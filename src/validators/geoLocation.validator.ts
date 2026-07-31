@@ -1,0 +1,30 @@
+import { body, param, query } from 'express-validator';
+
+export const geoLocationIdValidator = [
+    param('id').isUUID().withMessage('Invalid GeoLocation ID'),
+];
+
+export const createGeoLocationValidator = [
+    body('geoLevelTypeId').notEmpty().withMessage('Geographic level is required').isString().withMessage('Geographic level must be a string').isUUID().withMessage('Invalid Geographic Level Type'),
+    body('parentGeoLocationId').optional().isUUID().withMessage('Invalid Parent GeoLocation ID'),
+    body('name').trim().notEmpty().withMessage('Name is required').isLength({ max: 150 }).withMessage('Name must be at most 150 characters long'),
+    body('externalCode').trim().notEmpty().withMessage('Code is required').isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
+    body('latitude').optional().isFloat({ min: -90, max: 90 }).withMessage('Latitude must be a number between -90 and 90'),
+    body('longitude').optional().isFloat({ min: -180, max: 180 }).withMessage('Longitude must be a number between -180 and 180'),
+    body('shortName').optional({ nullable: true }).trim().isLength({ max: 100 }).withMessage('Short name must be at most 50 characters long'),
+    body('isoCode').optional({ nullable: true }).trim().isLength({ max: 10 }).withMessage('ISO code must be at most 10 characters long'),
+    body('level').optional({ nullable: true }).isInt({ min: 1 }).withMessage('Level must be a positive integer'),
+];
+
+export const updateGeoLocationValidator = [
+    ...geoLocationIdValidator,
+    body('geoLevelTypeId').optional().notEmpty().withMessage('Geographic level is required').isString().withMessage('Geographic level must be a string').isUUID().withMessage('Invalid Geographic Level Type'),
+    body('parentGeoLocationId').optional().isUUID().withMessage('Invalid Parent GeoLocation ID'),
+    body('name').optional().trim().notEmpty().withMessage('Name is required').isLength({ max: 150 }).withMessage('Name must be at most 150 characters long'),
+    body('externalCode').optional().trim().notEmpty().withMessage('Code is required').isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
+    body('latitude').optional().isFloat({ min: -90, max: 90 }).withMessage('Latitude must be a number between -90 and 90'),
+    body('longitude').optional().isFloat({ min: -180, max: 180 }).withMessage('Longitude must be a number between -180 and 180'),
+    body('shortName').optional({ nullable: true }).trim().isLength({ max: 100 }).withMessage('Short name must be at most 50 characters long'),
+    body('isoCode').optional({ nullable: true }).trim().isLength({ max: 10 }).withMessage('ISO code must be at most 10 characters long'),
+    body('level').optional({ nullable: true }).isInt({ min: 1 }).withMessage('Level must be a positive integer'),
+];

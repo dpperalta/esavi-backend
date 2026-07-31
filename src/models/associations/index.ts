@@ -1,0 +1,11 @@
+import { initAuthAssociations } from './auth.associations';
+import { initCatalogAssociations } from './catalog.association';
+import { initGeographicAssociations } from './geographic.associations';
+import { initHealthFacilityAssociations } from './healthFacility.associations';
+
+export const initAssociations = (): void => {
+    initAuthAssociations();
+    initGeographicAssociations();
+    initCatalogAssociations();
+    initHealthFacilityAssociations();
+}
