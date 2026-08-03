@@ -27,8 +27,8 @@ const createHealthFacility = async (req: Request, res: Response, next: NextFunct
 // Code: ESAVI-HF-002
 const getHealthFacilitiesByLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
-    const limit = parseInt(req.query.limit as string) || 10;
-    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
         const data = await getHealthFacilitiesByGeoLocationService(id, limit, offset);
         return res.status(200).json({
