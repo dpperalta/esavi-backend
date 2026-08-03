@@ -11,9 +11,8 @@ const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser
     const { code } = data;
     const { userId } = authUser || {};
     const existingType = await GeoLevelType.findOne({
-        where: { 
-            code: code.trim().toLocaleUpperCase(),
-            isActive: true
+        where: {
+            code: code.trim().toLocaleUpperCase()
         }
     });
     if( existingType ) {
@@ -82,7 +81,6 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
         const existingType = await GeoLevelType.findOne({
             where: {
                 code: data.code.trim().toLocaleUpperCase(),
-                isActive: true,
                 geoLevelTypeId: { [Op.ne]: id }
             }
         });

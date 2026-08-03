@@ -121,21 +121,37 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
     if (!catalogItem) {
         throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_003_NOT_FOUND');
     }
-    if( data.code && toConstantCase(data.code.trim()) !== catalogItem.code ) {
+    // Validate that the referenced Catalog Type exists and is active before moving the item
+    let targetCatalogTypeId = catalogItem.catalogTypeId;
+    if( data.catalogTypeId && data.catalogTypeId !== catalogItem.catalogTypeId ) {
+        const catalogType = await CatalogType.findOne({
+            where: {
+                catalogTypeId: data.catalogTypeId,
+                isActive: true
+            }
+        });
+        if (!catalogType) {
+            throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATITEM_003_CATTYPE_NOT_FOUND');
+        }
+        targetCatalogTypeId = data.catalogTypeId;
+    }
+    // The code must be unique within the target Catalog Type, which may differ from the current one
+    const targetCode = data.code ? toConstantCase(data.code.trim()) : catalogItem.code;
+    if( targetCode && ( targetCode !== catalogItem.code || targetCatalogTypeId !== catalogItem.catalogTypeId ) ) {
         const existingItem = await CatalogItem.findOne({
             where: {
-                code: toConstantCase(data.code.trim()),
-                catalogTypeId: catalogItem.catalogTypeId,
-                isActive: true,
+                code: targetCode,
+                catalogTypeId: targetCatalogTypeId,
                 catalogItemId: { [Op.ne]: id }
             }
         });
         if( existingItem ) {
-            throw new AppError(getMessage('catalogItem.codeExists', lang), 409, 'CATITEM_003_CODE_EXISTS'); 
+            throw new AppError(getMessage('catalogItem.codeExists', lang), 409, 'CATITEM_003_CODE_EXISTS');
         }
     }
     const currentAppDetails = Array.isArray(catalogItem.appDetails) ? catalogItem.appDetails : [];
     let objectToUpdate = {
+        catalogTypeId: targetCatalogTypeId !== catalogItem.catalogTypeId ? targetCatalogTypeId : undefined,
         code: data.code && toConstantCase(data.code.trim()) !== catalogItem.code ? toConstantCase(data.code.trim()) : undefined,
         name: data.name && toTitleCase(data.name.trim()) !== catalogItem.name ? toTitleCase(data.name.trim()) : undefined,
         value: data.value && data.value.trim() !== catalogItem.value ? data.value.trim() : undefined,
@@ -143,6 +159,7 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
         metadata: data.metadata && JSON.stringify(data.metadata) !== JSON.stringify(catalogItem.metadata) ? data.metadata : undefined,
         sortOrder: data.sortOrder && data.sortOrder !== catalogItem.sortOrder ? data.sortOrder : undefined,
     };
+    if (objectToUpdate.catalogTypeId === undefined) delete objectToUpdate.catalogTypeId;
     if (objectToUpdate.code === undefined) delete objectToUpdate.code;
     if (objectToUpdate.name === undefined) delete objectToUpdate.name;
     if (objectToUpdate.value === undefined) delete objectToUpdate.value;

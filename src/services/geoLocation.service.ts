@@ -32,8 +32,7 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser?:
     if( data.externalCode ){
         const existingLocation = await GeoLocation.findOne({
             where: {
-                externalCode: data.externalCode.trim(),
-                isActive: true
+                externalCode: data.externalCode.trim()
             }
         });
         if( existingLocation ) {
@@ -146,16 +145,39 @@ const getGeoLocationByIdService = async (id: string, lang: string = 'en', isAdmi
 const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocationInput>, authUser?: AuthUser, lang: string = 'en') => {
     const { userId } = authUser || {};
     const geoLocation = await GeoLocation.findByPk(id);
-    const { externalCode, name, shortName, officialName, isoCode, latitude, longitude, geoPolygon, sortOrder } = data;
+    const { externalCode, name, shortName, officialName, isoCode, latitude, longitude, geoPolygon, sortOrder, geoLevelTypeId, parentGeoLocationId } = data;
     let updatedGeoLocation = geoLocation;
     if (!geoLocation) {
         throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'GEOLOC_004_LOCATION_NOT_FOUND');
+    }
+    // Validate the referenced Geographic Level Type when it comes in the payload
+    if( geoLevelTypeId && geoLevelTypeId !== geoLocation.geoLevelTypeId ) {
+        const geoLevelType = await GeoLevelType.findOne({
+            where: {
+                geoLevelTypeId,
+                isActive: true
+            }
+        });
+        if( !geoLevelType ) {
+            throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOLOC_004_GEOLEVELTYPE_NOT_FOUND');
+        }
+    }
+    // Validate the referenced parent location when it comes in the payload
+    if( parentGeoLocationId && parentGeoLocationId !== geoLocation.parentGeoLocationId ) {
+        const parent = await GeoLocation.findOne({
+            where: {
+                geoLocationId: parentGeoLocationId,
+                isActive: true
+            }
+        });
+        if( !parent ) {
+            throw new AppError(getMessage('geoLocation.parentNotFound', lang), 404, 'GEOLOC_004_PARENT_GEOLOCATION_NOT_FOUND');
+        }
     }
     if( externalCode && externalCode.trim() !== geoLocation.externalCode ) {
         const existingLocation = await GeoLocation.findOne({
             where: {
                 externalCode: externalCode.trim(),
-                isActive: true,
                 geoLocationId: { [Op.ne]: id }
             }
         });
@@ -165,6 +187,8 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
     }
     const currentAppDetails = Array.isArray(geoLocation.appDetails) ? geoLocation.appDetails : [];
     let objectToUpdate = {
+        geoLevelTypeId: geoLevelTypeId && geoLevelTypeId !== geoLocation.geoLevelTypeId ? geoLevelTypeId : undefined,
+        parentGeoLocationId: parentGeoLocationId && parentGeoLocationId !== geoLocation.parentGeoLocationId ? parentGeoLocationId : undefined,
         name: name && name.trim() !== geoLocation.name ? name.trim() : undefined,
         officialName: officialName && officialName.trim() !== geoLocation.officialName ? officialName.trim() : undefined,
         shortName: shortName && shortName.trim() !== geoLocation.shortName ? shortName.trim() : undefined,
@@ -175,6 +199,8 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
         geoPolygon: geoPolygon && JSON.stringify(geoPolygon) !== JSON.stringify(geoLocation.geoPolygon) ? geoPolygon : undefined,
         sortOrder: sortOrder && sortOrder !== geoLocation.sortOrder ? sortOrder : undefined,
     };
+    if (objectToUpdate.geoLevelTypeId === undefined) delete objectToUpdate.geoLevelTypeId;
+    if (objectToUpdate.parentGeoLocationId === undefined) delete objectToUpdate.parentGeoLocationId;
     if (objectToUpdate.name === undefined) delete objectToUpdate.name;
     if (objectToUpdate.officialName === undefined) delete objectToUpdate.officialName;
     if (objectToUpdate.shortName === undefined) delete objectToUpdate.shortName;

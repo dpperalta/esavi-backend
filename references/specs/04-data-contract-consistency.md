@@ -105,8 +105,10 @@ Las claves `alreadyActive` y `alreadyInactive` existen hoy para `geoLevelType` y
 4. **409 en los cinco duplicados.** Cambiar el status en `catalogItem.service.ts:30`, `catalogType.service.ts:13`, `geoLocation.service.ts:42`, `geoLocation.service.ts:165` y `healthFacility.service.ts:59`.
    *Verificación:* crear con un `code` existente devuelve 409 en las cinco entidades.
 
-5. **Criterio único de unicidad.** Quitar `isActive: true` de los `where` de comprobación en los updates de `catalogItem:124`, `catalogType:76`, `geoLevelType:84` y `geoLocation:157`. El `Op.ne` sobre la propia PK se mantiene.
+5. **Criterio único de unicidad.** Quitar `isActive: true` de los `where` de comprobación en los updates de `catalogItem:124`, `catalogType:76`, `geoLevelType:84` y `geoLocation:157`, y también en los creates de `geoLevelType:16` y `geoLocation:36`, los dos únicos que todavía filtraban. El `Op.ne` sobre la propia PK se mantiene en los updates.
    *Verificación:* un `code` ocupado por un registro inactivo se rechaza igual desde create que desde update.
+
+   > Los dos creates se añadieron durante la implementación: el plan original solo enumeraba los updates, pero `createGeoLevelTypeService` dejaba pasar un código ocupado por un registro inactivo y Postgres lo rechazaba con `23505`, devolviendo **500** en vez de 409. Es el escenario que la sección 6 describe al descartar el criterio de DEUDA-013, y sin corregirlo dos criterios de aceptación quedaban en rojo. `catalogType`, `catalogItem` y `healthFacility` ya consultaban sin `isActive` en create.
 
 6. **FK revalidadas en el update.** En `updateCatalogItemService`, validar y aplicar `catalogTypeId` cuando venga en el payload, reutilizando la comprobación del create. Mismo tratamiento para `geoLevelTypeId` y `parentGeoLocationId` en `updateGeoLocationService`. Una FK inexistente o inactiva devuelve 404.
    *Verificación:* actualizar un catalogItem con un `catalogTypeId` inexistente devuelve 404, y con uno válido mueve el ítem de tipo.
@@ -178,6 +180,8 @@ Las claves `alreadyActive` y `alreadyInactive` existen hoy para `geoLevelType` y
 | Update con FK inexistente | 200, la FK se ignoraba | **404** |
 | Update con FK válida en catalogItem | 200, sin efecto | **200**, se aplica el cambio |
 | `name` duplicado bajo el mismo padre | 500 | **409** |
+| Create con `code` ocupado por un registro inactivo (`geoLevelType`) | 500 por `23505` | **409** |
+| Create con `externalCode` ocupado por un registro inactivo (`geoLocation`) | 201, se aceptaba | **409** |
 
 ---
 

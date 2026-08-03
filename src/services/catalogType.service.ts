@@ -77,7 +77,6 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
         const existingType = await CatalogType.findOne({
             where: {
                 code: toCamelCase(data.code.trim()),
-                isActive: true,
                 catalogTypeId: { [Op.ne]: id }
             }
         });
