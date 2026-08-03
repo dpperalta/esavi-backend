@@ -6,6 +6,13 @@ export const healthFacilityIdValidator = [
         .trim()
 ];
 
+export const healthFacilityListValidator = [
+    query('limit').optional().isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be an integer between 1 and 100'),
+    query('offset').optional().isInt({ min: 0 })
+        .withMessage('Offset must be a non-negative integer')
+];
+
 export const createHealthFacilityValidator = [
     body('geoLocationId').notEmpty().withMessage('Geo Location ID is required')
         .isUUID().withMessage('Geo Location ID must be a valid UUID').trim(),

@@ -4,6 +4,13 @@ export const geoLocationIdValidator = [
     param('id').isUUID().withMessage('Invalid GeoLocation ID'),
 ];
 
+export const geoLocationListValidator = [
+    query('limit').optional().isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be an integer between 1 and 100'),
+    query('offset').optional().isInt({ min: 0 })
+        .withMessage('Offset must be a non-negative integer')
+];
+
 export const createGeoLocationValidator = [
     body('geoLevelTypeId').notEmpty().withMessage('Geographic level is required').isString().withMessage('Geographic level must be a string').isUUID().withMessage('Invalid Geographic Level Type'),
     body('parentGeoLocationId').optional().isUUID().withMessage('Invalid Parent GeoLocation ID'),

@@ -1,4 +1,17 @@
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
+
+export const geoLevelTypeIdValidator = [
+    param('id').notEmpty().withMessage('Geographic Level Type ID is required')
+        .isUUID().withMessage('Geographic Level Type ID must be a valid UUID')
+        .trim()
+];
+
+export const geoLevelTypeListValidator = [
+    query('limit').optional().isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be an integer between 1 and 100'),
+    query('offset').optional().isInt({ min: 0 })
+        .withMessage('Offset must be a non-negative integer')
+];
 
 export const createGeoLevelTypeValidator = [
     body('code').trim().notEmpty().withMessage('Code is required').isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
