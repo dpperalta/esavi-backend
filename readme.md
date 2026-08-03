@@ -99,3 +99,59 @@ el `email` no coinciden con las que carga el servidor.
 
 `requiresPasswordChange` queda en `true` a propósito: la contraseña del bootstrap pasa por el
 shell y por el historial de comandos, así que hay que rotarla en el primer acceso.
+
+## Comandos
+
+| Comando | Qué hace |
+|---|---|
+| `npm run dev` | Arranca en desarrollo con ts-node-dev |
+| `npm start` | Arranca en producción desde `dist/` |
+| `npm run build` | Compila `src/` a `dist/` |
+| `npm test` | Ejecuta la suite (necesita `.env.test`) |
+| `npm run test:watch` | La suite en modo watch |
+| `npm run lint` | ESLint sobre `src/` y `tests/` |
+| `npm run lint:fix` | Igual, corrigiendo lo autocorregible |
+| `npm run format` | Prettier sobre todo el repo |
+| `npm run format:check` | Comprueba el formato sin escribir |
+| `npm run i18n:check` | Paridad de claves entre `es`, `en` y `nl` |
+| **`npm run check`** | **build + lint + i18n:check + test.** El único comando que hay que correr antes de un PR |
+
+No hay CI. Es una decisión explícita del proyecto: los comandos existen, pero nada garantiza que
+se ejecuten. `npm run check` los deja en uno solo.
+
+## Suite de pruebas
+
+La suite corre con Jest + supertest **contra una base de datos PostgreSQL real**, no con
+mocks de Sequelize: buena parte de lo que verifica son status codes que dependen de
+restricciones de la base (un `409` lo produce una `UNIQUE` de Postgres).
+
+### Requisitos
+
+- PostgreSQL en marcha, con las extensiones `pgcrypto`, `citext` y `postgis` disponibles.
+- Un archivo `.env.test` en la raíz. Se crea copiando la plantilla:
+
+```bash
+cp .env.test.example .env.test
+```
+
+Rellena `DB_USER` y `DB_PASSWORD` con las credenciales locales. **`DB_NAME` debe terminar en
+`_test`** (por defecto `esavi_test`).
+
+No hace falta crear la base a mano: el setup la borra y la vuelve a crear en cada ejecución,
+carga el esquema desde `esaviapp.sql` y siembra los cuatro roles canónicos.
+
+### Ejecutar
+
+```bash
+npm test
+```
+
+### Protección de la base de desarrollo
+
+La suite **recrea** `DB_NAME` desde cero. Para que eso no pueda apuntar nunca a la base de
+desarrollo, el setup aborta antes de tocar nada si:
+
+- `NODE_ENV` no es `test`, o
+- `DB_NAME` no termina en `_test`.
+
+Ambas comprobaciones están cubiertas por sus propios tests en `tests/setup/database.test.ts`.

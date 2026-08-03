@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+src/logs/
+
+# Authoritative DDL: formatting it would obscure `git blame` on the schema
+esaviapp.sql
+
+package-lock.json

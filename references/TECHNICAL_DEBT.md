@@ -20,36 +20,36 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 
 | ID | Severidad | Título |
 |---|---|---|
-| [DEUDA-001](#deuda-001) | 🔴 | `setEntityActiveStatusService` ignora `notFoundMessage` |
-| [DEUDA-002](#deuda-002) | 🔴 | Endpoint de seed sin autenticación |
-| [DEUDA-003](#deuda-003) | 🔴 | Tres claves i18n referenciadas que no existen |
-| [DEUDA-004](#deuda-004) | 🔴 | `nd.json` tiene 23 de 124 claves |
-| [DEUDA-005](#deuda-005) | 🔴 | `DELETE /catalog-types/:id` declara rol `USER` |
-| [DEUDA-006](#deuda-006) | 🔴 | Siete rutas sin `validateFields` ni validadores |
-| [DEUDA-007](#deuda-007) | 🔴 | `limit` / `offset` sin validar llegan como `NaN` a Sequelize |
-| [DEUDA-008](#deuda-008) | 🟠 | Códigos `ESAVI-*` desalineados entre capas |
-| [DEUDA-009](#deuda-009) | 🟠 | Guards de rol duplicados dentro de los controladores |
-| [DEUDA-010](#deuda-010) | 🟠 | `validateUserRole(SUPERADMIN, ADMIN)` exige 100, no 50 |
-| [DEUDA-011](#deuda-011) | 🟠 | 400 vs 409 para el mismo caso de duplicado |
-| [DEUDA-012](#deuda-012) | 🟠 | Login responde 404 ante credenciales inválidas |
-| [DEUDA-013](#deuda-013) | 🟠 | Unicidad de `code` con criterio distinto en create y update |
-| [DEUDA-014](#deuda-014) | 🟠 | El update no revalida las FK |
-| [DEUDA-015](#deuda-015) | 🟠 | Validadores incorrectos y sin spread en `geoLocation.routes.ts` |
-| [DEUDA-016](#deuda-016) | 🟠 | Typo `ESAIV-HF-*` y abreviatura de dos letras |
-| [DEUDA-017](#deuda-017) | 🟠 | CORS abierto en producción |
-| [DEUDA-018](#deuda-018) | 🟠 | Sin transacciones fuera de `user.service.ts` |
+| [DEUDA-001](#deuda-001) | 🔴 | ✅ `setEntityActiveStatusService` ignora `notFoundMessage` |
+| [DEUDA-002](#deuda-002) | 🔴 | ✅ Endpoint de seed sin autenticación |
+| [DEUDA-003](#deuda-003) | 🔴 | ✅ Tres claves i18n referenciadas que no existen |
+| [DEUDA-004](#deuda-004) | 🔴 | ✅ `nd.json` tiene 23 de 124 claves |
+| [DEUDA-005](#deuda-005) | 🔴 | ✅ `DELETE /catalog-types/:id` declara rol `USER` |
+| [DEUDA-006](#deuda-006) | 🔴 | ✅ Siete rutas sin `validateFields` ni validadores |
+| [DEUDA-007](#deuda-007) | 🔴 | ✅ `limit` / `offset` sin validar llegan como `NaN` a Sequelize |
+| [DEUDA-008](#deuda-008) | 🟠 | ✅ Códigos `ESAVI-*` desalineados entre capas |
+| [DEUDA-009](#deuda-009) | 🟠 | ✅ Guards de rol duplicados dentro de los controladores |
+| [DEUDA-010](#deuda-010) | 🟠 | ✅ `validateUserRole(SUPERADMIN, ADMIN)` exige 100, no 50 |
+| [DEUDA-011](#deuda-011) | 🟠 | ✅ 400 vs 409 para el mismo caso de duplicado |
+| [DEUDA-012](#deuda-012) | 🟠 | ✅ Login responde 404 ante credenciales inválidas |
+| [DEUDA-013](#deuda-013) | 🟠 | ✅ Unicidad de `code` con criterio distinto en create y update |
+| [DEUDA-014](#deuda-014) | 🟠 | ✅ El update no revalida las FK |
+| [DEUDA-015](#deuda-015) | 🟠 | ✅ Validadores incorrectos y sin spread en `geoLocation.routes.ts` |
+| [DEUDA-016](#deuda-016) | 🟠 | ✅ Typo `ESAIV-HF-*` y abreviatura de dos letras |
+| [DEUDA-017](#deuda-017) | 🟠 | ✅ CORS abierto en producción |
+| [DEUDA-018](#deuda-018) | 🟠 | ✅ Sin transacciones fuera de `user.service.ts` |
 | [DEUDA-019](#deuda-019) | 🟡 | ✅ Sufijos de archivo fuera de norma |
 | [DEUDA-020](#deuda-020) | 🟡 | ✅ `CreateCatalogItem` sin sufijo `Input` |
 | [DEUDA-021](#deuda-021) | 🟡 | ✅ `UpdateGeoLevelTypeInput` declarado y nunca usado |
 | [DEUDA-022](#deuda-022) | 🟡 | ✅ Código duplicado en `healthFacility.service.ts` |
 | [DEUDA-023](#deuda-023) | 🟡 | ✅ Código comentado obsoleto |
 | [DEUDA-024](#deuda-024) | 🟡 | ✅ `loginController` y `const route` |
-| [DEUDA-025](#deuda-025) | 🟡 | Falta `geoLevelTypeIdValidator` |
-| [DEUDA-026](#deuda-026) | 🟡 | Paginación duplicada y hardcodeada |
+| [DEUDA-025](#deuda-025) | 🟡 | ✅ Falta `geoLevelTypeIdValidator` |
+| [DEUDA-026](#deuda-026) | 🟡 | ✅ Paginación duplicada y hardcodeada |
 | [DEUDA-027](#deuda-027) | 🟡 | ✅ `AppDetails` declarado y nunca importado |
 | [DEUDA-028](#deuda-028) | 🟡 | ✅ `AuthUser` y `Express.Request['user']` divergen |
 | [DEUDA-029](#deuda-029) | 🟡 | ✅ Barrels de `types/` con dos estilos |
-| [DEUDA-030](#deuda-030) | 🟡 | Sin tests ni linter |
+| [DEUDA-030](#deuda-030) | 🟡 | ✅ Sin tests ni linter |
 | [DEUDA-031](#deuda-031) | 🔴 | `roles.constants.ts` lee variables de entorno que no existen |
 | [DEUDA-032](#deuda-032) | 🟠 | Los middlewares construyen respuestas de error a mano |
 | [DEUDA-033](#deuda-033) | 🟠 | `tokenValidation` deja `email` y `displayName` cifrados en `req.user` |
@@ -62,8 +62,14 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030. Las
 entradas 031–036 todavía no tienen spec.
 
-**Saldadas a 2026-08-03**: 019, 020, 021, 022, 023, 024, 027, 028 y 029, todas
-por el SPEC 06.
+**Saldadas a 2026-08-03**: las 30 entradas 001–030, por los siete specs de la
+serie, todos en estado Implementado.
+
+Tres se cerraron por una vía distinta a la que proponía su «Aceptación», y la
+nota de cada una lo hace constar: **002** (el router de seed deja de montarse en
+producción, en vez de exigir SUPERADMIN), **013** (unicidad **sin** filtrar por
+`isActive`, alineada con las UNIQUE del DDL, en vez de con `isActive: true`) y
+**018** (alcance reducido a conectar el `transaction` del servicio genérico).
 
 | Spec | Entradas que cierra |
 |---|---|
@@ -87,7 +93,9 @@ las decisiones de ese spec.
 ---
 
 <a id="deuda-001"></a>
-## DEUDA-001 🔴 `setEntityActiveStatusService` ignora `notFoundMessage`
+## DEUDA-001 🔴 ✅ `setEntityActiveStatusService` ignora `notFoundMessage`
+
+> ✅ **Saldada** por el [SPEC 04](./specs/04-data-contract-consistency.md) el 2026-08-03. La línea 25 de `entityActivation.service.ts` lanza `AppError(options.notFoundMessage, ...)`. Cada entidad devuelve su propio mensaje.
 
 **Archivo**: `src/services/common/entityActivation.service.ts:29`
 
@@ -104,7 +112,9 @@ Borrar un `catalogItem` inexistente responde "Tipo de nivel geográfico no encon
 ---
 
 <a id="deuda-002"></a>
-## DEUDA-002 🔴 Endpoint de seed sin autenticación
+## DEUDA-002 🔴 ✅ Endpoint de seed sin autenticación
+
+> ✅ **Saldada** por el [SPEC 01](./specs/01-authorization-and-exposure.md) el 2026-08-03. Cerrada por la segunda vía que la propia Aceptación admitía, no por la primera: `src/routes/index.ts:18-20` no monta `/seed` cuando `NODE_ENV === "production"`. El middleware sigue comentado en `seed.routes.ts` a propósito, y en el resto de entornos el gate `?enable=SEED_ACTION` se conserva.
 
 **Archivo**: `src/routes/seed.route.ts:8-9`
 
@@ -115,7 +125,9 @@ Borrar un `catalogItem` inexistente responde "Tipo de nivel geográfico no encon
 ---
 
 <a id="deuda-003"></a>
-## DEUDA-003 🔴 Tres claves i18n referenciadas que no existen
+## DEUDA-003 🔴 ✅ Tres claves i18n referenciadas que no existen
+
+> ✅ **Saldada** por el [SPEC 03](./specs/03-i18n-parity.md) el 2026-08-03. `auth.loginFailed` existe en los tres idiomas; `catalogItem.updateFailed` y `facilityType.notFound` ya no se referencian desde el código. `npm run i18n:check` no reporta referencias sin resolver.
 
 `getMessage` devuelve **cadena vacía** cuando la clave falta, así que el cliente recibe `message: ""` sin ningún error visible.
 
@@ -130,7 +142,9 @@ Borrar un `catalogItem` inexistente responde "Tipo de nivel geográfico no encon
 ---
 
 <a id="deuda-004"></a>
-## DEUDA-004 🔴 `nd.json` tiene 23 de 124 claves
+## DEUDA-004 🔴 ✅ `nd.json` tiene 23 de 124 claves
+
+> ✅ **Saldada** por el [SPEC 03](./specs/03-i18n-parity.md) el 2026-08-03. `nd.json` renombrado a `nl.json`, con los tres catálogos a 132 claves idénticas. Verificado por `npm run i18n:check` y fijado por el bloque de paridad de `tests/i18n/messages.test.ts`: borrar o vaciar una clave de `nl.json` rompe la suite.
 
 **Archivo**: `src/data/i18n/nd.json`
 
@@ -143,7 +157,9 @@ Borrar un `catalogItem` inexistente responde "Tipo de nivel geográfico no encon
 ---
 
 <a id="deuda-005"></a>
-## DEUDA-005 🔴 `DELETE /catalog-types/:id` declara rol `USER`
+## DEUDA-005 🔴 ✅ `DELETE /catalog-types/:id` declara rol `USER`
+
+> ✅ **Saldada** por el [SPEC 01](./specs/01-authorization-and-exposure.md) el 2026-08-03. `catalogType.routes.ts:29` declara `ADMIN`. Fijado por `tests/auth/roles.test.ts` (regla `ESAVI-CATTYPE-005A`): un USER recibe 403.
 
 **Archivo**: `src/routes/catalogType.routes.ts`
 
@@ -156,7 +172,9 @@ Debe corregirse **antes** que DEUDA-009, no después.
 ---
 
 <a id="deuda-006"></a>
-## DEUDA-006 🔴 Siete rutas sin `validateFields` ni validadores
+## DEUDA-006 🔴 ✅ Siete rutas sin `validateFields` ni validadores
+
+> ✅ **Saldada** por el [SPEC 02](./specs/02-input-validation.md) el 2026-08-03. Las 19 rutas con `:id` llevan su validador seguido de `validateFields`; ninguna queda sin él.
 
 Reciben un `:id` sin comprobar que sea un UUID, o parámetros de query sin validar. Un id malformado llega a Sequelize y produce un 500 en vez de un 400.
 
@@ -177,7 +195,9 @@ Reciben un `:id` sin comprobar que sea un UUID, o parámetros de query sin valid
 ---
 
 <a id="deuda-007"></a>
-## DEUDA-007 🔴 `limit` / `offset` sin validar llegan como `NaN` a Sequelize
+## DEUDA-007 🔴 ✅ `limit` / `offset` sin validar llegan como `NaN` a Sequelize
+
+> ✅ **Saldada** por el [SPEC 02](./specs/02-input-validation.md) el 2026-08-03. Los cinco `*ListValidator` aplican `isInt({ min: 1, max: 100 })` a `limit` e `isInt({ min: 0 })` a `offset`.
 
 Ningún endpoint valida los parámetros de paginación. En el estilo dominante:
 
@@ -192,7 +212,9 @@ const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 ---
 
 <a id="deuda-008"></a>
-## DEUDA-008 🟠 Códigos `ESAVI-*` desalineados entre capas
+## DEUDA-008 🟠 ✅ Códigos `ESAVI-*` desalineados entre capas
+
+> ✅ **Saldada** por el [SPEC 05](./specs/05-operation-codes.md) el 2026-08-03. Las entidades usan la numeración canónica `001 / 002[A|B] / 003 / 004 / 005A / 005B` de forma idéntica en las cinco ubicaciones.
 
 En `catalogType`, `geoLevelType` y `geoLocation`, el mismo número significa operaciones distintas según la capa:
 
@@ -211,7 +233,9 @@ Rastrear una operación por su código a través de las capas es imposible, que 
 ---
 
 <a id="deuda-009"></a>
-## DEUDA-009 🟠 Guards de rol duplicados dentro de los controladores
+## DEUDA-009 🟠 ✅ Guards de rol duplicados dentro de los controladores
+
+> ✅ **Saldada** por el [SPEC 01](./specs/01-authorization-and-exposure.md) el 2026-08-03. Cero ocurrencias de `isSuperAdmin` y cero `status(403)` en `src/controllers/`. La autorización vive solo en la ruta.
 
 Siete sitios repiten la autorización que ya hizo el middleware:
 
@@ -232,7 +256,9 @@ Depende de [DEUDA-005](#deuda-005).
 ---
 
 <a id="deuda-010"></a>
-## DEUDA-010 🟠 `validateUserRole(SUPERADMIN, ADMIN)` exige 100, no 50
+## DEUDA-010 🟠 ✅ `validateUserRole(SUPERADMIN, ADMIN)` exige 100, no 50
+
+> ✅ **Saldada** por el [SPEC 01](./specs/01-authorization-and-exposure.md) el 2026-08-03. `grep -rnE "validateUserRole\([^)]*," src/routes/` no devuelve nada: ninguna ruta pasa más de un rol.
 
 **Archivo**: `src/routes/geoLevelType.routes.ts` — `GET /geo-level-types/`
 
@@ -243,7 +269,9 @@ Depende de [DEUDA-005](#deuda-005).
 ---
 
 <a id="deuda-011"></a>
-## DEUDA-011 🟠 400 vs 409 para el mismo caso de duplicado
+## DEUDA-011 🟠 ✅ 400 vs 409 para el mismo caso de duplicado
+
+> ✅ **Saldada** por el [SPEC 04](./specs/04-data-contract-consistency.md) el 2026-08-03. Todos los duplicados responden 409. Fijado por `tests/contract/response.test.ts`, que cubre el duplicado en create y en update; degradar cualquiera de los dos a 400 rompe la suite.
 
 | Entidad | create | update |
 |---|---|---|
@@ -261,7 +289,9 @@ La misma entidad devuelve códigos distintos para el mismo conflicto según la o
 ---
 
 <a id="deuda-012"></a>
-## DEUDA-012 🟠 Login responde 404 ante credenciales inválidas
+## DEUDA-012 🟠 ✅ Login responde 404 ante credenciales inválidas
+
+> ✅ **Saldada** por el [SPEC 01](./specs/01-authorization-and-exposure.md) el 2026-08-03. `auth.service.ts:32,36` lanzan 401 en ambos casos, con mensaje y código idénticos entre sí.
 
 **Archivo**: `src/services/auth.service.ts:32,36`
 
@@ -274,7 +304,9 @@ Nota: usar el mismo código y mensaje para ambos casos **es correcto** y debe co
 ---
 
 <a id="deuda-013"></a>
-## DEUDA-013 🟠 Unicidad de `code` con criterio distinto en create y update
+## DEUDA-013 🟠 ✅ Unicidad de `code` con criterio distinto en create y update
+
+> ✅ **Saldada** por el [SPEC 04](./specs/04-data-contract-consistency.md) el 2026-08-03. Resuelta con el criterio **contrario** al que proponía la Aceptación original. El spec fijó la unicidad **sin** filtrar por `isActive`, alineada con las UNIQUE reales del DDL, en vez de `isActive: true`. Los cuatro servicios aplican ese mismo criterio en create y en update.
 
 En create se busca **sin** filtrar por `isActive`; en update **sí** se filtra por `isActive: true`.
 
@@ -295,7 +327,9 @@ Consecuencia: un código ocupado por un registro **inactivo** bloquea la creaci�
 ---
 
 <a id="deuda-014"></a>
-## DEUDA-014 🟠 El update no revalida las FK
+## DEUDA-014 🟠 ✅ El update no revalida las FK
+
+> ✅ **Saldada** por el [SPEC 04](./specs/04-data-contract-consistency.md) el 2026-08-03. `updateCatalogItemService:125-136` valida `catalogTypeId` cuando viene en el payload, con el criterio del create.
 
 `updateCatalogItemService` acepta `catalogTypeId` en el validador, pero el servicio nunca lo valida ni lo aplica. Lo mismo en las demás entidades con FK: la comprobación de existencia y `isActive` solo ocurre en create.
 
@@ -304,7 +338,9 @@ Consecuencia: un código ocupado por un registro **inactivo** bloquea la creaci�
 ---
 
 <a id="deuda-015"></a>
-## DEUDA-015 🟠 Validadores incorrectos y sin spread en `geoLocation.routes.ts`
+## DEUDA-015 🟠 ✅ Validadores incorrectos y sin spread en `geoLocation.routes.ts`
+
+> ✅ **Saldada** por el [SPEC 02](./specs/02-input-validation.md) el 2026-08-03. Todos los validadores se pasan con spread; ninguna ruta lo omite.
 
 Tres rutas pasan `updateGeoLocationValidator` **sin `...`**, y dos de ellas lo usan en operaciones que no son un update:
 
@@ -323,7 +359,9 @@ Sin el spread, el array se monta como un único middleware. Y un DELETE no debe 
 ---
 
 <a id="deuda-016"></a>
-## DEUDA-016 🟠 Typo `ESAIV-HF-*` y abreviatura de dos letras
+## DEUDA-016 🟠 ✅ Typo `ESAIV-HF-*` y abreviatura de dos letras
+
+> ✅ **Saldada** por el [SPEC 05](./specs/05-operation-codes.md) el 2026-08-03. Los códigos son `ESAVI-HFAC-001` y `ESAVI-HFAC-002`. `ESAIV` solo sobrevive en `src/logs/esaviLog.log`, que está gitignored.
 
 **Archivo**: `src/services/healthFacility.service.ts:9,87`
 
@@ -336,7 +374,9 @@ Además: la ruta usa `ESAVI-HF-002A` y el controlador `ESAVI-HF-002` para el mis
 ---
 
 <a id="deuda-017"></a>
-## DEUDA-017 🟠 CORS abierto en producción
+## DEUDA-017 🟠 ✅ CORS abierto en producción
+
+> ✅ **Saldada** por el [SPEC 01](./specs/01-authorization-and-exposure.md) el 2026-08-03. `src/app.ts:55` monta `cors()` con la lista blanca de `CORS_ORIGINS`, obligatoria cuando `NODE_ENV=production`.
 
 **Archivo**: `src/index.ts:27`
 
@@ -347,7 +387,9 @@ Además: la ruta usa `ESAVI-HF-002A` y el controlador `ESAVI-HF-002` para el mis
 ---
 
 <a id="deuda-018"></a>
-## DEUDA-018 🟠 Sin transacciones fuera de `user.service.ts`
+## DEUDA-018 🟠 ✅ Sin transacciones fuera de `user.service.ts`
+
+> ✅ **Saldada** por el [SPEC 04](./specs/04-data-contract-consistency.md) el 2026-08-03. Saldada con el alcance que el spec redujo a propósito: el `transaction` de `setEntityActiveStatusService` queda conectado en sus llamadores, y queda registrado que hoy ninguna otra operación es multi-escritura. Envolver operaciones de una sola escritura se descartó explícitamente.
 
 Solo `user.service.ts` usa `sequelize.transaction()`. Los demás servicios hacen varias escrituras dependientes sin envolverlas: un fallo a mitad deja el estado inconsistente.
 
@@ -441,7 +483,9 @@ Contiene copias literales de `getActiveCatalogItemsByTypeService`, `getAllCatalo
 ---
 
 <a id="deuda-025"></a>
-## DEUDA-025 🟡 Falta `geoLevelTypeIdValidator`
+## DEUDA-025 🟡 ✅ Falta `geoLevelTypeIdValidator`
+
+> ✅ **Saldada** por el [SPEC 02](./specs/02-input-validation.md) el 2026-08-03. `geoLevelTypeIdValidator` existe en `src/validators/geoLevelType.validator.ts:3`.
 
 **Archivo**: `src/validators/geoLevelType.validator.ts`
 
@@ -450,7 +494,9 @@ Es la única entidad sin validador de id, y por eso sus rutas con `:id` no valid
 ---
 
 <a id="deuda-026"></a>
-## DEUDA-026 🟡 Paginación duplicada y hardcodeada
+## DEUDA-026 🟡 ✅ Paginación duplicada y hardcodeada
+
+> ✅ **Saldada** por el [SPEC 02](./specs/02-input-validation.md) el 2026-08-03. `src/constants/pagination.constants.ts` es la única fuente, leída del entorno, e importada por los cinco servicios. El default se resuelve en el servicio.
 
 `geoLevelType.service.ts:8-9` y `geoLocation.service.ts:7-8` declaran `DEFAULT_LIMIT`/`DEFAULT_OFFSET` por duplicado; `catalogItem`, `catalogType` y `healthFacility` hardcodean `10` y `0` sin leer el entorno. `healthFacility.controller.ts:30-31` resuelve el default en el controlador en vez de en el servicio.
 
@@ -494,7 +540,9 @@ Además `tokenValidation` puebla `roles` con `{ name, level }`, mientras `UserRo
 ---
 
 <a id="deuda-030"></a>
-## DEUDA-030 🟡 Sin tests ni linter
+## DEUDA-030 🟡 ✅ Sin tests ni linter
+
+> ✅ **Saldada** por el [SPEC 07](./specs/07-tooling-and-tests.md) el 2026-08-03. Jest + ts-jest + supertest sobre una base de pruebas real (116 tests: contrato de respuesta, matriz de roles e i18n), ESLint 9 plano con la tabla de `naming-convention`, Prettier con `eslint-config-prettier`, y `npm run check` encadenando build, lint, i18n:check y test. Queda registrado que sin CI los comandos existen pero nada garantiza que se ejecuten.
 
 `npm test` sale con error; no hay ESLint ni Prettier configurados. Nada de este documento es verificable automáticamente: las reglas del canon se comprueban leyendo.
 

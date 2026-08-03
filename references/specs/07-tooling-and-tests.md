@@ -1,6 +1,6 @@
 # SPEC 07 — Verificación automática: linter y suite mínima
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 a 06 (la suite codifica el comportamiento posterior a la serie)
 > **Fecha:** 2026-08-01
 > **Objetivo:** Que el contrato de respuesta y la matriz de roles se comprueben ejecutando un comando, no leyendo el código.

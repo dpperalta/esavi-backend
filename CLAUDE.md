@@ -30,7 +30,7 @@ Generate a crypto key: `node -e "console.log(require('crypto').randomBytes(32).t
 
 ## Environment
 
-`src/index.ts` and `src/database/connection.ts` both load `.env.${NODE_ENV}` (`.env.development` / `.env.production`) from `process.cwd()`, not plain `.env`. See `.env.example` for the full variable list. `connectDatabase()` throws at startup if any `DB_*` variable is missing.
+`src/app.ts` and `src/database/connection.ts` both load `.env.${NODE_ENV}` (`.env.development` / `.env.production` / `.env.test`) from `process.cwd()`, not plain `.env`. See `.env.example` for the full variable list. `connectDatabase()` throws at startup if any `DB_*` variable is missing.
 
 ## Database schema
 
@@ -51,7 +51,7 @@ Associations live outside the model files, in `src/models/associations/*.ts`, al
 
 ### Response shape
 
-Success: `{ ok: true, message, data }` where `message` always comes from `getMessage(key, req.lang)`. Errors are produced by `errorHandler` (last middleware in `src/index.ts`): `{ ok: false, message, code, errors }` — `errors` is only the real error text when `NODE_ENV=development`, otherwise `'Internal server error'`.
+Success: `{ ok: true, message, data }` where `message` always comes from `getMessage(key, req.lang)`. Errors are produced by `errorHandler` (last middleware in `src/app.ts`): `{ ok: false, message, code, errors }` — `errors` is only the real error text when `NODE_ENV=development`, otherwise `'Internal server error'`.
 
 ### Operation codes
 
@@ -69,7 +69,7 @@ Every controller catch block follows the same pattern — log with the operation
 
 **PII encryption** — `email`, `username`, `firstName`, `lastName`, `displayName` on `appUser` are stored encrypted via `esaviCrypt` (deterministic AES from `crypto.helper.ts`, fixed IV so equality lookups work). Always look users up with `where: { email: esaviCrypt(email) }` and decrypt with `esaviDecrypt` before returning. Passwords use bcrypt separately.
 
-**i18n** — `languageMiddleware` resolves `req.lang` from `?lang=`, then `Accept-Language`, then `DEFAULT_LANGUAGE`, filtered against `SUPPORTED_LANGUAGES`. Messages live in `src/data/i18n/{es,en,nd}.json` and are read by dot-path with `{{param}}` interpolation. Add every new user-facing string to all three files.
+**i18n** — `languageMiddleware` resolves `req.lang` from `?lang=`, then `Accept-Language`, then `DEFAULT_LANGUAGE`, filtered against `SUPPORTED_LANGUAGES`. Messages live in `src/data/i18n/{es,en,nl}.json` and are read by dot-path with `{{param}}` interpolation. Add every new user-facing string to all three files.
 
 **Soft delete / activation** — `DELETE` sets `isActive: false` + `deletedAt` (typically ADMIN), `PATCH /activate/:id` reverses it (typically SUPERADMIN). Both go through the generic `setEntityActiveStatusService` in `src/services/common/entityActivation.service.ts`; use it rather than hand-rolling activation logic.
 
@@ -86,4 +86,4 @@ Every controller catch block follows the same pattern — log with the operation
 ## Known state
 
 - `/api/seed/admin` is currently unauthenticated (its auth middleware is commented out in `src/routes/seed.route.ts`); it is gated only by `?enable=` matching `SEED_ACTION`.
-- `cors()` is wide open — flagged with a TODO in `src/index.ts` for production hardening.
+- CORS is driven by `CORS_ORIGINS`, resolved in `src/app.ts`; the variable is mandatory when `NODE_ENV=production`.

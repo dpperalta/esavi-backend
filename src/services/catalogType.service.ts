@@ -12,7 +12,7 @@ const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser?:
     const code = toCamelCase(data.code.trim());
     const existing = await CatalogType.findOne({ where: { code } });
     if (existing) {
-        throw new AppError(getMessage('catalogType.codeExists', lang), 409, 'CATTYPE_001_CODE_EXISTS');
+        throw new AppError(getMessage('catalogType.codeExists', lang, { code }), 409, 'CATTYPE_001_CODE_EXISTS');
     }
     const newEntry: AppDetails = {
         createdAt: new Date(),
@@ -83,7 +83,7 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
             }
         });
         if( existingType ) {
-            throw new AppError(getMessage('catalogType.codeExists', lang), 409, 'CATTYPE_004_CODE_EXISTS');
+            throw new AppError(getMessage('catalogType.codeExists', lang, { code: toCamelCase(data.code.trim()) }), 409, 'CATTYPE_004_CODE_EXISTS');
         }
     }
     const currentAppDetails = Array.isArray(catalogType.appDetails) ? catalogType.appDetails : [];
