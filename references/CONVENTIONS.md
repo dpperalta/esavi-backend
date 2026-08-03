@@ -148,6 +148,28 @@ ESAVI-<ENTIDAD>-<NNN>[A|B|C]
 
 `002` sin letra cuando hay un solo listado; `002A`/`002B` cuando existen ambas variantes. Los sufijos `A`/`B`/`C` **solo** distinguen variantes de la misma operación, nunca operaciones distintas.
 
+### Listado dual — un `GET /` que se bifurca en dos servicios
+
+Cuando hay **una sola ruta** `GET /` que, según el rol de quien pide, llama a un servicio u otro (público solo-activos frente a admin con inactivos), la numeración es:
+
+- **Ruta:** `002`, sin letra. El código de la ruta describe el endpoint, y endpoint hay uno.
+- **Controlador:** `002`, sin letra. Es el que elige la rama con el predicado de permisos (`canViewInactive(...)`, `isSuperAdmin(...)`).
+- **Servicios:** `002A` para la variante pública y `002B` para la de administración. Los sufijos describen las dos variantes del servicio, que sí son dos.
+
+```ts
+// routes/geoLevelType.routes.ts
+// Code: ESAVI-GEOTYPE-002
+router.get('/', tokenValidation, validateUserRole(USER), ...listValidator, validateFields, getGeoLevelTypes);
+
+// controllers/geoLevelType.controller.ts
+// Code: ESAVI-GEOTYPE-002
+const data = isSuperAdmin(req.user as AuthUser)
+    ? await getAllGeoLevelTypesService(limit, offset)     // ESAVI-GEOTYPE-002B
+    : await getActiveGeoLevelTypesService(limit, offset); // ESAVI-GEOTYPE-002A
+```
+
+Esto **no** contradice la fila `002A`/`002B` de la tabla: allí son dos rutas distintas (`/` y `/admin`), como en `catalogItem`, y entonces cada ruta lleva su propia letra. La diferencia está en cuántas rutas existen, no en cuántos servicios.
+
 ### El mismo código en cinco lugares
 
 Un código de operación aparece en cinco sitios y **debe ser idéntico en los cinco**. Ésta es la regla que más se ha roto:
@@ -168,7 +190,29 @@ Formato paralelo, con guion bajo y **sin** el prefijo `ESAVI-`:
 <ENTIDAD>_<NNN>_<ACCION>
 ```
 
-`CATITEM_001_CREATION_FAILED`, `CATITEM_003_NOT_FOUND`, `CATITEM_005B_ACTIVATION_FAILED`. Acciones estándar: `CREATION_FAILED`, `FETCH_FAILED`, `UPDATE_FAILED`, `DELETE_FAILED`, `ACTIVATION_FAILED`, `NOT_FOUND`, `CODE_EXISTS`, `<FK>_NOT_FOUND`.
+`CATITEM_001_CREATION_FAILED`, `CATITEM_003_NOT_FOUND`, `CATITEM_005B_ACTIVATION_FAILED`. Acciones estándar: `CREATION_FAILED`, `FETCH_FAILED`, `UPDATE_FAILED`, `DELETE_FAILED`, `ACTIVATION_FAILED`, `NOT_FOUND`, `CODE_EXISTS`, `ALREADY_ACTIVE`, `ALREADY_INACTIVE`, `<FK>_NOT_FOUND`.
+
+### Sufijo de activación — `005A` / `005B`
+
+El servicio de activación es uno solo y atiende las dos operaciones, así que el número **no** se escribe fijo: se calcula al entrar y se usa en los tres sitios donde aparece.
+
+```ts
+// ESAVI-CATTYPE-005A / 005B - Setting Catalog Type Active/Inactive Service - For SuperAdmin
+const setCatalogTypeActivationService = async (id, authUser?, lang = 'en', isActive = true) => {
+    const op = isActive ? '005B' : '005A';
+    ...
+    notFoundCode: `CATTYPE_${ op }_NOT_FOUND`,
+    alreadyInStateCode: `CATTYPE_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+    appDetail: {
+        ...
+        method: `ESAVI-CATTYPE-${ op }`,
+    }
+}
+```
+
+El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no distingue un borrado de una activación, y el valor de un código de operación es poder buscarlo en el log y saber exactamente qué se intentó.
+
+`appDetails.method` guarda el código y **solo** el código: nunca `_ACTIVATION` ni `_DEACTIVATION` pegados detrás. Esos sufijos describen el resultado, no la operación, y rompen la búsqueda por código en la auditoría.
 
 ### Abreviaturas registradas
 
