@@ -18,7 +18,7 @@ route.get('/', tokenValidation, validateUserRole(USER), ...geoLocationListValida
 
 // Get Geographic Location by ID
 // Code: ESAVI-GEOLOC-003
-route.get('/:id', tokenValidation, validateUserRole(USER), getGeoLocationById);
+route.get('/:id', tokenValidation, validateUserRole(USER), ...geoLocationIdValidator, validateFields, getGeoLocationById);
 
 // Update Geographic Location
 // Code: ESAVI-GEOLOC-004

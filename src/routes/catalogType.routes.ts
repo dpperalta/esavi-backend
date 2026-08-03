@@ -30,7 +30,7 @@ router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...catalogTypeId
 
 // Activate Catalog Type
 // Code: ESAVI-CATTYPE-005B
-router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), activateCatalogType);
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...catalogTypeIdValidator, validateFields, activateCatalogType);
 
 
 export default router;
