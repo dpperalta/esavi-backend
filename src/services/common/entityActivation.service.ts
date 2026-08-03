@@ -1,5 +1,6 @@
 import { Model, ModelStatic, Transaction, WhereOptions } from 'sequelize';
 import { AppError } from '../../helpers/appError.helper';
+import { AppDetails } from '../../types';
 
 interface ActivationOptions<T extends Model> {
     model: ModelStatic<T>;
@@ -10,12 +11,7 @@ interface ActivationOptions<T extends Model> {
     notFoundCode: string;
     alreadyInStateMessage: string;
     alreadyInStateCode: string;
-    appDetail: {
-        createdAt: Date;
-        user: string;
-        method: string;
-        detail: string;
-    };
+    appDetail: AppDetails;
 }
 
 // Generic function to activate/deactivate an entity

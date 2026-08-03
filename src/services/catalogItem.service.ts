@@ -2,7 +2,7 @@ import { Op } from "sequelize";
 import { AppError, getMessage, toConstantCase, toTitleCase } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
-import { AuthUser, CreateCatalogItemInput } from "../types";
+import { AppDetails, AuthUser, CreateCatalogItemInput } from "../types";
 import { setEntityActiveStatusService } from "./common/entityActivation.service";
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from "../constants/pagination.constants";
 
@@ -45,6 +45,12 @@ const createCatalogItemService = async (data: CreateCatalogItemInput, authUser?:
         sortOrder = Number(maxSortOrder ?? 0) + 1;
     }
     // Create the Catalog Item
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CATITEM-001',
+        detail: 'Catalog item created by service'
+    };
     const createdItem = await CatalogItem.create({
         catalogTypeId: data.catalogTypeId,
         code: code ? code : 'NO_CODE_' + Date.now(),
@@ -53,14 +59,7 @@ const createCatalogItemService = async (data: CreateCatalogItemInput, authUser?:
         description: data.description ? data.description.trim() : null,
         metadata: data.metadata || {},
         sortOrder,
-        appDetails: [
-            {
-                createdAt: new Date(),
-                user: authUser?.userId || 'undefined',
-                method: 'ESAVI-CATITEM-001',
-                detail: 'Catalog item created by service'
-            }
-        ]
+        appDetails: [newEntry]
     });
     return createdItem;
 }
@@ -168,16 +167,17 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
     if (objectToUpdate.metadata === undefined) delete objectToUpdate.metadata;
     if (objectToUpdate.sortOrder === undefined) delete objectToUpdate.sortOrder;
     if( Object.keys(objectToUpdate).length > 0 ) {
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: userId || 'undefined',
+            method: 'ESAVI-CATITEM-004',
+            detail: 'Catalog item updated by service'
+        };
         updatedCatalogItem = await catalogItem.update({
             ...objectToUpdate,
             appDetails: [
                 ...currentAppDetails,
-                {
-                    'createdAt': new Date(),
-                    'user': userId || 'undefined',
-                    'method': 'ESAVI-CATITEM-004',
-                    'detail': 'Catalog item updated by service'
-                }
+                newEntry
             ]
         }, {returning: true});
     }

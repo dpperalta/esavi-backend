@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
 import { getMessage, AppError, esaviLog } from '../helpers';
-import { AuthUser, CreateGeoLocationInput } from '../types';
+import { AppDetails, AuthUser, CreateGeoLocationInput } from '../types';
 import { GeoLevelType, GeoLocation } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
@@ -64,6 +64,12 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser?:
         });
         sortOrder = Number(maxSortOrder ?? 0) + 1;
     }
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-GEOLOC-001',
+        detail: 'Geographic location created by service'
+    };
     const createdLocation = await GeoLocation.create({
         geoLevelTypeId: data.geoLevelTypeId,
         parentGeoLocationId: data.parentGeoLocationId ?? null,
@@ -77,14 +83,7 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser?:
         sortOrder: sortOrder ?? undefined,
         level: calculatedLevel,
         geoPolygon: data.geoPolygon ?? null,
-        appDetails: [
-            {
-                createdAt: new Date(),
-                user: authUser?.userId || 'undefined',
-                method: 'ESAVI-GEOLOC-001',
-                detail: 'Geographic location created by service'
-            }
-        ]
+        appDetails: [newEntry]
     });
     return createdLocation;
 }
@@ -239,17 +238,18 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
     if (objectToUpdate.geoPolygon === undefined) delete objectToUpdate.geoPolygon;
     if (objectToUpdate.sortOrder === undefined) delete objectToUpdate.sortOrder;
     if( Object.keys(objectToUpdate).length > 0 ) {
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: userId || 'undefined',
+            method: 'ESAVI-GEOLOC-004',
+            detail: 'Geographic location updated by service'
+        };
         updatedGeoLocation = await geoLocation.update({
-            ...objectToUpdate, 
+            ...objectToUpdate,
             appDetails: [
-            ...currentAppDetails,
-            {
-                'createdAt': new Date(),
-                'user': userId || 'undefined',
-                'method': 'ESAVI-GEOLOC-004',
-                'detail': 'Geographic location updated by service'
-            }
-        ]
+                ...currentAppDetails,
+                newEntry
+            ]
         }, {returning: true});
         console.log('ACTUALIZA');
     }
