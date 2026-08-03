@@ -10,11 +10,11 @@ const router = Router();
 
 // Create Geographic Level Type
 // Code: ESAVI-GEOTYPE-001
-router.post('/', tokenValidation, validateUserRole(SUPERADMIN), ...createGeoLevelTypeValidator, validateFields, createGeoLevelType);
+router.post('/', tokenValidation, validateUserRole(ADMIN), ...createGeoLevelTypeValidator, validateFields, createGeoLevelType);
 
 // Get Geographic Level Types
 // Code: ESAVI-GEOTYPE-002
-router.get('/', tokenValidation, validateUserRole(SUPERADMIN, ADMIN), getGeoLevelTypes);
+router.get('/', tokenValidation, validateUserRole(USER), getGeoLevelTypes);
 
 // Get Geographic Level Type by ID
 // Code: ESAVI-GEOTYPE-003
@@ -22,11 +22,11 @@ router.get('/:id', tokenValidation, validateUserRole(USER), getGeoLevelTypeById)
 
 // Update Geographic Level Type
 // Code: ESAVI-GEOTYPE-004
-router.put('/:id', tokenValidation, validateUserRole(SUPERADMIN), ...updateGeoLevelTypeValidator, validateFields, updateGeoLevelType);
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...updateGeoLevelTypeValidator, validateFields, updateGeoLevelType);
 
 // Soft delete Geographic Level Type
 // Code: ESAVI-GEOTYPE-005A
-router.delete('/:id', tokenValidation, validateUserRole(SUPERADMIN), deleteGeoLevelType);
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), deleteGeoLevelType);
 
 // Activate Geographic Level Type
 // Code: ESAVI-GEOTYPE-005B
