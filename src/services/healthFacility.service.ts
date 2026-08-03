@@ -4,7 +4,7 @@ import { CatalogItem } from '../models/catalogItem.model';
 import { GeoLocation } from '../models/geoLocation.model';
 import { CatalogType } from '../models/catalogType.model';
 import { AppError, getMessage } from '../helpers';
-import { AuthUser, CreateHealthFacilityInput } from '../types';
+import { AppDetails, AuthUser, CreateHealthFacilityInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-HFAC-001 - Create Health Facility Service
@@ -62,6 +62,12 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
         }
     }
     // Create the new health facility
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'unknown',
+        method: 'ESAVI-HFAC-001',
+        detail: 'Health facility created by service'
+    };
     const newHealthFacility = await HealthFacility.create({
         geoLocationId: data.geoLocationId,
         facilityTypeItemId: data.facilityTypeItemId ?? null,
@@ -76,12 +82,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
         phone: data.phone || null,
         email: data.email || null,
         isActive: data.isActive !== undefined ? data.isActive : true,
-        appDetails: [{
-            createdAt: new Date(),
-            user: authUser?.userId || 'unknown',
-            method: 'ESAVI-HFAC-001',
-            detail: 'Health facility created by service'
-        }]
+        appDetails: [newEntry]
     });
     return newHealthFacility;
 }

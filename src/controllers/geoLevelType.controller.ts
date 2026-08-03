@@ -1,14 +1,13 @@
-import { NextFunction, Request, Response } from 'express';
+﻿import { NextFunction, Request, Response } from 'express';
 import { createGeoLevelTypeService, getActiveGeoLevelTypesService, getAllGeoLevelTypesService, getGeoLevelTypeByIdService, setGeoLevelTypeActivationService, updateGeoLevelTypeService } from '../services/geoLevelType.service'
-import { esaviLog, getMessage, isSuperAdmin, AppError } from '../helpers';
-import { AuthUser } from '../types';
-import { CreateGeoLevelTypeInput } from '../types/geographical/geoLevelType.types';
+import { esaviLog, getMessage, canViewInactive, AppError } from '../helpers';
+import { CreateGeoLevelTypeInput } from '../types/geography/geoLevelType.types';
 
 // Create Geographic Level Type Controller
 // Code: ESAVI-GEOTYPE-001
 const createGeoLevelType = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await createGeoLevelTypeService({ ...req.body } as CreateGeoLevelTypeInput, { userId: req.user?.userId } as AuthUser, req.lang);
+        const data = await createGeoLevelTypeService({ ...req.body } as CreateGeoLevelTypeInput, req.user, req.lang);
         return res.status(201).json({
             ok: true,
             message: getMessage('geoLevelType.createdSuccess', req.lang),
@@ -30,7 +29,7 @@ const getGeoLevelTypes = async(req: Request, res: Response, next: NextFunction):
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = isSuperAdmin(req.user as AuthUser) ? await getAllGeoLevelTypesService( limit,  offset ) : await getActiveGeoLevelTypesService( limit,  offset );
+        const data = canViewInactive(req.user) ? await getAllGeoLevelTypesService( limit,  offset ) : await getActiveGeoLevelTypesService( limit,  offset );
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.getSuccessPlural', req.lang),
@@ -51,7 +50,7 @@ const getGeoLevelTypes = async(req: Request, res: Response, next: NextFunction):
 const getGeoLevelTypeById = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        const data = await getGeoLevelTypeByIdService(id, req.lang, isSuperAdmin(req.user as AuthUser));
+        const data = await getGeoLevelTypeByIdService(id, req.lang, canViewInactive(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.getSuccess', req.lang),
@@ -72,7 +71,7 @@ const getGeoLevelTypeById = async(req: Request, res: Response, next: NextFunctio
 const updateGeoLevelType = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        const data = await updateGeoLevelTypeService(id, { ...req.body } as Partial<CreateGeoLevelTypeInput>, req.user as AuthUser, req.lang);
+        const data = await updateGeoLevelTypeService(id, { ...req.body } as Partial<CreateGeoLevelTypeInput>, req.user, req.lang);
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.updatedSuccess', req.lang),
@@ -93,7 +92,7 @@ const updateGeoLevelType = async(req: Request, res: Response, next: NextFunction
 const deleteGeoLevelType = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        await setGeoLevelTypeActivationService(id, req.user as AuthUser, req.lang, false);
+        await setGeoLevelTypeActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.deletedSuccess', req.lang)
@@ -113,7 +112,7 @@ const deleteGeoLevelType = async(req: Request, res: Response, next: NextFunction
 const activateGeoLevelType = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        await setGeoLevelTypeActivationService(id, req.user as AuthUser, req.lang, true);
+        await setGeoLevelTypeActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.activatedSuccess', req.lang)

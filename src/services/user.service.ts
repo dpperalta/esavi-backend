@@ -3,7 +3,7 @@ import { sequelize } from '../database/connection';
 import { AppUser }  from '../models/appUser.model';
 import { AppRole }  from '../models/appRole.model';
 import { AppUserRole } from '../models/appUserRole.model';
-import { CreateUserServiceParams } from '../types';
+import { AppDetails, CreateUserServiceParams } from '../types';
 import { getMessage } from '../helpers/i18n.helper';
 import { esaviCrypt } from '../helpers/crypto.helper';
 import { AppError } from '../helpers/appError.helper';
@@ -39,6 +39,12 @@ const createUserService = async ({data, authUser, lang = 'en'}: CreateUserServic
         }
         // User creation
         const passwordHash = await bcrypt.hash( password, 10 );
+        const userEntry: AppDetails = {
+            createdAt: new Date(),
+            user: creatorId || 'undefined',
+            method: 'ESAVI-USER-001',
+            detail: 'User created by service'
+        };
         const user = await AppUser.create({
             username: username ? esaviCrypt(username) : undefined,
             firstName: esaviCrypt(firstName),
@@ -48,29 +54,25 @@ const createUserService = async ({data, authUser, lang = 'en'}: CreateUserServic
             passwordHash: passwordHash,
             requiresPasswordChange: true,
             isActive: true,
-            appDetails: [{
-                'createdAt': new Date(),
-                'user': creatorId || 'undefined',
-                'method': 'ESAVI-USER-001',
-                'detail': 'User created by service'
-            }]
+            appDetails: [userEntry]
         }, { transaction });
 
         // User-Role association
         await Promise.all(
-            roleIds.map((roleId) => 
-                AppUserRole.create({
+            roleIds.map((roleId) => {
+                const roleEntry: AppDetails = {
+                    createdAt: new Date(),
+                    user: creatorId || 'undefined',
+                    method: 'ESAVI-USER-001',
+                    detail: 'Role assigned by service'
+                };
+                return AppUserRole.create({
                     userId: user.userId,
                     roleId,
                     assignedByUserId: creatorId,
-                    appDetails: [{
-                        'createdAt': new Date(),
-                        'user': creatorId || 'undefined',
-                        'method': 'ESAVI-USER-001',
-                        'detail': 'Role assigned by service'
-                    }]
-                }, { transaction }) 
-            )
+                    appDetails: [roleEntry]
+                }, { transaction });
+            })
         );
         
         await transaction.commit();

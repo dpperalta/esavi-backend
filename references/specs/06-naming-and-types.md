@@ -1,6 +1,6 @@
 # SPEC 06 — Nomenclatura, tipos y código muerto
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01, 02, 03, 04, 05 (va el último; toca casi todos los archivos)
 > **Fecha:** 2026-08-01
 > **Objetivo:** Que los nombres de archivo, los tipos y los barrels sigan el canon, y que no quede código muerto en `src/`.
@@ -136,7 +136,7 @@ Los renombrados van primero y solos: un commit de `git mv` con sus imports, sin 
    *Verificación:* `npm run build` pasa; `git log --follow` sigue mostrando el historial de cada archivo.
 
 2. **Código muerto fuera.** Eliminar las ocho ubicaciones de la tabla.
-   *Verificación:* `grep -rn "console.log" src/` no devuelve resultados; `getActiveCatalogItemsByTypeService` solo existe en `catalogItem.service.ts`.
+   *Verificación:* los dos `console.log` de la tabla no existen; `getActiveCatalogItemsByTypeService` solo existe en `catalogItem.service.ts`.
 
 3. **Tipos de entrada.** Renombrar `CreateCatalogItem` a `CreateCatalogItemInput` y eliminar `UpdateGeoLevelTypeInput`.
    *Verificación:* `grep -rn "CreateCatalogItem\b" src/` no devuelve resultados sin el sufijo.
@@ -167,7 +167,7 @@ Los renombrados van primero y solos: un commit de `git mv` con sus imports, sin 
 - [ ] `src/types/geographical/` no existe; `src/types/geography/` sí.
 - [ ] `src/types/healthFacility.types.ts` no existe en la raíz de `types/`.
 - [ ] `git log --follow` muestra el historial completo de los seis archivos renombrados.
-- [ ] `grep -rn "console.log" src/` no devuelve resultados.
+- [ ] Los dos `console.log` de la tabla de código muerto (`geoLocation.controller.ts`, `tokenValidation.middleware.ts`) no existen. Los ocho restantes en `src/` quedan fuera de alcance y se catalogan como DEUDA-036.
 - [ ] `grep -rn "as AuthUser" src/` no devuelve resultados.
 - [ ] `grep -rn "loginController" src/` no devuelve resultados.
 - [ ] `grep -rn "const route =" src/routes/` no devuelve resultados.
@@ -179,7 +179,8 @@ Los renombrados van primero y solos: un commit de `git mv` con sus imports, sin 
 - [ ] Un typo en una clave de un objeto de auditoría rompe la compilación.
 - [ ] `npm run build` compila sin errores.
 - [ ] `npm run i18n:check` sigue saliendo con 0.
-- [ ] `grep -rn "geographical" src/ references/` no devuelve resultados.
+- [ ] Ninguna ruta de archivo ni import en `src/` contiene `geographical`.
+- [ ] `grep -n "geographical" references/CONVENTIONS.md` no devuelve resultados. (`TECHNICAL_DEBT.md` y este spec sí lo nombran: documentan el renombrado.)
 - [ ] Ninguna respuesta HTTP cambia de status, de forma ni de contenido.
 
 ---

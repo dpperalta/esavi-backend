@@ -1,13 +1,12 @@
-import { NextFunction, Request, Response } from 'express';
+﻿import { NextFunction, Request, Response } from 'express';
 import { createUserService } from '../services/user.service';
 import { esaviLog, getMessage, AppError } from '../helpers';
-import { AuthUser } from '../types/user/user.types';
 
 // Create User Controller
 // Code: ESAVI-USER-001
 const createUser = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
     try {
-        const data = await createUserService({ data: req.body, authUser: { userId: req.user?.userId } as AuthUser, lang: req.lang });
+        const data = await createUserService({ data: req.body, authUser: req.user, lang: req.lang });
         return res.status(201).json({
             ok: true,
             message: getMessage('user.createdSuccess', req.lang),

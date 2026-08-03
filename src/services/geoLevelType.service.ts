@@ -2,7 +2,7 @@ import { Op } from 'sequelize';
 import { AppError } from '../helpers/appError.helper';
 import { getMessage } from '../helpers/i18n.helper';
 import { GeoLevelType } from '../models/geoLevelType.model';
-import { AuthUser, CreateGeoLevelTypeInput } from '../types';
+import { AppDetails, AuthUser, CreateGeoLevelTypeInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -19,16 +19,17 @@ const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser
     if( existingType ) {
         throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${code.trim()}` } ), 409, 'GEOTYPE_001_CODE_EXISTS');
     }
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: userId || 'undefined',
+        method: 'ESAVI-GEOTYPE-001',
+        detail: 'GeoLevelType created by service'
+    };
     const newGeoLevelType = await GeoLevelType.create({
         code: data.code.trim().toLocaleUpperCase(),
         name: data.name.trim(),
         sortOrder: data.sortOrder,
-        appDetails: [{
-            'createdAt': new Date(),
-            'user': userId || 'undefined',
-            'method': 'ESAVI-GEOTYPE-001',
-            'detail': 'GeoLevelType created by service'
-        }]
+        appDetails: [newEntry]
     });
     return newGeoLevelType;
 }
@@ -100,19 +101,20 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
     if (objectToUpdate.name === undefined) delete objectToUpdate.name;
     if (objectToUpdate.sortOrder === undefined) delete objectToUpdate.sortOrder;
     if( Object.keys(objectToUpdate).length > 0 ) {
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: userId || 'undefined',
+            method: 'ESAVI-GEOTYPE-004',
+            detail: 'GeoLevelType updated by service'
+        };
         updatedGeoLevelType = await geoLevelType.update({
-            ...objectToUpdate, 
+            ...objectToUpdate,
             appDetails: [
-            ...currentAppDetails,
-            {
-                'createdAt': new Date(),
-                'user': userId || 'undefined',
-                'method': 'ESAVI-GEOTYPE-004',
-                'detail': 'GeoLevelType updated by service'
-            }
-        ]
+                ...currentAppDetails,
+                newEntry
+            ]
         }, {returning: true});
-    } 
+    }
 
     return updatedGeoLevelType;
 };

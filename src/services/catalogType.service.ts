@@ -2,7 +2,7 @@ import { Op } from 'sequelize';
 import { CatalogType } from '../models/catalogType.model';
 import { CatalogItem } from '../models/catalogItem.model';
 import { AppError, getMessage, toCamelCase, toTitleCase } from '../helpers';
-import { AuthUser, CreateCatalogTypeInput } from '../types';
+import { AppDetails, AuthUser, CreateCatalogTypeInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -14,17 +14,18 @@ const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser?:
     if (existing) {
         throw new AppError(getMessage('catalogType.codeExists', lang), 409, 'CATTYPE_001_CODE_EXISTS');
     }
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'unknown',
+        method: 'ESAVI-CATTYPE-001',
+        detail: 'CatalogType created by service'
+    };
     const newCatalogType = await CatalogType.create({
         code,
         name: toTitleCase(data.name.trim()),
         description: data.description?.trim() || null,
         sortOrder: data.sortOrder || 0,
-        appDetails: [{
-            createdAt: new Date(),
-            user: authUser?.userId || 'unknown',
-            method: 'ESAVI-CATTYPE-001',
-            detail: 'CatalogType created by service'
-        }]
+        appDetails: [newEntry]
     });
     return newCatalogType;
 }
@@ -97,17 +98,18 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
     if (objectToUpdate.description === undefined) delete objectToUpdate.description;
     if (objectToUpdate.sortOrder === undefined) delete objectToUpdate.sortOrder;
     if( Object.keys(objectToUpdate).length > 0 ) {
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: userId || 'undefined',
+            method: 'ESAVI-CATTYPE-004',
+            detail: 'CatalogType updated by service'
+        };
         updatedCatalogType = await catalogType.update({
-            ...objectToUpdate, 
+            ...objectToUpdate,
             appDetails: [
-            ...currentAppDetails,
-            {
-                'createdAt': new Date(),
-                'user': userId || 'undefined',
-                'method': 'ESAVI-CATTYPE-004',
-                'detail': 'CatalogType updated by service'
-            }
-        ]
+                ...currentAppDetails,
+                newEntry
+            ]
         }, {returning: true});
     }
     return updatedCatalogType;

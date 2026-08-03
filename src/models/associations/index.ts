@@ -1,5 +1,5 @@
 import { initAuthAssociations } from './auth.associations';
-import { initCatalogAssociations } from './catalog.association';
+import { initCatalogAssociations } from './catalog.associations';
 import { initGeographicAssociations } from './geographic.associations';
 import { initHealthFacilityAssociations } from './healthFacility.associations';
 

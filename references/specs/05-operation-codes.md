@@ -1,6 +1,6 @@
 # SPEC 05 — Códigos de operación trazables
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01, SPEC 02, SPEC 04 (tocan las mismas líneas)
 > **Fecha:** 2026-08-01
 > **Objetivo:** Que un código `ESAVI-*` signifique la misma operación en las cinco ubicaciones donde aparece.

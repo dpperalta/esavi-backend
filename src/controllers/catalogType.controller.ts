@@ -1,13 +1,12 @@
-import { Request, Response, NextFunction } from 'express';
+﻿import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage, canViewInactive } from '../helpers';
 import { createCatalogTypeService, getActiveCatalogTypesService, getAllCatalogTypesService, getCatalogTypeByIdService, setCatalogTypeActivationService, updateCatalogTypeService } from '../services/catalogType.service';
-import { AuthUser } from '../types';
 
 // Create Catalog Type Controller
 // Code: ESAVI-CATTYPE-001
 const createCatalogType = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await createCatalogTypeService(req.body, { userId: req.user?.userId } as AuthUser, req.lang);
+        const data = await createCatalogTypeService(req.body, req.user, req.lang);
         return res.status(201).json({
             ok: true,
             message: getMessage('catalogType.createdSuccess', req.lang),
@@ -29,7 +28,7 @@ const getCatalogTypes = async (req: Request, res: Response, next: NextFunction):
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = canViewInactive(req.user as AuthUser) ? await getAllCatalogTypesService(limit, offset) : await getActiveCatalogTypesService(limit, offset);
+        const data = canViewInactive(req.user) ? await getAllCatalogTypesService(limit, offset) : await getActiveCatalogTypesService(limit, offset);
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogType.getSuccessPlural', req.lang),
@@ -50,7 +49,7 @@ const getCatalogTypes = async (req: Request, res: Response, next: NextFunction):
 const getCatalogTypeById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
-        const data = await getCatalogTypeByIdService(id.toString(), req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getCatalogTypeByIdService(id.toString(), req.lang, canViewInactive(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogType.getSuccess', req.lang),
@@ -71,7 +70,7 @@ const getCatalogTypeById = async (req: Request, res: Response, next: NextFunctio
 const updateCatalogType = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
-        const data = await updateCatalogTypeService(id.toString(), req.body, { userId: req.user?.userId } as AuthUser, req.lang);
+        const data = await updateCatalogTypeService(id.toString(), req.body, req.user, req.lang);
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogType.updatedSuccess', req.lang),
@@ -92,7 +91,7 @@ const updateCatalogType = async (req: Request, res: Response, next: NextFunction
 const deleteCatalogType = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        await setCatalogTypeActivationService(id, { userId: req.user?.userId } as AuthUser, req.lang, false);
+        await setCatalogTypeActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogType.deletedSuccess', req.lang)
@@ -112,7 +111,7 @@ const deleteCatalogType = async (req: Request, res: Response, next: NextFunction
 const activateCatalogType = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        await setCatalogTypeActivationService(id, { userId: req.user?.userId } as AuthUser, req.lang, true);
+        await setCatalogTypeActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogType.activatedSuccess', req.lang)

@@ -4,7 +4,7 @@ import { esaviLog, getMessage, AppError } from '../helpers';
 
 // Execute login process
 // Code: ESAVI-AUTH-001
-const loginController = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void   > => {
+const login = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void   > => {
     try{
         const result = await loginService(req.body);
         return res.status(200).json({
@@ -23,5 +23,5 @@ const loginController = async( req: Request, res: Response, next: NextFunction )
 }
 
 export {
-    loginController
+    login
 }

@@ -53,6 +53,7 @@ Cada entrada tiene un ID estable, para convertirse después en un spec independi
 | [DEUDA-033](#deuda-033) | 🟠 | `tokenValidation` deja `email` y `displayName` cifrados en `req.user` |
 | [DEUDA-034](#deuda-034) | 🟠 | Reasignar `parentGeoLocationId` puede crear un ciclo |
 | [DEUDA-035](#deuda-035) | 🟡 | `canViewInactive` exige SUPERADMIN; la matriz dice ADMIN |
+| [DEUDA-036](#deuda-036) | 🟡 | Quedan 8 `console.log` en `src/` fuera del alcance del SPEC 06 |
 
 ## Mapa de resolución
 
@@ -536,3 +537,23 @@ Nada impide asignar como padre de una ubicación a uno de sus propios descendien
 El resultado: un ADMIN pasa el middleware de una ruta declarada `ADMIN` y recibe únicamente los registros activos, sin ninguna señal de que se le está filtrando.
 
 **Aceptación**: `canViewInactive` admite ADMIN, o la matriz canónica se corrige a SUPERADMIN. Las dos fuentes deben decir lo mismo.
+
+---
+
+<a id="deuda-036"></a>
+## DEUDA-036 🟡 Quedan 8 `console.log` en `src/` fuera del alcance del SPEC 06
+
+Detectada al implementar el [SPEC 06](./specs/06-naming-and-types.md), cuyo alcance solo cubría los dos `console.log` de depuración que sí eliminó.
+
+No son homogéneos y por eso no se tratan juntos:
+
+| Ubicación | Qué es |
+|---|---|
+| `health.controller.ts:4-5` | depuración olvidada: vuelca `req.query.lang` y `req.lang` en cada petición de salud |
+| `geoLocation.service.ts:254` | depuración olvidada: `console.log('ACTUALIZA')` |
+| `connection.ts:40`, `index.ts:96-98` | banner de arranque; salida intencional, pero esquiva `esaviLog` |
+| `connection.ts:28` | `logging: env === 'development' ? console.log : false`; es el logger que recibe Sequelize, no un log suelto |
+
+Los dos primeros grupos se eliminan o pasan a `esaviLog`. El último es funcional: cambiarlo altera el comportamiento en desarrollo.
+
+**Aceptación**: los tres `console.log` de depuración no existen; los cuatro del banner salen por `esaviLog`; `connection.ts:28` se documenta como uso legítimo o se sustituye por un logger explícito.

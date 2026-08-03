@@ -1,4 +1,4 @@
-export interface CreateCatalogItem {
+export interface CreateCatalogItemInput {
     catalogTypeId: string;
     code?: string | null;
     name: string;
