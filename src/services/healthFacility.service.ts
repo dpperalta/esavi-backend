@@ -28,12 +28,13 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
             },
             include: [{
                 model: CatalogType,
+                as: 'catalogType',
                 //where: { code: 'FACILITY_TYPE' },
                 attributes: []
             }]
         });
         if (!facilityType) {
-            throw new AppError(getMessage('facilityType.notFound', lang), 404, 'HF_001_FACILITY_TYPE_NOT_FOUND');
+            throw new AppError(getMessage('healthFacility.facilityTypeNotFound', lang), 404, 'HF_001_FACILITY_TYPE_NOT_FOUND');
         }
     }
     // If parentHealthFacilityId is provided, validate that the parent health facility exists and is active

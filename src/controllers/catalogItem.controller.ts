@@ -107,7 +107,7 @@ const updateCatalogItem = async (req: Request, res: Response, next: NextFunction
             next(error);
             return;
         }
-        next(new AppError(getMessage('catalogItem.updateFailed', req.lang), 500, 'CATITEM_003_UPDATE_FAILED', error));
+        next(new AppError(getMessage('catalogItem.updatedFailed', req.lang), 500, 'CATITEM_003_UPDATE_FAILED', error));
     }
 }
 
