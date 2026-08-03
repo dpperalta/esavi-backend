@@ -53,26 +53,26 @@ const getAllCatalogTypesService = async (limit: number = DEFAULT_LIMIT, offset: 
     return catalogTypes;
 }
 
-// ESAVI-CATTYPE-002C - Get Catalog Type by ID Service
+// ESAVI-CATTYPE-003 - Get Catalog Type by ID Service
 const getCatalogTypeByIdService = async (id: string, lang: string = 'en', isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { catalogTypeId: id } : { catalogTypeId: id, isActive: true };
         const catalogType = await CatalogType.findOne({
             where: whereClause
         }); 
         if( !catalogType ) {
-            throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATTYPE_002C_NOT_FOUND');
+            throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATTYPE_003_NOT_FOUND');
         }
         return catalogType;
 }
 
-// ESAVI-CATTYPE-003 - Update Catalog Type Service - For SuperAdmin
+// ESAVI-CATTYPE-004 - Update Catalog Type Service - For SuperAdmin
 const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogTypeInput>, authUser?: AuthUser, lang: string = 'en') => {
     const { userId } = authUser || {};
     const catalogType = await CatalogType.findByPk(id);
     let updatedCatalogType = catalogType;
 
     if (!catalogType) {
-        throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATTYPE_003_NOT_FOUND');
+        throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATTYPE_004_NOT_FOUND');
     }
     if( data.code && toCamelCase(data.code.trim()) !== catalogType.code ) {
         const existingType = await CatalogType.findOne({
@@ -82,7 +82,7 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
             }
         });
         if( existingType ) {
-            throw new AppError(getMessage('catalogType.codeExists', lang), 409, 'CATTYPE_003_CODE_EXISTS'); 
+            throw new AppError(getMessage('catalogType.codeExists', lang), 409, 'CATTYPE_004_CODE_EXISTS');
         }
     }
     const currentAppDetails = Array.isArray(catalogType.appDetails) ? catalogType.appDetails : [];
@@ -104,7 +104,7 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
             {
                 'createdAt': new Date(),
                 'user': userId || 'undefined',
-                'method': 'ESAVI-CATTYPE-003',
+                'method': 'ESAVI-CATTYPE-004',
                 'detail': 'CatalogType updated by service'
             }
         ]
