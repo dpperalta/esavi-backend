@@ -1,7 +1,7 @@
 export interface CreateHealthFacilityInput {
     geoLocationId: string;
     parentHealthFacilityId?: string | null;
-    facilityTypeItemId: string;
+    facilityTypeItemId?: string | null;
     localCode?: string | null;
     name: string;
     officialName?: string | null;
