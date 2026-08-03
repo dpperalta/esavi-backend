@@ -33,24 +33,3 @@ route.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...geoLocationIdV
 route.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...geoLocationIdValidator, validateFields, activateGeoLocation);
 
 export default route;
-
-/*
-import { activateGeoLevelType, createGeoLevelType, deleteGeoLevelType, getGeoLevelTypeById, getGeoLevelTypes, updateGeoLevelType } from '../controllers/geoLevelType.controller';
-import { createGeoLevelTypeValidator, updateGeoLevelTypeValidator } from '../validators';
-import { tokenValidation, validateUserRole } from '../middlewares';
-import { ROLES } from '../constants/roles.constants';
-
-const { SUPERADMIN, ADMIN, USER } = ROLES;
-
-const router = Router();
-
-// Soft delete Geographic Level Type
-// Code: ESAVI-GEOTYPE-005A
-router.delete('/:id', tokenValidation, validateUserRole(SUPERADMIN), deleteGeoLevelType);
-
-// Activate Geographic Level Type
-// Code: ESAVI-GEOTYPE-005B
-router.patch('/:id/activate', tokenValidation, validateUserRole(SUPERADMIN), activateGeoLevelType);
-
-export default router;
-*/

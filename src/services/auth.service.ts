@@ -43,9 +43,6 @@ const loginService =async({ email, password }: LoginInput) => {
 
     const token = await jwtGenerate({
         userId: user.getDataValue('userId'),
-        //email: user.getDataValue('email'),
-        //displayName: user.getDataValue('displayName'),
-        //roles
     });
     
     return {
@@ -53,9 +50,7 @@ const loginService =async({ email, password }: LoginInput) => {
         user: {
             userId: user.userId,
             email: esaviDecrypt(user.email),
-            //email: user.getDataValue('email'),
             displayName: esaviDecrypt(user.displayName),
-            //displayName: user.getDataValue('displayName'),
             roles
         }
     };  

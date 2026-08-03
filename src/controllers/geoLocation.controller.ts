@@ -31,7 +31,6 @@ const getGeoLocations = async(req: Request, res: Response, next: NextFunction): 
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     const geoLevelId = req.query.geoLevelId ? (req.query.geoLevelId as string).trim() : undefined;
     const parentId = req.query.parentId ? (req.query.parentId as string).trim() : undefined;
-    console.log({geoLevelId, parentId, limit, offset});
     try {
         const data = isSuperAdmin(req.user as AuthUser) 
             ? await getAllGeoLocationsService( geoLevelId, parentId, limit,  offset ) 

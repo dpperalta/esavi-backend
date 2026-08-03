@@ -2,22 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { getMessage } from '../helpers/i18n.helper';
 import { ROLE_LEVELS } from '../constants/roles.constants';
 
-/* const validateUserRole = ( ...requiredRole: string[] ) => {
-    return ( req: Request, res: Response, next: NextFunction ): Response | void => {
-        const userRoles = req.user?.roles || [];
-        const hasRequiredRole = userRoles.some(
-            role => requiredRole.includes(role.name)
-        );
-        if (!hasRequiredRole) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang),
-                error: `Forbidden: Requires elevation`
-            });
-        }
-        next();
-    }
-} */
 const validateUserRole = ( ...requiredRole: string[] ) => {
     return ( req: Request, res: Response, next: NextFunction ): Response | void => {
         const userRoles = req.user?.roles || [];

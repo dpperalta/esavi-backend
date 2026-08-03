@@ -1,2 +1,2 @@
-export * from './catalogType.type';
-export * from './catalogItem.type';
+export * from './catalogType.types';
+export * from './catalogItem.types';

@@ -15,9 +15,6 @@ export interface UserRole {
 }
 
 export interface AuthUser {
-    //userId: string;
-    //email: string;
-    //roles: string[];
     userId: string;
     email: string;
     displayName: string;

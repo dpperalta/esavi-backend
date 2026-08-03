@@ -70,7 +70,6 @@ const tokenValidation = async( req: Request, res: Response, next: NextFunction )
         req.user = userHeader;
         next();
     } catch (error) {
-        console.log(error);
         esaviLog('ESAVI-ERROR - Error during token validation', 'error');
         if ( error instanceof jwt.TokenExpiredError ) {
             return res.status(401).json({

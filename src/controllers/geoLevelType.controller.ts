@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { createGeoLevelTypeService, getActiveGeoLevelTypesService, getAllGeoLevelTypesService, getGeoLevelTypeByIdService, setGeoLevelTypeActivationService, updateGeoLevelTypeService } from '../services/geoLevelType.service'
 import { esaviLog, getMessage, isSuperAdmin, AppError } from '../helpers';
 import { AuthUser } from '../types';
-import { CreateGeoLevelTypeInput } from '../types/geographical/geoLevelType.types';
+import { CreateGeoLevelTypeInput } from '../types/geography/geoLevelType.types';
 
 // Create Geographic Level Type Controller
 // Code: ESAVI-GEOTYPE-001
