@@ -4,6 +4,7 @@ import { getMessage } from '../helpers/i18n.helper';
 import { GeoLevelType } from '../models/geoLevelType.model';
 import { AuthUser, CreateGeoLevelTypeInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-GEOTYPE-001 - Create Geographic Level Type Service
@@ -119,21 +120,30 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
 // ESAVI-GEOTYPE-005 - Setting Geographic Level Type Active/Inactive Service - For SuperAdmin
 // This service will set isActive to false and append a deletion entry to appDetails. The record will not be removed from the database.
 const setGeoLevelTypeActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
-    return setEntityActiveStatusService({
-        model: GeoLevelType,
-        where: { geoLevelTypeId: id },
-        isActive,
-        notFoundMessage: getMessage('geoLevelType.notFound', lang),
-        notFoundCode: 'GEOTYPE_005_LEVEL_NOT_FOUND',
-        alreadyInStateMessage: getMessage(`geoLevelType.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
-        alreadyInStateCode: 'GEOTYPE_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
-        appDetail: {
-            createdAt: new Date(),
-            user: authUser?.userId || 'undefined',
-            method: 'ESAVI-GEOTYPE-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
-            detail: `GeoLevelType ${ isActive ? 'activated' : 'deactivated' } by service`
-        }
-    });  
+    const transaction = await sequelize.transaction();
+    try {
+        const geoLevelType = await setEntityActiveStatusService({
+            model: GeoLevelType,
+            where: { geoLevelTypeId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('geoLevelType.notFound', lang),
+            notFoundCode: 'GEOTYPE_005_LEVEL_NOT_FOUND',
+            alreadyInStateMessage: getMessage(`geoLevelType.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: 'GEOTYPE_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-GEOTYPE-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                detail: `GeoLevelType ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return geoLevelType;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }
 
 export {

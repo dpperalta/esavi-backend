@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { AppError, getMessage, toConstantCase, toTitleCase } from "../helpers";
+import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
 import { AuthUser, CreateCatalogItem } from "../types";
 import { setEntityActiveStatusService } from "./common/entityActivation.service";
@@ -185,21 +186,30 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
 
 // ESAVI-CATITEM-004 - Setting Catalog Item Active/Inactive Service - For SuperAdmin
 const setCatalogItemActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
-    return setEntityActiveStatusService({
-        model: CatalogItem,
-        where: { catalogItemId: id },
-        isActive,
-        notFoundMessage: getMessage('catalogItem.notFound', lang),
-        notFoundCode: 'CATITEM_004_NOT_FOUND',
-        alreadyInStateMessage: getMessage(`catalogItem.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
-        alreadyInStateCode: 'CATITEM_004' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
-        appDetail: {
-            createdAt: new Date(),
-            user: authUser?.userId || 'undefined',
-            method: 'ESAVI-CATITEM-004' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
-            detail: `CatalogItem ${ isActive ? 'activated' : 'deactivated' } by service`
-        }
-    });  
+    const transaction = await sequelize.transaction();
+    try {
+        const catalogItem = await setEntityActiveStatusService({
+            model: CatalogItem,
+            where: { catalogItemId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('catalogItem.notFound', lang),
+            notFoundCode: 'CATITEM_004_NOT_FOUND',
+            alreadyInStateMessage: getMessage(`catalogItem.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: 'CATITEM_004' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-CATITEM-004' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                detail: `CatalogItem ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return catalogItem;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }
 
 export {

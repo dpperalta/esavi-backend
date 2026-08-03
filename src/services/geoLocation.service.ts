@@ -3,6 +3,7 @@ import { getMessage, AppError, esaviLog } from '../helpers';
 import { AuthUser, CreateGeoLocationInput } from '../types';
 import { GeoLevelType, GeoLocation } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-GEOLOC-001 - Create Geographic Location Service
@@ -257,22 +258,30 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
 
 // ESAVI-GEOLOC-005 - Setting Geographic Location Active/Inactive Service
 const setGeoLocationActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
-    return setEntityActiveStatusService({
-        model: GeoLocation,
-        where: { geoLocationId: id },
-        isActive,
-        notFoundMessage: getMessage('geoLocation.notFound', lang),
-        notFoundCode: 'GEOLOC_005_LOCATION_NOT_FOUND',
-        alreadyInStateMessage: getMessage(`geoLocation.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
-        alreadyInStateCode: 'GEOLOC_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
-        appDetail: {
-            createdAt: new Date(),
-            user: authUser?.userId || 'undefined',
-            method: 'ESAVI-GEOLOC-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
-            detail: `Geographic location ${ isActive ? 'activated' : 'deactivated' } by service`
-        }
-    });
-
+    const transaction = await sequelize.transaction();
+    try {
+        const geoLocation = await setEntityActiveStatusService({
+            model: GeoLocation,
+            where: { geoLocationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('geoLocation.notFound', lang),
+            notFoundCode: 'GEOLOC_005_LOCATION_NOT_FOUND',
+            alreadyInStateMessage: getMessage(`geoLocation.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: 'GEOLOC_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-GEOLOC-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                detail: `Geographic location ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return geoLocation;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }
 
 export {
