@@ -39,6 +39,18 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser?:
             throw new AppError(getMessage('geoLocation.externalCodeExists', lang, { code: data.externalCode }), 409, 'GEOLOC_001_EXTERNAL_CODE_EXISTS');
         }
     }
+    // The name must be unique among the siblings of the same parent - UQ_geoLocation_parent_name
+    if( data.parentGeoLocationId ) {
+        const existingSibling = await GeoLocation.findOne({
+            where: {
+                parentGeoLocationId: data.parentGeoLocationId,
+                name: data.name.trim()
+            }
+        });
+        if( existingSibling ) {
+            throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: data.name.trim() }), 409, 'GEOLOC_001_NAME_EXISTS');
+        }
+    }
     let sortOrder: number | null = null;
     if( data.sortOrder !== undefined ) {
         sortOrder = data.sortOrder;
@@ -183,6 +195,21 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
         });
         if( existingLocation ) {
             throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: externalCode.trim() }), 409, 'GEOLOC_004_EXTERNAL_CODE_EXISTS');
+        }
+    }
+    // The name must be unique among the siblings of the target parent - UQ_geoLocation_parent_name
+    const targetParentId = parentGeoLocationId ?? geoLocation.parentGeoLocationId;
+    const targetName = name ? name.trim() : geoLocation.name;
+    if( targetParentId && ( targetName !== geoLocation.name || targetParentId !== geoLocation.parentGeoLocationId ) ) {
+        const existingSibling = await GeoLocation.findOne({
+            where: {
+                parentGeoLocationId: targetParentId,
+                name: targetName,
+                geoLocationId: { [Op.ne]: id }
+            }
+        });
+        if( existingSibling ) {
+            throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: targetName }), 409, 'GEOLOC_004_NAME_EXISTS');
         }
     }
     const currentAppDetails = Array.isArray(geoLocation.appDetails) ? geoLocation.appDetails : [];
