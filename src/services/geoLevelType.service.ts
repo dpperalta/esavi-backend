@@ -17,7 +17,7 @@ const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser
         }
     });
     if( existingType ) {
-        throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${code.trim()}` } ), 409, 'GEOTYPE_001_ALREADY_EXISTS'); 
+        throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${code.trim()}` } ), 409, 'GEOTYPE_001_CODE_EXISTS');
     }
     const newGeoLevelType = await GeoLevelType.create({
         code: data.code.trim().toLocaleUpperCase(),
@@ -64,7 +64,7 @@ const getGeoLevelTypeByIdService = async (id: string, lang: string = 'en', isAdm
         where: whereClause
     }); 
     if( !geoLevelType ) {
-        throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_003_LEVEL_NOT_FOUND');
+        throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_003_NOT_FOUND');
     }
     return geoLevelType;
 }
@@ -76,7 +76,7 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
     let updatedGeoLevelType = geoLevelType;
 
     if (!geoLevelType) {
-        throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_004_LEVEL_NOT_FOUND');
+        throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_004_NOT_FOUND');
     }
     if(  data.code && data.code.trim().toLocaleUpperCase() !== geoLevelType.code ) {
         const existingType = await GeoLevelType.findOne({
@@ -86,7 +86,7 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
             }
         });
         if( existingType ) {
-            throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${data.code.trim()}` } ), 409, 'GEOTYPE_004_ALREADY_EXISTS'); 
+            throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${data.code.trim()}` } ), 409, 'GEOTYPE_004_CODE_EXISTS');
         }
     }
     

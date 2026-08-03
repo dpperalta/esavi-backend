@@ -149,7 +149,7 @@ const getGeoLocationByIdService = async (id: string, lang: string = 'en', isAdmi
         ]
     });
     if (!geoLocation) {
-        throw new AppError(getMessage('geoLocation.notFound'), 404, 'GEOLOC_003_LOCATION_NOT_FOUND');
+        throw new AppError(getMessage('geoLocation.notFound'), 404, 'GEOLOC_003_NOT_FOUND');
     }
     return geoLocation;
 }
@@ -161,7 +161,7 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
     const { externalCode, name, shortName, officialName, isoCode, latitude, longitude, geoPolygon, sortOrder, geoLevelTypeId, parentGeoLocationId } = data;
     let updatedGeoLocation = geoLocation;
     if (!geoLocation) {
-        throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'GEOLOC_004_LOCATION_NOT_FOUND');
+        throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'GEOLOC_004_NOT_FOUND');
     }
     // Validate the referenced Geographic Level Type when it comes in the payload
     if( geoLevelTypeId && geoLevelTypeId !== geoLocation.geoLevelTypeId ) {
