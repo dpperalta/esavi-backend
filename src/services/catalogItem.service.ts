@@ -2,12 +2,12 @@ import { Op } from "sequelize";
 import { AppError, getMessage, toConstantCase, toTitleCase } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
-import { AuthUser, CreateCatalogItem } from "../types";
+import { AuthUser, CreateCatalogItemInput } from "../types";
 import { setEntityActiveStatusService } from "./common/entityActivation.service";
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from "../constants/pagination.constants";
 
 // ESAVI-CATITEM-001 - Create Catalog Item Service
-const createCatalogItemService = async (data: CreateCatalogItem, authUser?: AuthUser, lang: string = 'en') => {
+const createCatalogItemService = async (data: CreateCatalogItemInput, authUser?: AuthUser, lang: string = 'en') => {
     // Validate that the referenced Catalog Type exists and is active
     const catalogType = await CatalogType.findOne({
         where: {
@@ -115,7 +115,7 @@ const getCatalogItemByIdService = async (id: string, lang: string = 'en', isAdmi
 }
 
 // ESAVI-CATITEM-004 - Update Catalog Item Service - For SuperAdmin
-const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogItem>, authUser?: AuthUser, lang: string = 'en') => {
+const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogItemInput>, authUser?: AuthUser, lang: string = 'en') => {
     const { userId } = authUser || {};
     const catalogItem = await CatalogItem.findByPk(id);
     let updatedCatalogItem = catalogItem;
