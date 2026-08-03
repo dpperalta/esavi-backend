@@ -3,6 +3,7 @@ import { getMessage, AppError, esaviLog } from '../helpers';
 import { AuthUser, CreateGeoLocationInput } from '../types';
 import { GeoLevelType, GeoLocation } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-GEOLOC-001 - Create Geographic Location Service
@@ -32,12 +33,23 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser?:
     if( data.externalCode ){
         const existingLocation = await GeoLocation.findOne({
             where: {
-                externalCode: data.externalCode.trim(),
-                isActive: true
+                externalCode: data.externalCode.trim()
             }
         });
         if( existingLocation ) {
-            throw new AppError(getMessage('geoLocation.externalCodeExists', lang, { code: data.externalCode }), 400, 'GEOLOC_001_EXTERNAL_CODE_EXISTS');
+            throw new AppError(getMessage('geoLocation.externalCodeExists', lang, { code: data.externalCode }), 409, 'GEOLOC_001_EXTERNAL_CODE_EXISTS');
+        }
+    }
+    // The name must be unique among the siblings of the same parent - UQ_geoLocation_parent_name
+    if( data.parentGeoLocationId ) {
+        const existingSibling = await GeoLocation.findOne({
+            where: {
+                parentGeoLocationId: data.parentGeoLocationId,
+                name: data.name.trim()
+            }
+        });
+        if( existingSibling ) {
+            throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: data.name.trim() }), 409, 'GEOLOC_001_NAME_EXISTS');
         }
     }
     let sortOrder: number | null = null;
@@ -146,25 +158,65 @@ const getGeoLocationByIdService = async (id: string, lang: string = 'en', isAdmi
 const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocationInput>, authUser?: AuthUser, lang: string = 'en') => {
     const { userId } = authUser || {};
     const geoLocation = await GeoLocation.findByPk(id);
-    const { externalCode, name, shortName, officialName, isoCode, latitude, longitude, geoPolygon, sortOrder } = data;
+    const { externalCode, name, shortName, officialName, isoCode, latitude, longitude, geoPolygon, sortOrder, geoLevelTypeId, parentGeoLocationId } = data;
     let updatedGeoLocation = geoLocation;
     if (!geoLocation) {
         throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'GEOLOC_004_LOCATION_NOT_FOUND');
+    }
+    // Validate the referenced Geographic Level Type when it comes in the payload
+    if( geoLevelTypeId && geoLevelTypeId !== geoLocation.geoLevelTypeId ) {
+        const geoLevelType = await GeoLevelType.findOne({
+            where: {
+                geoLevelTypeId,
+                isActive: true
+            }
+        });
+        if( !geoLevelType ) {
+            throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOLOC_004_GEOLEVELTYPE_NOT_FOUND');
+        }
+    }
+    // Validate the referenced parent location when it comes in the payload
+    if( parentGeoLocationId && parentGeoLocationId !== geoLocation.parentGeoLocationId ) {
+        const parent = await GeoLocation.findOne({
+            where: {
+                geoLocationId: parentGeoLocationId,
+                isActive: true
+            }
+        });
+        if( !parent ) {
+            throw new AppError(getMessage('geoLocation.parentNotFound', lang), 404, 'GEOLOC_004_PARENT_GEOLOCATION_NOT_FOUND');
+        }
     }
     if( externalCode && externalCode.trim() !== geoLocation.externalCode ) {
         const existingLocation = await GeoLocation.findOne({
             where: {
                 externalCode: externalCode.trim(),
-                isActive: true,
                 geoLocationId: { [Op.ne]: id }
             }
         });
         if( existingLocation ) {
-            throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: externalCode.trim() }), 400, 'GEOLOC_004_EXTERNAL_CODE_EXISTS'); 
+            throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: externalCode.trim() }), 409, 'GEOLOC_004_EXTERNAL_CODE_EXISTS');
+        }
+    }
+    // The name must be unique among the siblings of the target parent - UQ_geoLocation_parent_name
+    const targetParentId = parentGeoLocationId ?? geoLocation.parentGeoLocationId;
+    const targetName = name ? name.trim() : geoLocation.name;
+    if( targetParentId && ( targetName !== geoLocation.name || targetParentId !== geoLocation.parentGeoLocationId ) ) {
+        const existingSibling = await GeoLocation.findOne({
+            where: {
+                parentGeoLocationId: targetParentId,
+                name: targetName,
+                geoLocationId: { [Op.ne]: id }
+            }
+        });
+        if( existingSibling ) {
+            throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: targetName }), 409, 'GEOLOC_004_NAME_EXISTS');
         }
     }
     const currentAppDetails = Array.isArray(geoLocation.appDetails) ? geoLocation.appDetails : [];
     let objectToUpdate = {
+        geoLevelTypeId: geoLevelTypeId && geoLevelTypeId !== geoLocation.geoLevelTypeId ? geoLevelTypeId : undefined,
+        parentGeoLocationId: parentGeoLocationId && parentGeoLocationId !== geoLocation.parentGeoLocationId ? parentGeoLocationId : undefined,
         name: name && name.trim() !== geoLocation.name ? name.trim() : undefined,
         officialName: officialName && officialName.trim() !== geoLocation.officialName ? officialName.trim() : undefined,
         shortName: shortName && shortName.trim() !== geoLocation.shortName ? shortName.trim() : undefined,
@@ -175,6 +227,8 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
         geoPolygon: geoPolygon && JSON.stringify(geoPolygon) !== JSON.stringify(geoLocation.geoPolygon) ? geoPolygon : undefined,
         sortOrder: sortOrder && sortOrder !== geoLocation.sortOrder ? sortOrder : undefined,
     };
+    if (objectToUpdate.geoLevelTypeId === undefined) delete objectToUpdate.geoLevelTypeId;
+    if (objectToUpdate.parentGeoLocationId === undefined) delete objectToUpdate.parentGeoLocationId;
     if (objectToUpdate.name === undefined) delete objectToUpdate.name;
     if (objectToUpdate.officialName === undefined) delete objectToUpdate.officialName;
     if (objectToUpdate.shortName === undefined) delete objectToUpdate.shortName;
@@ -204,21 +258,30 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
 
 // ESAVI-GEOLOC-005 - Setting Geographic Location Active/Inactive Service
 const setGeoLocationActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
-    return setEntityActiveStatusService({
-        model: GeoLocation,
-        where: { geoLocationId: id, isActive: !isActive },
-        isActive,
-        lang,
-        notFoundMessage: getMessage('geoLocation.notFound', lang),
-        notFoundCode: 'GEOLOC_005_LOCATION_NOT_FOUND',
-        appDetail: {
-            createdAt: new Date(),
-            user: authUser?.userId || 'undefined',
-            method: 'ESAVI-GEOLOC-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
-            detail: `Geographic location ${ isActive ? 'activated' : 'deactivated' } by service`
-        }
-    });
-
+    const transaction = await sequelize.transaction();
+    try {
+        const geoLocation = await setEntityActiveStatusService({
+            model: GeoLocation,
+            where: { geoLocationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('geoLocation.notFound', lang),
+            notFoundCode: 'GEOLOC_005_LOCATION_NOT_FOUND',
+            alreadyInStateMessage: getMessage(`geoLocation.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: 'GEOLOC_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-GEOLOC-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                detail: `Geographic location ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return geoLocation;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }
 
 export {

@@ -384,7 +384,13 @@ El update **también** valida: hoy varios updates aceptan cambiar una FK sin com
 
 ### Unicidad
 
-El criterio de `isActive` debe ser **el mismo en create y en update**. El canon: la unicidad se evalúa sobre registros activos (`isActive: true`) en ambas operaciones, excluyendo el propio registro en update con `[Op.ne]`. Un código liberado por un borrado lógico vuelve a estar disponible.
+El criterio de `isActive` debe ser **el mismo en create y en update**. El canon: la unicidad se evalúa **sin filtrar por `isActive`**, excluyendo el propio registro en update con `[Op.ne]`.
+
+```ts
+where: { catalogTypeId, code, catalogItemId: { [Op.ne]: id } }
+```
+
+Es lo que garantizan de verdad las `UNIQUE` del DDL, que tampoco filtran por `isActive`. Un código ocupado por un registro borrado lógicamente **sigue ocupado**: liberarlo exigiría índices únicos parciales `WHERE "isActive"`, que hoy no existen. Filtrar por `isActive: true` deja pasar valores que Postgres rechaza con `23505`, convirtiendo un 409 en un 500 (SPEC 04).
 
 ### Normalización en escritura
 
@@ -419,28 +425,50 @@ Nunca se implementa a mano: se delega en `setEntityActiveStatusService` (`src/se
 
 ```ts
 const setCatalogItemActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
-    return setEntityActiveStatusService({
-        model: CatalogItem,
-        where: { catalogItemId: id, isActive: !isActive },
-        isActive,
-        lang,
-        notFoundMessage: getMessage('catalogItem.notFound', lang),
-        notFoundCode: 'CATITEM_005_NOT_FOUND',
-        appDetail: {
-            createdAt: new Date(),
-            user: authUser?.userId || 'undefined',
-            method: 'ESAVI-CATITEM-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
-            detail: `CatalogItem ${ isActive ? 'activated' : 'deactivated' } by service`
-        }
-    });
+    const transaction = await sequelize.transaction();
+    try {
+        const catalogItem = await setEntityActiveStatusService({
+            model: CatalogItem,
+            where: { catalogItemId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('catalogItem.notFound', lang),
+            notFoundCode: 'CATITEM_005_NOT_FOUND',
+            alreadyInStateMessage: getMessage(`catalogItem.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: 'CATITEM_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-CATITEM-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                detail: `CatalogItem ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return catalogItem;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }
 ```
+
+El `where` filtra **solo por la PK**. El estado lo compara el servicio genérico, que distingue tres casos:
+
+| Situación | Respuesta |
+|---|---|
+| La entidad no existe | 404 con `notFoundMessage` |
+| Ya está en el estado pedido | 409 con `alreadyActive` / `alreadyInactive` |
+| Está en el otro estado | se actualiza |
+
+Meter `isActive: !isActive` en el `where` convierte el segundo caso en un 404 que miente: el recurso existe. Cada entidad necesita sus claves `alreadyActive` y `alreadyInactive` en los tres idiomas.
 
 Un `DELETE` nunca borra físicamente: pone `isActive: false` y sella `deletedAt`.
 
 ### Transacciones
 
 **Obligatorias cuando hay más de una escritura dependiente.** Crear un usuario y asignarle roles, o crear una entidad y sus hijos, van en una transacción con `commit()` y `rollback()` en el `catch` (patrón de `src/services/user.service.ts`). Una sola escritura no la necesita.
+
+Estado a 2026-08-02: las **únicas** operaciones multi-escritura del código son `createUserService` y los cuatro servicios de activación, que abren la transacción y la pasan a `setEntityActiveStatusService` por su parámetro `transaction`. Todo lo demás —creates, updates y borrados lógicos de catálogos y geografía— hace una sola escritura y va sin transacción, deliberadamente. La regla queda escrita para las entidades ESAVI que vienen, que sí tendrán hijos.
 
 ### Paginación
 

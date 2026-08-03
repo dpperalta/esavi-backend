@@ -4,6 +4,7 @@ import { CatalogItem } from '../models/catalogItem.model';
 import { AppError, getMessage, toCamelCase, toTitleCase } from '../helpers';
 import { AuthUser, CreateCatalogTypeInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-CATTYPE-001 - Create Catalog Type Service
@@ -11,7 +12,7 @@ const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser?:
     const code = toCamelCase(data.code.trim());
     const existing = await CatalogType.findOne({ where: { code } });
     if (existing) {
-        throw new AppError(getMessage('catalogType.codeExists', lang), 400, 'CATTYPE_001_CODE_EXISTS');
+        throw new AppError(getMessage('catalogType.codeExists', lang), 409, 'CATTYPE_001_CODE_EXISTS');
     }
     const newCatalogType = await CatalogType.create({
         code,
@@ -77,7 +78,6 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
         const existingType = await CatalogType.findOne({
             where: {
                 code: toCamelCase(data.code.trim()),
-                isActive: true,
                 catalogTypeId: { [Op.ne]: id }
             }
         });
@@ -115,20 +115,30 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
 
 // ESAVI-CATTYPE-004 - Setting Catalog Type Active/Inactive Service - For SuperAdmin
 const setCatalogTypeActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
-    return setEntityActiveStatusService({
-        model: CatalogType,
-        where: { catalogTypeId: id, isActive: !isActive },
-        isActive,
-        lang,
-        notFoundMessage: getMessage('catalogType.notFound', lang),
-        notFoundCode: 'CATTYPE_004_NOT_FOUND',
-        appDetail: {
-            createdAt: new Date(),
-            user: authUser?.userId || 'undefined',
-            method: 'ESAVI-CATTYPE-004' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
-            detail: `CatalogType ${ isActive ? 'activated' : 'deactivated' } by service`
-        }
-    });  
+    const transaction = await sequelize.transaction();
+    try {
+        const catalogType = await setEntityActiveStatusService({
+            model: CatalogType,
+            where: { catalogTypeId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('catalogType.notFound', lang),
+            notFoundCode: 'CATTYPE_004_NOT_FOUND',
+            alreadyInStateMessage: getMessage(`catalogType.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: 'CATTYPE_004' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-CATTYPE-004' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                detail: `CatalogType ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return catalogType;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }
 
 

@@ -58,7 +58,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
             }
         });
         if (existingLocalCode) {
-            throw new AppError(getMessage('healthFacility.codeExists', lang, { code: data.localCode }), 400, 'HF_001_LOCAL_CODE_EXISTS');
+            throw new AppError(getMessage('healthFacility.codeExists', lang, { code: data.localCode }), 409, 'HF_001_LOCAL_CODE_EXISTS');
         }
     }
     // Create the new health facility
