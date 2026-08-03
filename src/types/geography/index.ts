@@ -1,2 +1,2 @@
-export { CreateGeoLevelTypeInput } from './geoLevelType.types';
-export { CreateGeoLocationInput } from './geoLocation.types';
+export * from './geoLevelType.types';
+export * from './geoLocation.types';
