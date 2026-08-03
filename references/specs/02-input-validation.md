@@ -76,6 +76,7 @@ export const catalogTypeListValidator = [
 | `GET /catalog-types/` | todo | `...catalogTypeListValidator` |
 | `GET /catalog-types/:id` | todo | `...catalogTypeIdValidator` |
 | `DELETE /catalog-types/:id` | todo | `...catalogTypeIdValidator` |
+| `PATCH /catalog-types/activate/:id` | todo | `...catalogTypeIdValidator` |
 | `GET /geo-level-types/` | todo | `...geoLevelTypeListValidator` |
 | `GET /geo-level-types/:id` | todo | `...geoLevelTypeIdValidator` *(nuevo)* |
 | `DELETE /geo-level-types/:id` | todo | `...geoLevelTypeIdValidator` |
@@ -83,6 +84,7 @@ export const catalogTypeListValidator = [
 | `GET /catalog-items/type/:id` | list | `...catalogItemIdValidator, ...catalogItemListValidator` |
 | `GET /catalog-items/admin/type/:id` | todo | `...catalogItemIdValidator, ...catalogItemListValidator` |
 | `GET /geo-locations/` | list | `...geoLocationListValidator` |
+| `GET /geo-locations/:id` | todo | `...geoLocationIdValidator` |
 | `PUT /geo-locations/:id` | spread | `...geoLocationIdValidator, ...updateGeoLocationValidator` |
 | `DELETE /geo-locations/:id` | validador incorrecto | `...geoLocationIdValidator` |
 | `PATCH /geo-locations/activate/:id` | validador incorrecto | `...geoLocationIdValidator` |
