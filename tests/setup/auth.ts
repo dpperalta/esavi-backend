@@ -24,6 +24,10 @@ const testUsers = new Map<TestRole, TestUser>();
  * Creates one user for the given role and assigns it. PII goes through
  * `esaviCrypt` because that is how the application stores and looks it up;
  * a plaintext email here would make `loginService` unable to find the user.
+ *
+ * Idempotent by design: Jest gives every test file its own module registry, so
+ * the in-memory cache resets per file while the rows survive the whole run.
+ * Creating blindly would hit `UQ_appUser_email` on the second file.
  */
 const createTestUser = async ( role: TestRole ): Promise<TestUser> => {
     const email = `${ role.toLowerCase() }@test.local`;
@@ -37,19 +41,28 @@ const createTestUser = async ( role: TestRole ): Promise<TestUser> => {
         );
     }
 
-    const user = await AppUser.create({
-        username: esaviCrypt(email),
-        email: esaviCrypt(email),
-        passwordHash: await bcrypt.hash(TEST_PASSWORD, 10),
-        displayName: esaviCrypt(displayName),
-        requiresPasswordChange: false,
-        isActive: true
+    const [user] = await AppUser.findOrCreate({
+        where: { email: esaviCrypt(email) },
+        defaults: {
+            username: esaviCrypt(email),
+            email: esaviCrypt(email),
+            passwordHash: await bcrypt.hash(TEST_PASSWORD, 10),
+            displayName: esaviCrypt(displayName),
+            requiresPasswordChange: false,
+            isActive: true
+        }
     });
 
-    await AppUserRole.create({
-        userId: user.getDataValue('userId'),
-        roleId: appRole.getDataValue('roleId'),
-        isActive: true
+    await AppUserRole.findOrCreate({
+        where: {
+            userId: user.getDataValue('userId'),
+            roleId: appRole.getDataValue('roleId')
+        },
+        defaults: {
+            userId: user.getDataValue('userId'),
+            roleId: appRole.getDataValue('roleId'),
+            isActive: true
+        }
     });
 
     const token = await jwtGenerate({ userId: user.getDataValue('userId') }) as string;
