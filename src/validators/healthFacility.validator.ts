@@ -19,8 +19,8 @@ export const createHealthFacilityValidator = [
     body('parentHealthFacilityId').optional().isUUID().withMessage('Parent Health Facility ID must be a valid UUID').trim(),
     body('facilityTypeItemId').optional().notEmpty().withMessage('Facility Type Item ID is required')
         .isUUID().withMessage('Facility Type Item ID must be a valid UUID').trim(),
-    body('localCode').trim().notEmpty().withMessage('Local Code is required')
-        .isLength({ max: 100 }).withMessage('Local Code must be at most 100 characters long'),
+    body('localCode').optional().trim().notEmpty().withMessage('Local Code cannot be empty')
+        .isLength({ max: 200 }).withMessage('Local Code must be at most 200 characters long'),
     body('name').trim().notEmpty().withMessage('Name is required')
         .isLength({ max: 255 }).withMessage('Name must be at most 255 characters long'),
     body('officialName').optional().trim()
@@ -44,7 +44,7 @@ export const updateHealthFacilityValidator = [
     body('facilityTypeItemId').optional().notEmpty().withMessage('Facility Type Item ID is required')
         .isUUID().withMessage('Facility Type Item ID must be a valid UUID').trim(),
     body('localCode').optional().trim().notEmpty().withMessage('Local Code cannot be empty')
-        .isLength({ max: 100 }).withMessage('Local Code must be at most 100 characters long'),
+        .isLength({ max: 200 }).withMessage('Local Code must be at most 200 characters long'),
     body('name').optional().trim().notEmpty().withMessage('Name cannot be empty')
         .isLength({ max: 255 }).withMessage('Name must be at most 255 characters long'),
     body('officialName').optional().trim()

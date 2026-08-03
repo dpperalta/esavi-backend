@@ -1,11 +1,11 @@
-import { Op } from 'sequelize';
-import { HealthFacility } from '../models/healthFacility.model';
-import { CatalogItem } from '../models/catalogItem.model';
-import { GeoLocation } from '../models/geoLocation.model';
-import { CatalogType } from '../models/catalogType.model';
-import { AppError, getMessage } from '../helpers';
+import { CatalogItem, CatalogType, GeoLocation, HealthFacility } from '../models';
+import { AppError, getMessage, toConstantCase, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateHealthFacilityInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// Code of the catalogType that groups the valid facility types.
+// Must match the value enforced by the TRG_healthFacility_validateCatalogs trigger in esaviapp.sql
+const HEALTH_FACILITY_TYPE_CATALOG_CODE = 'healthFacilityType';
 
 // ESAVI-HFAC-001 - Create Health Facility Service
 const createHealthFacilityService = async (data: CreateHealthFacilityInput, authUser: AuthUser | undefined, lang: string) => {
@@ -29,7 +29,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
             include: [{
                 model: CatalogType,
                 as: 'catalogType',
-                //where: { code: 'FACILITY_TYPE' },
+                where: { code: HEALTH_FACILITY_TYPE_CATALOG_CODE },
                 attributes: []
             }]
         });
@@ -49,22 +49,21 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
             throw new AppError(getMessage('healthFacility.parentNotFound', lang), 404, 'HFAC_001_PARENT_HEALTH_FACILITY_NOT_FOUND');
         }
     }
-    // Validate the local code uniqueness within the same geoLocationId
-    if (data.localCode) {
+    // Validate the local code uniqueness. The UQ_healthFacility_localCode constraint is global,
+    // so the check must not be scoped by geoLocationId, and it runs against the normalized value
+    const localCode = data.localCode ? toConstantCase(data.localCode.trim()) : null;
+    if (localCode) {
         const existingLocalCode = await HealthFacility.findOne({
-            where: {
-                localCode: data.localCode,
-                geoLocationId: data.geoLocationId
-            }
+            where: { localCode }
         });
         if (existingLocalCode) {
-            throw new AppError(getMessage('healthFacility.codeExists', lang, { code: data.localCode }), 409, 'HFAC_001_LOCAL_CODE_EXISTS');
+            throw new AppError(getMessage('healthFacility.codeExists', lang, { code: localCode }), 409, 'HFAC_001_LOCAL_CODE_EXISTS');
         }
     }
     // Create the new health facility
     const newEntry: AppDetails = {
         createdAt: new Date(),
-        user: authUser?.userId || 'unknown',
+        user: authUser?.userId || 'undefined',
         method: 'ESAVI-HFAC-001',
         detail: 'Health facility created by service'
     };
@@ -72,8 +71,8 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
         geoLocationId: data.geoLocationId,
         facilityTypeItemId: data.facilityTypeItemId ?? null,
         parentHealthFacilityId: data.parentHealthFacilityId ?? null,
-        localCode: data.localCode || 'NC_' + Date.now(),
-        name: data.name,
+        localCode,
+        name: toTitleCase(data.name.trim()),
         officialName: data.officialName || null,
         shortName: data.shortName || null,
         address: data.address || null,

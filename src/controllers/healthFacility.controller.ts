@@ -1,5 +1,5 @@
 ﻿import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from "../helpers";
+import { AppError, esaviLog, getMessage } from "../helpers";
 import { createHealthFacilityService, getHealthFacilitiesByGeoLocationService } from '../services/healthFacility.service';
 
 // Create Health Facility Controller
