@@ -8,7 +8,7 @@ import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-CATTYPE-001 - Create Catalog Type Service
-const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser?: AuthUser, lang: string = 'en') => {
+const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser: AuthUser | undefined, lang: string) => {
     const code = toCamelCase(data.code.trim());
     const existing = await CatalogType.findOne({ where: { code } });
     if (existing) {
@@ -55,7 +55,7 @@ const getAllCatalogTypesService = async (limit: number = DEFAULT_LIMIT, offset: 
 }
 
 // ESAVI-CATTYPE-003 - Get Catalog Type by ID Service
-const getCatalogTypeByIdService = async (id: string, lang: string = 'en', isAdmin: boolean = false) => {
+const getCatalogTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { catalogTypeId: id } : { catalogTypeId: id, isActive: true };
         const catalogType = await CatalogType.findOne({
             where: whereClause
@@ -67,7 +67,7 @@ const getCatalogTypeByIdService = async (id: string, lang: string = 'en', isAdmi
 }
 
 // ESAVI-CATTYPE-004 - Update Catalog Type Service - For SuperAdmin
-const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogTypeInput>, authUser?: AuthUser, lang: string = 'en') => {
+const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogTypeInput>, authUser: AuthUser | undefined, lang: string) => {
     const { userId } = authUser || {};
     const catalogType = await CatalogType.findByPk(id);
     let updatedCatalogType = catalogType;
@@ -116,7 +116,7 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
 }
 
 // ESAVI-CATTYPE-005A / 005B - Setting Catalog Type Active/Inactive Service - For SuperAdmin
-const setCatalogTypeActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+const setCatalogTypeActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {

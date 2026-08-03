@@ -9,7 +9,7 @@ import { esaviCrypt } from '../helpers/crypto.helper';
 import { AppError } from '../helpers/appError.helper';
 
 // ESAVI-USER-001 - Create User Service
-const createUserService = async ({data, authUser, lang = 'en'}: CreateUserServiceParams) => {
+const createUserService = async ({data, authUser, lang}: CreateUserServiceParams) => {
     const transaction = await sequelize.transaction();
     const { email, password, username, firstName, lastName, roleId } = data;
     const { userId: creatorId } = authUser || {};

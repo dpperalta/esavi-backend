@@ -53,4 +53,8 @@ const esaviLog = (message: string, type: 'info' | 'error' | 'warn' | 'debug' | '
     }
 }
 
-export { esaviLog };
+// log4js writes asynchronously, so a process.exit() right after esaviLog() drops the entry.
+// Await this before exiting on purpose.
+const esaviLogFlush = (): Promise<void> => new Promise( resolve => logs4js.shutdown(() => resolve()) );
+
+export { esaviLog, esaviLogFlush };

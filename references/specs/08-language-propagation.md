@@ -1,11 +1,13 @@
 # SPEC 08 — Idioma efectivo: resolución y propagación
 
-> **Estado:** Borrador
+> **Estado:** Implementado
 > **Depende de:** SPEC 03 (paridad i18n; sin ella, propagar el idioma solo reparte cadenas vacías)
 > **Fecha:** 2026-08-02
 > **Objetivo:** Que la respuesta salga en el idioma que pidió el cliente, y que `DEFAULT_LANGUAGE` valga lo que dice el `.env`.
 
-Cubre dos hallazgos **no catalogados**, detectados al verificar el SPEC 03 el 2026-08-02. El paso 1 los registra como **DEUDA-036 y DEUDA-037** en [TECHNICAL_DEBT.md](../TECHNICAL_DEBT.md).
+Cubre dos hallazgos **no catalogados**, detectados al verificar el SPEC 03 el 2026-08-02. El paso 1 los registra como **DEUDA-037 y DEUDA-038** en [TECHNICAL_DEBT.md](../TECHNICAL_DEBT.md).
+
+> **Nota de implementación (2026-08-03)**: este spec se redactó pidiendo los IDs 036 y 037. El 2026-08-03, antes de implementarlo, el SPEC 06 ocupó el 036 con «El banner de arranque esquiva `esaviLog`». Como los IDs de deuda son estables, los hallazgos de este spec quedan como **DEUDA-037** (hallazgo A) y **DEUDA-038** (hallazgo B).
 
 ---
 
@@ -101,7 +103,7 @@ Hacer `lang` requerido es deliberado: convierte cada fuga futura en un error de 
 
 El paso 2 va antes que el 3 a propósito: con el helper ya arreglado, las rutas que sí propagan el idioma quedan correctas de inmediato, y las que no lo propagan pasan a responder en español en vez de en inglés. El sistema mejora antes de estar completo.
 
-1. **Registrar la deuda.** Añadir DEUDA-036 (`DEFAULT_LANGUAGE` leído antes de `dotenv`) y DEUDA-037 (el idioma no llega al servicio) a `TECHNICAL_DEBT.md`, con su fila en la tabla resumen y su sección de detalle.
+1. **Registrar la deuda.** Añadir DEUDA-037 (`DEFAULT_LANGUAGE` leído antes de `dotenv`) y DEUDA-038 (el idioma no llega al servicio) a `TECHNICAL_DEBT.md`, con su fila en la tabla resumen y su sección de detalle.
    *Verificación:* ambas entradas enlazadas desde la tabla.
 
 2. **Resolver `DEFAULT_LANGUAGE` en tiempo de llamada.** Sustituir la constante de módulo de `i18n.helper.ts` por `getDefaultLanguage()`, usada tanto en el valor por defecto del parámetro como en el nivel 2 de la cadena de fallback.
