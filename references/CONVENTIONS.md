@@ -24,7 +24,7 @@ Un endpoint nuevo **siempre** genera siete artefactos, en este orden. Ninguno es
 
 Más dos registros obligatorios en el mismo commit:
 
-- Claves i18n en **los tres** archivos: `src/data/i18n/es.json`, `en.json`, `nd.json`.
+- Claves i18n en **los tres** archivos: `src/data/i18n/es.json`, `en.json`, `nl.json`.
 - Alta de la ruta en `src/routes/index.ts` y de los barrels correspondientes (`validators/index.ts`, `types/<dominio>/index.ts`, `models/index.ts`).
 
 Entregar un endpoint sin validador, sin claves i18n o sin tipos no es "un endpoint incompleto": es un endpoint que no se acepta.
@@ -358,7 +358,7 @@ return res.status(200).json({
 
 ### Error
 
-Los produce `errorHandler` (`src/middlewares/errorHandler.middleware.ts`), último middleware de `src/index.ts`:
+Los produce `errorHandler` (`src/middlewares/errorHandler.middleware.ts`), último middleware de `src/app.ts`:
 
 ```ts
 { ok: false, message, code, errors }
@@ -540,7 +540,7 @@ const DEFAULT_OFFSET = process.env.ESAVI_APP_DEFAULT_OFFSET ? parseInt(process.e
 
 ## 13. Claves i18n
 
-Estructura `<entidad>.<clave>` en `src/data/i18n/{es,en,nd}.json`.
+Estructura `<entidad>.<clave>` en `src/data/i18n/{es,en,nl}.json`.
 
 | Clave | Uso |
 |---|---|
@@ -959,6 +959,6 @@ La ruta base va en **kebab-case plural**: `/catalog-items`, `/geo-level-types`, 
 - [ ] El `catch` del controlador sigue el idiom de tres pasos.
 - [ ] El servicio valida las FK, normaliza en escritura y extiende `appDetails` sin sobrescribirlo.
 - [ ] Hay transacción si se hace más de una escritura dependiente.
-- [ ] Las claves i18n existen en `es.json`, `en.json` **y** `nd.json`, y todas las referenciadas desde el código existen.
+- [ ] Las claves i18n existen en `es.json`, `en.json` **y** `nl.json`, y todas las referenciadas desde el código existen.
 - [ ] No queda código comentado.
 - [ ] `npm run build` pasa.

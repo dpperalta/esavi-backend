@@ -158,6 +158,25 @@ const setupTestDatabase = async (): Promise<void> => {
     await seedRoles();
 }
 
+let modelsReady = false;
+
+/**
+ * Per-file entry point. Jest gives every test file its own module registry, so
+ * each one has to register the models and open its own pool over the database
+ * that `globalSetup` already recreated. Idempotent: registering the
+ * associations twice would make Sequelize redefine them.
+ */
+const openTestConnection = async (): Promise<void> => {
+    assertTestEnvironment();
+
+    if( !modelsReady ) {
+        initModels();
+        modelsReady = true;
+    }
+
+    await sequelize.authenticate();
+}
+
 /**
  * Closes the pool so Jest exits without open handles.
  */
@@ -171,5 +190,6 @@ export {
     loadSchema,
     seedRoles,
     setupTestDatabase,
+    openTestConnection,
     closeTestDatabase
 }

@@ -8,6 +8,10 @@ import path from 'path';
  */
 process.env.NODE_ENV = 'test';
 
+// `src/app.ts` and `src/database/connection.ts` call dotenv themselves; without
+// this the suite output is buried under one banner per imported module.
+process.env.DOTENV_CONFIG_QUIET = 'true';
+
 dotenv.config({
     path: path.resolve(process.cwd(), '.env.test'),
     quiet: true
