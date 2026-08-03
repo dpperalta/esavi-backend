@@ -1,5 +1,6 @@
 // @ts-check
 const tseslint = require('typescript-eslint');
+const eslintConfigPrettier = require('eslint-config-prettier');
 
 /**
  * Flat config. Encodes the naming rules of sections 3, 4 and 5 of
@@ -95,5 +96,8 @@ module.exports = tseslint.config(
                 }
             ]
         }
-    }
+    },
+
+    // Last, so it wins: turns off every rule Prettier already decides.
+    eslintConfigPrettier
 );

@@ -100,6 +100,25 @@ el `email` no coinciden con las que carga el servidor.
 `requiresPasswordChange` queda en `true` a propósito: la contraseña del bootstrap pasa por el
 shell y por el historial de comandos, así que hay que rotarla en el primer acceso.
 
+## Comandos
+
+| Comando | Qué hace |
+|---|---|
+| `npm run dev` | Arranca en desarrollo con ts-node-dev |
+| `npm start` | Arranca en producción desde `dist/` |
+| `npm run build` | Compila `src/` a `dist/` |
+| `npm test` | Ejecuta la suite (necesita `.env.test`) |
+| `npm run test:watch` | La suite en modo watch |
+| `npm run lint` | ESLint sobre `src/` y `tests/` |
+| `npm run lint:fix` | Igual, corrigiendo lo autocorregible |
+| `npm run format` | Prettier sobre todo el repo |
+| `npm run format:check` | Comprueba el formato sin escribir |
+| `npm run i18n:check` | Paridad de claves entre `es`, `en` y `nl` |
+| **`npm run check`** | **build + lint + i18n:check + test.** El único comando que hay que correr antes de un PR |
+
+No hay CI. Es una decisión explícita del proyecto: los comandos existen, pero nada garantiza que
+se ejecuten. `npm run check` los deja en uno solo.
+
 ## Suite de pruebas
 
 La suite corre con Jest + supertest **contra una base de datos PostgreSQL real**, no con
