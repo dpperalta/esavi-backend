@@ -5,6 +5,7 @@ import { GeoLocation } from '../models/geoLocation.model';
 import { CatalogType } from '../models/catalogType.model';
 import { AppError, getMessage } from '../helpers';
 import { AuthUser, CreateHealthFacilityInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAIV-HF-001 - Create Health Facility Service
 const createHealthFacilityService = async (data: CreateHealthFacilityInput, authUser?: AuthUser, lang: string = 'en') => {
@@ -85,7 +86,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
 }
 
 // ESAIV-HF-002 - Get Health Facilities by GeoLocation Service
-const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, limit: number = 10, offset: number = 0) => {
+const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     if (!geoLocationId) {
         throw new AppError(getMessage('geoLocation.idRequired', 'en'), 400, 'HF_002_GEOLOCATIONID_REQUIRED');
     }

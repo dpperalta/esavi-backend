@@ -3,9 +3,7 @@ import { getMessage, AppError, esaviLog } from '../helpers';
 import { AuthUser, CreateGeoLocationInput } from '../types';
 import { GeoLevelType, GeoLocation } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
-
-const DEFAULT_LIMIT = process.env.ESAVI_APP_DEFAULT_LIMIT ? parseInt(process.env.ESAVI_APP_DEFAULT_LIMIT) : 10;
-const DEFAULT_OFFSET = process.env.ESAVI_APP_DEFAULT_OFFSET ? parseInt(process.env.ESAVI_APP_DEFAULT_OFFSET) : 0;
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-GEOLOC-001 - Create Geographic Location Service
 const createGeoLocationService = async( data: CreateGeoLocationInput, authUser?: AuthUser, lang: string = 'en' ) => {

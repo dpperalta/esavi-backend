@@ -4,6 +4,7 @@ import { CatalogItem } from '../models/catalogItem.model';
 import { AppError, getMessage, toCamelCase, toTitleCase } from '../helpers';
 import { AuthUser, CreateCatalogTypeInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-CATTYPE-001 - Create Catalog Type Service
 const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser?: AuthUser, lang: string = 'en') => {
@@ -28,7 +29,7 @@ const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser?:
 }
 
 // ESAVI-CATTYPE-002A - Get Catalog Types Service
-const getActiveCatalogTypesService = async (limit: number = 10, offset: number = 0) => {
+const getActiveCatalogTypesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const catalogTypes = await CatalogType.findAndCountAll({
         where: { isActive: true },
         order: [['sortOrder', 'ASC']],
@@ -39,7 +40,7 @@ const getActiveCatalogTypesService = async (limit: number = 10, offset: number =
 }
 
 // ESAVI-CATTYPE-002B - Get All Catalog Types Service (including inactive) - For SuperAdmin
-const getAllCatalogTypesService = async (limit: number = 10, offset: number = 0) => {
+const getAllCatalogTypesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const catalogTypes = await CatalogType.findAndCountAll({
         order: [
             ['sortOrder', 'ASC'],
