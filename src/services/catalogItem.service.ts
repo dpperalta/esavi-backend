@@ -3,6 +3,7 @@ import { AppError, getMessage, toConstantCase, toTitleCase } from "../helpers";
 import { CatalogItem, CatalogType } from "../models";
 import { AuthUser, CreateCatalogItem } from "../types";
 import { setEntityActiveStatusService } from "./common/entityActivation.service";
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from "../constants/pagination.constants";
 
 // ESAVI-CATITEM-001 - Create Catalog Item Service
 const createCatalogItemService = async (data: CreateCatalogItem, authUser?: AuthUser, lang: string = 'en') => {
@@ -64,7 +65,7 @@ const createCatalogItemService = async (data: CreateCatalogItem, authUser?: Auth
 }
 
 // ESAVI-CATITEM-002A - Get Catalog Items by Catalog Type Service
-const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: number = 10, offset: number = 0) => {
+const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     if ( !catalogTypeId ) {
         throw new AppError(getMessage('catalogType.idRequired', 'en'), 400, 'CATITEM_002A_CATTYPEID_REQUIRED');
     }
@@ -81,7 +82,7 @@ const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: 
 }
 
 // ESAVI-CATITEM-002B - Get All Catalog Items by Catalog Type Service (including inactive) - For SuperAdmin
-const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit: number = 10, offset: number = 0, isAdmin: boolean = false) => {
+const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, isAdmin: boolean = false) => {
     let whereClause = {};
     if( isAdmin && catalogTypeId ) {
         whereClause = { catalogTypeId };

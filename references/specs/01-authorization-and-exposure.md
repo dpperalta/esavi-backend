@@ -1,6 +1,6 @@
 # SPEC 01 — Autorización en un solo punto y superficie expuesta
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** —
 > **Fecha:** 2026-08-01
 > **Objetivo:** Que la ruta sea el único lugar donde se autoriza, con los niveles de la matriz canónica, y que seed y CORS dejen de estar abiertos.

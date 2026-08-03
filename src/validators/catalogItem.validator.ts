@@ -6,6 +6,13 @@ export const catalogItemIdValidator = [
         .trim()
 ];
 
+export const catalogItemListValidator = [
+    query('limit').optional().isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be an integer between 1 and 100'),
+    query('offset').optional().isInt({ min: 0 })
+        .withMessage('Offset must be a non-negative integer')
+];
+
 export const createCatalogItemValidator = [
     body('catalogTypeId').notEmpty().withMessage('Catalog Type ID is required')
         .isUUID().withMessage('Catalog Type ID must be a valid UUID').trim(),
@@ -21,7 +28,6 @@ export const createCatalogItemValidator = [
 ];
 
 export const updateCatalogItemValidator = [
-    ...catalogItemIdValidator,
     body('catalogTypeId').optional().isUUID().withMessage('Catalog Type ID must be a valid UUID').trim(),
     body('code').optional().trim().notEmpty().withMessage('Code cannot be empty')
         .isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
