@@ -102,25 +102,25 @@ const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit
     return catalogItems;
 }
 
-// ESAVI-CATITEM-002C - Get Catalog Item by ID Service
+// ESAVI-CATITEM-003 - Get Catalog Item by ID Service
 const getCatalogItemByIdService = async (id: string, lang: string = 'en', isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { catalogItemId: id } : { catalogItemId: id, isActive: true };
     const catalogItem = await CatalogItem.findOne({ 
         where: whereClause 
     });
     if (!catalogItem) {
-        throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_001_NOT_FOUND');
+        throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_003_NOT_FOUND');
     }
     return catalogItem;
 }
 
-// ESAVI-CATITEM-003 - Update Catalog Item Service - For SuperAdmin
+// ESAVI-CATITEM-004 - Update Catalog Item Service - For SuperAdmin
 const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogItem>, authUser?: AuthUser, lang: string = 'en') => {
     const { userId } = authUser || {};
     const catalogItem = await CatalogItem.findByPk(id);
     let updatedCatalogItem = catalogItem;
     if (!catalogItem) {
-        throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_003_NOT_FOUND');
+        throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_004_NOT_FOUND');
     }
     // Validate that the referenced Catalog Type exists and is active before moving the item
     let targetCatalogTypeId = catalogItem.catalogTypeId;
@@ -132,7 +132,7 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
             }
         });
         if (!catalogType) {
-            throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATITEM_003_CATTYPE_NOT_FOUND');
+            throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATITEM_004_CATTYPE_NOT_FOUND');
         }
         targetCatalogTypeId = data.catalogTypeId;
     }
@@ -147,7 +147,7 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
             }
         });
         if( existingItem ) {
-            throw new AppError(getMessage('catalogItem.codeExists', lang), 409, 'CATITEM_003_CODE_EXISTS');
+            throw new AppError(getMessage('catalogItem.codeExists', lang), 409, 'CATITEM_004_CODE_EXISTS');
         }
     }
     const currentAppDetails = Array.isArray(catalogItem.appDetails) ? catalogItem.appDetails : [];
@@ -175,7 +175,7 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
                 {
                     'createdAt': new Date(),
                     'user': userId || 'undefined',
-                    'method': 'ESAVI-CATITEM-003',
+                    'method': 'ESAVI-CATITEM-004',
                     'detail': 'Catalog item updated by service'
                 }
             ]
