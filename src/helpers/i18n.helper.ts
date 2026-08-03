@@ -1,12 +1,12 @@
 import es from '../data/i18n/es.json';
 import en from '../data/i18n/en.json';
-import nd from '../data/i18n/nd.json';
+import nl from '../data/i18n/nl.json';
 import { esaviLog } from './esaviLogs.helper';
 
 const messages = {
     es,
     en,
-    nd
+    nl
 };
 
 type lang = keyof typeof messages;
