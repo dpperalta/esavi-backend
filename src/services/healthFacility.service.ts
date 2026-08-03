@@ -119,8 +119,49 @@ const getAllHealthFacilitiesByGeoLocationService = async (geoLocationId: string,
     return healthFacilities;
 }
 
+// ESAVI-HFAC-003 - Get Health Facility by ID Service
+const getHealthFacilityByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const whereClause = includeInactive ? { healthFacilityId: id } : { healthFacilityId: id, isActive: true };
+    const healthFacility = await HealthFacility.findOne({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        include: [
+            {
+                model: GeoLocation,
+                as: 'geoLocation',
+                attributes: ['geoLocationId', 'name', 'level']
+            },
+            {
+                model: CatalogItem,
+                as: 'facilityType',
+                attributes: ['catalogItemId', 'code', 'name']
+            },
+            {
+                model: HealthFacility,
+                as: 'parent',
+                attributes: ['healthFacilityId', 'name', 'localCode']
+            },
+            {
+                model: HealthFacility,
+                as: 'children',
+                attributes: ['healthFacilityId', 'name', 'localCode', 'isActive'],
+                // Inactive children are only listed for users allowed to see them
+                where: includeInactive ? undefined : { isActive: true },
+                required: false
+            }
+        ],
+        order: [[{ model: HealthFacility, as: 'children' }, 'name', 'ASC']]
+    });
+    if (!healthFacility) {
+        throw new AppError(getMessage('healthFacility.notFound', lang), 404, 'HFAC_003_NOT_FOUND');
+    }
+    return healthFacility;
+}
+
 export {
     createHealthFacilityService,
     getHealthFacilitiesByGeoLocationService,
-    getAllHealthFacilitiesByGeoLocationService
+    getAllHealthFacilitiesByGeoLocationService,
+    getHealthFacilityByIdService
 }

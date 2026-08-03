@@ -1,9 +1,11 @@
 ﻿import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from "../helpers";
+import { AppError, canViewInactive, esaviLog, getMessage } from "../helpers";
+import { AuthUser } from '../types';
 import {
     createHealthFacilityService,
     getAllHealthFacilitiesByGeoLocationService,
-    getHealthFacilitiesByGeoLocationService
+    getHealthFacilitiesByGeoLocationService,
+    getHealthFacilityByIdService
 } from '../services/healthFacility.service';
 
 // Create Health Facility Controller
@@ -72,8 +74,30 @@ const getAllHealthFacilitiesByLocation = async (req: Request, res: Response, nex
     }
 }
 
+// Get Health Facility By ID Controller
+// Code: ESAVI-HFAC-003
+const getHealthFacilityById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getHealthFacilityByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('healthFacility.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-HFAC-003: Error fetching Health Facility by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('healthFacility.getFailed', req.lang), 500, 'HFAC_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createHealthFacility,
     getHealthFacilitiesByLocation,
-    getAllHealthFacilitiesByLocation
+    getAllHealthFacilitiesByLocation,
+    getHealthFacilityById
 }
