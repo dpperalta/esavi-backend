@@ -1,6 +1,6 @@
 # SPEC 04 — Contrato de conflicto y consistencia de escritura
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 03 (usa claves i18n que ese spec corrige y añade)
 > **Fecha:** 2026-08-01
 > **Objetivo:** Que un conflicto responda siempre 409 con el mensaje de su propia entidad, y que el update valide lo mismo que el create.

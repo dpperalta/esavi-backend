@@ -172,7 +172,6 @@ const setCatalogItemActivationService = async (id: string, authUser?: AuthUser, 
         model: CatalogItem,
         where: { catalogItemId: id, isActive: !isActive },
         isActive,
-        lang,
         notFoundMessage: getMessage('catalogItem.notFound', lang),
         notFoundCode: 'CATITEM_004_NOT_FOUND',
         appDetail: {

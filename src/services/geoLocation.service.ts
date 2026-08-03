@@ -208,7 +208,6 @@ const setGeoLocationActivationService = async (id: string, authUser?: AuthUser, 
         model: GeoLocation,
         where: { geoLocationId: id, isActive: !isActive },
         isActive,
-        lang,
         notFoundMessage: getMessage('geoLocation.notFound', lang),
         notFoundCode: 'GEOLOC_005_LOCATION_NOT_FOUND',
         appDetail: {

@@ -125,7 +125,6 @@ const setGeoLevelTypeActivationService = async (id: string, authUser?: AuthUser,
         model: GeoLevelType,
         where: { geoLevelTypeId: id, isActive: !isActive },
         isActive,
-        lang,
         notFoundMessage: getMessage('geoLevelType.notFound', lang),
         notFoundCode: 'GEOTYPE_005_LEVEL_NOT_FOUND',
         appDetail: {

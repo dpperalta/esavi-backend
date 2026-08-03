@@ -1,13 +1,11 @@
 import { Model, ModelStatic, Transaction, WhereOptions } from 'sequelize';
 import { AppError } from '../../helpers/appError.helper';
-import { getMessage } from '../../helpers/i18n.helper';
 
 interface ActivationOptions<T extends Model> {
     model: ModelStatic<T>;
     where: WhereOptions;
     isActive: boolean;
     transaction?: Transaction;
-    lang?: string;
     notFoundMessage: string;
     notFoundCode: string;
     appDetail: {
@@ -26,7 +24,7 @@ const setEntityActiveStatusService = async <T extends Model>(options: Activation
         transaction: options.transaction 
     });
     if( !entity ) {
-        throw new AppError(getMessage('geoLevelType.notFound', options.lang || 'en'), 404, options.notFoundCode);
+        throw new AppError(options.notFoundMessage, 404, options.notFoundCode);
     }
     const current = entity.get({ plain: true }) as any;
     const currentAppDetails = Array.isArray(current.appDetails) ? current.appDetails : [];

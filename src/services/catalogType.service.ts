@@ -119,7 +119,6 @@ const setCatalogTypeActivationService = async (id: string, authUser?: AuthUser, 
         model: CatalogType,
         where: { catalogTypeId: id, isActive: !isActive },
         isActive,
-        lang,
         notFoundMessage: getMessage('catalogType.notFound', lang),
         notFoundCode: 'CATTYPE_004_NOT_FOUND',
         appDetail: {
