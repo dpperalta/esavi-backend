@@ -103,57 +103,6 @@ const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, li
     return healthFacilities;
 }
 
-/*
-// ESAVI-CATITEM-002A - Get Catalog Items by Catalog Type Service
-const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: number = 10, offset: number = 0) => {
-    if ( !catalogTypeId ) {
-        throw new AppError(getMessage('catalogType.idRequired', 'en'), 400, 'CATITEM_002A_CATTYPEID_REQUIRED');
-    }
-    const catalogItems = await CatalogItem.findAndCountAll({
-        where: { 
-            catalogTypeId, 
-            isActive: true 
-        },
-        order: [['sortOrder', 'ASC']],
-        limit,
-        offset
-    });
-    return catalogItems;
-}
-
-// ESAVI-CATITEM-002B - Get All Catalog Items by Catalog Type Service (including inactive) - For SuperAdmin
-const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit: number = 10, offset: number = 0, isAdmin: boolean = false) => {
-    let whereClause = {};
-    if( isAdmin && catalogTypeId ) {
-        whereClause = { catalogTypeId };
-    } else if( !isAdmin && catalogTypeId ) {
-        whereClause = { catalogTypeId, isActive: true };
-    }
-    const catalogItems = await CatalogItem.findAndCountAll({
-        where: whereClause,
-        order: [
-            ['sortOrder', 'ASC'],
-            ['name', 'ASC']
-        ],
-        limit,
-        offset
-    });
-    return catalogItems;
-}
-
-// ESAVI-CATITEM-002C - Get Catalog Item by ID Service
-const getCatalogItemByIdService = async (id: string, lang: string = 'en', isAdmin: boolean = false) => {
-    const whereClause = isAdmin ? { catalogItemId: id } : { catalogItemId: id, isActive: true };
-    const catalogItem = await CatalogItem.findOne({ 
-        where: whereClause 
-    });
-    if (!catalogItem) {
-        throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_001_NOT_FOUND');
-    }
-    return catalogItem;
-}
-*/
-
 export {
     createHealthFacilityService,
     getHealthFacilitiesByGeoLocationService
