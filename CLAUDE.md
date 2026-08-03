@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Convenciones de código (norma vinculante)
+
+Antes de escribir o modificar código bajo `src/`, lee **`references/CONVENTIONS.md`**. Define la nomenclatura, los siete artefactos obligatorios por endpoint, el esquema de códigos `ESAVI-*`, la matriz de roles y el contrato de respuesta. Manda sobre cualquier archivo existente que lo contradiga.
+
+Las desviaciones actuales están catalogadas en `references/TECHNICAL_DEBT.md` y no son precedente.
+
 ## Idioma
 
 Responde **siempre en español** en este repositorio. Esto aplica a explicaciones, resúmenes, planes y mensajes de commit. El código, los nombres de identificadores y los comentarios en el código siguen la convención existente del repositorio (inglés).

@@ -20,11 +20,45 @@ dotenv.config({
     path: path.resolve(process.cwd(), `.env.${env}`)
 });
 
+const DEFAULT_CORS_ORIGINS = 'http://localhost:5173,http://localhost:3000';
+
+/**
+ * Resolves the CORS whitelist from CORS_ORIGINS. The variable is mandatory in
+ * production; in any other environment it falls back to the local frontends.
+ */
+const resolveCorsOrigins = (): string[] => {
+    const rawOrigins = ( process.env.CORS_ORIGINS ?? '' ).trim();
+
+    if( !rawOrigins && env !== 'production' ) {
+        return DEFAULT_CORS_ORIGINS.split(',');
+    }
+
+    const origins = rawOrigins
+        .split(',')
+        .map( origin => origin.trim().replace(/\/+$/, '') )
+        .filter( origin => origin.length > 0 );
+
+    if( origins.length === 0 ) {
+        const message = 'CORS_ORIGINS is required when NODE_ENV=production and must list at least one origin';
+        console.error(styleText('red', `Error starting server: ${ message }`));
+        esaviLog(`Error starting server: ${ message }`, 'error');
+        process.exit(1);
+    }
+
+    return origins;
+}
+
+const allowedOrigins = resolveCorsOrigins();
+
 const app = express();
 
 app.use(helmet());
 app.disable('x-powered-by'); // Remove X-Powered-By header for security
-app.use(cors()); //TODO: Configure CORS properly for production with specific origins and settings
+app.use(cors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+}));
 
 // Morgan
 if( env === 'development' ) {
@@ -65,6 +99,7 @@ const startServer = async (): Promise<void> => {
             esaviLog(`[START]: Server running on port ${ PORT }`, 'info');
             esaviLog(`[START]: Environment: ${ env }`, 'info');
             esaviLog(`[START]: Server time: ${ new Date().toISOString() }`, 'info');
+            esaviLog(`[START]: Allowed CORS origins: ${ allowedOrigins.join(', ') }`, 'info');
         });
     } catch (error) {
         console.error(styleText('red',`Error starting server: ${error instanceof Error ? error.message : String(error)}`));
