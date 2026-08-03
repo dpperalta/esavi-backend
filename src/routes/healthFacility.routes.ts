@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateHealthFacility,
     createHealthFacility,
+    deleteHealthFacility,
     getAllHealthFacilitiesByLocation,
     getHealthFacilitiesByLocation,
     getHealthFacilityById,
@@ -26,13 +28,21 @@ router.get('/location/:id', tokenValidation, validateUserRole(USER), ...geoLocat
 // Code: ESAVI-HFAC-002B
 router.get('/admin/location/:id', tokenValidation, validateUserRole(ADMIN), ...geoLocationIdValidator, ...healthFacilityListValidator, validateFields, getAllHealthFacilitiesByLocation);
 
+// Activate Health Facility - For SuperAdmin
+// Code: ESAVI-HFAC-005B
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...healthFacilityIdValidator, validateFields, activateHealthFacility);
+
 // Get Health Facility by ID
 // Code: ESAVI-HFAC-003
-// Declared after the literal paths so Express does not capture 'location' or 'admin' as an :id
+// Declared after the literal paths so Express does not capture 'location', 'admin' or 'activate' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...healthFacilityIdValidator, validateFields, getHealthFacilityById);
 
 // Update Health Facility
 // Code: ESAVI-HFAC-004
 router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...healthFacilityIdValidator, ...updateHealthFacilityValidator, validateFields, updateHealthFacility);
+
+// Soft delete Health Facility
+// Code: ESAVI-HFAC-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...healthFacilityIdValidator, validateFields, deleteHealthFacility);
 
 export default router;

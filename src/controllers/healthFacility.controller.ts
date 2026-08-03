@@ -6,7 +6,8 @@ import {
     getAllHealthFacilitiesByGeoLocationService,
     getHealthFacilitiesByGeoLocationService,
     getHealthFacilityByIdService,
-    updateHealthFacilityService
+    updateHealthFacilityService,
+    setHealthFacilityActivationService
 } from '../services/healthFacility.service';
 
 // Create Health Facility Controller
@@ -117,10 +118,52 @@ const updateHealthFacility = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Delete Health Facility Controller - Soft delete
+// Code: ESAVI-HFAC-005A
+const deleteHealthFacility = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setHealthFacilityActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('healthFacility.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-HFAC-005A: Error deleting Health Facility: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('healthFacility.deletedFailed', req.lang), 500, 'HFAC_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Health Facility Controller - For SuperAdmin
+// Code: ESAVI-HFAC-005B
+const activateHealthFacility = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setHealthFacilityActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('healthFacility.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-HFAC-005B: Error activating Health Facility: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('healthFacility.activatedFailed', req.lang), 500, 'HFAC_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createHealthFacility,
     getHealthFacilitiesByLocation,
     getAllHealthFacilitiesByLocation,
     getHealthFacilityById,
-    updateHealthFacility
+    updateHealthFacility,
+    deleteHealthFacility,
+    activateHealthFacility
 }

@@ -1,7 +1,9 @@
 import { Op } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, HealthFacility } from '../models';
 import { AppError, getMessage, toConstantCase, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateHealthFacilityInput } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Code of the catalogType that groups the valid facility types.
@@ -291,10 +293,53 @@ const updateHealthFacilityService = async (id: string, data: Partial<CreateHealt
     return updatedHealthFacility;
 }
 
+// ESAVI-HFAC-005A / 005B - Setting Health Facility Active/Inactive Service
+const setHealthFacilityActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // A deactivated parent with active children leaves the hierarchy in a state no listing can represent
+        if (!isActive) {
+            const activeChildren = await HealthFacility.count({
+                where: {
+                    parentHealthFacilityId: id,
+                    isActive: true
+                },
+                transaction
+            });
+            if (activeChildren > 0) {
+                throw new AppError(getMessage('healthFacility.hasActiveChildren', lang), 409, 'HFAC_005A_HAS_ACTIVE_CHILDREN');
+            }
+        }
+        const healthFacility = await setEntityActiveStatusService({
+            model: HealthFacility,
+            where: { healthFacilityId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('healthFacility.notFound', lang),
+            notFoundCode: `HFAC_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`healthFacility.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `HFAC_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-HFAC-${ op }`,
+                detail: `HealthFacility ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return healthFacility;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createHealthFacilityService,
     getHealthFacilitiesByGeoLocationService,
     getAllHealthFacilitiesByGeoLocationService,
     getHealthFacilityByIdService,
-    updateHealthFacilityService
+    updateHealthFacilityService,
+    setHealthFacilityActivationService
 }
