@@ -22,7 +22,8 @@
         "invalidToken": "Invalid token. Please log in again.",
         "tokenMissing": "Authentication is missing. Please log in to obtain access.",
         "forbidden": "You do not have permission to access this resource.",
-        "loginSuccess": "Login successful. Welcome back, {{name}}!"
+        "loginSuccess": "Login successful. Welcome back, {{name}}!",
+        "loginFailed": "The login could not be completed"
     },
     "crypto": {
         "encryptionFailed": "Encryption failed. Please try again later.",
@@ -128,6 +129,7 @@
     "healthFacility": {
         "codeExists": "A health facility with code {{code}} already exists",
         "parentNotFound": "Parent health facility not found. Please check the parent health facility ID and try again.",
+        "facilityTypeNotFound": "The facility type does not exist or is inactive",
         "notFound": "Health facility not found. Please check the health facility ID and try again.",
         "notFoundPlural": "One or more health facilities not found. Please check the health facility IDs and try again.",
         "createdSuccess": "Health facility created successfully",

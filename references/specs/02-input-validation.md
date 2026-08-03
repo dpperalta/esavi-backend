@@ -1,6 +1,6 @@
 # SPEC 02 — Validación de entrada y paginación
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (toca los mismos archivos de rutas)
 > **Fecha:** 2026-08-01
 > **Objetivo:** Que ninguna ruta llegue a Sequelize con un `:id` no verificado ni con un `limit`/`offset` sin validar.

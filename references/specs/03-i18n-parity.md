@@ -1,6 +1,6 @@
 # SPEC 03 — Integridad y paridad de los mensajes i18n
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** —
 > **Fecha:** 2026-08-01
 > **Objetivo:** Que ninguna respuesta salga con `message` vacío, en ninguno de los tres idiomas soportados.

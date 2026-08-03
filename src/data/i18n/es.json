@@ -22,7 +22,8 @@
         "invalidToken": "Token inválido. Por favor, inicie sesión nuevamente.",
         "tokenMissing": "Falta la autenticación. Por favor, inicie sesión para obtener acceso.",
         "forbidden": "No tiene permisos para acceder a este recurso.",
-        "loginSuccess": "Inicio de sesión exitoso. ¡Bienvenido de nuevo, {{name}}!" 
+        "loginSuccess": "Inicio de sesión exitoso. ¡Bienvenido de nuevo, {{name}}!",
+        "loginFailed": "No se pudo completar el inicio de sesión"
     },
     "crypto": {
         "encryptionFailed": "Error al encriptar. Por favor, inténtelo de nuevo más tarde.",
@@ -128,6 +129,7 @@
     "healthFacility": {
         "codeExists": "Un establecimiento de salud con el código {{code}} ya existe",
         "parentNotFound": "Establecimiento de salud padre no encontrado. Por favor, verifique el ID del establecimiento de salud padre e inténtelo de nuevo.",
+        "facilityTypeNotFound": "El tipo de establecimiento no existe o está inactivo",
         "notFound": "Establecimiento de salud no encontrado. Por favor, verifique el ID del establecimiento de salud e inténtelo de nuevo.",
         "notFoundPlural": "Uno o más establecimientos de salud no encontrados. Por favor, verifique los IDs de los establecimientos de salud e inténtelo de nuevo.",
         "createdSuccess": "Establecimiento de salud creado exitosamente",
