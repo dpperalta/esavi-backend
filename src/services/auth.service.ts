@@ -29,11 +29,11 @@ const loginService =async({ email, password }: LoginInput) => {
         ]
     });
     if( !user ) {
-        throw new AppError(getMessage('auth.invalidCredentials'), 404, 'AUTH_001_INVALID_CREDENTIALS');
+        throw new AppError(getMessage('auth.invalidCredentials'), 401, 'AUTH_001_INVALID_CREDENTIALS');
     }
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if( !isPasswordValid ) {
-        throw new AppError(getMessage('auth.invalidCredentials'), 404, 'AUTH_001_INVALID_CREDENTIALS');
+        throw new AppError(getMessage('auth.invalidCredentials'), 401, 'AUTH_001_INVALID_CREDENTIALS');
     }
     const roles = user.roles?.map((role: AppRole) => ({
         roleId: role.getDataValue('roleId'),
