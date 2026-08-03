@@ -22,26 +22,26 @@ const createHealthFacility = async (req: Request, res: Response, next: NextFunct
     }
 }
 
-// Get health facilities of a given geoLocationId with pagination and option to include inactive (for admin users)
-// Code: ESAVI-HFAC-002
+// Get Active Health Facilities By GeoLocation Controller
+// Code: ESAVI-HFAC-002A
 const getHealthFacilitiesByLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getHealthFacilitiesByGeoLocationService(id, limit, offset);
+        const data = await getHealthFacilitiesByGeoLocationService(id, req.lang, limit, offset);
         return res.status(200).json({
             ok: true,
             message: getMessage('healthFacility.getSuccessPlural', req.lang),
             data
         });
     } catch (error) {
-        esaviLog('ESAVI-HFAC-002: Error getting health facilities by geoLocationId: ' + error, 'error');
+        esaviLog('ESAVI-HFAC-002A: Error getting health facilities by geoLocationId: ' + error, 'error');
         if( error instanceof AppError ) {
             next(error);
             return;
         }
-        next(new AppError(getMessage('healthFacility.getFailedPlural', req.lang), 500, 'HFAC_002_GET_BY_GEOLOCATION_FAILED', error));
+        next(new AppError(getMessage('healthFacility.getFailedPlural', req.lang), 500, 'HFAC_002A_GET_BY_GEOLOCATION_FAILED', error));
     }
 }
 

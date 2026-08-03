@@ -86,10 +86,10 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
     return newHealthFacility;
 }
 
-// ESAVI-HFAC-002 - Get Health Facilities by GeoLocation Service
-const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+// ESAVI-HFAC-002A - Get Active Health Facilities by GeoLocation Service
+const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     if (!geoLocationId) {
-        throw new AppError(getMessage('geoLocation.idRequired', 'en'), 400, 'HFAC_002_GEOLOCATIONID_REQUIRED');
+        throw new AppError(getMessage('geoLocation.idRequired', lang), 400, 'HFAC_002A_GEOLOCATIONID_REQUIRED');
     }
     const healthFacilities = await HealthFacility.findAndCountAll({
         where: {
