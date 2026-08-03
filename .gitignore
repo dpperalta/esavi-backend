@@ -3,7 +3,9 @@ node_modules/
 .env
 .env.development
 .env.production
+.env.test
 dist/
+coverage/
 
 src/logs/*.log
 *.log
