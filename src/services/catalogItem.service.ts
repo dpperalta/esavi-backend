@@ -184,8 +184,9 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
     return updatedCatalogItem;
 }
 
-// ESAVI-CATITEM-004 - Setting Catalog Item Active/Inactive Service - For SuperAdmin
+// ESAVI-CATITEM-005A / 005B - Setting Catalog Item Active/Inactive Service - For SuperAdmin
 const setCatalogItemActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
         const catalogItem = await setEntityActiveStatusService({
@@ -194,13 +195,13 @@ const setCatalogItemActivationService = async (id: string, authUser?: AuthUser, 
             isActive,
             transaction,
             notFoundMessage: getMessage('catalogItem.notFound', lang),
-            notFoundCode: 'CATITEM_004_NOT_FOUND',
+            notFoundCode: `CATITEM_${ op }_NOT_FOUND`,
             alreadyInStateMessage: getMessage(`catalogItem.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
-            alreadyInStateCode: 'CATITEM_004' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            alreadyInStateCode: `CATITEM_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
             appDetail: {
                 createdAt: new Date(),
                 user: authUser?.userId || 'undefined',
-                method: 'ESAVI-CATITEM-004' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                method: `ESAVI-CATITEM-${ op }`,
                 detail: `CatalogItem ${ isActive ? 'activated' : 'deactivated' } by service`
             }
         });

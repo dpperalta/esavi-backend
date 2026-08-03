@@ -117,9 +117,10 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
     return updatedGeoLevelType;
 };
 
-// ESAVI-GEOTYPE-005 - Setting Geographic Level Type Active/Inactive Service - For SuperAdmin
+// ESAVI-GEOTYPE-005A / 005B - Setting Geographic Level Type Active/Inactive Service - For SuperAdmin
 // This service will set isActive to false and append a deletion entry to appDetails. The record will not be removed from the database.
 const setGeoLevelTypeActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
         const geoLevelType = await setEntityActiveStatusService({
@@ -128,13 +129,13 @@ const setGeoLevelTypeActivationService = async (id: string, authUser?: AuthUser,
             isActive,
             transaction,
             notFoundMessage: getMessage('geoLevelType.notFound', lang),
-            notFoundCode: 'GEOTYPE_005_LEVEL_NOT_FOUND',
+            notFoundCode: `GEOTYPE_${ op }_NOT_FOUND`,
             alreadyInStateMessage: getMessage(`geoLevelType.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
-            alreadyInStateCode: 'GEOTYPE_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            alreadyInStateCode: `GEOTYPE_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
             appDetail: {
                 createdAt: new Date(),
                 user: authUser?.userId || 'undefined',
-                method: 'ESAVI-GEOTYPE-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                method: `ESAVI-GEOTYPE-${ op }`,
                 detail: `GeoLevelType ${ isActive ? 'activated' : 'deactivated' } by service`
             }
         });

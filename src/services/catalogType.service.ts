@@ -113,8 +113,9 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
     return updatedCatalogType;
 }
 
-// ESAVI-CATTYPE-004 - Setting Catalog Type Active/Inactive Service - For SuperAdmin
+// ESAVI-CATTYPE-005A / 005B - Setting Catalog Type Active/Inactive Service - For SuperAdmin
 const setCatalogTypeActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
         const catalogType = await setEntityActiveStatusService({
@@ -123,13 +124,13 @@ const setCatalogTypeActivationService = async (id: string, authUser?: AuthUser, 
             isActive,
             transaction,
             notFoundMessage: getMessage('catalogType.notFound', lang),
-            notFoundCode: 'CATTYPE_004_NOT_FOUND',
+            notFoundCode: `CATTYPE_${ op }_NOT_FOUND`,
             alreadyInStateMessage: getMessage(`catalogType.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
-            alreadyInStateCode: 'CATTYPE_004' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            alreadyInStateCode: `CATTYPE_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
             appDetail: {
                 createdAt: new Date(),
                 user: authUser?.userId || 'undefined',
-                method: 'ESAVI-CATTYPE-004' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                method: `ESAVI-CATTYPE-${ op }`,
                 detail: `CatalogType ${ isActive ? 'activated' : 'deactivated' } by service`
             }
         });
