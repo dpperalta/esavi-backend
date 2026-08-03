@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createHealthFacility, getHealthFacilitiesByLocation } from '../controllers/healthFacility.controller';
+import {
+    createHealthFacility,
+    getAllHealthFacilitiesByLocation,
+    getHealthFacilitiesByLocation
+} from '../controllers/healthFacility.controller';
 import { createHealthFacilityValidator, geoLocationIdValidator, healthFacilityListValidator } from '../validators';
 
 const { SUPERADMIN, ADMIN, USER } = ROLES;
@@ -15,5 +19,9 @@ router.post('/', tokenValidation, validateUserRole(ADMIN), ...createHealthFacili
 // Get Active Health Facilities By GeoLocation
 // Code: ESAVI-HFAC-002A
 router.get('/location/:id', tokenValidation, validateUserRole(USER), ...geoLocationIdValidator, ...healthFacilityListValidator, validateFields, getHealthFacilitiesByLocation);
+
+// Get All Health Facilities By GeoLocation - For Admin
+// Code: ESAVI-HFAC-002B
+router.get('/admin/location/:id', tokenValidation, validateUserRole(ADMIN), ...geoLocationIdValidator, ...healthFacilityListValidator, validateFields, getAllHealthFacilitiesByLocation);
 
 export default router;
