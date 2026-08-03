@@ -1,13 +1,12 @@
-import { Request, Response, NextFunction } from "express"
+﻿import { Request, Response, NextFunction } from "express"
 import { AppError, canViewInactive, esaviLog, getMessage } from "../helpers";
-import { AuthUser } from "../types";
 import { createCatalogItemService, getActiveCatalogItemsByTypeService, getAllCatalogItemsByTypeService, getCatalogItemByIdService, setCatalogItemActivationService, updateCatalogItemService } from "../services/catalogItem.service";
 
 // Create Catalog Item Controller
 // Code: ESAVI-CATITEM-001
 const createCatalogItem = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try{
-        const data = await createCatalogItemService(req.body, { userId: req.user?.userId } as AuthUser, req.lang);
+        const data = await createCatalogItemService(req.body, req.user, req.lang);
         return res.status(201).json({
             ok: true,
             message: getMessage('catalogItem.createdSuccess', req.lang),
@@ -74,7 +73,7 @@ const getAllCatalogItemsByType = async (req: Request, res: Response, next: NextF
 const getCatalogItemById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
-        const data = await getCatalogItemByIdService(id.toString().trim(), req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getCatalogItemByIdService(id.toString().trim(), req.lang, canViewInactive(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogItem.getSuccess', req.lang),
@@ -95,7 +94,7 @@ const getCatalogItemById = async (req: Request, res: Response, next: NextFunctio
 const updateCatalogItem = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
-        const data = await updateCatalogItemService(id.toString().trim(), req.body, { userId: req.user?.userId } as AuthUser, req.lang);
+        const data = await updateCatalogItemService(id.toString().trim(), req.body, req.user, req.lang);
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogItem.updatedSuccess', req.lang),
@@ -116,7 +115,7 @@ const updateCatalogItem = async (req: Request, res: Response, next: NextFunction
 const deleteCatalogItem = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try{
-        await setCatalogItemActivationService( id, { userId: req.user?.userId } as AuthUser, req.lang, false );
+        await setCatalogItemActivationService( id, req.user, req.lang, false );
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogItem.deletedSuccess', req.lang)
@@ -136,7 +135,7 @@ const deleteCatalogItem = async (req: Request, res: Response, next: NextFunction
 const activateCatalogItem = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try{
-        await setCatalogItemActivationService( id, { userId: req.user?.userId } as AuthUser, req.lang, true );
+        await setCatalogItemActivationService( id, req.user, req.lang, true );
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogItem.activatedSuccess', req.lang)

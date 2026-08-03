@@ -1,14 +1,13 @@
-import { Request, Response, NextFunction } from 'express';
+﻿import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage, isSuperAdmin } from '../helpers';
 import { createGeoLocationService, getAllGeoLocationsService, getActiveGeoLocationsService, getGeoLocationByIdService, updateGeoLocationService, setGeoLocationActivationService } from '../services/geoLocation.service';
-import { AuthUser } from '../types/user/user.types';
 
 
 // Create Geographic Location Controller
 // Code: ESAVI-GEOLOC-001
 const createGeoLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const createdLocation = await createGeoLocationService(req.body, { userId: req.user?.userId } as AuthUser, req.lang);
+        const createdLocation = await createGeoLocationService(req.body, req.user, req.lang);
         return res.status(201).json({
             ok: true,
             message: getMessage('geoLocation.createdSuccess', req.lang),
@@ -32,7 +31,7 @@ const getGeoLocations = async(req: Request, res: Response, next: NextFunction): 
     const geoLevelId = req.query.geoLevelId ? (req.query.geoLevelId as string).trim() : undefined;
     const parentId = req.query.parentId ? (req.query.parentId as string).trim() : undefined;
     try {
-        const data = isSuperAdmin(req.user as AuthUser) 
+        const data = isSuperAdmin(req.user) 
             ? await getAllGeoLocationsService( geoLevelId, parentId, limit,  offset ) 
             : await getActiveGeoLocationsService( geoLevelId, parentId, limit,  offset );
         return res.status(200).json({
@@ -55,7 +54,7 @@ const getGeoLocations = async(req: Request, res: Response, next: NextFunction): 
 const getGeoLocationById = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        const data = await getGeoLocationByIdService(id, req.lang, isSuperAdmin(req.user as AuthUser));
+        const data = await getGeoLocationByIdService(id, req.lang, isSuperAdmin(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLocation.getSuccess', req.lang),
@@ -76,7 +75,7 @@ const getGeoLocationById = async(req: Request, res: Response, next: NextFunction
 const updateGeoLocation = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        const updatedLocation = await updateGeoLocationService(id, req.body, { userId: req.user?.userId } as AuthUser, req.lang);
+        const updatedLocation = await updateGeoLocationService(id, req.body, req.user, req.lang);
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLocation.updatedSuccess', req.lang),
@@ -97,7 +96,7 @@ const updateGeoLocation = async(req: Request, res: Response, next: NextFunction)
 const deleteGeoLocation = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        await setGeoLocationActivationService( id, req.user as AuthUser, req.lang, false);
+        await setGeoLocationActivationService( id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLocation.deletedSuccess', req.lang)
@@ -118,7 +117,7 @@ const deleteGeoLocation = async(req: Request, res: Response, next: NextFunction)
 const activateGeoLocation = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        await setGeoLocationActivationService(id, req.user as AuthUser, req.lang, true);
+        await setGeoLocationActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLocation.activatedSuccess', req.lang)

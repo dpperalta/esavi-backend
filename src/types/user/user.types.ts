@@ -8,10 +8,10 @@ export interface CreateUserInput {
 }
 
 export interface UserRole {
-    roleId: string;
     name: string;
-    code: string;
     level: number;
+    roleId?: string;   // el token no lo puebla
+    code?: string;     // el token no lo puebla
 }
 
 export interface AuthUser {
@@ -23,7 +23,7 @@ export interface AuthUser {
 
 export interface CreateUserServiceParams {
     data: CreateUserInput;
-    authUser: AuthUser;
+    authUser?: AuthUser;
     lang?: string;
 }
 

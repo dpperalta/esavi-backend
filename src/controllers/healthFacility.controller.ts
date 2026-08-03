@@ -1,13 +1,12 @@
-import { Request, Response, NextFunction } from 'express';
+﻿import { Request, Response, NextFunction } from 'express';
 import { AppError, canViewInactive, esaviLog, getMessage } from "../helpers";
-import { AuthUser } from "../types";
 import { createHealthFacilityService, getHealthFacilitiesByGeoLocationService } from '../services/healthFacility.service';
 
 // Create Health Facility Controller
 // Code: ESAVI-HFAC-001
 const createHealthFacility = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await createHealthFacilityService(req.body, { userId: req.user?.userId } as AuthUser, req.lang);
+        const data = await createHealthFacilityService(req.body, req.user, req.lang);
         return res.status(201).json({
             ok: true,
             message: getMessage('healthFacility.createdSuccess', req.lang),
