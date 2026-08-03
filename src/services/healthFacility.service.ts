@@ -28,6 +28,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
             },
             include: [{
                 model: CatalogType,
+                as: 'catalogType',
                 //where: { code: 'FACILITY_TYPE' },
                 attributes: []
             }]
