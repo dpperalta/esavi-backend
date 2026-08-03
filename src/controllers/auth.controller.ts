@@ -6,7 +6,7 @@ import { esaviLog, getMessage, AppError } from '../helpers';
 // Code: ESAVI-AUTH-001
 const login = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void   > => {
     try{
-        const result = await loginService(req.body);
+        const result = await loginService(req.body, req.lang);
         return res.status(200).json({
             ok: true,
             message: getMessage('auth.loginSuccess', req.lang, { name: `${result.user.displayName}` }),

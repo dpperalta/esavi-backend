@@ -56,14 +56,17 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-034](#deuda-034) | 🟠 | Reasignar `parentGeoLocationId` puede crear un ciclo |
 | [DEUDA-035](#deuda-035) | 🟡 | `canViewInactive` exige SUPERADMIN; la matriz dice ADMIN |
 | [DEUDA-036](#deuda-036) | 🟡 | El banner de arranque esquiva `esaviLog` |
+| [DEUDA-037](#deuda-037) | 🟠 | ✅ `DEFAULT_LANGUAGE` se lee antes de que `dotenv` pueble el entorno |
+| [DEUDA-038](#deuda-038) | 🟠 | ✅ El idioma resuelto no llega desde el controlador al servicio |
 
 ## Mapa de resolución
 
-La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030. Las
-entradas 031–036 todavía no tienen spec.
+La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030, y el
+SPEC 08 cubre 037 y 038. Las entradas 031–036 todavía no tienen spec.
 
 **Saldadas a 2026-08-03**: las 30 entradas 001–030, por los siete specs de la
-serie, todos en estado Implementado.
+serie, más 037 y 038 por el SPEC 08. Los ocho specs están en estado
+Implementado.
 
 Tres se cerraron por una vía distinta a la que proponía su «Aceptación», y la
 nota de cada una lo hace constar: **002** (el router de seed deja de montarse en
@@ -80,11 +83,19 @@ producción, en vez de exigir SUPERADMIN), **013** (unicidad **sin** filtrar por
 | [05 — Códigos de operación](./specs/05-operation-codes.md) | 008, 016 |
 | [06 — Nomenclatura, tipos y código muerto](./specs/06-naming-and-types.md) | 019, 020, 021, 022, 023, 024, 027, 028, 029 |
 | [07 — Linter y suite mínima](./specs/07-tooling-and-tests.md) | 030 |
+| [08 — Idioma efectivo](./specs/08-language-propagation.md) | 037, 038 |
 | sin spec | 031, 032, 033, 034, 035, 036 |
 
-Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07. El 05 renumera líneas
-que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los cinco
-anteriores; el 07 escribe la suite contra el comportamiento ya corregido.
+Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08. El 05 renumera
+líneas que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los
+cinco anteriores; el 07 escribe la suite contra el comportamiento ya corregido;
+el 08 depende del 03, que garantizó que las claves existan en los tres idiomas.
+
+**El SPEC 08 desvía la numeración que él mismo propone**: fue redactado el
+2026-08-02 pidiendo registrar sus dos hallazgos como DEUDA-036 y DEUDA-037,
+pero el 2026-08-03 el SPEC 06 ocupó el 036 con el banner de arranque. Los IDs
+son estables, así que los hallazgos del 08 son [DEUDA-037](#deuda-037) y
+[DEUDA-038](#deuda-038).
 
 **El SPEC 04 corrige la aceptación escrita en [DEUDA-013](#deuda-013)**: el
 criterio correcto es *sin* filtrar por `isActive`, no `isActive: true`. Ver
@@ -630,3 +641,63 @@ Quedan cinco, en dos grupos que no se tratan igual:
 El primero es una inconsistencia de canal: la salida es deliberada, pero no pasa por el logger del proyecto. El segundo es funcional — cambiarlo altera qué se registra en desarrollo.
 
 **Aceptación**: los cuatro del banner salen por `esaviLog`; `connection.ts:28` se documenta como uso legítimo o se sustituye por un logger explícito.
+
+---
+
+<a id="deuda-037"></a>
+## DEUDA-037 🟠 ✅ `DEFAULT_LANGUAGE` se lee antes de que `dotenv` pueble el entorno
+
+> ✅ **Saldada** por el [SPEC 08](./specs/08-language-propagation.md) el 2026-08-03. `getDefaultLanguage()` resuelve el valor en cada llamada, no al cargar el módulo, y el literal de reserva pasó de `'en'` a `'es'`. `startServer()` detiene el arranque con `process.exit(1)` si `DEFAULT_LANGUAGE` no está entre los idiomas usables, con la misma política que `resolveCorsOrigins()`. `languageMiddleware` dejó de resolver su propio default para no divergir del helper. Verificado en caliente: con `DEFAULT_LANGUAGE=es`, un JSON malformado sin `req.lang` responde en español; con `DEFAULT_LANGUAGE=xx` el servidor no arranca y deja el motivo en `esaviLog`. Ese registro exigió añadir `esaviLogFlush()`: log4js escribe en asíncrono y el `process.exit(1)` descartaba la entrada.
+
+Detectada al verificar el [SPEC 03](./specs/03-i18n-parity.md) el 2026-08-02, contra la API corriendo con `DEFAULT_LANGUAGE=es`. La cierra el [SPEC 08](./specs/08-language-propagation.md).
+
+**Archivo**: `src/helpers/i18n.helper.ts:13`
+
+La constante se resuelve en el cuerpo del módulo:
+
+```ts
+const DEFAULT_LANGUAGE = process.env.DEFAULT_LANGUAGE as lang || 'en';
+```
+
+Los `import` de `src/index.ts` se hoistean, así que la cadena `index.ts → routes → controllers → helpers` ejecuta ese módulo **antes** de la línea 19, donde `dotenv.config()` puebla el entorno. El operador `||` se queda con la rama derecha en todos los arranques: el idioma por defecto del helper nunca es el configurado.
+
+```
+POST /api/auth/login?lang=es   (JSON malformado)
+→ 500 {"message":"Internal server error. Please try again later."}
+```
+
+Esto convierte en trampa el fallback que instaló el SPEC 03: su nivel 2 cae a `'en'`, no al idioma que el equipo cree haber configurado. Y ninguna prueba lo distingue de un fallback legítimo.
+
+Es el mismo patrón que [DEUDA-031](#deuda-031) —leer `process.env` al cargar el módulo—, en otro archivo y con otra consecuencia.
+
+**Aceptación**: `i18n.helper.ts` no lee `process.env` en el cuerpo del módulo; con `DEFAULT_LANGUAGE=es`, un error sin `req.lang` responde en español. Un `DEFAULT_LANGUAGE` fuera de `SUPPORTED_LANGUAGES` detiene el arranque en vez de degradar en silencio.
+
+---
+
+<a id="deuda-038"></a>
+## DEUDA-038 🟠 ✅ El idioma resuelto no llega desde el controlador al servicio
+
+> ✅ **Saldada** por el [SPEC 08](./specs/08-language-propagation.md) el 2026-08-03. `lang` es un parámetro **requerido** en las 17 firmas de servicio y en `CreateUserServiceParams`, así que omitirlo es un error de compilación; `loginService` lo recibe y `login` le pasa `req.lang`; las tres llamadas a `getMessage` sin idioma lo reciben. Dos ajustes que el spec no preveía y que el compilador impuso: `authUser?: AuthUser` pasó a `authUser: AuthUser | undefined` en 13 firmas —un parámetro requerido no puede seguir a uno opcional (TS1016)— y `Express.Request['lang']` pasó a requerido, que es lo que ya ocurre en ejecución porque `languageMiddleware` se monta antes de las rutas. El cuarto bloque de `scripts/i18n-check.js` fija las tres formas de fuga: restaurar cualquiera de ellas devuelve exit 1.
+>
+> **El recuento fue 19, no 20**: `entityActivation.service.ts` ya no declaraba `lang?: string` al llegar el spec. El [SPEC 04](./specs/04-data-contract-consistency.md) se lo había quitado al hacerlo usar `notFoundMessage`, así que ahora recibe los mensajes ya traducidos.
+
+Detectada junto a [DEUDA-037](#deuda-037) el 2026-08-02. La cierra el [SPEC 08](./specs/08-language-propagation.md).
+
+`languageMiddleware` resuelve `req.lang` correctamente, pero de ahí en adelante hay tres fugas:
+
+| Fuga | Dónde | Efecto |
+|---|---|---|
+| `lang: string = 'en'` en la firma | 19 funciones de `src/services/`, más `lang?: string` en `entityActivation.service.ts` | si el controlador olvida pasarlo, el idioma no cae al configurado: cae a inglés |
+| `lang` ausente de la firma | `loginService` (`auth.service.ts:17`), y `loginController` no se lo pasa | todo el flujo de autenticación responde siempre en un solo idioma |
+| `getMessage(clave)` sin segundo argumento | `auth.service.ts:32`, `auth.service.ts:36`, `geoLocation.service.ts:140` | el mensaje ignora el idioma pedido |
+
+```
+POST /api/auth/login?lang=es   (credenciales inválidas)
+→ 401 {"message":"Invalid email or password. Please try again."}
+```
+
+El cliente pidió español y `req.lang` valía `es`. El mensaje sale en inglés porque nunca llegó al servicio.
+
+El valor por defecto es lo que dejó pasar el bug: un parámetro opcional no obliga a nadie a propagarlo, y el literal `'en'` disfraza la omisión de comportamiento normal.
+
+**Aceptación**: `lang` es un parámetro **requerido** en las firmas de servicio, de modo que cada fuga futura sea un error de compilación; todo controlador que llame a un servicio con mensajes le pasa `req.lang`; `npm run i18n:check` falla si reaparece cualquiera de las tres formas.

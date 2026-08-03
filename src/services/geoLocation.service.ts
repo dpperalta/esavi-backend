@@ -7,7 +7,7 @@ import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-GEOLOC-001 - Create Geographic Location Service
-const createGeoLocationService = async( data: CreateGeoLocationInput, authUser?: AuthUser, lang: string = 'en' ) => {
+const createGeoLocationService = async( data: CreateGeoLocationInput, authUser: AuthUser | undefined, lang: string ) => {
     const geoLevelType = await GeoLevelType.findOne({
         where: {
             geoLevelTypeId: data.geoLevelTypeId,
@@ -125,7 +125,7 @@ const getAllGeoLocationsService = async (geoLevelTypeId?: string, parentGeoLocat
 }
 
 // ESAVI-GEOLOC-003 - Get Geographic Location by ID service
-const getGeoLocationByIdService = async (id: string, lang: string = 'en', isAdmin: boolean = false) => {
+const getGeoLocationByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { geoLocationId: id } : { geoLocationId: id, isActive: true };
     const geoLocation = await GeoLocation.findOne({
         where: whereClause,
@@ -148,13 +148,13 @@ const getGeoLocationByIdService = async (id: string, lang: string = 'en', isAdmi
         ]
     });
     if (!geoLocation) {
-        throw new AppError(getMessage('geoLocation.notFound'), 404, 'GEOLOC_003_NOT_FOUND');
+        throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'GEOLOC_003_NOT_FOUND');
     }
     return geoLocation;
 }
 
 // ESAVI-GEOLOC-004 - Update Geographic Location Service - For SuperAdmin
-const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocationInput>, authUser?: AuthUser, lang: string = 'en') => {
+const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocationInput>, authUser: AuthUser | undefined, lang: string) => {
     const { userId } = authUser || {};
     const geoLocation = await GeoLocation.findByPk(id);
     const { externalCode, name, shortName, officialName, isoCode, latitude, longitude, geoPolygon, sortOrder, geoLevelTypeId, parentGeoLocationId } = data;
@@ -256,7 +256,7 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
 }
 
 // ESAVI-GEOLOC-005A / 005B - Setting Geographic Location Active/Inactive Service
-const setGeoLocationActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+const setGeoLocationActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {

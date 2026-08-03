@@ -24,6 +24,6 @@ export interface AuthUser {
 export interface CreateUserServiceParams {
     data: CreateUserInput;
     authUser?: AuthUser;
-    lang?: string;
+    lang: string;
 }
 

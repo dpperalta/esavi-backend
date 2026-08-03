@@ -7,7 +7,7 @@ import { setEntityActiveStatusService } from "./common/entityActivation.service"
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from "../constants/pagination.constants";
 
 // ESAVI-CATITEM-001 - Create Catalog Item Service
-const createCatalogItemService = async (data: CreateCatalogItemInput, authUser?: AuthUser, lang: string = 'en') => {
+const createCatalogItemService = async (data: CreateCatalogItemInput, authUser: AuthUser | undefined, lang: string) => {
     // Validate that the referenced Catalog Type exists and is active
     const catalogType = await CatalogType.findOne({
         where: {
@@ -102,7 +102,7 @@ const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit
 }
 
 // ESAVI-CATITEM-003 - Get Catalog Item by ID Service
-const getCatalogItemByIdService = async (id: string, lang: string = 'en', isAdmin: boolean = false) => {
+const getCatalogItemByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { catalogItemId: id } : { catalogItemId: id, isActive: true };
     const catalogItem = await CatalogItem.findOne({ 
         where: whereClause 
@@ -114,7 +114,7 @@ const getCatalogItemByIdService = async (id: string, lang: string = 'en', isAdmi
 }
 
 // ESAVI-CATITEM-004 - Update Catalog Item Service - For SuperAdmin
-const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogItemInput>, authUser?: AuthUser, lang: string = 'en') => {
+const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogItemInput>, authUser: AuthUser | undefined, lang: string) => {
     const { userId } = authUser || {};
     const catalogItem = await CatalogItem.findByPk(id);
     let updatedCatalogItem = catalogItem;
@@ -185,7 +185,7 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
 }
 
 // ESAVI-CATITEM-005A / 005B - Setting Catalog Item Active/Inactive Service - For SuperAdmin
-const setCatalogItemActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+const setCatalogItemActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {

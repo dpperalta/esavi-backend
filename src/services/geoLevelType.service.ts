@@ -8,7 +8,7 @@ import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-GEOTYPE-001 - Create Geographic Level Type Service
-const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser?: AuthUser, lang: string = 'en') => {
+const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser: AuthUser | undefined, lang: string) => {
     const { code } = data;
     const { userId } = authUser || {};
     const existingType = await GeoLevelType.findOne({
@@ -59,7 +59,7 @@ const getAllGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offset:
 }
 
 // ESAVI-GEOTYPE-003 - Get Geographic Level Type by ID Service
-const getGeoLevelTypeByIdService = async (id: string, lang: string = 'en', isAdmin: boolean = false) => {
+const getGeoLevelTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { geoLevelTypeId: id } : { geoLevelTypeId: id, isActive: true };
     const geoLevelType = await GeoLevelType.findOne({
         where: whereClause
@@ -71,7 +71,7 @@ const getGeoLevelTypeByIdService = async (id: string, lang: string = 'en', isAdm
 }
 
 // ESAVI-GEOTYPE-004 - Update Geographic Level Type Service - For SuperAdmin
-const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLevelTypeInput>, authUser?: AuthUser, lang: string = 'en') => {
+const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLevelTypeInput>, authUser: AuthUser | undefined, lang: string) => {
     const { userId } = authUser || {};
     const geoLevelType = await GeoLevelType.findByPk(id);
     let updatedGeoLevelType = geoLevelType;
@@ -121,7 +121,7 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
 
 // ESAVI-GEOTYPE-005A / 005B - Setting Geographic Level Type Active/Inactive Service - For SuperAdmin
 // This service will set isActive to false and append a deletion entry to appDetails. The record will not be removed from the database.
-const setGeoLevelTypeActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+const setGeoLevelTypeActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {

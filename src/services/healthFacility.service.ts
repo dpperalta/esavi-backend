@@ -8,7 +8,7 @@ import { AppDetails, AuthUser, CreateHealthFacilityInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // ESAVI-HFAC-001 - Create Health Facility Service
-const createHealthFacilityService = async (data: CreateHealthFacilityInput, authUser?: AuthUser, lang: string = 'en') => {
+const createHealthFacilityService = async (data: CreateHealthFacilityInput, authUser: AuthUser | undefined, lang: string) => {
     // Validate that the referenced GeoLocation exists and is active
     const geoLocation = await GeoLocation.findOne({
         where: {
