@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createGeoLocationValidator, updateGeoLocationValidator } from '../validators';
+import { createGeoLocationValidator, geoLocationIdValidator, updateGeoLocationValidator } from '../validators';
 import { ROLES } from '../constants/roles.constants';
 import { tokenValidation, validateUserRole, validateFields } from '../middlewares';
 import { activateGeoLocation, createGeoLocation, deleteGeoLocation, getGeoLocationById, getGeoLocations, updateGeoLocation } from '../controllers/geoLocation.controller';
@@ -22,7 +22,7 @@ route.get('/:id', tokenValidation, validateUserRole(USER), getGeoLocationById);
 
 // Update Geographic Location
 // Code: ESAVI-GEOLOC-004
-route.put('/:id', tokenValidation, validateUserRole(ADMIN), updateGeoLocationValidator, validateFields, updateGeoLocation);
+route.put('/:id', tokenValidation, validateUserRole(ADMIN), ...geoLocationIdValidator, ...updateGeoLocationValidator, validateFields, updateGeoLocation);
 
 // Soft delete Geographic Location
 // Code: ESAVI-GEOLOC-005A

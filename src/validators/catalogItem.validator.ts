@@ -28,7 +28,6 @@ export const createCatalogItemValidator = [
 ];
 
 export const updateCatalogItemValidator = [
-    ...catalogItemIdValidator,
     body('catalogTypeId').optional().isUUID().withMessage('Catalog Type ID must be a valid UUID').trim(),
     body('code').optional().trim().notEmpty().withMessage('Code cannot be empty')
         .isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),

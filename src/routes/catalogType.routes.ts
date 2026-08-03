@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createCatalogTypeValidator, updateCatalogTypeValidator } from '../validators';
+import { catalogTypeIdValidator, createCatalogTypeValidator, updateCatalogTypeValidator } from '../validators';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import { activateCatalogType, createCatalogType, deleteCatalogType, getCatalogTypeById, getCatalogTypes, updateCatalogType } from '../controllers/catalogType.controller';
@@ -22,7 +22,7 @@ router.get('/:id', tokenValidation, validateUserRole(USER), getCatalogTypeById);
 
 // Update Catalog Type
 // Code: ESAVI-CATTYPE-004
-router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...updateCatalogTypeValidator, validateFields, updateCatalogType);
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...catalogTypeIdValidator, ...updateCatalogTypeValidator, validateFields, updateCatalogType);
 
 // Soft delete Catalog Type
 // Code: ESAVI-CATTYPE-005A

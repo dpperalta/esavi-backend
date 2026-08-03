@@ -39,7 +39,6 @@ export const createHealthFacilityValidator = [
 ];
 
 export const updateHealthFacilityValidator = [
-    ...healthFacilityIdValidator,
     body('geoLocationId').optional().isUUID().withMessage('Geo Location ID must be a valid UUID').trim(),
     body('parentHealthFacilityId').optional().isUUID().withMessage('Parent Health Facility ID must be a valid UUID').trim(),
     body('facilityTypeItemId').optional().notEmpty().withMessage('Facility Type Item ID is required')

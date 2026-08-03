@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { activateGeoLevelType, createGeoLevelType, deleteGeoLevelType, getGeoLevelTypeById, getGeoLevelTypes, updateGeoLevelType } from '../controllers/geoLevelType.controller';
-import { createGeoLevelTypeValidator, updateGeoLevelTypeValidator } from '../validators';
+import { createGeoLevelTypeValidator, geoLevelTypeIdValidator, updateGeoLevelTypeValidator } from '../validators';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
@@ -22,7 +22,7 @@ router.get('/:id', tokenValidation, validateUserRole(USER), getGeoLevelTypeById)
 
 // Update Geographic Level Type
 // Code: ESAVI-GEOTYPE-004
-router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...updateGeoLevelTypeValidator, validateFields, updateGeoLevelType);
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...geoLevelTypeIdValidator, ...updateGeoLevelTypeValidator, validateFields, updateGeoLevelType);
 
 // Soft delete Geographic Level Type
 // Code: ESAVI-GEOTYPE-005A

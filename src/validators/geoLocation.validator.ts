@@ -24,7 +24,6 @@ export const createGeoLocationValidator = [
 ];
 
 export const updateGeoLocationValidator = [
-    ...geoLocationIdValidator,
     body('geoLevelTypeId').optional().notEmpty().withMessage('Geographic level is required').isString().withMessage('Geographic level must be a string').isUUID().withMessage('Invalid Geographic Level Type'),
     body('parentGeoLocationId').optional().isUUID().withMessage('Invalid Parent GeoLocation ID'),
     body('name').optional().trim().notEmpty().withMessage('Name is required').isLength({ max: 150 }).withMessage('Name must be at most 150 characters long'),
