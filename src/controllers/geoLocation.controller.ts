@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage, isAdmin, isSuperAdmin } from '../helpers';
+import { AppError, esaviLog, getMessage, isSuperAdmin } from '../helpers';
 import { createGeoLocationService, getAllGeoLocationsService, getActiveGeoLocationsService, getGeoLocationByIdService, updateGeoLocationService, setGeoLocationActivationService } from '../services/geoLocation.service';
 import { AuthUser } from '../types/user/user.types';
 
@@ -98,12 +98,6 @@ const updateGeoLocation = async(req: Request, res: Response, next: NextFunction)
 const deleteGeoLocation = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        if( !isSuperAdmin(req.user as AuthUser) && !isAdmin(req.user as AuthUser) ) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang)
-            });
-        }
         await setGeoLocationActivationService( id, req.user as AuthUser, req.lang, false);
         return res.status(200).json({
             ok: true,
@@ -125,12 +119,6 @@ const deleteGeoLocation = async(req: Request, res: Response, next: NextFunction)
 const activateGeoLocation = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        if( !isSuperAdmin(req.user as AuthUser) && !isAdmin(req.user as AuthUser) ) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang)
-            });
-        }
         await setGeoLocationActivationService(id, req.user as AuthUser, req.lang, true);
         return res.status(200).json({
             ok: true,

@@ -72,12 +72,6 @@ const getGeoLevelTypeById = async(req: Request, res: Response, next: NextFunctio
 const updateGeoLevelType = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        if( !isSuperAdmin(req.user as AuthUser) ) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang)
-            });
-        }
         const data = await updateGeoLevelTypeService(id, { ...req.body } as Partial<CreateGeoLevelTypeInput>, req.user as AuthUser, req.lang);
         return res.status(200).json({
             ok: true,
@@ -99,12 +93,6 @@ const updateGeoLevelType = async(req: Request, res: Response, next: NextFunction
 const deleteGeoLevelType = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        if( !isSuperAdmin(req.user as AuthUser) ) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang)
-            });
-        }
         await setGeoLevelTypeActivationService(id, req.user as AuthUser, req.lang, false);
         return res.status(200).json({
             ok: true,
@@ -125,12 +113,6 @@ const deleteGeoLevelType = async(req: Request, res: Response, next: NextFunction
 const activateGeoLevelType = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        if( !isSuperAdmin(req.user as AuthUser) ) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang)
-            });
-        }
         await setGeoLevelTypeActivationService(id, req.user as AuthUser, req.lang, true);
         return res.status(200).json({
             ok: true,
