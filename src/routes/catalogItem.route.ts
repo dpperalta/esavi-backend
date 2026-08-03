@@ -21,19 +21,19 @@ router.get('/type/:id', tokenValidation, validateUserRole(USER), ...catalogItemI
 router.get('/admin/type/:id', tokenValidation, validateUserRole(ADMIN), ...catalogItemIdValidator, ...catalogItemListValidator, validateFields, getAllCatalogItemsByType);
 
 // Get Catalog Item by ID
-// Code: ESAVI-CATITEM-002C
+// Code: ESAVI-CATITEM-003
 router.get('/:id', tokenValidation, validateUserRole(USER), ...catalogItemIdValidator, validateFields, getCatalogItemById);
 
 // Update Catalog Item
-// Code: ESAVI-CATITEM-003
+// Code: ESAVI-CATITEM-004
 router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...catalogItemIdValidator, ...updateCatalogItemValidator, validateFields, updateCatalogItem);
 
 // Soft delete Catalog Item
-// Code: ESAVI-CATITEM-004A
+// Code: ESAVI-CATITEM-005A
 router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...catalogItemIdValidator, validateFields, deleteCatalogItem);
 
 // Activate Catalog Item
-// Code: ESAVI-CATITEM-004B
+// Code: ESAVI-CATITEM-005B
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...catalogItemIdValidator, validateFields, activateCatalogItem);
 
 export default router;

@@ -23,7 +23,7 @@ const createUserService = async ({data, authUser, lang = 'en'}: CreateUserServic
             transaction
         }); 
         if( existingUser ) {
-            throw new AppError(getMessage('user.alreadyExists', lang), 409, 'USER_001_ALREADY_EXISTS');
+            throw new AppError(getMessage('user.alreadyExists', lang), 409, 'USER_001_EMAIL_EXISTS');
         }
         // Role existence check
         const roleIds = Array.isArray( roleId ) ? roleId : [ roleId ];

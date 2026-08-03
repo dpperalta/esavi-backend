@@ -7,7 +7,7 @@ import { AppError, getMessage } from '../helpers';
 import { AuthUser, CreateHealthFacilityInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
-// ESAIV-HF-001 - Create Health Facility Service
+// ESAVI-HFAC-001 - Create Health Facility Service
 const createHealthFacilityService = async (data: CreateHealthFacilityInput, authUser?: AuthUser, lang: string = 'en') => {
     // Validate that the referenced GeoLocation exists and is active
     const geoLocation = await GeoLocation.findOne({
@@ -17,7 +17,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
         }
     });
     if (!geoLocation) {
-        throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'HF_001_GEOLOCATION_NOT_FOUND');
+        throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'HFAC_001_GEOLOCATION_NOT_FOUND');
     }
     // Validate that the referenced CatalogItem for facility type exists and is active
     if (data.facilityTypeItemId) {
@@ -34,7 +34,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
             }]
         });
         if (!facilityType) {
-            throw new AppError(getMessage('healthFacility.facilityTypeNotFound', lang), 404, 'HF_001_FACILITY_TYPE_NOT_FOUND');
+            throw new AppError(getMessage('healthFacility.facilityTypeNotFound', lang), 404, 'HFAC_001_FACILITY_TYPE_NOT_FOUND');
         }
     }
     // If parentHealthFacilityId is provided, validate that the parent health facility exists and is active
@@ -46,7 +46,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
             }
         });
         if (!parentHealthFacility) {
-            throw new AppError(getMessage('healthFacility.parentNotFound', lang), 404, 'HF_001_PARENT_HEALTH_FACILITY_NOT_FOUND');
+            throw new AppError(getMessage('healthFacility.parentNotFound', lang), 404, 'HFAC_001_PARENT_HEALTH_FACILITY_NOT_FOUND');
         }
     }
     // Validate the local code uniqueness within the same geoLocationId
@@ -58,7 +58,7 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
             }
         });
         if (existingLocalCode) {
-            throw new AppError(getMessage('healthFacility.codeExists', lang, { code: data.localCode }), 409, 'HF_001_LOCAL_CODE_EXISTS');
+            throw new AppError(getMessage('healthFacility.codeExists', lang, { code: data.localCode }), 409, 'HFAC_001_LOCAL_CODE_EXISTS');
         }
     }
     // Create the new health facility
@@ -79,17 +79,17 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
         appDetails: [{
             createdAt: new Date(),
             user: authUser?.userId || 'unknown',
-            method: 'ESAIV-HF-001',
+            method: 'ESAVI-HFAC-001',
             detail: 'Health facility created by service'
         }]
     });
     return newHealthFacility;
 }
 
-// ESAIV-HF-002 - Get Health Facilities by GeoLocation Service
+// ESAVI-HFAC-002 - Get Health Facilities by GeoLocation Service
 const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     if (!geoLocationId) {
-        throw new AppError(getMessage('geoLocation.idRequired', 'en'), 400, 'HF_002_GEOLOCATIONID_REQUIRED');
+        throw new AppError(getMessage('geoLocation.idRequired', 'en'), 400, 'HFAC_002_GEOLOCATIONID_REQUIRED');
     }
     const healthFacilities = await HealthFacility.findAndCountAll({
         where: {
@@ -102,57 +102,6 @@ const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, li
     });
     return healthFacilities;
 }
-
-/*
-// ESAVI-CATITEM-002A - Get Catalog Items by Catalog Type Service
-const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: number = 10, offset: number = 0) => {
-    if ( !catalogTypeId ) {
-        throw new AppError(getMessage('catalogType.idRequired', 'en'), 400, 'CATITEM_002A_CATTYPEID_REQUIRED');
-    }
-    const catalogItems = await CatalogItem.findAndCountAll({
-        where: { 
-            catalogTypeId, 
-            isActive: true 
-        },
-        order: [['sortOrder', 'ASC']],
-        limit,
-        offset
-    });
-    return catalogItems;
-}
-
-// ESAVI-CATITEM-002B - Get All Catalog Items by Catalog Type Service (including inactive) - For SuperAdmin
-const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit: number = 10, offset: number = 0, isAdmin: boolean = false) => {
-    let whereClause = {};
-    if( isAdmin && catalogTypeId ) {
-        whereClause = { catalogTypeId };
-    } else if( !isAdmin && catalogTypeId ) {
-        whereClause = { catalogTypeId, isActive: true };
-    }
-    const catalogItems = await CatalogItem.findAndCountAll({
-        where: whereClause,
-        order: [
-            ['sortOrder', 'ASC'],
-            ['name', 'ASC']
-        ],
-        limit,
-        offset
-    });
-    return catalogItems;
-}
-
-// ESAVI-CATITEM-002C - Get Catalog Item by ID Service
-const getCatalogItemByIdService = async (id: string, lang: string = 'en', isAdmin: boolean = false) => {
-    const whereClause = isAdmin ? { catalogItemId: id } : { catalogItemId: id, isActive: true };
-    const catalogItem = await CatalogItem.findOne({ 
-        where: whereClause 
-    });
-    if (!catalogItem) {
-        throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_001_NOT_FOUND');
-    }
-    return catalogItem;
-}
-*/
 
 export {
     createHealthFacilityService,

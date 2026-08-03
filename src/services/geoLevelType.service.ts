@@ -17,7 +17,7 @@ const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser
         }
     });
     if( existingType ) {
-        throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${code.trim()}` } ), 409, 'GEOTYPE_001_ALREADY_EXISTS'); 
+        throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${code.trim()}` } ), 409, 'GEOTYPE_001_CODE_EXISTS');
     }
     const newGeoLevelType = await GeoLevelType.create({
         code: data.code.trim().toLocaleUpperCase(),
@@ -64,7 +64,7 @@ const getGeoLevelTypeByIdService = async (id: string, lang: string = 'en', isAdm
         where: whereClause
     }); 
     if( !geoLevelType ) {
-        throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_003_LEVEL_NOT_FOUND');
+        throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_003_NOT_FOUND');
     }
     return geoLevelType;
 }
@@ -76,7 +76,7 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
     let updatedGeoLevelType = geoLevelType;
 
     if (!geoLevelType) {
-        throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_004_LEVEL_NOT_FOUND');
+        throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_004_NOT_FOUND');
     }
     if(  data.code && data.code.trim().toLocaleUpperCase() !== geoLevelType.code ) {
         const existingType = await GeoLevelType.findOne({
@@ -86,7 +86,7 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
             }
         });
         if( existingType ) {
-            throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${data.code.trim()}` } ), 409, 'GEOTYPE_004_ALREADY_EXISTS'); 
+            throw new AppError(getMessage('geoLevelType.alreadyExists', lang,  { code: `${data.code.trim()}` } ), 409, 'GEOTYPE_004_CODE_EXISTS');
         }
     }
     
@@ -117,9 +117,10 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
     return updatedGeoLevelType;
 };
 
-// ESAVI-GEOTYPE-005 - Setting Geographic Level Type Active/Inactive Service - For SuperAdmin
+// ESAVI-GEOTYPE-005A / 005B - Setting Geographic Level Type Active/Inactive Service - For SuperAdmin
 // This service will set isActive to false and append a deletion entry to appDetails. The record will not be removed from the database.
 const setGeoLevelTypeActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
         const geoLevelType = await setEntityActiveStatusService({
@@ -128,13 +129,13 @@ const setGeoLevelTypeActivationService = async (id: string, authUser?: AuthUser,
             isActive,
             transaction,
             notFoundMessage: getMessage('geoLevelType.notFound', lang),
-            notFoundCode: 'GEOTYPE_005_LEVEL_NOT_FOUND',
+            notFoundCode: `GEOTYPE_${ op }_NOT_FOUND`,
             alreadyInStateMessage: getMessage(`geoLevelType.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
-            alreadyInStateCode: 'GEOTYPE_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            alreadyInStateCode: `GEOTYPE_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
             appDetail: {
                 createdAt: new Date(),
                 user: authUser?.userId || 'undefined',
-                method: 'ESAVI-GEOTYPE-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                method: `ESAVI-GEOTYPE-${ op }`,
                 detail: `GeoLevelType ${ isActive ? 'activated' : 'deactivated' } by service`
             }
         });

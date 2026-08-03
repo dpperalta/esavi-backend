@@ -149,7 +149,7 @@ const getGeoLocationByIdService = async (id: string, lang: string = 'en', isAdmi
         ]
     });
     if (!geoLocation) {
-        throw new AppError(getMessage('geoLocation.notFound'), 404, 'GEOLOC_003_LOCATION_NOT_FOUND');
+        throw new AppError(getMessage('geoLocation.notFound'), 404, 'GEOLOC_003_NOT_FOUND');
     }
     return geoLocation;
 }
@@ -161,7 +161,7 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
     const { externalCode, name, shortName, officialName, isoCode, latitude, longitude, geoPolygon, sortOrder, geoLevelTypeId, parentGeoLocationId } = data;
     let updatedGeoLocation = geoLocation;
     if (!geoLocation) {
-        throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'GEOLOC_004_LOCATION_NOT_FOUND');
+        throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'GEOLOC_004_NOT_FOUND');
     }
     // Validate the referenced Geographic Level Type when it comes in the payload
     if( geoLevelTypeId && geoLevelTypeId !== geoLocation.geoLevelTypeId ) {
@@ -256,8 +256,9 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
     return updatedGeoLocation;
 }
 
-// ESAVI-GEOLOC-005 - Setting Geographic Location Active/Inactive Service
+// ESAVI-GEOLOC-005A / 005B - Setting Geographic Location Active/Inactive Service
 const setGeoLocationActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
         const geoLocation = await setEntityActiveStatusService({
@@ -266,13 +267,13 @@ const setGeoLocationActivationService = async (id: string, authUser?: AuthUser, 
             isActive,
             transaction,
             notFoundMessage: getMessage('geoLocation.notFound', lang),
-            notFoundCode: 'GEOLOC_005_LOCATION_NOT_FOUND',
+            notFoundCode: `GEOLOC_${ op }_NOT_FOUND`,
             alreadyInStateMessage: getMessage(`geoLocation.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
-            alreadyInStateCode: 'GEOLOC_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
+            alreadyInStateCode: `GEOLOC_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
             appDetail: {
                 createdAt: new Date(),
                 user: authUser?.userId || 'undefined',
-                method: 'ESAVI-GEOLOC-005' + ( isActive ? 'B_ACTIVATION' : 'A_DEACTIVATION' ),
+                method: `ESAVI-GEOLOC-${ op }`,
                 detail: `Geographic location ${ isActive ? 'activated' : 'deactivated' } by service`
             }
         });

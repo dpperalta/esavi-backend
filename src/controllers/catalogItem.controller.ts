@@ -70,7 +70,7 @@ const getAllCatalogItemsByType = async (req: Request, res: Response, next: NextF
 }
 
 // Get catalog items by ID
-// Code: ESAVI-CATITEM-002C
+// Code: ESAVI-CATITEM-003
 const getCatalogItemById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
@@ -81,17 +81,17 @@ const getCatalogItemById = async (req: Request, res: Response, next: NextFunctio
             data
         });
     } catch (error) {
-        esaviLog('ESAVI-CATITEM-002C: Error fetching Catalog Item by ID: ' + error, 'error');
+        esaviLog('ESAVI-CATITEM-003: Error fetching Catalog Item by ID: ' + error, 'error');
         if( error instanceof AppError ) {
             next(error);
             return;
         }
-        next(new AppError(getMessage('catalogItem.getFailed', req.lang), 500, 'CATITEM_002C_FETCH_FAILED', error));
+        next(new AppError(getMessage('catalogItem.getFailed', req.lang), 500, 'CATITEM_003_FETCH_FAILED', error));
     }
 }
 
 // Update Catalog Item
-// Code: ESAVI-CATITEM-003
+// Code: ESAVI-CATITEM-004
 const updateCatalogItem = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
@@ -102,17 +102,17 @@ const updateCatalogItem = async (req: Request, res: Response, next: NextFunction
             data
         });
     } catch (error) {
-        esaviLog('ESAVI-CATITEM-003: Error updating Catalog Item: ' + error, 'error');
+        esaviLog('ESAVI-CATITEM-004: Error updating Catalog Item: ' + error, 'error');
         if( error instanceof AppError ) {
             next(error);
             return;
         }
-        next(new AppError(getMessage('catalogItem.updatedFailed', req.lang), 500, 'CATITEM_003_UPDATE_FAILED', error));
+        next(new AppError(getMessage('catalogItem.updatedFailed', req.lang), 500, 'CATITEM_004_UPDATE_FAILED', error));
     }
 }
 
 // Soft delete or Activate Catalog Item Controller - For Admin
-// Code: ESAVI-CATITEM-004A (Delete) and ESAVI-CATITEM-004B (Activate)
+// Code: ESAVI-CATITEM-005A (Delete)
 const deleteCatalogItem = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try{
@@ -122,17 +122,17 @@ const deleteCatalogItem = async (req: Request, res: Response, next: NextFunction
             message: getMessage('catalogItem.deletedSuccess', req.lang)
         });
     } catch (error) {
-        esaviLog('ESAVI-CATITEM-004A: Error deleting Catalog Item: ' + error, 'error');
+        esaviLog('ESAVI-CATITEM-005A: Error deleting Catalog Item: ' + error, 'error');
         if( error instanceof AppError ) {
             next(error);
             return;
         }
-        next(new AppError(getMessage('catalogItem.deletedFailed', req.lang), 500, 'CATITEM_004A_DELETE_FAILED', error));
+        next(new AppError(getMessage('catalogItem.deletedFailed', req.lang), 500, 'CATITEM_005A_DELETE_FAILED', error));
     }
 }
 
 // Activate Catalog Item Controller - For Admin
-// Code: ESAVI-CATITEM-004B (Activate)
+// Code: ESAVI-CATITEM-005B (Activate)
 const activateCatalogItem = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try{
@@ -142,12 +142,12 @@ const activateCatalogItem = async (req: Request, res: Response, next: NextFuncti
             message: getMessage('catalogItem.activatedSuccess', req.lang)
         });
     } catch (error) {
-        esaviLog('ESAVI-CATITEM-004B: Error activating Catalog Item: ' + error, 'error');
+        esaviLog('ESAVI-CATITEM-005B: Error activating Catalog Item: ' + error, 'error');
         if( error instanceof AppError ) {
             next(error);
             return;
         }
-        next(new AppError(getMessage('catalogItem.activatedFailed', req.lang), 500, 'CATITEM_004B_ACTIVATION_FAILED', error));
+        next(new AppError(getMessage('catalogItem.activatedFailed', req.lang), 500, 'CATITEM_005B_ACTIVATION_FAILED', error));
     }
 }
 

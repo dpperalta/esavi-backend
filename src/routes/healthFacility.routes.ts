@@ -9,11 +9,11 @@ const { SUPERADMIN, ADMIN, USER } = ROLES;
 const router = Router();
 
 // Create Health Facility
-// Code: ESAVI-HF-001
+// Code: ESAVI-HFAC-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createHealthFacilityValidator, validateFields, createHealthFacility);
 
 // Get health facilities of a given geoLocationId with pagination and option to include inactive (for admin users)
-// Code: ESAVI-HF-002A
+// Code: ESAVI-HFAC-002
 router.get('/location/:id', tokenValidation, validateUserRole(USER), ...geoLocationIdValidator, ...healthFacilityListValidator, validateFields, getHealthFacilitiesByLocation);
 
 export default router;
