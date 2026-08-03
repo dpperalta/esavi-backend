@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage, canViewInactive, isSuperAdmin } from '../helpers';
+import { AppError, esaviLog, getMessage, canViewInactive } from '../helpers';
 import { createCatalogTypeService, getActiveCatalogTypesService, getAllCatalogTypesService, getCatalogTypeByIdService, setCatalogTypeActivationService, updateCatalogTypeService } from '../services/catalogType.service';
 import { AuthUser } from '../types';
 
@@ -87,17 +87,11 @@ const updateCatalogType = async (req: Request, res: Response, next: NextFunction
     }
 }
 
-// Soft delete or Activate Catalog Type Controller - For SuperAdmin
+// Soft delete Catalog Type Controller - For Admin
 // Code: ESAVI-CATTYPE-005A (Delete)
 const deleteCatalogType = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        if( !isSuperAdmin(req.user as AuthUser) ) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang)
-            });
-        }
         await setCatalogTypeActivationService(id, { userId: req.user?.userId } as AuthUser, req.lang, false);
         return res.status(200).json({
             ok: true,
@@ -118,12 +112,6 @@ const deleteCatalogType = async (req: Request, res: Response, next: NextFunction
 const activateCatalogType = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        if( !isSuperAdmin(req.user as AuthUser) ) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang)
-            });
-        }
         await setCatalogTypeActivationService(id, { userId: req.user?.userId } as AuthUser, req.lang, true);
         return res.status(200).json({
             ok: true,

@@ -30,7 +30,7 @@ route.delete('/:id', tokenValidation, validateUserRole(ADMIN), updateGeoLocation
 
 // Activate Geographic Location
 // Code: ESAVI-GEOLOC-005B
-route.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), updateGeoLocationValidator, validateFields, activateGeoLocation);
+route.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), updateGeoLocationValidator, validateFields, activateGeoLocation);
 
 export default route;
 

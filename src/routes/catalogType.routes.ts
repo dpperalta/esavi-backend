@@ -22,11 +22,11 @@ router.get('/:id', tokenValidation, validateUserRole(USER), getCatalogTypeById);
 
 // Update Catalog Type
 // Code: ESAVI-CATTYPE-004
-router.put('/:id', tokenValidation, validateUserRole(SUPERADMIN), ...updateCatalogTypeValidator, validateFields, updateCatalogType);
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...updateCatalogTypeValidator, validateFields, updateCatalogType);
 
 // Soft delete Catalog Type
 // Code: ESAVI-CATTYPE-005A
-router.delete('/:id', tokenValidation, validateUserRole(USER), deleteCatalogType);
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), deleteCatalogType);
 
 // Activate Catalog Type
 // Code: ESAVI-CATTYPE-005B

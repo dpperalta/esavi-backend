@@ -15,7 +15,6 @@ src/logs/*.log
 *.docx
 .qodo
 
-.claude/
 .agents/
 
 graphify-out/
