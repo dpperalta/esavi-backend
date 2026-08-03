@@ -1,5 +1,5 @@
 ﻿import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage, isSuperAdmin } from '../helpers';
+import { AppError, esaviLog, getMessage, canViewInactive } from '../helpers';
 import { createGeoLocationService, getAllGeoLocationsService, getActiveGeoLocationsService, getGeoLocationByIdService, updateGeoLocationService, setGeoLocationActivationService } from '../services/geoLocation.service';
 
 
@@ -31,7 +31,7 @@ const getGeoLocations = async(req: Request, res: Response, next: NextFunction): 
     const geoLevelId = req.query.geoLevelId ? (req.query.geoLevelId as string).trim() : undefined;
     const parentId = req.query.parentId ? (req.query.parentId as string).trim() : undefined;
     try {
-        const data = isSuperAdmin(req.user) 
+        const data = canViewInactive(req.user) 
             ? await getAllGeoLocationsService( geoLevelId, parentId, limit,  offset ) 
             : await getActiveGeoLocationsService( geoLevelId, parentId, limit,  offset );
         return res.status(200).json({
@@ -54,7 +54,7 @@ const getGeoLocations = async(req: Request, res: Response, next: NextFunction): 
 const getGeoLocationById = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        const data = await getGeoLocationByIdService(id, req.lang, isSuperAdmin(req.user));
+        const data = await getGeoLocationByIdService(id, req.lang, canViewInactive(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLocation.getSuccess', req.lang),

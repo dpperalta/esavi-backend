@@ -1,6 +1,6 @@
 ﻿import { NextFunction, Request, Response } from 'express';
 import { createGeoLevelTypeService, getActiveGeoLevelTypesService, getAllGeoLevelTypesService, getGeoLevelTypeByIdService, setGeoLevelTypeActivationService, updateGeoLevelTypeService } from '../services/geoLevelType.service'
-import { esaviLog, getMessage, isSuperAdmin, AppError } from '../helpers';
+import { esaviLog, getMessage, canViewInactive, AppError } from '../helpers';
 import { CreateGeoLevelTypeInput } from '../types/geography/geoLevelType.types';
 
 // Create Geographic Level Type Controller
@@ -29,7 +29,7 @@ const getGeoLevelTypes = async(req: Request, res: Response, next: NextFunction):
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = isSuperAdmin(req.user) ? await getAllGeoLevelTypesService( limit,  offset ) : await getActiveGeoLevelTypesService( limit,  offset );
+        const data = canViewInactive(req.user) ? await getAllGeoLevelTypesService( limit,  offset ) : await getActiveGeoLevelTypesService( limit,  offset );
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.getSuccessPlural', req.lang),
@@ -50,7 +50,7 @@ const getGeoLevelTypes = async(req: Request, res: Response, next: NextFunction):
 const getGeoLevelTypeById = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        const data = await getGeoLevelTypeByIdService(id, req.lang, isSuperAdmin(req.user));
+        const data = await getGeoLevelTypeByIdService(id, req.lang, canViewInactive(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.getSuccess', req.lang),
