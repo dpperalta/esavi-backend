@@ -206,10 +206,12 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
 const setGeoLocationActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
     return setEntityActiveStatusService({
         model: GeoLocation,
-        where: { geoLocationId: id, isActive: !isActive },
+        where: { geoLocationId: id },
         isActive,
         notFoundMessage: getMessage('geoLocation.notFound', lang),
         notFoundCode: 'GEOLOC_005_LOCATION_NOT_FOUND',
+        alreadyInStateMessage: getMessage(`geoLocation.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+        alreadyInStateCode: 'GEOLOC_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
         appDetail: {
             createdAt: new Date(),
             user: authUser?.userId || 'undefined',

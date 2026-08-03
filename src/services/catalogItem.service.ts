@@ -170,10 +170,12 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
 const setCatalogItemActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
     return setEntityActiveStatusService({
         model: CatalogItem,
-        where: { catalogItemId: id, isActive: !isActive },
+        where: { catalogItemId: id },
         isActive,
         notFoundMessage: getMessage('catalogItem.notFound', lang),
         notFoundCode: 'CATITEM_004_NOT_FOUND',
+        alreadyInStateMessage: getMessage(`catalogItem.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+        alreadyInStateCode: 'CATITEM_004' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
         appDetail: {
             createdAt: new Date(),
             user: authUser?.userId || 'undefined',

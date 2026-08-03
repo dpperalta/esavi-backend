@@ -8,6 +8,8 @@ interface ActivationOptions<T extends Model> {
     transaction?: Transaction;
     notFoundMessage: string;
     notFoundCode: string;
+    alreadyInStateMessage: string;
+    alreadyInStateCode: string;
     appDetail: {
         createdAt: Date;
         user: string;
@@ -27,6 +29,9 @@ const setEntityActiveStatusService = async <T extends Model>(options: Activation
         throw new AppError(options.notFoundMessage, 404, options.notFoundCode);
     }
     const current = entity.get({ plain: true }) as any;
+    if( current.isActive === options.isActive ) {
+        throw new AppError(options.alreadyInStateMessage, 409, options.alreadyInStateCode);
+    }
     const currentAppDetails = Array.isArray(current.appDetails) ? current.appDetails : [];
     await entity.update({
         isActive: options.isActive,

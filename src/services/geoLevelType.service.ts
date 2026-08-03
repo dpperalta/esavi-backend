@@ -123,10 +123,12 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
 const setGeoLevelTypeActivationService = async (id: string, authUser?: AuthUser, lang: string = 'en', isActive: boolean = true) => {
     return setEntityActiveStatusService({
         model: GeoLevelType,
-        where: { geoLevelTypeId: id, isActive: !isActive },
+        where: { geoLevelTypeId: id },
         isActive,
         notFoundMessage: getMessage('geoLevelType.notFound', lang),
         notFoundCode: 'GEOTYPE_005_LEVEL_NOT_FOUND',
+        alreadyInStateMessage: getMessage(`geoLevelType.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+        alreadyInStateCode: 'GEOTYPE_005' + ( isActive ? 'B_ALREADY_ACTIVE' : 'A_ALREADY_INACTIVE' ),
         appDetail: {
             createdAt: new Date(),
             user: authUser?.userId || 'undefined',
