@@ -94,7 +94,7 @@ El orden importa: el paso 4 debe ir antes del 5. Hoy el único freno real en `DE
    *Verificación:* email inexistente y contraseña errónea devuelven la misma respuesta, con status 401.
 
 4. **Matriz canónica en las rutas.** Aplicar las 7 filas de la tabla de alcance en `catalogType.routes.ts`, `geoLevelType.routes.ts` y `geoLocation.routes.ts`. En `GET /geo-level-types/`, sustituir `validateUserRole(SUPERADMIN, ADMIN)` por `validateUserRole(USER)`. Ninguna ruta queda con más de un rol.
-   *Verificación:* `grep -rn "validateUserRole(.*," src/routes/` no devuelve nada.
+   *Verificación:* `grep -rnE "validateUserRole\([^)]*," src/routes/` no devuelve nada. El patrón se acota al interior del paréntesis a propósito: con `.*` el cuantificador es voraz, cruza el paréntesis de cierre y captura la coma que separa los middlewares siguientes, con lo que casa con casi todas las rutas y no discrimina nada.
 
 5. **Guards fuera de los controladores.** Eliminar los 7 bloques `if( !isSuperAdmin(...) ) return res.status(403)...` de `catalogType.controller.ts:95,121`, `geoLevelType.controller.ts:75,102,128` y `geoLocation.controller.ts:101,128`, junto con los imports de `isSuperAdmin` / `isAdmin` que queden sin uso.
    *Verificación:* `grep -rn "status(403)" src/controllers/` no devuelve nada; `npm run build` pasa.
