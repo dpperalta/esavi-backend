@@ -179,7 +179,8 @@ Los renombrados van primero y solos: un commit de `git mv` con sus imports, sin 
 - [ ] Un typo en una clave de un objeto de auditoría rompe la compilación.
 - [ ] `npm run build` compila sin errores.
 - [ ] `npm run i18n:check` sigue saliendo con 0.
-- [ ] `grep -rn "geographical" src/ references/` no devuelve resultados.
+- [ ] Ninguna ruta de archivo ni import en `src/` contiene `geographical`.
+- [ ] `grep -n "geographical" references/CONVENTIONS.md` no devuelve resultados. (`TECHNICAL_DEBT.md` y este spec sí lo nombran: documentan el renombrado.)
 - [ ] Ninguna respuesta HTTP cambia de status, de forma ni de contenido.
 
 ---

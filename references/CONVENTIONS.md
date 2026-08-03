@@ -68,7 +68,7 @@ Sufijo obligatorio por carpeta. **Plural donde el canon lo indica** — es la fu
 Reglas adicionales:
 
 - La base del nombre va en **camelCase** y coincide exactamente con la entidad: `catalogItem`, no `catalog-item` ni `CatalogItem` ni `catalog_item`.
-- Los tipos viven **siempre** en una subcarpeta de dominio (`types/catalog/`, `types/geographical/`, `types/user/`, `types/common/`). Nunca sueltos en la raíz de `types/`.
+- Los tipos viven **siempre** en una subcarpeta de dominio (`types/catalog/`, `types/geography/`, `types/user/`, `types/common/`). Nunca sueltos en la raíz de `types/`.
 - Los nombres de subcarpeta de dominio son **sustantivos en singular**: `catalog/`, `user/`, `common/`. No adjetivos.
 
 ---

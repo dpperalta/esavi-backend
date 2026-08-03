@@ -30,8 +30,8 @@ const canManageUsers = ( authUser?: AuthUser ): boolean => {
     return hasAnyRole(authUser, [SUPERADMIN, ADMIN]);
 };
 
-// Can import geographical data
-const canImportGeographicalData = ( authUser?: AuthUser ): boolean => {
+// Can import geography data
+const canImportGeographyData = ( authUser?: AuthUser ): boolean => {
     return hasAnyRole(authUser, [SUPERADMIN]);
 }
 
@@ -48,7 +48,7 @@ const canDeleteLocations = ( authUser?: AuthUser ): boolean => {
 export {
     canViewInactive,
     canManageUsers,
-    canImportGeographicalData,
+    canImportGeographyData,
     canViewDashboards,
     canDeleteLocations,
     isSuperAdmin,
