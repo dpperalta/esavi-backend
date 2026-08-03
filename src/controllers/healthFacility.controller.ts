@@ -5,7 +5,8 @@ import {
     createHealthFacilityService,
     getAllHealthFacilitiesByGeoLocationService,
     getHealthFacilitiesByGeoLocationService,
-    getHealthFacilityByIdService
+    getHealthFacilityByIdService,
+    updateHealthFacilityService
 } from '../services/healthFacility.service';
 
 // Create Health Facility Controller
@@ -95,9 +96,31 @@ const getHealthFacilityById = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Update Health Facility Controller
+// Code: ESAVI-HFAC-004
+const updateHealthFacility = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateHealthFacilityService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('healthFacility.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-HFAC-004: Error updating Health Facility: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('healthFacility.updatedFailed', req.lang), 500, 'HFAC_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createHealthFacility,
     getHealthFacilitiesByLocation,
     getAllHealthFacilitiesByLocation,
-    getHealthFacilityById
+    getHealthFacilityById,
+    updateHealthFacility
 }

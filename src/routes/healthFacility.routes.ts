@@ -5,9 +5,10 @@ import {
     createHealthFacility,
     getAllHealthFacilitiesByLocation,
     getHealthFacilitiesByLocation,
-    getHealthFacilityById
+    getHealthFacilityById,
+    updateHealthFacility
 } from '../controllers/healthFacility.controller';
-import { createHealthFacilityValidator, geoLocationIdValidator, healthFacilityIdValidator, healthFacilityListValidator } from '../validators';
+import { createHealthFacilityValidator, geoLocationIdValidator, healthFacilityIdValidator, healthFacilityListValidator, updateHealthFacilityValidator } from '../validators';
 
 const { SUPERADMIN, ADMIN, USER } = ROLES;
 
@@ -29,5 +30,9 @@ router.get('/admin/location/:id', tokenValidation, validateUserRole(ADMIN), ...g
 // Code: ESAVI-HFAC-003
 // Declared after the literal paths so Express does not capture 'location' or 'admin' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...healthFacilityIdValidator, validateFields, getHealthFacilityById);
+
+// Update Health Facility
+// Code: ESAVI-HFAC-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...healthFacilityIdValidator, ...updateHealthFacilityValidator, validateFields, updateHealthFacility);
 
 export default router;
