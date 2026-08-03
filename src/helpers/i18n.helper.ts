@@ -9,12 +9,12 @@ const messages = {
     nl
 };
 
-type lang = keyof typeof messages;
+type Lang = keyof typeof messages;
 
-const DEFAULT_LANGUAGE = process.env.DEFAULT_LANGUAGE as lang || 'en';
+const DEFAULT_LANGUAGE = process.env.DEFAULT_LANGUAGE as Lang || 'en';
 
 // Walks the dot-path of a key inside a single language file. Returns undefined when the key is absent.
-const resolveKey = (key: string, selectedLang: lang): string | undefined => {
+const resolveKey = (key: string, selectedLang: Lang): string | undefined => {
     let value: any = messages[selectedLang];
 
     for( const k of key.split('.') ) {
@@ -28,7 +28,7 @@ const resolveKey = (key: string, selectedLang: lang): string | undefined => {
 }
 
 export const getMessage = (key: string, lang: string = DEFAULT_LANGUAGE, params = {}): string => {
-    const selectedLang = messages[lang as lang] ? (lang as lang) : DEFAULT_LANGUAGE;
+    const selectedLang = messages[lang as Lang] ? (lang as Lang) : DEFAULT_LANGUAGE;
 
     // 1. key in the requested language
     let value = resolveKey(key, selectedLang);

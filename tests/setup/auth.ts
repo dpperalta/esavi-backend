@@ -109,7 +109,7 @@ const getToken = ( role: TestRole ): string => getTestUser(role).token;
  * Ready-made `Authorization` header, so tests read as
  * `.set(authHeader('ADMIN'))` instead of repeating the Bearer prefix.
  */
-const authHeader = ( role: TestRole ): { Authorization: string } => ({
+const authHeader = ( role: TestRole ): Record<string, string> => ({
     Authorization: `Bearer ${ getToken(role) }`
 });
 
