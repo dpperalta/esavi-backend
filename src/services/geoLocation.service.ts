@@ -251,7 +251,6 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
                 newEntry
             ]
         }, {returning: true});
-        console.log('ACTUALIZA');
     }
     return updatedGeoLocation;
 }

@@ -1,6 +1,6 @@
 # SPEC 06 — Nomenclatura, tipos y código muerto
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01, 02, 03, 04, 05 (va el último; toca casi todos los archivos)
 > **Fecha:** 2026-08-01
 > **Objetivo:** Que los nombres de archivo, los tipos y los barrels sigan el canon, y que no quede código muerto en `src/`.

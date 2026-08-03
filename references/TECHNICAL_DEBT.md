@@ -14,6 +14,8 @@ Cada entrada tiene un ID estable, para convertirse después en un spec independi
 | 🟠 Media | Inconsistencia que confunde al consumidor de la API o rompe la trazabilidad |
 | 🟡 Baja | Nomenclatura, duplicación o limpieza; sin impacto funcional |
 
+Un ✅ delante del título marca la entrada como **saldada**: el spec que la cierra ya está implementado y verificado. La entrada se conserva con su descripción original, para que el diagnóstico siga siendo legible.
+
 ## Resumen
 
 | ID | Severidad | Título |
@@ -36,29 +38,32 @@ Cada entrada tiene un ID estable, para convertirse después en un spec independi
 | [DEUDA-016](#deuda-016) | 🟠 | Typo `ESAIV-HF-*` y abreviatura de dos letras |
 | [DEUDA-017](#deuda-017) | 🟠 | CORS abierto en producción |
 | [DEUDA-018](#deuda-018) | 🟠 | Sin transacciones fuera de `user.service.ts` |
-| [DEUDA-019](#deuda-019) | 🟡 | Sufijos de archivo fuera de norma |
-| [DEUDA-020](#deuda-020) | 🟡 | `CreateCatalogItem` sin sufijo `Input` |
-| [DEUDA-021](#deuda-021) | 🟡 | `UpdateGeoLevelTypeInput` declarado y nunca usado |
-| [DEUDA-022](#deuda-022) | 🟡 | Código duplicado en `healthFacility.service.ts` |
-| [DEUDA-023](#deuda-023) | 🟡 | Código comentado obsoleto |
-| [DEUDA-024](#deuda-024) | 🟡 | `loginController` y `const route` |
+| [DEUDA-019](#deuda-019) | 🟡 | ✅ Sufijos de archivo fuera de norma |
+| [DEUDA-020](#deuda-020) | 🟡 | ✅ `CreateCatalogItem` sin sufijo `Input` |
+| [DEUDA-021](#deuda-021) | 🟡 | ✅ `UpdateGeoLevelTypeInput` declarado y nunca usado |
+| [DEUDA-022](#deuda-022) | 🟡 | ✅ Código duplicado en `healthFacility.service.ts` |
+| [DEUDA-023](#deuda-023) | 🟡 | ✅ Código comentado obsoleto |
+| [DEUDA-024](#deuda-024) | 🟡 | ✅ `loginController` y `const route` |
 | [DEUDA-025](#deuda-025) | 🟡 | Falta `geoLevelTypeIdValidator` |
 | [DEUDA-026](#deuda-026) | 🟡 | Paginación duplicada y hardcodeada |
-| [DEUDA-027](#deuda-027) | 🟡 | `AppDetails` declarado y nunca importado |
-| [DEUDA-028](#deuda-028) | 🟡 | `AuthUser` y `Express.Request['user']` divergen |
-| [DEUDA-029](#deuda-029) | 🟡 | Barrels de `types/` con dos estilos |
+| [DEUDA-027](#deuda-027) | 🟡 | ✅ `AppDetails` declarado y nunca importado |
+| [DEUDA-028](#deuda-028) | 🟡 | ✅ `AuthUser` y `Express.Request['user']` divergen |
+| [DEUDA-029](#deuda-029) | 🟡 | ✅ Barrels de `types/` con dos estilos |
 | [DEUDA-030](#deuda-030) | 🟡 | Sin tests ni linter |
 | [DEUDA-031](#deuda-031) | 🔴 | `roles.constants.ts` lee variables de entorno que no existen |
 | [DEUDA-032](#deuda-032) | 🟠 | Los middlewares construyen respuestas de error a mano |
 | [DEUDA-033](#deuda-033) | 🟠 | `tokenValidation` deja `email` y `displayName` cifrados en `req.user` |
 | [DEUDA-034](#deuda-034) | 🟠 | Reasignar `parentGeoLocationId` puede crear un ciclo |
 | [DEUDA-035](#deuda-035) | 🟡 | `canViewInactive` exige SUPERADMIN; la matriz dice ADMIN |
-| [DEUDA-036](#deuda-036) | 🟡 | Quedan 8 `console.log` en `src/` fuera del alcance del SPEC 06 |
+| [DEUDA-036](#deuda-036) | 🟡 | El banner de arranque esquiva `esaviLog` |
 
 ## Mapa de resolución
 
 La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030. Las
-entradas 031–035 todavía no tienen spec.
+entradas 031–036 todavía no tienen spec.
+
+**Saldadas a 2026-08-03**: 019, 020, 021, 022, 023, 024, 027, 028 y 029, todas
+por el SPEC 06.
 
 | Spec | Entradas que cierra |
 |---|---|
@@ -69,7 +74,7 @@ entradas 031–035 todavía no tienen spec.
 | [05 — Códigos de operación](./specs/05-operation-codes.md) | 008, 016 |
 | [06 — Nomenclatura, tipos y código muerto](./specs/06-naming-and-types.md) | 019, 020, 021, 022, 023, 024, 027, 028, 029 |
 | [07 — Linter y suite mínima](./specs/07-tooling-and-tests.md) | 030 |
-| sin spec | 031, 032, 033, 034, 035 |
+| sin spec | 031, 032, 033, 034, 035, 036 |
 
 Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07. El 05 renumera líneas
 que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los cinco
@@ -353,7 +358,9 @@ Solo `user.service.ts` usa `sequelize.transaction()`. Los demás servicios hacen
 ---
 
 <a id="deuda-019"></a>
-## DEUDA-019 🟡 Sufijos de archivo fuera de norma
+## DEUDA-019 🟡 ✅ Sufijos de archivo fuera de norma
+
+> ✅ **Saldada** por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. Los siete movimientos se hicieron con `git mv`, en un commit sin cambios de contenido; `git log --follow` cruza el renombrado con similitud `R100`.
 
 | Archivo actual | Debería ser |
 |---|---|
@@ -371,7 +378,9 @@ Además, `src/types/geographical/` usa un adjetivo donde el canon pide un sustan
 ---
 
 <a id="deuda-020"></a>
-## DEUDA-020 🟡 `CreateCatalogItem` sin sufijo `Input`
+## DEUDA-020 🟡 ✅ `CreateCatalogItem` sin sufijo `Input`
+
+> ✅ **Saldada** por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. Renombrado a `CreateCatalogItemInput` en la declaración y en sus tres usos de `catalogItem.service.ts`.
 
 **Archivo**: `src/types/catalog/catalogItem.type.ts`
 
@@ -382,7 +391,9 @@ Es el único tipo de entrada sin el sufijo. Las otras seis entidades usan `Creat
 ---
 
 <a id="deuda-021"></a>
-## DEUDA-021 🟡 `UpdateGeoLevelTypeInput` declarado y nunca usado
+## DEUDA-021 🟡 ✅ `UpdateGeoLevelTypeInput` declarado y nunca usado
+
+> ✅ **Saldada** por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. Eliminada la interfaz y su re-export en el barrel de `geography/`.
 
 **Archivo**: `src/types/geographical/geoLevelType.types.ts:7`
 
@@ -393,7 +404,9 @@ Se declara y se exporta, pero el servicio usa `Partial<CreateGeoLevelTypeInput>`
 ---
 
 <a id="deuda-022"></a>
-## DEUDA-022 🟡 Código duplicado en `healthFacility.service.ts`
+## DEUDA-022 🟡 ✅ Código duplicado en `healthFacility.service.ts`
+
+> ✅ **Saldada**, verificada por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. Las tres copias ya no estaban al llegar el spec: un spec anterior de la serie las eliminó. Comprobado que las tres funciones tienen una única definición, en `catalogItem.service.ts`.
 
 **Archivo**: `src/services/healthFacility.service.ts:106-140`
 
@@ -404,7 +417,9 @@ Contiene copias literales de `getActiveCatalogItemsByTypeService`, `getAllCatalo
 ---
 
 <a id="deuda-023"></a>
-## DEUDA-023 🟡 Código comentado obsoleto
+## DEUDA-023 🟡 ✅ Código comentado obsoleto
+
+> ✅ **Saldada** por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. Eliminados los cuatro bloques, más la línea 13 de `crypto.helper.ts` —una quinta variante muerta que esta entrada no listaba— y los dos `console.log` de `geoLocation.controller.ts` y `tokenValidation.middleware.ts`. Los ocho `console.log` restantes en `src/` quedaron fuera de alcance: ver [DEUDA-036](#deuda-036).
 
 - `src/routes/geoLocation.routes.ts:47-53` — bloque comentado con rutas de **geoLevelType**, que además usan `/:id/activate` en vez de `/activate/:id`.
 - `src/middlewares/roleValidation.middleware.ts:5-20` — implementación anterior de `validateUserRole`, por nombre en vez de por nivel.
@@ -416,7 +431,9 @@ Contiene copias literales de `getActiveCatalogItemsByTypeService`, `getAllCatalo
 ---
 
 <a id="deuda-024"></a>
-## DEUDA-024 🟡 `loginController` y `const route`
+## DEUDA-024 🟡 ✅ `loginController` y `const route`
+
+> ✅ **Saldada** por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. `loginController` → `login` (declaración, export, import y handler de la ruta); `const route` → `const router` en los 8 puntos de `geoLocation.routes.ts`.
 
 - `src/controllers/auth.controller.ts` — `loginController` es el único controlador con sufijo `Controller`. Debería ser `login`.
 - `src/routes/geoLocation.routes.ts` — usa `const route = Router()` y `export default route`. El canon fija `router`.
@@ -442,7 +459,9 @@ Es la única entidad sin validador de id, y por eso sus rutas con `:id` no valid
 ---
 
 <a id="deuda-027"></a>
-## DEUDA-027 🟡 `AppDetails` declarado y nunca importado
+## DEUDA-027 🟡 ✅ `AppDetails` declarado y nunca importado
+
+> ✅ **Saldada** por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. Los seis servicios lo importan; 11 objetos de auditoría se extrajeron a constantes anotadas y otros 4 quedan cubiertos al tipar `ActivationOptions.appDetail` como `AppDetails`. Verificado: un typo en una clave rompe la compilación con `TS2561`.
 
 **Archivo**: `src/types/common/audit.types.ts:16`
 
@@ -451,7 +470,9 @@ El tipo existe y los modelos lo usan, pero **ningún servicio lo importa**: todo
 ---
 
 <a id="deuda-028"></a>
-## DEUDA-028 🟡 `AuthUser` y `Express.Request['user']` divergen
+## DEUDA-028 🟡 ✅ `AuthUser` y `Express.Request['user']` divergen
+
+> ✅ **Saldada** por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. `Express.Request['user']` es ahora `AuthUser`; `UserRole` declara `roleId` y `code` como opcionales, describiendo lo que el token puebla de verdad. Los 25 casts desaparecieron. Al quitarlos aflora que `req.user` es opcional y sus consumidores lo exigían obligatorio: los 8 predicados de `permissions.helper.ts` y `CreateUserServiceParams.authUser` pasaron a opcionales. Es corrección de tipo pura — `hasAnyRole` ya devolvía `false` ante `undefined`.
 
 `AuthUser` (`src/types/user/user.types.ts`) y la extensión de `Express.Request` (`src/types/express/index.d.ts`) son estructuras distintas y no vinculadas. De ahí el `req.user as AuthUser` repetido en todos los controladores, y el `{ userId: req.user?.userId } as AuthUser` que construye un objeto incompleto.
 
@@ -462,7 +483,9 @@ Además `tokenValidation` puebla `roles` con `{ name, level }`, mientras `UserRo
 ---
 
 <a id="deuda-029"></a>
-## DEUDA-029 🟡 Barrels de `types/` con dos estilos
+## DEUDA-029 🟡 ✅ Barrels de `types/` con dos estilos
+
+> ✅ **Saldada** por el [SPEC 06](./specs/06-naming-and-types.md) el 2026-08-03. Los cuatro barrels usan `export * from`. El caso que lo justificaba estaba vivo: `UserRole` llevaba tiempo declarado pero ausente del barrel nominal, así que no era importable desde `../types`.
 
 `types/catalog/index.ts` y `types/common/index.ts` usan `export * from`; `types/geographical/index.ts` y `types/user/index.ts` usan re-export nominal explícito. Con el nominal, un tipo nuevo no se exporta hasta que alguien lo añade a mano.
 
@@ -538,22 +561,24 @@ El resultado: un ADMIN pasa el middleware de una ruta declarada `ADMIN` y recibe
 
 **Aceptación**: `canViewInactive` admite ADMIN, o la matriz canónica se corrige a SUPERADMIN. Las dos fuentes deben decir lo mismo.
 
+**Nota del SPEC 06 (2026-08-03)**: el paso 8 pasó los 4 puntos de geografía de `isSuperAdmin` a `canViewInactive`, así que el predicado gobierna ahora 7 usos en vez de 3. El bug no cambió —los dos predicados devuelven hoy lo mismo—, pero la corrección se aplica en un solo sitio y alcanza a los siete. Se resuelve en un spec propio: es un cambio de comportamiento observable y, antes que eso, una decisión de canon sobre si el listado `002B` debe ser ADMIN o SUPERADMIN.
+
 ---
 
 <a id="deuda-036"></a>
-## DEUDA-036 🟡 Quedan 8 `console.log` en `src/` fuera del alcance del SPEC 06
+## DEUDA-036 🟡 El banner de arranque esquiva `esaviLog`
 
-Detectada al implementar el [SPEC 06](./specs/06-naming-and-types.md), cuyo alcance solo cubría los dos `console.log` de depuración que sí eliminó.
+Detectada al implementar el [SPEC 06](./specs/06-naming-and-types.md), cuyo alcance solo cubría los dos `console.log` de depuración que sí eliminó. Quedaban otros ocho en `src/`, no homogéneos.
 
-No son homogéneos y por eso no se tratan juntos:
+**Resueltos a 2026-08-03** (eliminados a mano, fuera del SPEC 06): los tres de depuración olvidada — `health.controller.ts:4-5`, que volcaba `req.query.lang` y `req.lang` en cada petición de salud, y `geoLocation.service.ts:254`, un `console.log('ACTUALIZA')`.
+
+Quedan cinco, en dos grupos que no se tratan igual:
 
 | Ubicación | Qué es |
 |---|---|
-| `health.controller.ts:4-5` | depuración olvidada: vuelca `req.query.lang` y `req.lang` en cada petición de salud |
-| `geoLocation.service.ts:254` | depuración olvidada: `console.log('ACTUALIZA')` |
 | `connection.ts:40`, `index.ts:96-98` | banner de arranque; salida intencional, pero esquiva `esaviLog` |
 | `connection.ts:28` | `logging: env === 'development' ? console.log : false`; es el logger que recibe Sequelize, no un log suelto |
 
-Los dos primeros grupos se eliminan o pasan a `esaviLog`. El último es funcional: cambiarlo altera el comportamiento en desarrollo.
+El primero es una inconsistencia de canal: la salida es deliberada, pero no pasa por el logger del proyecto. El segundo es funcional — cambiarlo altera qué se registra en desarrollo.
 
-**Aceptación**: los tres `console.log` de depuración no existen; los cuatro del banner salen por `esaviLog`; `connection.ts:28` se documenta como uso legítimo o se sustituye por un logger explícito.
+**Aceptación**: los cuatro del banner salen por `esaviLog`; `connection.ts:28` se documenta como uso legítimo o se sustituye por un logger explícito.
