@@ -28,7 +28,7 @@ const createCatalogItemService = async (data: CreateCatalogItem, authUser?: Auth
             }
         });
         if (existingItem) {
-            throw new AppError(getMessage('catalogItem.codeExists', lang, { code }), 400, 'CATITEM_001_CODE_EXISTS');
+            throw new AppError(getMessage('catalogItem.codeExists', lang, { code }), 409, 'CATITEM_001_CODE_EXISTS');
         }
     }
     // Defining sortOrder: if provided in the request, use it. Otherwise, set it to max existing sortOrder + 1 for the same catalogTypeId

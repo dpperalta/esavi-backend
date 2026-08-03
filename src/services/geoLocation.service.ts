@@ -37,7 +37,7 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser?:
             }
         });
         if( existingLocation ) {
-            throw new AppError(getMessage('geoLocation.externalCodeExists', lang, { code: data.externalCode }), 400, 'GEOLOC_001_EXTERNAL_CODE_EXISTS');
+            throw new AppError(getMessage('geoLocation.externalCodeExists', lang, { code: data.externalCode }), 409, 'GEOLOC_001_EXTERNAL_CODE_EXISTS');
         }
     }
     let sortOrder: number | null = null;
@@ -160,7 +160,7 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
             }
         });
         if( existingLocation ) {
-            throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: externalCode.trim() }), 400, 'GEOLOC_004_EXTERNAL_CODE_EXISTS'); 
+            throw new AppError(getMessage('geoLocation.alreadyExists', lang, { code: externalCode.trim() }), 409, 'GEOLOC_004_EXTERNAL_CODE_EXISTS');
         }
     }
     const currentAppDetails = Array.isArray(geoLocation.appDetails) ? geoLocation.appDetails : [];

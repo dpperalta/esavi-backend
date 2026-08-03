@@ -11,7 +11,7 @@ const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser?:
     const code = toCamelCase(data.code.trim());
     const existing = await CatalogType.findOne({ where: { code } });
     if (existing) {
-        throw new AppError(getMessage('catalogType.codeExists', lang), 400, 'CATTYPE_001_CODE_EXISTS');
+        throw new AppError(getMessage('catalogType.codeExists', lang), 409, 'CATTYPE_001_CODE_EXISTS');
     }
     const newCatalogType = await CatalogType.create({
         code,
