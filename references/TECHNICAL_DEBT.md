@@ -54,15 +54,18 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-032](#deuda-032) | 🟠 | Los middlewares construyen respuestas de error a mano |
 | [DEUDA-033](#deuda-033) | 🟠 | `tokenValidation` deja `email` y `displayName` cifrados en `req.user` |
 | [DEUDA-034](#deuda-034) | 🟠 | Reasignar `parentGeoLocationId` puede crear un ciclo |
-| [DEUDA-035](#deuda-035) | 🟡 | `canViewInactive` exige SUPERADMIN; la matriz dice ADMIN |
+| [DEUDA-035](#deuda-035) | 🟠 | `canViewInactive` exige SUPERADMIN; la matriz dice ADMIN |
 | [DEUDA-036](#deuda-036) | 🟡 | El banner de arranque esquiva `esaviLog` |
 | [DEUDA-037](#deuda-037) | 🟠 | ✅ `DEFAULT_LANGUAGE` se lee antes de que `dotenv` pueble el entorno |
 | [DEUDA-038](#deuda-038) | 🟠 | ✅ El idioma resuelto no llega desde el controlador al servicio |
+| [DEUDA-039](#deuda-039) | 🔴 | ✅ `geoPolygon` no coincide con la columna `geopolygon` del SQL |
+| [DEUDA-040](#deuda-040) | 🟠 | El validador de update anuncia `isActive` y el servicio lo ignora |
 
 ## Mapa de resolución
 
-La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030, y el
-SPEC 08 cubre 037 y 038. Las entradas 031–036 todavía no tienen spec.
+La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030, el
+SPEC 08 cubre 037 y 038, y el SPEC 09 cubre 039. Las entradas 031–036 y 040
+todavía no tienen spec.
 
 **Saldadas a 2026-08-03**: las 30 entradas 001–030, por los siete specs de la
 serie, más 037 y 038 por el SPEC 08. Los ocho specs están en estado
@@ -84,7 +87,8 @@ producción, en vez de exigir SUPERADMIN), **013** (unicidad **sin** filtrar por
 | [06 — Nomenclatura, tipos y código muerto](./specs/06-naming-and-types.md) | 019, 020, 021, 022, 023, 024, 027, 028, 029 |
 | [07 — Linter y suite mínima](./specs/07-tooling-and-tests.md) | 030 |
 | [08 — Idioma efectivo](./specs/08-language-propagation.md) | 037, 038 |
-| sin spec | 031, 032, 033, 034, 035, 036 |
+| [09 — CRUD de healthFacility](./specs/09-healthfacility-crud.md) | 039 |
+| sin spec | 031, 032, 033, 034, 035, 036, 040 |
 
 Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08. El 05 renumera
 líneas que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los
@@ -610,7 +614,7 @@ Nada impide asignar como padre de una ubicación a uno de sus propios descendien
 ---
 
 <a id="deuda-035"></a>
-## DEUDA-035 🟡 `canViewInactive` exige SUPERADMIN; la matriz dice ADMIN
+## DEUDA-035 🟠 `canViewInactive` exige SUPERADMIN; la matriz dice ADMIN
 
 **Archivo**: `src/helpers/permissions.helper.ts`
 
@@ -621,6 +625,17 @@ El resultado: un ADMIN pasa el middleware de una ruta declarada `ADMIN` y recibe
 **Aceptación**: `canViewInactive` admite ADMIN, o la matriz canónica se corrige a SUPERADMIN. Las dos fuentes deben decir lo mismo.
 
 **Nota del SPEC 06 (2026-08-03)**: el paso 8 pasó los 4 puntos de geografía de `isSuperAdmin` a `canViewInactive`, así que el predicado gobierna ahora 7 usos en vez de 3. El bug no cambió —los dos predicados devuelven hoy lo mismo—, pero la corrección se aplica en un solo sitio y alcanza a los siete. Se resuelve en un spec propio: es un cambio de comportamiento observable y, antes que eso, una decisión de canon sobre si el listado `002B` debe ser ADMIN o SUPERADMIN.
+
+**Nota del SPEC 09 (2026-08-03) — severidad subida de 🟡 a 🟠**: hasta ahora las dos mitades de la contradicción vivían en entidades distintas y ningún consumidor las cruzaba. `healthFacility` es la primera entidad donde coinciden en la misma superficie, y el resultado es visible desde fuera:
+
+```
+GET /api/health-facilities/admin/location/:id   (ADMIN)  → 200, incluye la instalación inactiva
+GET /api/health-facilities/:id                  (ADMIN)  → 404 sobre esa misma instalación
+```
+
+La ruta `002B` filtra por rol de ruta —`validateUserRole(ADMIN)`, sin `isActive` en el `where`— mientras que `003` delega en `canViewInactive`, que solo concede a SUPERADMIN. El mismo usuario ve una fila en el listado y no puede abrirla. Deja de ser una inconsistencia de canon para ser un comportamiento incorrecto de cara al cliente.
+
+El SPEC 09 no lo corrigió deliberadamente: su paso 5 manda usar `canViewInactive`, y cambiar el predicado alcanzaría a 7 puntos de llamada en 5 entidades, ninguno cubierto por su suite. El criterio de aceptación del spec se corrigió para describir el comportamiento real (404 para USER y ADMIN, 200 para SUPERADMIN), y `tests/contract/healthFacility.test.ts` lo fija con un comentario que remite aquí. Cuando esta entrada se salde, esos tests fallarán: ésa es la señal de que hay que actualizarlos.
 
 ---
 
@@ -701,3 +716,54 @@ El cliente pidió español y `req.lang` valía `es`. El mensaje sale en inglés 
 El valor por defecto es lo que dejó pasar el bug: un parámetro opcional no obliga a nadie a propagarlo, y el literal `'en'` disfraza la omisión de comportamiento normal.
 
 **Aceptación**: `lang` es un parámetro **requerido** en las firmas de servicio, de modo que cada fuga futura sea un error de compilación; todo controlador que llame a un servicio con mensajes le pasa `req.lang`; `npm run i18n:check` falla si reaparece cualquiera de las tres formas.
+
+---
+
+<a id="deuda-039"></a>
+## DEUDA-039 🔴 ✅ `geoPolygon` no coincide con la columna `geopolygon` del SQL
+
+> ✅ **Saldada** por el [SPEC 09](./specs/09-healthfacility-crud.md) el 2026-08-03. `geoLocation.model.ts` mapea el atributo con `field: 'geopolygon'`, que es como lo declara el DDL. Además, las dos comprobaciones de FK de `healthFacility.service.ts` (create y update) pasaron a pedir `attributes: ['geoLocationId']`: una comprobación de existencia no necesita traerse la geometría, y así el servicio no depende de que el mapeo de otra entidad sea correcto.
+
+Detectada al escribir la suite de contrato del [SPEC 09](./specs/09-healthfacility-crud.md) el 2026-08-03, que fue lo primero que ejecutó estos endpoints contra el `esaviapp.sql` real.
+
+`esaviapp.sql:427` declara la columna **toda en minúsculas** —`"geopolygon"`—, a diferencia del resto de columnas de la tabla, que son camelCase entrecomillado. `geoLocation.model.ts:84` la declaraba como `geoPolygon` sin `field`, así que Sequelize la citaba como `"GeoLocation"."geoPolygon"`.
+
+Toda consulta que seleccionara la lista completa de atributos de `GeoLocation` fallaba:
+
+```
+POST /api/geo-locations
+→ 500  error: no existe la columna «geoPolygon»
+       hint: Probablemente quiera hacer referencia a la columna «GeoLocation.geopolygon».
+```
+
+El alcance era mayor que la propia entidad: `createHealthFacilityService` valida su FK con `GeoLocation.findOne(...)` sin acotar `attributes`, de modo que **`POST /api/health-facilities` también devolvía 500**. Ningún test lo detectaba porque hasta el SPEC 09 ninguna suite creaba una geoLocation.
+
+**Aceptación**: `POST` y `GET /api/geo-locations` responden 201 y 200 contra el esquema de `esaviapp.sql`, y la suite de contrato de `healthFacility` crea sus fixtures por la API en vez de por SQL directo.
+
+---
+
+<a id="deuda-040"></a>
+## DEUDA-040 🟠 El validador de update anuncia `isActive` y el servicio lo ignora
+
+**Archivos**: `src/validators/catalogItem.validator.ts:41`, `src/validators/catalogType.validator.ts:28`
+
+Detectada al implementar el [SPEC 09](./specs/09-healthfacility-crud.md) el 2026-08-03, que arrastraba la misma línea en `healthFacility.validator.ts` y la eliminó al crear su endpoint de update.
+
+Los dos validadores aceptan `isActive` en el cuerpo del `PUT`:
+
+```ts
+body('isActive').optional().isBoolean().withMessage('isActive must be a boolean value')
+```
+
+Ninguno de los dos servicios lo lee: `objectToUpdate` no lo contempla en `updateCatalogItemService` ni en `updateCatalogTypeService`. El resultado es un campo que la API declara aceptar y descarta en silencio:
+
+```
+PUT /api/catalog-items/:id   { "isActive": false }
+→ 200, con la entidad intacta y todavía activa
+```
+
+Sin error y sin señal. El cliente tiene motivos para creer que desactivó el registro.
+
+La plantilla de `updateEntityValidator` de la sección 14.2 de [CONVENTIONS.md](./CONVENTIONS.md) **no incluye `isActive`**, y con razón: el estado se cambia por `005A` y `005B`, que sellan `deletedAt` y pasan por `setEntityActiveStatusService`. Aplicarlo desde el update abriría un segundo camino sin esas garantías.
+
+**Aceptación**: las dos líneas desaparecen, o los servicios de update aplican el campo — pero entonces `deletedAt` y las reglas de `005A`/`005B` tienen que respetarse también por esa vía. La primera opción es la que siguió el SPEC 09.

@@ -59,6 +59,5 @@ export const updateHealthFacilityValidator = [
         .isLength({ max: 50 }).withMessage('Phone must be at most 50 characters long'),
     body('email').optional().trim()
         .isEmail().withMessage('Email must be a valid email address')
-        .isLength({ max: 255 }).withMessage('Email must be at most 255 characters long'),
-    body('isActive').optional().isBoolean().withMessage('isActive must be a boolean value')
+        .isLength({ max: 255 }).withMessage('Email must be at most 255 characters long')
 ];
