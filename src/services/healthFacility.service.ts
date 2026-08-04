@@ -21,7 +21,8 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
         where: {
             geoLocationId: data.geoLocationId,
             isActive: true
-        }
+        },
+        attributes: ['geoLocationId']
     });
     if (!geoLocation) {
         throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'HFAC_001_GEOLOCATION_NOT_FOUND');
@@ -181,7 +182,8 @@ const updateHealthFacilityService = async (id: string, data: Partial<CreateHealt
             where: {
                 geoLocationId,
                 isActive: true
-            }
+            },
+            attributes: ['geoLocationId']
         });
         if (!geoLocation) {
             throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'HFAC_004_GEOLOCATION_NOT_FOUND');

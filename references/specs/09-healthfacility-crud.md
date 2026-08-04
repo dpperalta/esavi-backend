@@ -176,7 +176,7 @@ Cada paso deja el sistema compilando y arrancable. Los pasos 1 y 2 corrigen lo e
 - [ ] Crear sin `localCode` devuelve 201.
 - [ ] Un `facilityTypeItemId` que no pertenece al catálogo `healthFacilityType` devuelve 404, no 500.
 - [ ] `GET /:id` devuelve `geoLocation`, `facilityType`, `parent` y `children`.
-- [ ] `GET /:id` de una instalación inactiva: 404 para USER, 200 para ADMIN.
+- [ ] `GET /:id` de una instalación inactiva: 404 para USER/ADMIN, 200 para ADMIN.
 - [ ] `PUT /:id` con `parentHealthFacilityId` igual al propio id devuelve 409.
 - [ ] `PUT /:id` con un descendiente como padre devuelve 409.
 - [ ] `DELETE /:id` de una instalación con hijos activos devuelve 409.
