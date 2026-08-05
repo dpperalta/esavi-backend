@@ -1,6 +1,49 @@
+import { Op } from 'sequelize';
 import { AppUser, AppUserGeoLocation, GeoLocation } from '../models';
 import { AppError, getMessage } from '../helpers';
+import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, CreateAppUserGeoLocationInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// The PII columns returned for the assigned user, and the geoLocation attributes.
+// GeoLocation is listed attribute by attribute on purpose: the full attribute list
+// drags the geometry column into every row of every listing
+const USER_ATTRIBUTES = ['userId', 'username', 'firstName', 'lastName', 'email'];
+
+const geoLocationInclude = {
+    model: GeoLocation,
+    as: 'geoLocation',
+    attributes: ['geoLocationId', 'name', 'level', 'parentGeoLocationId']
+};
+
+// AppUser PII is stored encrypted, so a raw email is useless to any client.
+// Null-safe because firstName and lastName are optional columns
+const decryptField = (value?: string | null) => value ? esaviDecrypt(value) : value ?? null;
+
+const toUserResponse = (user: AppUser) => ({
+    userId: user.userId,
+    username: decryptField(user.username),
+    firstName: decryptField(user.firstName),
+    lastName: decryptField(user.lastName),
+    email: decryptField(user.email)
+});
+
+const toAssignmentResponse = (assignment: AppUserGeoLocation) => {
+    const plain = assignment.toJSON() as Record<string, unknown>;
+    if (plain.user) {
+        plain.user = toUserResponse(plain.user as AppUser);
+    }
+    return plain;
+}
+
+// Only assignments in force right now: an open-ended validity, or one that has not expired yet.
+// Built per call, so the cutoff is the request time and not the moment the module was loaded
+const currentValidityFilter = () => ({
+    [Op.or]: [
+        { validTo: null },
+        { validTo: { [Op.gt]: new Date() } }
+    ]
+});
 
 // ESAVI-USERGEO-001 - Create App User Geo Location Service
 // One row per (userId, geoLocationId) pair, forever: the pair is never duplicated, it is reactivated.
@@ -70,6 +113,66 @@ const createAppUserGeoLocationService = async (data: CreateAppUserGeoLocationInp
     return { assignment: newAssignment, created: true };
 }
 
+// ESAVI-USERGEO-002A - Get App User Geo Locations By User Service
+// `current` defaults to true at the route: whoever reads the operational state of a user
+// should not be shown assignments that already expired
+const getAppUserGeoLocationsByUserService = async (userId: string, lang: string, current: boolean, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    // The same user owns every row of this listing, so it is fetched and decrypted once
+    // for the whole response rather than per row
+    const user = await AppUser.findOne({
+        where: { userId },
+        attributes: USER_ATTRIBUTES
+    });
+    if (!user) {
+        throw new AppError(getMessage('user.notFound', lang), 404, 'USERGEO_002A_USER_NOT_FOUND');
+    }
+    const assignments = await AppUserGeoLocation.findAndCountAll({
+        where: {
+            userId,
+            isActive: true,
+            ...( current ? currentValidityFilter() : {} )
+        },
+        include: [geoLocationInclude],
+        order: [['validFrom', 'DESC']],
+        limit,
+        offset
+    });
+    return {
+        count: assignments.count,
+        user: toUserResponse(user),
+        rows: assignments.rows.map(toAssignmentResponse)
+    };
+}
+
+// ESAVI-USERGEO-002B - Get All App User Geo Locations By User Service - For Admin
+// Same listing without the isActive filter, and with `current` defaulting to false at the route
+const getAllAppUserGeoLocationsByUserService = async (userId: string, lang: string, current: boolean, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const user = await AppUser.findOne({
+        where: { userId },
+        attributes: USER_ATTRIBUTES
+    });
+    if (!user) {
+        throw new AppError(getMessage('user.notFound', lang), 404, 'USERGEO_002B_USER_NOT_FOUND');
+    }
+    const assignments = await AppUserGeoLocation.findAndCountAll({
+        where: {
+            userId,
+            ...( current ? currentValidityFilter() : {} )
+        },
+        include: [geoLocationInclude],
+        order: [['validFrom', 'DESC']],
+        limit,
+        offset
+    });
+    return {
+        count: assignments.count,
+        user: toUserResponse(user),
+        rows: assignments.rows.map(toAssignmentResponse)
+    };
+}
+
 export {
-    createAppUserGeoLocationService
+    createAppUserGeoLocationService,
+    getAppUserGeoLocationsByUserService,
+    getAllAppUserGeoLocationsByUserService
 };

@@ -268,7 +268,19 @@ Las FK reutilizan las claves ya existentes `user.notFound` y `geoLocation.notFou
 
 `username`, `firstName`, `lastName` y `email` se devuelven **descifrados** con `esaviDecrypt`. `assignedByUserId` va crudo, sin resolver.
 
-**`002A` / `002B` — listado:** `data` es `{ count, rows }` de `findAndCountAll`, con `rows` en la forma de arriba.
+**`002A` / `002B` — listado:** `data` es `{ count, user, rows }`. `count` y `rows` salen de `findAndCountAll`; `rows` tiene la forma de arriba **menos la clave `user`**.
+
+```
+{ ok, message, data: {
+    count,
+    user: { userId, username, firstName, lastName, email },
+    rows: [ { userGeoLocationId, userId, geoLocationId, validFrom, validTo,
+              assignedByUserId, isActive, createdAt, updatedAt, deletedAt, appDetails,
+              geoLocation: { geoLocationId, name, level, parentGeoLocationId } } ]
+} }
+```
+
+`user` sale **una sola vez por respuesta**, no una por fila. Los dos listados son por usuario, así que el `user` de cada fila sería el mismo repetido `count` veces, con tres descifrados `esaviDecrypt` por fila. Decidido el 2026-08-04, durante el paso 7. `003` **no** cambia: sigue devolviendo `user` dentro de la fila, porque ahí solo hay una.
 
 **`007` — masiva:** `data` es `{ count, rows }` con las filas creadas y reactivadas.
 
@@ -354,7 +366,8 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 - [ ] Crear sin `validFrom` deja `validFrom` con la fecha actual.
 - [ ] `GET /user/:userId` **no** devuelve asignaciones con `validTo` en el pasado; `?current=false` sí las devuelve.
 - [ ] `GET /admin/user/:userId` devuelve las cerradas por defecto y responde **403** a un USER.
-- [ ] Los dos listados devuelven `data` como `{ count, rows }` y ordenan por `validFrom DESC`.
+- [ ] Los dos listados devuelven `data` como `{ count, user, rows }` y ordenan por `validFrom DESC`.
+- [ ] `user` aparece **una sola vez** en la respuesta de los listados, con su PII descifrada, y **no** dentro de cada fila de `rows`.
 - [ ] `GET /:id` devuelve `user` y `geoLocation`, con `user.email`, `user.username`, `user.firstName` y `user.lastName` **descifrados**.
 - [ ] `GET /:id` de una asignación cerrada: 404 para USER y ADMIN, 200 para SUPERADMIN.
 - [ ] `PUT /:id` con `userId` o `geoLocationId` en el body devuelve **400**.

@@ -1,6 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { createAppUserGeoLocationService } from '../services/appUserGeoLocation.service';
+import {
+    createAppUserGeoLocationService,
+    getAppUserGeoLocationsByUserService,
+    getAllAppUserGeoLocationsByUserService
+} from '../services/appUserGeoLocation.service';
+
+// The `current` default is not the same on both listings, so it is resolved per endpoint
+// and an explicit ?current= always wins over it
+const resolveCurrent = (value: unknown, fallback: boolean): boolean =>
+    value === undefined ? fallback : value === 'true';
 
 // Create App User Geo Location Controller
 // Code: ESAVI-USERGEO-001
@@ -24,6 +33,56 @@ const createAppUserGeoLocation = async (req: Request, res: Response, next: NextF
     }
 }
 
+// Get App User Geo Locations By User Controller
+// Code: ESAVI-USERGEO-002A
+const getAppUserGeoLocationsByUser = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const userId = (req.params.userId).toString().trim();
+    const current = resolveCurrent(req.query.current, true);
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAppUserGeoLocationsByUserService(userId, req.lang, current, limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-002A: Error getting App User Geo Locations by userId: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.fetchFailed', req.lang), 500, 'USERGEO_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All App User Geo Locations By User Controller - For Admin
+// Code: ESAVI-USERGEO-002B
+const getAllAppUserGeoLocationsByUser = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const userId = (req.params.userId).toString().trim();
+    const current = resolveCurrent(req.query.current, false);
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllAppUserGeoLocationsByUserService(userId, req.lang, current, limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-002B: Error getting all App User Geo Locations by userId: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.fetchFailed', req.lang), 500, 'USERGEO_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createAppUserGeoLocation
+    createAppUserGeoLocation,
+    getAppUserGeoLocationsByUser,
+    getAllAppUserGeoLocationsByUser
 }
