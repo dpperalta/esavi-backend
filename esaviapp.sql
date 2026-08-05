@@ -424,7 +424,7 @@ CREATE TABLE IF NOT EXISTS "geoLocation" (
   "externalCode" varchar(100),
   "latitude" numeric(10,7),
   "longitude" numeric(10,7),
-  "geopolygon" geometry(MultiPolygon, 4326),
+  "geoPolygon" geometry(MultiPolygon, 4326),
   "level" smallint,
   "sortOrder" smallint NOT NULL DEFAULT 0 CHECK ("sortOrder" >= 0),
   "isActive" boolean NOT NULL DEFAULT true,
