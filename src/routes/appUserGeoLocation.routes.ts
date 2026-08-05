@@ -4,9 +4,11 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createAppUserGeoLocation,
     getAppUserGeoLocationsByUser,
-    getAllAppUserGeoLocationsByUser
+    getAllAppUserGeoLocationsByUser,
+    getAppUserGeoLocationById
 } from '../controllers/appUserGeoLocation.controller';
 import {
+    appUserGeoLocationIdValidator,
     appUserGeoLocationListValidator,
     createAppUserGeoLocationValidator,
     userIdParamValidator
@@ -27,5 +29,10 @@ router.get('/user/:userId', tokenValidation, validateUserRole(USER), ...userIdPa
 // Get All App User Geo Locations By User - For Admin
 // Code: ESAVI-USERGEO-002B
 router.get('/admin/user/:userId', tokenValidation, validateUserRole(ADMIN), ...userIdParamValidator, ...appUserGeoLocationListValidator, validateFields, getAllAppUserGeoLocationsByUser);
+
+// Get App User Geo Location by ID
+// Code: ESAVI-USERGEO-003
+// Declared after the literal paths so Express does not capture 'user' or 'admin' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...appUserGeoLocationIdValidator, validateFields, getAppUserGeoLocationById);
 
 export default router;

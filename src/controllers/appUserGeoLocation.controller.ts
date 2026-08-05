@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
 import {
     createAppUserGeoLocationService,
     getAppUserGeoLocationsByUserService,
-    getAllAppUserGeoLocationsByUserService
+    getAllAppUserGeoLocationsByUserService,
+    getAppUserGeoLocationByIdService
 } from '../services/appUserGeoLocation.service';
 
 // The `current` default is not the same on both listings, so it is resolved per endpoint
@@ -81,8 +83,30 @@ const getAllAppUserGeoLocationsByUser = async (req: Request, res: Response, next
     }
 }
 
+// Get App User Geo Location By ID Controller
+// Code: ESAVI-USERGEO-003
+const getAppUserGeoLocationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getAppUserGeoLocationByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-003: Error getting App User Geo Location by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.fetchFailed', req.lang), 500, 'USERGEO_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createAppUserGeoLocation,
     getAppUserGeoLocationsByUser,
-    getAllAppUserGeoLocationsByUser
+    getAllAppUserGeoLocationsByUser,
+    getAppUserGeoLocationById
 }

@@ -171,8 +171,34 @@ const getAllAppUserGeoLocationsByUserService = async (userId: string, lang: stri
     };
 }
 
+// ESAVI-USERGEO-003 - Get App User Geo Location By ID Service
+// Unlike the listings, a single row carries its own user: there is no repetition to avoid
+const getAppUserGeoLocationByIdService = async (id: string, lang: string, includeInactive: boolean) => {
+    const assignment = await AppUserGeoLocation.findOne({
+        where: {
+            userGeoLocationId: id,
+            // A closed assignment is invisible unless the caller can see inactive rows,
+            // which today means SUPERADMIN
+            ...( includeInactive ? {} : { isActive: true } )
+        },
+        include: [
+            {
+                model: AppUser,
+                as: 'user',
+                attributes: USER_ATTRIBUTES
+            },
+            geoLocationInclude
+        ]
+    });
+    if (!assignment) {
+        throw new AppError(getMessage('appUserGeoLocation.notFound', lang), 404, 'USERGEO_003_NOT_FOUND');
+    }
+    return toAssignmentResponse(assignment);
+}
+
 export {
     createAppUserGeoLocationService,
     getAppUserGeoLocationsByUserService,
-    getAllAppUserGeoLocationsByUserService
+    getAllAppUserGeoLocationsByUserService,
+    getAppUserGeoLocationByIdService
 };
