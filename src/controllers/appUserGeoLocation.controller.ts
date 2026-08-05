@@ -9,7 +9,8 @@ import {
     updateAppUserGeoLocationService,
     setAppUserGeoLocationActivationService,
     reassignAppUserGeoLocationService,
-    bulkAssignGeoLocationsService
+    bulkAssignGeoLocationsService,
+    resolveUserCoverageService
 } from '../services/appUserGeoLocation.service';
 
 // The `current` default is not the same on both listings, so it is resolved per endpoint
@@ -210,6 +211,27 @@ const bulkAssignGeoLocations = async (req: Request, res: Response, next: NextFun
     }
 }
 
+// Get User Coverage Controller
+// Code: ESAVI-USERGEO-008
+const getUserCoverage = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const userId = (req.params.userId).toString().trim();
+    try {
+        const data = await resolveUserCoverageService(userId, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.coverageSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-008: Error resolving user coverage: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.coverageFailed', req.lang), 500, 'USERGEO_008_COVERAGE_FAILED', error));
+    }
+}
+
 export {
     createAppUserGeoLocation,
     getAppUserGeoLocationsByUser,
@@ -219,5 +241,6 @@ export {
     deleteAppUserGeoLocation,
     activateAppUserGeoLocation,
     reassignAppUserGeoLocation,
-    bulkAssignGeoLocations
+    bulkAssignGeoLocations,
+    getUserCoverage
 }

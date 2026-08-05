@@ -1,4 +1,4 @@
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppUser, AppUserGeoLocation, GeoLocation } from '../models';
 import { AppError, getMessage } from '../helpers';
@@ -6,6 +6,21 @@ import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, BulkAssignGeoLocationsInput, CreateAppUserGeoLocationInput, ReassignGeoLocationInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// Upper bound for the descendant walk of ESAVI-USERGEO-008. Together with UNION it keeps the
+// recursive CTE terminating even if the stored geoLocation tree already contains a cycle,
+// which no SQL constraint can detect
+const MAX_COVERAGE_DEPTH = 50;
+
+// Shape of one row of the recursive CTE. Raw SQL is outside Sequelize's typing,
+// so the contract is declared here rather than inferred
+interface CoverageRow {
+    geoLocationId: string;
+    name: string;
+    level: number;
+    parentGeoLocationId: string | null;
+    isAssigned: boolean;
+}
 
 // The PII columns returned for the assigned user, and the geoLocation attributes.
 // GeoLocation is listed attribute by attribute on purpose: the full attribute list
@@ -472,6 +487,64 @@ const bulkAssignGeoLocationsService = async (data: BulkAssignGeoLocationsInput, 
     }
 }
 
+// ESAVI-USERGEO-008 - Resolve User Coverage Service
+// The assignment stays one row and the inheritance is resolved on read. Expanding on write
+// would multiply the rows and go stale the moment a new child geoLocation is created.
+// Read-only: it never writes appDetails
+const resolveUserCoverageService = async (userId: string, lang: string) => {
+    const user = await AppUser.findOne({
+        where: { userId },
+        attributes: ['userId']
+    });
+    if (!user) {
+        throw new AppError(getMessage('user.notFound', lang), 404, 'USERGEO_008_USER_NOT_FOUND');
+    }
+    // Two guards against a cycle in the stored data: UNION instead of UNION ALL, and an
+    // explicit depth cap. With a corrupt tree the query still terminates
+    const coverage = await sequelize.query<CoverageRow>(
+        `WITH RECURSIVE assigned AS (
+            SELECT g."geoLocationId", g."name", g."level", g."parentGeoLocationId"
+            FROM "appUserGeoLocation" a
+            JOIN "geoLocation" g ON g."geoLocationId" = a."geoLocationId"
+            WHERE a."userId" = :userId
+              AND a."isActive" = true
+              AND ( a."validTo" IS NULL OR a."validTo" > now() )
+              AND g."isActive" = true
+        ),
+        descendants AS (
+            SELECT a."geoLocationId", a."name", a."level", a."parentGeoLocationId",
+                   true AS "isAssigned", 1 AS depth
+            FROM assigned a
+            UNION
+            SELECT c."geoLocationId", c."name", c."level", c."parentGeoLocationId",
+                   false AS "isAssigned", d.depth + 1
+            FROM descendants d
+            JOIN "geoLocation" c ON c."parentGeoLocationId" = d."geoLocationId"
+            WHERE c."isActive" = true
+              AND d.depth < :maxDepth
+        )
+        SELECT "geoLocationId", "name", "level", "parentGeoLocationId",
+               bool_or("isAssigned") AS "isAssigned"
+        FROM descendants
+        GROUP BY "geoLocationId", "name", "level", "parentGeoLocationId"
+        ORDER BY "level" ASC, "name" ASC`,
+        {
+            // Parameterized, never string interpolation
+            replacements: { userId, maxDepth: MAX_COVERAGE_DEPTH },
+            type: QueryTypes.SELECT
+        }
+    );
+    return {
+        assigned: coverage
+            .filter(( row ) => row.isAssigned )
+            .map(({ geoLocationId, name, level }) => ({ geoLocationId, name, level })),
+        // The full expansion, which includes the assigned nodes themselves
+        coverage: coverage.map(({ geoLocationId, name, level, parentGeoLocationId }) =>
+            ({ geoLocationId, name, level, parentGeoLocationId })),
+        count: coverage.length
+    };
+}
+
 export {
     createAppUserGeoLocationService,
     getAppUserGeoLocationsByUserService,
@@ -480,5 +553,6 @@ export {
     updateAppUserGeoLocationService,
     setAppUserGeoLocationActivationService,
     reassignAppUserGeoLocationService,
-    bulkAssignGeoLocationsService
+    bulkAssignGeoLocationsService,
+    resolveUserCoverageService
 };

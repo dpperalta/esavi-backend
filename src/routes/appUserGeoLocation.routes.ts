@@ -10,7 +10,8 @@ import {
     deleteAppUserGeoLocation,
     activateAppUserGeoLocation,
     reassignAppUserGeoLocation,
-    bulkAssignGeoLocations
+    bulkAssignGeoLocations,
+    getUserCoverage
 } from '../controllers/appUserGeoLocation.controller';
 import {
     appUserGeoLocationIdValidator,
@@ -34,6 +35,11 @@ router.post('/', tokenValidation, validateUserRole(ADMIN), ...createAppUserGeoLo
 // Code: ESAVI-USERGEO-007
 // Declared before /:id so Express does not capture 'bulk' as an :id
 router.post('/bulk', tokenValidation, validateUserRole(ADMIN), ...bulkAssignValidator, validateFields, bulkAssignGeoLocations);
+
+// Get User Coverage
+// Code: ESAVI-USERGEO-008
+// Declared before /user/:userId, which would otherwise swallow the /coverage suffix
+router.get('/user/:userId/coverage', tokenValidation, validateUserRole(USER), ...userIdParamValidator, validateFields, getUserCoverage);
 
 // Get App User Geo Locations By User
 // Code: ESAVI-USERGEO-002A
