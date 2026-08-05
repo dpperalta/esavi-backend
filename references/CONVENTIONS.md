@@ -148,6 +148,18 @@ ESAVI-<ENTIDAD>-<NNN>[A|B|C]
 
 `002` sin letra cuando hay un solo listado; `002A`/`002B` cuando existen ambas variantes. Los sufijos `A`/`B`/`C` **solo** distinguen variantes de la misma operación, nunca operaciones distintas.
 
+### Más allá de `005B` — operaciones no canónicas
+
+El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se estira con letras** para meter otra cosa. Una operación que no sea ninguna de las siete recibe un número propio a partir de `006`, registrado aquí.
+
+| Entidad | Código | Operación |
+|---|---|---|
+| appUserGeoLocation | `006` | reasignar — cierra la asignación origen y abre la del destino, transaccional |
+| appUserGeoLocation | `007` | asignación masiva — un usuario a varias geolocalizaciones, todo o nada |
+| appUserGeoLocation | `008` | cobertura efectiva — asignaciones vigentes más sus descendientes |
+
+`appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
+
 ### Listado dual — un `GET /` que se bifurca en dos servicios
 
 Cuando hay **una sola ruta** `GET /` que, según el rol de quien pide, llama a un servicio u otro (público solo-activos frente a admin con inactivos), la numeración es:
@@ -218,6 +230,7 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 
 | Entidad | Abreviatura |
 |---|---|
+| appUserGeoLocation | `USERGEO` |
 | catalogItem | `CATITEM` |
 | catalogType | `CATTYPE` |
 | geoLevelType | `GEOTYPE` |
