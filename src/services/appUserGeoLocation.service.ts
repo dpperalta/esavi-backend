@@ -224,6 +224,8 @@ const updateAppUserGeoLocationService = async (id: string, data: Partial<CreateA
     if (!assignment.isActive) {
         throw new AppError(getMessage('appUserGeoLocation.alreadyInactive', lang, { id }), 409, 'USERGEO_004_ALREADY_INACTIVE');
     }
+    // Validate if data is empty, if so return the assignment without updating
+    if (Object.keys(data).length === 0) return assignment;
     // The range is checked against the resulting row, not against the payload: sending only
     // validFrom must still be compared with the validTo already stored
     const targetValidFrom = data.validFrom ? new Date(data.validFrom) : assignment.validFrom;
