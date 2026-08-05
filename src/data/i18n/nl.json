@@ -155,5 +155,29 @@
         "deletedFailed": "Verwijderen van de zorginstelling mislukt. Probeer het later opnieuw.",
         "activatedSuccess": "Zorginstelling succesvol geactiveerd",
         "activatedFailed": "Activeren van de zorginstelling mislukt. Probeer het later opnieuw."
+    },
+    "appUserGeoLocation": {
+        "createSuccess": "Geografische toewijzing succesvol aangemaakt",
+        "reactivateSuccess": "Geografische toewijzing succesvol heractiveerd",
+        "createdFailed": "Aanmaken van de geografische toewijzing mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Geografische toewijzing succesvol opgehaald",
+        "fetchFailed": "Ophalen van de geografische toewijzing mislukt. Probeer het later opnieuw.",
+        "notFound": "Geografische toewijzing niet gevonden. Controleer het ID van de toewijzing en probeer het opnieuw.",
+        "assignmentExists": "De gebruiker heeft al een actieve toewijzing voor deze geografische locatie",
+        "invalidDateRange": "De einddatum van de geldigheid moet later zijn dan de begindatum",
+        "updateSuccess": "Geografische toewijzing succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de geografische toewijzing mislukt. Probeer het later opnieuw.",
+        "alreadyInactive": "De geografische toewijzing met ID {{id}} is al inactief",
+        "alreadyActive": "De geografische toewijzing met ID {{id}} is al actief",
+        "deleteSuccess": "Geografische toewijzing succesvol verwijderd",
+        "activateSuccess": "Geografische toewijzing succesvol geactiveerd",
+        "reassignSuccess": "Geografische toewijzing succesvol opnieuw toegewezen",
+        "reassignFailed": "Opnieuw toewijzen van de geografische toewijzing mislukt. Probeer het later opnieuw.",
+        "sameGeoLocation": "De doellocatie moet verschillen van de bronlocatie",
+        "bulkSuccess": "Geografische toewijzingen succesvol aangemaakt",
+        "bulkFailed": "Aanmaken van de geografische toewijzingen mislukt. Probeer het later opnieuw.",
+        "geoLocationsNotFound": "{{count}} geografische locaties bestaan niet of zijn inactief. Controleer de IDs en probeer het opnieuw.",
+        "coverageSuccess": "Geografische dekking van de gebruiker succesvol opgehaald",
+        "coverageFailed": "Ophalen van de geografische dekking van de gebruiker mislukt. Probeer het later opnieuw."
     }
 }

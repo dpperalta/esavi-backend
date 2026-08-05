@@ -155,5 +155,29 @@
         "deletedFailed": "Failed to delete the health facility. Please try again later.",
         "activatedSuccess": "Health facility activated successfully",
         "activatedFailed": "Failed to activate the health facility. Please try again later."
+    },
+    "appUserGeoLocation": {
+        "createSuccess": "Geographic assignment created successfully",
+        "reactivateSuccess": "Geographic assignment reactivated successfully",
+        "createdFailed": "Failed to create the geographic assignment. Please try again later.",
+        "getSuccess": "Geographic assignment retrieved successfully",
+        "fetchFailed": "Failed to retrieve the geographic assignment. Please try again later.",
+        "notFound": "Geographic assignment not found. Please check the assignment ID and try again.",
+        "assignmentExists": "The user already has an active assignment for this geographic location",
+        "invalidDateRange": "The validity end date must be later than the start date",
+        "updateSuccess": "Geographic assignment updated successfully",
+        "updatedFailed": "Failed to update the geographic assignment. Please try again later.",
+        "alreadyInactive": "The geographic assignment with ID {{id}} is already inactive",
+        "alreadyActive": "The geographic assignment with ID {{id}} is already active",
+        "deleteSuccess": "Geographic assignment deleted successfully",
+        "activateSuccess": "Geographic assignment activated successfully",
+        "reassignSuccess": "Geographic assignment reassigned successfully",
+        "reassignFailed": "Failed to reassign the geographic assignment. Please try again later.",
+        "sameGeoLocation": "The target geographic location must be different from the source one",
+        "bulkSuccess": "Geographic assignments created successfully",
+        "bulkFailed": "Failed to create the geographic assignments. Please try again later.",
+        "geoLocationsNotFound": "{{count}} geographic locations do not exist or are inactive. Please check the IDs and try again.",
+        "coverageSuccess": "User geographic coverage retrieved successfully",
+        "coverageFailed": "Failed to retrieve the user geographic coverage. Please try again later."
     }
 }
