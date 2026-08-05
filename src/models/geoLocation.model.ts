@@ -83,8 +83,6 @@ GeoLocation.init({
     },
     geoPolygon: {
         type: DataTypes.GEOMETRY("MULTIPOLYGON", 4326),
-        // esaviapp.sql declares this column all lowercase, unlike every other camelCase column
-        field: 'geopolygon',
         allowNull: true,
     },
     isActive: {

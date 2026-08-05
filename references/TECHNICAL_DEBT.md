@@ -722,11 +722,15 @@ El valor por defecto es lo que dejó pasar el bug: un parámetro opcional no obl
 <a id="deuda-039"></a>
 ## DEUDA-039 🔴 ✅ `geoPolygon` no coincide con la columna `geopolygon` del SQL
 
-> ✅ **Saldada** por el [SPEC 09](./specs/09-healthfacility-crud.md) el 2026-08-03. `geoLocation.model.ts` mapea el atributo con `field: 'geopolygon'`, que es como lo declara el DDL. Además, las dos comprobaciones de FK de `healthFacility.service.ts` (create y update) pasaron a pedir `attributes: ['geoLocationId']`: una comprobación de existencia no necesita traerse la geometría, y así el servicio no depende de que el mapeo de otra entidad sea correcto.
+> ✅ **Saldada definitivamente** el 2026-08-04, al alinear el DDL con el resto del esquema: `esaviapp.sql:427` declara ahora `"geoPolygon"` en camelCase entrecomillado, y `geoLocation.model.ts` volvió a mapear el atributo **sin `field`**. El nombre del atributo y el de la columna coinciden, que es la convención de las otras 44 tablas.
+>
+> ⚠️ **Saldada primero a medias** por el [SPEC 09](./specs/09-healthfacility-crud.md) el 2026-08-03, con `field: 'geopolygon'` en el modelo. Aquello alineaba el modelo con el DDL de entonces, pero no con las bases ya creadas: la de desarrollo tenía —y tiene— la columna como `"geoPolygon"`, de modo que el mismo error reaparecía con el nombre invertido. Se detectó al verificar el paso 2 del [SPEC F01](./functional/specs/01-appusergeolocation-crud.md) el 2026-08-04.
+>
+> Lo que **sí** se mantiene del SPEC 09: las dos comprobaciones de FK de `healthFacility.service.ts` (create y update) piden `attributes: ['geoLocationId']`. Una comprobación de existencia no necesita traerse la geometría, y así el servicio no depende de que el mapeo de otra entidad sea correcto.
 
 Detectada al escribir la suite de contrato del [SPEC 09](./specs/09-healthfacility-crud.md) el 2026-08-03, que fue lo primero que ejecutó estos endpoints contra el `esaviapp.sql` real.
 
-`esaviapp.sql:427` declara la columna **toda en minúsculas** —`"geopolygon"`—, a diferencia del resto de columnas de la tabla, que son camelCase entrecomillado. `geoLocation.model.ts:84` la declaraba como `geoPolygon` sin `field`, así que Sequelize la citaba como `"GeoLocation"."geoPolygon"`.
+`esaviapp.sql:427` declaraba la columna **toda en minúsculas** —`"geopolygon"`—, a diferencia del resto de columnas de la tabla, que son camelCase entrecomillado. `geoLocation.model.ts:84` la declaraba como `geoPolygon` sin `field`, así que Sequelize la citaba como `"GeoLocation"."geoPolygon"`.
 
 Toda consulta que seleccionara la lista completa de atributos de `GeoLocation` fallaba:
 

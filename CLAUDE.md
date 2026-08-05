@@ -8,6 +8,17 @@ Antes de escribir o modificar código bajo `src/`, lee **`references/CONVENTIONS
 
 Las desviaciones actuales están catalogadas en `references/TECHNICAL_DEBT.md` y no son precedente.
 
+## Specs
+
+Las implementaciones se planifican antes de escribirse. Hay dos series de specs, con numeración independiente:
+
+- **Técnicos** — `references/specs/NN-slug.md`, citados como `SPEC 01`…`SPEC 09`. Reglas transversales del repositorio. Cerrados; no se añaden nuevos aquí.
+- **Funcionales** — `references/functional/specs/NN-slug.md`, citados como `SPEC F01` en adelante. Alcance, modelo de datos y requerimientos por endpoint de cada entidad. Empiezan en `01`.
+
+`references/specs/09-healthfacility-crud.md` es el ejemplo canónico de un spec de CRUD completo. Cada spec declara su estado — `Borrador`, `En revisión`, `Aprobado`, `Implementado`, `Obsoleto` — y solo se implementa cuando está `Aprobado`.
+
+Usa `/esavi-spec <tabla>` para redactar el spec de una entidad nueva; el skill vive en `.claude/skills/esavi-spec/`.
+
 ## Idioma
 
 Responde **siempre en español** en este repositorio. Esto aplica a explicaciones, resúmenes, planes y mensajes de commit. El código, los nombres de identificadores y los comentarios en el código siguen la convención existente del repositorio (inglés).
@@ -19,14 +30,28 @@ REST API for ESAVI (Eventos Supuestamente Atribuibles a la Vacunación e Inmuniz
 ## Commands
 
 ```bash
-npm run dev      # ts-node-dev with NODE_ENV=development, loads .env.development
-npm run build    # tsc -> dist/
-npm start        # NODE_ENV=production node dist/index.js, loads .env.production
+npm run dev         # ts-node-dev with NODE_ENV=development, loads .env.development
+npm run build       # tsc -> dist/
+npm start           # NODE_ENV=production node dist/index.js, loads .env.production
+npm test            # NODE_ENV=test jest --runInBand
+npm run lint        # eslint src/ tests/   (--fix via npm run lint:fix)
+npm run i18n:check  # node scripts/i18n-check.js — key parity across es/en/nl + spec guards
+npm run format      # prettier --write .   (--check via npm run format:check)
+npm run check       # build && lint && i18n:check && test — the gate before closing a PR
 ```
 
-No test suite is configured (`npm test` exits 1). No linter is configured.
-
 Generate a crypto key: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+
+## Tests
+
+Jest + ts-jest + supertest, configured in `jest.config.ts`, run serially (`--runInBand`) against `.env.test`. `tests/setup/` holds the shared fixtures: `globalSetup.ts`, `env.ts`, `database.ts` and `auth.ts` (token helpers per role).
+
+Four suites, each enforcing a convention rather than a feature:
+
+- `tests/auth/roles.test.ts` — `ROUTE_RULES` lists every route with its minimum role and operation code; a new endpoint must be added here.
+- `tests/contract/response.test.ts` — the `{ ok, message, data }` / `{ ok, message, code, errors }` envelope.
+- `tests/contract/<entity>.test.ts` — full CRUD walkthrough per entity (`healthFacility.test.ts` is the reference).
+- `tests/i18n/messages.test.ts` — exact key parity across `es`, `en` and `nl`.
 
 ## Environment
 
@@ -34,7 +59,7 @@ Generate a crypto key: `node -e "console.log(require('crypto').randomBytes(32).t
 
 ## Database schema
 
-The schema is **not** created by Sequelize — there is no `sequelize.sync()`. `esaviapp.sql` at the repo root is the authoritative DDL (~40 tables: auth, catalogs, geography, health facilities, patients, ESAVI cases, notifications). Only a subset of those tables currently has models in `src/models/`; adding an entity means writing a model that matches the existing SQL table.
+The schema is **not** created by Sequelize — there is no `sequelize.sync()`. `esaviapp.sql` at the repo root is the authoritative DDL: **45 tables** covering auth and system config, catalogs, geography, health facilities, clinical catalogs, patients, ESAVI cases, notifications and investigations. Only **8** of them currently have models in `src/models/` (`catalogType`, `catalogItem`, `appUser`, `appRole`, `appUserRole`, `geoLevelType`, `geoLocation`, `healthFacility`); adding an entity means writing a model that matches the existing SQL table.
 
 Model conventions: `timestamps: false` + `freezeTableName: true`, camelCase table names quoted in SQL (`"catalogItem"`), UUID PKs defaulting to `sequelize.literal('gen_random_uuid()')`, and every table carries `isActive`, `deletedAt`, `sysDetails` (JSONB) and `appDetails` (JSONB array).
 

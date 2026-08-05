@@ -155,5 +155,29 @@
         "deletedFailed": "Error al eliminar el establecimiento de salud. Por favor, inténtelo de nuevo más tarde.",
         "activatedSuccess": "Establecimiento de salud activado exitosamente",
         "activatedFailed": "Error al activar el establecimiento de salud. Por favor, inténtelo de nuevo más tarde."
+    },
+    "appUserGeoLocation": {
+        "createSuccess": "Asignación geográfica creada exitosamente",
+        "reactivateSuccess": "Asignación geográfica reactivada exitosamente",
+        "createdFailed": "Error al crear la asignación geográfica. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Asignación geográfica obtenida exitosamente",
+        "fetchFailed": "Error al obtener la asignación geográfica. Por favor, inténtelo de nuevo más tarde.",
+        "notFound": "Asignación geográfica no encontrada. Por favor, verifique el ID de la asignación e inténtelo de nuevo.",
+        "assignmentExists": "El usuario ya tiene una asignación activa para esta ubicación geográfica",
+        "invalidDateRange": "La fecha de fin de vigencia debe ser posterior a la fecha de inicio",
+        "updateSuccess": "Asignación geográfica actualizada exitosamente",
+        "updatedFailed": "Error al actualizar la asignación geográfica. Por favor, inténtelo de nuevo más tarde.",
+        "alreadyInactive": "La asignación geográfica con ID {{id}} ya está inactiva",
+        "alreadyActive": "La asignación geográfica con ID {{id}} ya está activa",
+        "deleteSuccess": "Asignación geográfica eliminada exitosamente",
+        "activateSuccess": "Asignación geográfica activada exitosamente",
+        "reassignSuccess": "Asignación geográfica reasignada exitosamente",
+        "reassignFailed": "Error al reasignar la asignación geográfica. Por favor, inténtelo de nuevo más tarde.",
+        "sameGeoLocation": "La ubicación geográfica de destino debe ser distinta de la de origen",
+        "bulkSuccess": "Asignaciones geográficas creadas exitosamente",
+        "bulkFailed": "Error al crear las asignaciones geográficas. Por favor, inténtelo de nuevo más tarde.",
+        "geoLocationsNotFound": "{{count}} ubicaciones geográficas no existen o están inactivas. Por favor, verifique los IDs e inténtelo de nuevo.",
+        "coverageSuccess": "Cobertura geográfica del usuario obtenida exitosamente",
+        "coverageFailed": "Error al obtener la cobertura geográfica del usuario. Por favor, inténtelo de nuevo más tarde."
     }
 }
