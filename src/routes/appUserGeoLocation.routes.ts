@@ -8,12 +8,14 @@ import {
     getAppUserGeoLocationById,
     updateAppUserGeoLocation,
     deleteAppUserGeoLocation,
-    activateAppUserGeoLocation
+    activateAppUserGeoLocation,
+    reassignAppUserGeoLocation
 } from '../controllers/appUserGeoLocation.controller';
 import {
     appUserGeoLocationIdValidator,
     appUserGeoLocationListValidator,
     createAppUserGeoLocationValidator,
+    reassignValidator,
     updateAppUserGeoLocationValidator,
     userIdParamValidator
 } from '../validators';
@@ -34,13 +36,17 @@ router.get('/user/:userId', tokenValidation, validateUserRole(USER), ...userIdPa
 // Code: ESAVI-USERGEO-002B
 router.get('/admin/user/:userId', tokenValidation, validateUserRole(ADMIN), ...userIdParamValidator, ...appUserGeoLocationListValidator, validateFields, getAllAppUserGeoLocationsByUser);
 
+// Reassign App User Geo Location
+// Code: ESAVI-USERGEO-006
+router.patch('/reassign/:id', tokenValidation, validateUserRole(ADMIN), ...appUserGeoLocationIdValidator, ...reassignValidator, validateFields, reassignAppUserGeoLocation);
+
 // Activate App User Geo Location - For SuperAdmin
 // Code: ESAVI-USERGEO-005B
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...appUserGeoLocationIdValidator, validateFields, activateAppUserGeoLocation);
 
 // Get App User Geo Location by ID
 // Code: ESAVI-USERGEO-003
-// Declared after the literal paths so Express does not capture 'user', 'admin' or 'activate' as an :id
+// Declared after the literal paths so Express does not capture 'user', 'admin', 'reassign' or 'activate' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...appUserGeoLocationIdValidator, validateFields, getAppUserGeoLocationById);
 
 // Update App User Geo Location

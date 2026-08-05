@@ -3,7 +3,7 @@ import { sequelize } from '../database/connection';
 import { AppUser, AppUserGeoLocation, GeoLocation } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
-import { AppDetails, AuthUser, CreateAppUserGeoLocationInput } from '../types';
+import { AppDetails, AuthUser, CreateAppUserGeoLocationInput, ReassignGeoLocationInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -295,11 +295,101 @@ const setAppUserGeoLocationActivationService = async (id: string, authUser: Auth
     }
 }
 
+// ESAVI-USERGEO-006 - Reassign App User Geo Location Service
+// Two rows change, so the whole thing runs in one transaction: either the user moves,
+// or nothing happened. Modelling this as a PUT that swaps geoLocationId would mean an
+// update that sometimes creates records
+const reassignAppUserGeoLocationService = async (id: string, data: ReassignGeoLocationInput, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const source = await AppUserGeoLocation.findByPk(id, { transaction });
+        if (!source) {
+            throw new AppError(getMessage('appUserGeoLocation.notFound', lang), 404, 'USERGEO_006_NOT_FOUND');
+        }
+        // Moving something already closed has no defined meaning
+        if (!source.isActive) {
+            throw new AppError(getMessage('appUserGeoLocation.alreadyInactive', lang, { id }), 409, 'USERGEO_006_ALREADY_INACTIVE');
+        }
+        const targetGeoLocation = await GeoLocation.findOne({
+            where: { geoLocationId: data.geoLocationId, isActive: true },
+            attributes: ['geoLocationId'],
+            transaction
+        });
+        if (!targetGeoLocation) {
+            throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'USERGEO_006_GEOLOC_NOT_FOUND');
+        }
+        // Without this guard the operation would close and reopen the very same row,
+        // leaving two audit entries and no effect
+        if (data.geoLocationId === source.geoLocationId) {
+            throw new AppError(getMessage('appUserGeoLocation.sameGeoLocation', lang), 409, 'USERGEO_006_SAME_GEOLOCATION');
+        }
+        const now = new Date();
+        const targetEntry: AppDetails = {
+            createdAt: now,
+            user: authUser?.userId || 'undefined',
+            method: 'ESAVI-USERGEO-006',
+            detail: `Assignment opened by reassignment from geoLocation ${ source.geoLocationId }`
+        };
+        // Same pair semantics as ESAVI-USERGEO-001: never duplicated, reactivated instead
+        const existingTarget = await AppUserGeoLocation.findOne({
+            where: { userId: source.userId, geoLocationId: data.geoLocationId },
+            transaction
+        });
+        if (existingTarget && existingTarget.isActive) {
+            throw new AppError(getMessage('appUserGeoLocation.assignmentExists', lang), 409, 'USERGEO_006_ASSIGNMENT_EXISTS');
+        }
+        let target: AppUserGeoLocation;
+        if (existingTarget) {
+            const targetAppDetails = Array.isArray(existingTarget.appDetails) ? existingTarget.appDetails : [];
+            await existingTarget.update({
+                isActive: true,
+                deletedAt: null,
+                validTo: null,
+                validFrom: now,
+                assignedByUserId: authUser?.userId ?? null,
+                updatedAt: now,
+                appDetails: [...targetAppDetails, targetEntry]
+            }, { transaction });
+            target = existingTarget;
+        } else {
+            target = await AppUserGeoLocation.create({
+                userId: source.userId,
+                geoLocationId: data.geoLocationId,
+                validFrom: now,
+                validTo: null,
+                assignedByUserId: authUser?.userId ?? null,
+                isActive: true,
+                appDetails: [targetEntry]
+            }, { transaction });
+        }
+        // The source is closed exactly like ESAVI-USERGEO-005A does it
+        const sourceAppDetails = Array.isArray(source.appDetails) ? source.appDetails : [];
+        await source.update({
+            isActive: false,
+            deletedAt: now,
+            validTo: now,
+            updatedAt: now,
+            appDetails: [...sourceAppDetails, {
+                createdAt: now,
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-USERGEO-006',
+                detail: `Assignment closed by reassignment to geoLocation ${ data.geoLocationId }`
+            }]
+        }, { transaction });
+        await transaction.commit();
+        return target;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createAppUserGeoLocationService,
     getAppUserGeoLocationsByUserService,
     getAllAppUserGeoLocationsByUserService,
     getAppUserGeoLocationByIdService,
     updateAppUserGeoLocationService,
-    setAppUserGeoLocationActivationService
+    setAppUserGeoLocationActivationService,
+    reassignAppUserGeoLocationService
 };

@@ -7,7 +7,8 @@ import {
     getAllAppUserGeoLocationsByUserService,
     getAppUserGeoLocationByIdService,
     updateAppUserGeoLocationService,
-    setAppUserGeoLocationActivationService
+    setAppUserGeoLocationActivationService,
+    reassignAppUserGeoLocationService
 } from '../services/appUserGeoLocation.service';
 
 // The `current` default is not the same on both listings, so it is resolved per endpoint
@@ -167,6 +168,27 @@ const activateAppUserGeoLocation = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Reassign App User Geo Location Controller
+// Code: ESAVI-USERGEO-006
+const reassignAppUserGeoLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await reassignAppUserGeoLocationService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.reassignSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-006: Error reassigning App User Geo Location: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.reassignFailed', req.lang), 500, 'USERGEO_006_REASSIGN_FAILED', error));
+    }
+}
+
 export {
     createAppUserGeoLocation,
     getAppUserGeoLocationsByUser,
@@ -174,5 +196,6 @@ export {
     getAppUserGeoLocationById,
     updateAppUserGeoLocation,
     deleteAppUserGeoLocation,
-    activateAppUserGeoLocation
+    activateAppUserGeoLocation,
+    reassignAppUserGeoLocation
 }
