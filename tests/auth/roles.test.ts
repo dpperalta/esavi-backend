@@ -65,6 +65,18 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'delete', path: `/api/health-facilities/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-HFAC-005A' },
     { method: 'patch',  path: `/api/health-facilities/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-HFAC-005B' },
 
+    // appUserGeoLocation
+    { method: 'post',   path: '/api/user-geo-locations',                              minRole: 'ADMIN',      code: 'ESAVI-USERGEO-001' },
+    { method: 'post',   path: '/api/user-geo-locations/bulk',                         minRole: 'ADMIN',      code: 'ESAVI-USERGEO-007' },
+    { method: 'get',    path: `/api/user-geo-locations/user/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-USERGEO-002A' },
+    { method: 'get',    path: `/api/user-geo-locations/admin/user/${ UUID }`,         minRole: 'ADMIN',      code: 'ESAVI-USERGEO-002B' },
+    { method: 'get',    path: `/api/user-geo-locations/user/${ UUID }/coverage`,      minRole: 'USER',       code: 'ESAVI-USERGEO-008' },
+    { method: 'get',    path: `/api/user-geo-locations/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-USERGEO-003' },
+    { method: 'put',    path: `/api/user-geo-locations/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-USERGEO-004' },
+    { method: 'patch',  path: `/api/user-geo-locations/reassign/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-USERGEO-006' },
+    { method: 'delete', path: `/api/user-geo-locations/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-USERGEO-005A' },
+    { method: 'patch',  path: `/api/user-geo-locations/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-USERGEO-005B' },
+
     // user
     { method: 'post',   path: '/api/users', minRole: 'SUPERADMIN', code: 'ESAVI-USER-001' }
 ];
@@ -122,7 +134,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(33);
+            expect(ROUTE_RULES).toHaveLength(43);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
