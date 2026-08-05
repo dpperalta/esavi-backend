@@ -5,12 +5,14 @@ import {
     createAppUserGeoLocation,
     getAppUserGeoLocationsByUser,
     getAllAppUserGeoLocationsByUser,
-    getAppUserGeoLocationById
+    getAppUserGeoLocationById,
+    updateAppUserGeoLocation
 } from '../controllers/appUserGeoLocation.controller';
 import {
     appUserGeoLocationIdValidator,
     appUserGeoLocationListValidator,
     createAppUserGeoLocationValidator,
+    updateAppUserGeoLocationValidator,
     userIdParamValidator
 } from '../validators';
 
@@ -34,5 +36,9 @@ router.get('/admin/user/:userId', tokenValidation, validateUserRole(ADMIN), ...u
 // Code: ESAVI-USERGEO-003
 // Declared after the literal paths so Express does not capture 'user' or 'admin' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...appUserGeoLocationIdValidator, validateFields, getAppUserGeoLocationById);
+
+// Update App User Geo Location
+// Code: ESAVI-USERGEO-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...appUserGeoLocationIdValidator, ...updateAppUserGeoLocationValidator, validateFields, updateAppUserGeoLocation);
 
 export default router;

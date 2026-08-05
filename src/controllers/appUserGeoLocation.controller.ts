@@ -5,7 +5,8 @@ import {
     createAppUserGeoLocationService,
     getAppUserGeoLocationsByUserService,
     getAllAppUserGeoLocationsByUserService,
-    getAppUserGeoLocationByIdService
+    getAppUserGeoLocationByIdService,
+    updateAppUserGeoLocationService
 } from '../services/appUserGeoLocation.service';
 
 // The `current` default is not the same on both listings, so it is resolved per endpoint
@@ -104,9 +105,31 @@ const getAppUserGeoLocationById = async (req: Request, res: Response, next: Next
     }
 }
 
+// Update App User Geo Location Controller
+// Code: ESAVI-USERGEO-004
+const updateAppUserGeoLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateAppUserGeoLocationService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.updateSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-004: Error updating App User Geo Location: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.updatedFailed', req.lang), 500, 'USERGEO_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createAppUserGeoLocation,
     getAppUserGeoLocationsByUser,
     getAllAppUserGeoLocationsByUser,
-    getAppUserGeoLocationById
+    getAppUserGeoLocationById,
+    updateAppUserGeoLocation
 }

@@ -196,9 +196,54 @@ const getAppUserGeoLocationByIdService = async (id: string, lang: string, includ
     return toAssignmentResponse(assignment);
 }
 
+// ESAVI-USERGEO-004 - Update App User Geo Location Service
+// Validity only. Moving an assignment to another geoLocation is ESAVI-USERGEO-006,
+// and the validator already rejects userId and geoLocationId with a 400
+const updateAppUserGeoLocationService = async (id: string, data: Partial<CreateAppUserGeoLocationInput>, authUser: AuthUser | undefined, lang: string) => {
+    const assignment = await AppUserGeoLocation.findByPk(id);
+    if (!assignment) {
+        throw new AppError(getMessage('appUserGeoLocation.notFound', lang), 404, 'USERGEO_004_NOT_FOUND');
+    }
+    if (!assignment.isActive) {
+        throw new AppError(getMessage('appUserGeoLocation.alreadyInactive', lang, { id }), 409, 'USERGEO_004_ALREADY_INACTIVE');
+    }
+    // The range is checked against the resulting row, not against the payload: sending only
+    // validFrom must still be compared with the validTo already stored
+    const targetValidFrom = data.validFrom ? new Date(data.validFrom) : assignment.validFrom;
+    const targetValidTo = data.validTo !== undefined
+        ? ( data.validTo ? new Date(data.validTo) : null )
+        : assignment.validTo ?? null;
+    if (targetValidTo && targetValidTo <= targetValidFrom) {
+        throw new AppError(getMessage('appUserGeoLocation.invalidDateRange', lang), 409, 'USERGEO_004_INVALID_DATE_RANGE');
+    }
+    const currentAppDetails = Array.isArray(assignment.appDetails) ? assignment.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-USERGEO-004',
+        detail: 'Assignment validity updated by service'
+    };
+    const objectToUpdate: Record<string, unknown> = {
+        validFrom: targetValidFrom.getTime() !== new Date(assignment.validFrom).getTime() ? targetValidFrom : undefined,
+        // validTo is nullable, so an explicit null is a real change and cannot be
+        // collapsed with "absent" the way the other update services do it
+        validTo: data.validTo !== undefined ? targetValidTo : undefined
+    };
+    if (objectToUpdate.validFrom === undefined) delete objectToUpdate.validFrom;
+    if (objectToUpdate.validTo === undefined) delete objectToUpdate.validTo;
+
+    await assignment.update({
+        ...objectToUpdate,
+        updatedAt: new Date(),
+        appDetails: [...currentAppDetails, newEntry]
+    });
+    return assignment;
+}
+
 export {
     createAppUserGeoLocationService,
     getAppUserGeoLocationsByUserService,
     getAllAppUserGeoLocationsByUserService,
-    getAppUserGeoLocationByIdService
+    getAppUserGeoLocationByIdService,
+    updateAppUserGeoLocationService
 };
