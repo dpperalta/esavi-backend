@@ -3,7 +3,7 @@ import { sequelize } from '../database/connection';
 import { AppUser, AppUserGeoLocation, GeoLocation } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
-import { AppDetails, AuthUser, CreateAppUserGeoLocationInput, ReassignGeoLocationInput } from '../types';
+import { AppDetails, AuthUser, BulkAssignGeoLocationsInput, CreateAppUserGeoLocationInput, ReassignGeoLocationInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -384,6 +384,94 @@ const reassignAppUserGeoLocationService = async (id: string, data: ReassignGeoLo
     }
 }
 
+// ESAVI-USERGEO-007 - Bulk Assign Geo Locations Service
+// All or nothing: it is the only semantics consistent with the rest of the API, which has
+// no endpoint with partial success
+const bulkAssignGeoLocationsService = async (data: BulkAssignGeoLocationsInput, authUser: AuthUser | undefined, lang: string) => {
+    const { userId, geoLocationIds } = data;
+    const transaction = await sequelize.transaction();
+    try {
+        const user = await AppUser.findOne({
+            where: { userId, isActive: true },
+            attributes: ['userId'],
+            transaction
+        });
+        if (!user) {
+            throw new AppError(getMessage('user.notFound', lang), 404, 'USERGEO_007_USER_NOT_FOUND');
+        }
+        const validFrom = data.validFrom ? new Date(data.validFrom) : new Date();
+        const validTo = data.validTo ? new Date(data.validTo) : null;
+        if (validTo && validTo <= validFrom) {
+            throw new AppError(getMessage('appUserGeoLocation.invalidDateRange', lang), 409, 'USERGEO_007_INVALID_DATE_RANGE');
+        }
+        // One query for the whole batch instead of one per id
+        const geoLocations = await GeoLocation.findAll({
+            where: {
+                geoLocationId: { [Op.in]: geoLocationIds },
+                isActive: true
+            },
+            attributes: ['geoLocationId'],
+            transaction
+        });
+        if (geoLocations.length !== geoLocationIds.length) {
+            const missing = geoLocationIds.length - geoLocations.length;
+            throw new AppError(getMessage('appUserGeoLocation.geoLocationsNotFound', lang, { count: missing }), 404, 'USERGEO_007_GEOLOC_NOT_FOUND');
+        }
+        const existingAssignments = await AppUserGeoLocation.findAll({
+            where: {
+                userId,
+                geoLocationId: { [Op.in]: geoLocationIds }
+            },
+            transaction
+        });
+        // A single active pair aborts the batch before anything is written
+        if (existingAssignments.some(( assignment ) => assignment.isActive)) {
+            throw new AppError(getMessage('appUserGeoLocation.assignmentExists', lang), 409, 'USERGEO_007_ASSIGNMENT_EXISTS');
+        }
+        const now = new Date();
+        const newEntry: AppDetails = {
+            createdAt: now,
+            user: authUser?.userId || 'undefined',
+            method: 'ESAVI-USERGEO-007',
+            detail: 'Assignment created by bulk assignment'
+        };
+        const existingByGeoLocation = new Map(existingAssignments.map(( assignment ) => [assignment.geoLocationId, assignment]));
+        const rows: AppUserGeoLocation[] = [];
+        for( const geoLocationId of geoLocationIds ) {
+            const existing = existingByGeoLocation.get(geoLocationId);
+            // Same pair semantics as ESAVI-USERGEO-001: inactive rows are reactivated, never duplicated
+            if (existing) {
+                const currentAppDetails = Array.isArray(existing.appDetails) ? existing.appDetails : [];
+                await existing.update({
+                    isActive: true,
+                    deletedAt: null,
+                    validTo,
+                    validFrom,
+                    assignedByUserId: authUser?.userId ?? null,
+                    updatedAt: now,
+                    appDetails: [...currentAppDetails, { ...newEntry, detail: 'Assignment reactivated by bulk assignment' }]
+                }, { transaction });
+                rows.push(existing);
+                continue;
+            }
+            rows.push(await AppUserGeoLocation.create({
+                userId,
+                geoLocationId,
+                validFrom,
+                validTo,
+                assignedByUserId: authUser?.userId ?? null,
+                isActive: true,
+                appDetails: [newEntry]
+            }, { transaction }));
+        }
+        await transaction.commit();
+        return { count: rows.length, rows };
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createAppUserGeoLocationService,
     getAppUserGeoLocationsByUserService,
@@ -391,5 +479,6 @@ export {
     getAppUserGeoLocationByIdService,
     updateAppUserGeoLocationService,
     setAppUserGeoLocationActivationService,
-    reassignAppUserGeoLocationService
+    reassignAppUserGeoLocationService,
+    bulkAssignGeoLocationsService
 };

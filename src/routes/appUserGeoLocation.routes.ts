@@ -9,11 +9,13 @@ import {
     updateAppUserGeoLocation,
     deleteAppUserGeoLocation,
     activateAppUserGeoLocation,
-    reassignAppUserGeoLocation
+    reassignAppUserGeoLocation,
+    bulkAssignGeoLocations
 } from '../controllers/appUserGeoLocation.controller';
 import {
     appUserGeoLocationIdValidator,
     appUserGeoLocationListValidator,
+    bulkAssignValidator,
     createAppUserGeoLocationValidator,
     reassignValidator,
     updateAppUserGeoLocationValidator,
@@ -27,6 +29,11 @@ const router = Router();
 // Create App User Geo Location
 // Code: ESAVI-USERGEO-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createAppUserGeoLocationValidator, validateFields, createAppUserGeoLocation);
+
+// Bulk Assign Geo Locations
+// Code: ESAVI-USERGEO-007
+// Declared before /:id so Express does not capture 'bulk' as an :id
+router.post('/bulk', tokenValidation, validateUserRole(ADMIN), ...bulkAssignValidator, validateFields, bulkAssignGeoLocations);
 
 // Get App User Geo Locations By User
 // Code: ESAVI-USERGEO-002A
@@ -46,7 +53,7 @@ router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...
 
 // Get App User Geo Location by ID
 // Code: ESAVI-USERGEO-003
-// Declared after the literal paths so Express does not capture 'user', 'admin', 'reassign' or 'activate' as an :id
+// Declared after the literal paths so Express does not capture 'bulk', 'user', 'admin', 'reassign' or 'activate' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...appUserGeoLocationIdValidator, validateFields, getAppUserGeoLocationById);
 
 // Update App User Geo Location

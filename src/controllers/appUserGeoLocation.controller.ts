@@ -8,7 +8,8 @@ import {
     getAppUserGeoLocationByIdService,
     updateAppUserGeoLocationService,
     setAppUserGeoLocationActivationService,
-    reassignAppUserGeoLocationService
+    reassignAppUserGeoLocationService,
+    bulkAssignGeoLocationsService
 } from '../services/appUserGeoLocation.service';
 
 // The `current` default is not the same on both listings, so it is resolved per endpoint
@@ -189,6 +190,26 @@ const reassignAppUserGeoLocation = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Bulk Assign Geo Locations Controller
+// Code: ESAVI-USERGEO-007
+const bulkAssignGeoLocations = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await bulkAssignGeoLocationsService(req.body, req.user, req.lang);
+        return res.status(201).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.bulkSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-007: Error bulk assigning Geo Locations: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.bulkFailed', req.lang), 500, 'USERGEO_007_BULK_ASSIGN_FAILED', error));
+    }
+}
+
 export {
     createAppUserGeoLocation,
     getAppUserGeoLocationsByUser,
@@ -197,5 +218,6 @@ export {
     updateAppUserGeoLocation,
     deleteAppUserGeoLocation,
     activateAppUserGeoLocation,
-    reassignAppUserGeoLocation
+    reassignAppUserGeoLocation,
+    bulkAssignGeoLocations
 }
