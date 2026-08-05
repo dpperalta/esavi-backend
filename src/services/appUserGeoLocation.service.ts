@@ -1,8 +1,10 @@
 import { Op } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { AppUser, AppUserGeoLocation, GeoLocation } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, CreateAppUserGeoLocationInput } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The PII columns returned for the assigned user, and the geoLocation attributes.
@@ -240,10 +242,64 @@ const updateAppUserGeoLocationService = async (id: string, data: Partial<CreateA
     return assignment;
 }
 
+// ESAVI-USERGEO-005A / 005B - Setting App User Geo Location Active/Inactive Service
+// Closing writes validTo alongside isActive and deletedAt: without it a row can end up
+// active and expired at once, a state no listing knows how to represent
+const setAppUserGeoLocationActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // Reopening a pair whose twin is already active would break the one-row-per-pair
+        // invariant. It can only happen through direct SQL, which the partial index allows
+        if (isActive) {
+            const assignment = await AppUserGeoLocation.findByPk(id, { transaction });
+            if (assignment) {
+                const activeTwin = await AppUserGeoLocation.findOne({
+                    where: {
+                        userId: assignment.userId,
+                        geoLocationId: assignment.geoLocationId,
+                        userGeoLocationId: { [Op.ne]: id },
+                        isActive: true
+                    },
+                    transaction
+                });
+                if (activeTwin) {
+                    throw new AppError(getMessage('appUserGeoLocation.assignmentExists', lang), 409, 'USERGEO_005B_ASSIGNMENT_EXISTS');
+                }
+            }
+        }
+        const assignment = await setEntityActiveStatusService({
+            model: AppUserGeoLocation,
+            where: { userGeoLocationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('appUserGeoLocation.notFound', lang),
+            notFoundCode: `USERGEO_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`appUserGeoLocation.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `USERGEO_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-USERGEO-${ op }`,
+                detail: `Assignment ${ isActive ? 'reopened' : 'closed' } by service`
+            }
+        });
+        // entityActivation.service.ts knows nothing about validTo, so the temporal side of the
+        // close is written here, inside the same transaction
+        await assignment.update({ validTo: isActive ? null : new Date() }, { transaction });
+        await transaction.commit();
+        return assignment;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createAppUserGeoLocationService,
     getAppUserGeoLocationsByUserService,
     getAllAppUserGeoLocationsByUserService,
     getAppUserGeoLocationByIdService,
-    updateAppUserGeoLocationService
+    updateAppUserGeoLocationService,
+    setAppUserGeoLocationActivationService
 };

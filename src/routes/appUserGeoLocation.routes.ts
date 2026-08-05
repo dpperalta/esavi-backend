@@ -6,7 +6,9 @@ import {
     getAppUserGeoLocationsByUser,
     getAllAppUserGeoLocationsByUser,
     getAppUserGeoLocationById,
-    updateAppUserGeoLocation
+    updateAppUserGeoLocation,
+    deleteAppUserGeoLocation,
+    activateAppUserGeoLocation
 } from '../controllers/appUserGeoLocation.controller';
 import {
     appUserGeoLocationIdValidator,
@@ -16,7 +18,7 @@ import {
     userIdParamValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -32,13 +34,21 @@ router.get('/user/:userId', tokenValidation, validateUserRole(USER), ...userIdPa
 // Code: ESAVI-USERGEO-002B
 router.get('/admin/user/:userId', tokenValidation, validateUserRole(ADMIN), ...userIdParamValidator, ...appUserGeoLocationListValidator, validateFields, getAllAppUserGeoLocationsByUser);
 
+// Activate App User Geo Location - For SuperAdmin
+// Code: ESAVI-USERGEO-005B
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...appUserGeoLocationIdValidator, validateFields, activateAppUserGeoLocation);
+
 // Get App User Geo Location by ID
 // Code: ESAVI-USERGEO-003
-// Declared after the literal paths so Express does not capture 'user' or 'admin' as an :id
+// Declared after the literal paths so Express does not capture 'user', 'admin' or 'activate' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...appUserGeoLocationIdValidator, validateFields, getAppUserGeoLocationById);
 
 // Update App User Geo Location
 // Code: ESAVI-USERGEO-004
 router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...appUserGeoLocationIdValidator, ...updateAppUserGeoLocationValidator, validateFields, updateAppUserGeoLocation);
+
+// Soft delete App User Geo Location
+// Code: ESAVI-USERGEO-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...appUserGeoLocationIdValidator, validateFields, deleteAppUserGeoLocation);
 
 export default router;

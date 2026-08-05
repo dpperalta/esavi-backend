@@ -6,7 +6,8 @@ import {
     getAppUserGeoLocationsByUserService,
     getAllAppUserGeoLocationsByUserService,
     getAppUserGeoLocationByIdService,
-    updateAppUserGeoLocationService
+    updateAppUserGeoLocationService,
+    setAppUserGeoLocationActivationService
 } from '../services/appUserGeoLocation.service';
 
 // The `current` default is not the same on both listings, so it is resolved per endpoint
@@ -126,10 +127,52 @@ const updateAppUserGeoLocation = async (req: Request, res: Response, next: NextF
     }
 }
 
+// Delete App User Geo Location Controller
+// Code: ESAVI-USERGEO-005A
+const deleteAppUserGeoLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setAppUserGeoLocationActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.deleteSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-005A: Error deleting App User Geo Location: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.updatedFailed', req.lang), 500, 'USERGEO_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate App User Geo Location Controller - For SuperAdmin
+// Code: ESAVI-USERGEO-005B
+const activateAppUserGeoLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setAppUserGeoLocationActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.activateSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-005B: Error activating App User Geo Location: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.updatedFailed', req.lang), 500, 'USERGEO_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createAppUserGeoLocation,
     getAppUserGeoLocationsByUser,
     getAllAppUserGeoLocationsByUser,
     getAppUserGeoLocationById,
-    updateAppUserGeoLocation
+    updateAppUserGeoLocation,
+    deleteAppUserGeoLocation,
+    activateAppUserGeoLocation
 }
