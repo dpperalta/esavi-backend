@@ -6,7 +6,8 @@ import {
     getActiveAppRolesService,
     getAllAppRolesService,
     getAppRoleByIdService,
-    updateAppRoleService
+    updateAppRoleService,
+    setAppRoleActivationService
 } from '../services/appRole.service';
 
 // Create App Role Controller
@@ -115,10 +116,52 @@ const updateAppRole = async (req: Request, res: Response, next: NextFunction): P
     }
 }
 
+// Delete App Role Controller - Soft delete
+// Code: ESAVI-APPROLE-005A
+const deleteAppRole = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setAppRoleActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appRole.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-APPROLE-005A: Error deleting App Role: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appRole.deletedFailed', req.lang), 500, 'APPROLE_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate App Role Controller - For SuperAdmin
+// Code: ESAVI-APPROLE-005B
+const activateAppRole = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setAppRoleActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appRole.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-APPROLE-005B: Error activating App Role: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appRole.activatedFailed', req.lang), 500, 'APPROLE_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createAppRole,
     getAppRoles,
     getAllAppRoles,
     getAppRoleById,
-    updateAppRole
+    updateAppRole,
+    deleteAppRole,
+    activateAppRole
 }

@@ -1,8 +1,11 @@
 import { Op } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { AppError, getMessage, isSuperAdmin, toConstantCase } from '../helpers';
 import { AppRole, AppUserRole } from '../models';
 import { AppDetails, AuthUser, CreateAppRoleInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { ROLES } from '../constants/roles.constants';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 // sysDetails is trigger metadata, never part of the domain response
 const LIST_EXCLUDE = { exclude: ['sysDetails'] };
@@ -166,10 +169,78 @@ const updateAppRoleService = async (id: string, data: Partial<CreateAppRoleInput
     return toAppRoleResponse(updatedAppRole);
 }
 
+// Set App Role Activation Service - For SuperAdmin on activation
+// Code: ESAVI-APPROLE-005A / 005B
+const setAppRoleActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const appRole = await AppRole.findByPk(id);
+    if( !appRole ) {
+        throw new AppError(getMessage('appRole.notFound', lang), 404, `APPROLE_${ op }_NOT_FOUND`);
+    }
+    if( !isActive ) {
+        // System role guard. It is not written for 005B: that route already demands SUPERADMIN,
+        // so the check would be dead code
+        if( appRole.isSystemRole && !isSuperAdmin(authUser) ) {
+            throw new AppError(getMessage('appRole.systemRole', lang), 403, 'APPROLE_005A_SYSTEM_ROLE');
+        }
+        // Retiring SUPERADMIN would leave nobody able to run 005B, which demands that very role,
+        // and the only way back would be SQL against production. Blocked even without carriers.
+        // Comparing by code works because the seed aligns code with name
+        if( appRole.code === ROLES.SUPERADMIN ) {
+            throw new AppError(getMessage('appRole.superAdminRole', lang), 409, 'APPROLE_005A_SUPERADMIN_ROLE');
+        }
+        // Carriers must be revoked first, or they end up pointing at an inactive role that no
+        // listing knows how to represent. Revoking is SPEC F02's job and stays explicit
+        const count = await AppUserRole.count({ where: { roleId: id, isActive: true } });
+        if( count > 0 ) {
+            throw new AppError(getMessage('appRole.hasActiveAssignments', lang, { count }), 409, 'APPROLE_005A_HAS_ACTIVE_ASSIGNMENTS');
+        }
+    } else {
+        // A role retired long ago may find its code or name taken by a role created since
+        const existingCode = await AppRole.findOne({
+            where: { code: appRole.code, isActive: true, roleId: { [Op.ne]: id } }
+        });
+        if( existingCode ) {
+            throw new AppError(getMessage('appRole.codeExists', lang, { code: appRole.code }), 409, 'APPROLE_005B_CODE_EXISTS');
+        }
+        const existingName = await AppRole.findOne({
+            where: { name: appRole.name, isActive: true, roleId: { [Op.ne]: id } }
+        });
+        if( existingName ) {
+            throw new AppError(getMessage('appRole.nameExists', lang, { name: appRole.name }), 409, 'APPROLE_005B_NAME_EXISTS');
+        }
+    }
+    const transaction = await sequelize.transaction();
+    try {
+        const updatedAppRole = await setEntityActiveStatusService({
+            model: AppRole,
+            where: { roleId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('appRole.notFound', lang),
+            notFoundCode: `APPROLE_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`appRole.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `APPROLE_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-APPROLE-${ op }`,
+                detail: `AppRole ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return updatedAppRole;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createAppRoleService,
     getActiveAppRolesService,
     getAllAppRolesService,
     getAppRoleByIdService,
-    updateAppRoleService
+    updateAppRoleService,
+    setAppRoleActivationService
 }
