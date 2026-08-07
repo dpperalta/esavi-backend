@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { createAppRoleService } from '../services/appRole.service';
+import {
+    createAppRoleService,
+    getActiveAppRolesService,
+    getAllAppRolesService
+} from '../services/appRole.service';
 
 // Create App Role Controller
 // Code: ESAVI-APPROLE-001
@@ -22,6 +26,52 @@ const createAppRole = async (req: Request, res: Response, next: NextFunction): P
     }
 }
 
+// Get App Roles Controller
+// Code: ESAVI-APPROLE-002A
+const getAppRoles = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getActiveAppRolesService(limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appRole.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-APPROLE-002A: Error fetching App Roles: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appRole.getFailedPlural', req.lang), 500, 'APPROLE_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All App Roles Controller - For Admin
+// Code: ESAVI-APPROLE-002B
+const getAllAppRoles = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllAppRolesService(limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appRole.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-APPROLE-002B: Error fetching all App Roles: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appRole.getFailedPlural', req.lang), 500, 'APPROLE_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createAppRole
+    createAppRole,
+    getAppRoles,
+    getAllAppRoles
 }

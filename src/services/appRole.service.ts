@@ -1,6 +1,14 @@
 import { AppError, getMessage, toConstantCase } from '../helpers';
 import { AppRole } from '../models';
 import { AppDetails, AuthUser, CreateAppRoleInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// sysDetails is trigger metadata, never part of the domain response
+const LIST_EXCLUDE = { exclude: ['sysDetails'] };
+
+// A role list is read from most to least authority; alphabetical would put
+// ANALYTICS first and SUPERADMIN last
+const LIST_ORDER: [string, string][] = [['level', 'DESC'], ['name', 'ASC']];
 
 // Highest level the requester currently holds, taken from the roles tokenValidation reloads
 // on every request. validateUserRole cannot express this guard: it compares against a fixed
@@ -52,6 +60,31 @@ const createAppRoleService = async (data: CreateAppRoleInput, authUser: AuthUser
     });
 }
 
+// Get Active App Roles Service
+// Code: ESAVI-APPROLE-002A
+const getActiveAppRolesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    return await AppRole.findAndCountAll({
+        where: { isActive: true },
+        attributes: LIST_EXCLUDE,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
+// Get All App Roles Service - For Admin
+// Code: ESAVI-APPROLE-002B
+const getAllAppRolesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    return await AppRole.findAndCountAll({
+        attributes: LIST_EXCLUDE,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
 export {
-    createAppRoleService
+    createAppRoleService,
+    getActiveAppRolesService,
+    getAllAppRolesService
 }
