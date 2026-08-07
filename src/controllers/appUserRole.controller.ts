@@ -7,7 +7,8 @@ import {
     getAllAppUserRolesByUserService,
     getAppUserRoleByIdService,
     getAppUserRolesByRoleService,
-    setAppUserRoleActivationService
+    setAppUserRoleActivationService,
+    bulkAssignRolesService
 } from '../services/appUserRole.service';
 
 // Assign App User Role Controller
@@ -100,6 +101,26 @@ const getAppUserRoleById = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Bulk Assign Roles Controller
+// Code: ESAVI-USERROLE-007
+const bulkAssignRoles = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await bulkAssignRolesService(req.body, req.user, req.lang);
+        return res.status(201).json({
+            ok: true,
+            message: getMessage('appUserRole.bulkSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERROLE-007: Error bulk assigning App User Roles: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserRole.bulkFailed', req.lang), 500, 'USERROLE_007_CREATION_FAILED', error));
+    }
+}
+
 // Get App User Roles By Role Controller - For Admin
 // Code: ESAVI-USERROLE-006
 const getAppUserRolesByRole = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -170,5 +191,6 @@ export {
     getAppUserRoleById,
     getAppUserRolesByRole,
     revokeAppUserRole,
-    reinstateAppUserRole
+    reinstateAppUserRole,
+    bulkAssignRoles
 };

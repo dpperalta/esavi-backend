@@ -8,11 +8,13 @@ import {
     getAppUserRoleById,
     getAppUserRolesByRole,
     revokeAppUserRole,
-    reinstateAppUserRole
+    reinstateAppUserRole,
+    bulkAssignRoles
 } from '../controllers/appUserRole.controller';
 import {
     appUserRoleIdValidator,
     appUserRoleListValidator,
+    bulkAssignRolesValidator,
     createAppUserRoleValidator,
     roleIdParamValidator,
     userIdParamValidator
@@ -25,6 +27,11 @@ const router = Router();
 // Assign App User Role
 // Code: ESAVI-USERROLE-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createAppUserRoleValidator, validateFields, assignAppUserRole);
+
+// Bulk Assign Roles
+// Code: ESAVI-USERROLE-007
+// Declared before /:id so Express does not capture 'bulk' as an :id
+router.post('/bulk', tokenValidation, validateUserRole(ADMIN), ...bulkAssignRolesValidator, validateFields, bulkAssignRoles);
 
 // Get App User Roles By User
 // Code: ESAVI-USERROLE-002A

@@ -3,7 +3,7 @@ import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
-import { AppDetails, AuthUser, CreateAppUserRoleInput } from '../types';
+import { AppDetails, AuthUser, BulkAssignRolesInput, CreateAppUserRoleInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
@@ -184,6 +184,91 @@ const getAppUserRoleByIdService = async (id: string, lang: string, includeInacti
     return toAssignmentResponse(assignment);
 }
 
+// ESAVI-USERROLE-007 - Bulk Assign Roles Service
+// All or nothing inside one transaction: a single failing role leaves the batch unwritten,
+// so the caller never has to work out which half of the request landed
+const bulkAssignRolesService = async (data: BulkAssignRolesInput, authUser: AuthUser | undefined, lang: string) => {
+    const { userId, roleIds } = data;
+    const transaction = await sequelize.transaction();
+    try {
+        const user = await AppUser.findOne({
+            where: { userId, isActive: true },
+            attributes: ['userId'],
+            transaction
+        });
+        if (!user) {
+            throw new AppError(getMessage('user.notFound', lang), 404, 'USERROLE_007_USER_NOT_FOUND');
+        }
+        // One query for the whole batch instead of one per id
+        const roles = await AppRole.findAll({
+            where: {
+                roleId: { [Op.in]: roleIds },
+                isActive: true
+            },
+            attributes: ['roleId', 'level'],
+            transaction
+        });
+        if (roles.length !== roleIds.length) {
+            const missing = roleIds.length - roles.length;
+            throw new AppError(getMessage('appUserRole.rolesNotFound', lang, { count: missing }), 404, 'USERROLE_007_ROLES_NOT_FOUND');
+        }
+        // The escalation guard covers every requested role, and it runs before anything is written:
+        // one role above the requester's level aborts the whole batch
+        const level = requesterLevel(authUser);
+        if (roles.some(( role ) => role.level > level)) {
+            throw new AppError(getMessage('appUserRole.roleLevelExceeded', lang), 403, 'USERROLE_007_ROLE_LEVEL_EXCEEDED');
+        }
+        const existingAssignments = await AppUserRole.findAll({
+            where: {
+                userId,
+                roleId: { [Op.in]: roleIds }
+            },
+            transaction
+        });
+        // A single active pair aborts the batch before anything is written
+        if (existingAssignments.some(( assignment ) => assignment.isActive)) {
+            throw new AppError(getMessage('appUserRole.assignmentExists', lang), 409, 'USERROLE_007_ASSIGNMENT_EXISTS');
+        }
+        const now = new Date();
+        const newEntry: AppDetails = {
+            createdAt: now,
+            user: authUser?.userId || 'undefined',
+            method: 'ESAVI-USERROLE-007',
+            detail: 'Role assigned by bulk assignment'
+        };
+        const existingByRole = new Map(existingAssignments.map(( assignment ) => [assignment.roleId, assignment]));
+        const rows: AppUserRole[] = [];
+        for( const roleId of roleIds ) {
+            const existing = existingByRole.get(roleId);
+            // Same pair semantics as ESAVI-USERROLE-001: inactive rows are reactivated, never duplicated
+            if (existing) {
+                const currentAppDetails = Array.isArray(existing.appDetails) ? existing.appDetails : [];
+                await existing.update({
+                    isActive: true,
+                    deletedAt: null,
+                    assignedByUserId: authUser?.userId ?? null,
+                    updatedAt: now,
+                    appDetails: [...currentAppDetails, { ...newEntry, detail: 'Role reactivated by bulk assignment' }]
+                }, { transaction });
+                rows.push(existing);
+                continue;
+            }
+            rows.push(await AppUserRole.create({
+                userId,
+                roleId,
+                assignedByUserId: authUser?.userId ?? null,
+                isActive: true,
+                appDetails: [newEntry]
+            }, { transaction }));
+        }
+        await transaction.commit();
+        return { count: rows.length, rows: rows.map(toAssignmentResponse) };
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 // ESAVI-USERROLE-006 - Get App User Roles By Role Service - For Admin
 // Answers "who is SUPERADMIN today". Here the user does travel inside every row and gets
 // decrypted per row: identifying the users is the whole point of the endpoint
@@ -293,5 +378,6 @@ export {
     getAllAppUserRolesByUserService,
     getAppUserRoleByIdService,
     getAppUserRolesByRoleService,
-    setAppUserRoleActivationService
+    setAppUserRoleActivationService,
+    bulkAssignRolesService
 };
