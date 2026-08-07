@@ -30,9 +30,9 @@ export const createAppUserRoleValidator = [
     body('roleId').notEmpty().withMessage('Role ID is required')
         .isUUID().withMessage('Role ID must be a valid UUID').trim(),
     body('validFrom').not().exists()
-        .withMessage('Valid From is not accepted. Role assignment validity is governed by isActive.'),
+        .withMessage('Valid From is not accepted. Role assignment validity is governed by activation.'),
     body('validTo').not().exists()
-        .withMessage('Valid To is not accepted. Role assignment validity is governed by isActive.')
+        .withMessage('Valid To is not accepted. Role assignment validity is governed by activation.')
 ];
 
 export const bulkAssignRolesValidator = [
@@ -46,7 +46,7 @@ export const bulkAssignRolesValidator = [
     body('roleIds').custom((ids: string[]) => !Array.isArray(ids) || new Set(ids).size === ids.length)
         .withMessage('Role IDs must not contain duplicates'),
     body('validFrom').not().exists()
-        .withMessage('Valid From is not accepted. Role assignment validity is governed by isActive.'),
+        .withMessage('Valid From is not accepted. Role assignment validity is governed by activation.'),
     body('validTo').not().exists()
-        .withMessage('Valid To is not accepted. Role assignment validity is governed by isActive.')
+        .withMessage('Valid To is not accepted. Role assignment validity is governed by activation.')
 ];
