@@ -6,6 +6,7 @@ import {
     getAppUserRolesByUserService,
     getAllAppUserRolesByUserService,
     getAppUserRoleByIdService,
+    getAppUserRolesByRoleService,
     setAppUserRoleActivationService
 } from '../services/appUserRole.service';
 
@@ -99,6 +100,29 @@ const getAppUserRoleById = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Get App User Roles By Role Controller - For Admin
+// Code: ESAVI-USERROLE-006
+const getAppUserRolesByRole = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const roleId = (req.params.roleId).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAppUserRolesByRoleService(roleId, req.lang, limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserRole.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERROLE-006: Error getting App User Roles by roleId: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserRole.fetchFailed', req.lang), 500, 'USERROLE_006_FETCH_FAILED', error));
+    }
+}
+
 // Revoke App User Role Controller
 // Code: ESAVI-USERROLE-005A
 const revokeAppUserRole = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -144,6 +168,7 @@ export {
     getAppUserRolesByUser,
     getAllAppUserRolesByUser,
     getAppUserRoleById,
+    getAppUserRolesByRole,
     revokeAppUserRole,
     reinstateAppUserRole
 };

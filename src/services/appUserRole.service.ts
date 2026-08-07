@@ -184,6 +184,32 @@ const getAppUserRoleByIdService = async (id: string, lang: string, includeInacti
     return toAssignmentResponse(assignment);
 }
 
+// ESAVI-USERROLE-006 - Get App User Roles By Role Service - For Admin
+// Answers "who is SUPERADMIN today". Here the user does travel inside every row and gets
+// decrypted per row: identifying the users is the whole point of the endpoint
+const getAppUserRolesByRoleService = async (roleId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    // The same role owns every row of this listing, so it is fetched once for the whole response
+    const role = await AppRole.findOne({
+        where: { roleId },
+        attributes: ROLE_ATTRIBUTES
+    });
+    if (!role) {
+        throw new AppError(getMessage('role.notFound', lang), 404, 'USERROLE_006_ROLE_NOT_FOUND');
+    }
+    const assignments = await AppUserRole.findAndCountAll({
+        where: { roleId, isActive: true },
+        include: [userInclude],
+        order: [['createdAt', 'DESC']],
+        limit,
+        offset
+    });
+    return {
+        count: assignments.count,
+        role: role.toJSON(),
+        rows: assignments.rows.map(toAssignmentResponse)
+    };
+}
+
 // ESAVI-USERROLE-005A / 005B - Setting App User Role Active/Inactive Service
 // Revoking is the operation this whole spec exists for, so it carries two guards that
 // entityActivation.service.ts knows nothing about. validTo is never touched: isActive governs
@@ -266,5 +292,6 @@ export {
     getAppUserRolesByUserService,
     getAllAppUserRolesByUserService,
     getAppUserRoleByIdService,
+    getAppUserRolesByRoleService,
     setAppUserRoleActivationService
 };

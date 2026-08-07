@@ -6,6 +6,7 @@ import {
     getAppUserRolesByUser,
     getAllAppUserRolesByUser,
     getAppUserRoleById,
+    getAppUserRolesByRole,
     revokeAppUserRole,
     reinstateAppUserRole
 } from '../controllers/appUserRole.controller';
@@ -13,6 +14,7 @@ import {
     appUserRoleIdValidator,
     appUserRoleListValidator,
     createAppUserRoleValidator,
+    roleIdParamValidator,
     userIdParamValidator
 } from '../validators';
 
@@ -31,6 +33,11 @@ router.get('/user/:userId', tokenValidation, validateUserRole(USER), ...userIdPa
 // Get All App User Roles By User - For Admin
 // Code: ESAVI-USERROLE-002B
 router.get('/admin/user/:userId', tokenValidation, validateUserRole(ADMIN), ...userIdParamValidator, ...appUserRoleListValidator, validateFields, getAllAppUserRolesByUser);
+
+// Get App User Roles By Role - For Admin
+// Code: ESAVI-USERROLE-006
+// Declared before /:id so Express does not capture 'role' as an :id
+router.get('/role/:roleId', tokenValidation, validateUserRole(ADMIN), ...roleIdParamValidator, ...appUserRoleListValidator, validateFields, getAppUserRolesByRole);
 
 // Reinstate App User Role - For SuperAdmin
 // Code: ESAVI-USERROLE-005B
