@@ -2,6 +2,18 @@ import { AppRole, AppUser, AppUserRole } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, CreateAppUserRoleInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// The PII columns returned for the assigned user, and the appRole attributes.
+// Both are listed column by column so no listing drags the password hash or the audit JSONB along
+const USER_ATTRIBUTES = ['userId', 'username', 'firstName', 'lastName', 'email'];
+const ROLE_ATTRIBUTES = ['roleId', 'code', 'name', 'level'];
+
+const roleInclude = {
+    model: AppRole,
+    as: 'role',
+    attributes: ROLE_ATTRIBUTES
+};
 
 // AppUser PII is stored encrypted, so a raw email is useless to any client.
 // Null-safe because firstName and lastName are optional columns
@@ -95,6 +107,58 @@ const assignAppUserRoleService = async (data: CreateAppUserRoleInput, authUser: 
     return { assignment: toAssignmentResponse(newAssignment), created: true };
 }
 
+// ESAVI-USERROLE-002A - Get App User Roles By User Service
+// Only the assignments in force: a revoked role must not look like a privilege the user still holds
+const getAppUserRolesByUserService = async (userId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    // The same user owns every row of this listing, so it is fetched and decrypted once
+    // for the whole response rather than per row
+    const user = await AppUser.findOne({
+        where: { userId },
+        attributes: USER_ATTRIBUTES
+    });
+    if (!user) {
+        throw new AppError(getMessage('user.notFound', lang), 404, 'USERROLE_002A_USER_NOT_FOUND');
+    }
+    const assignments = await AppUserRole.findAndCountAll({
+        where: { userId, isActive: true },
+        include: [roleInclude],
+        order: [['createdAt', 'DESC']],
+        limit,
+        offset
+    });
+    return {
+        count: assignments.count,
+        user: toUserResponse(user),
+        rows: assignments.rows.map(toAssignmentResponse)
+    };
+}
+
+// ESAVI-USERROLE-002B - Get All App User Roles By User Service - For Admin
+// Same listing without the isActive filter: administration needs to see what was revoked
+const getAllAppUserRolesByUserService = async (userId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const user = await AppUser.findOne({
+        where: { userId },
+        attributes: USER_ATTRIBUTES
+    });
+    if (!user) {
+        throw new AppError(getMessage('user.notFound', lang), 404, 'USERROLE_002B_USER_NOT_FOUND');
+    }
+    const assignments = await AppUserRole.findAndCountAll({
+        where: { userId },
+        include: [roleInclude],
+        order: [['createdAt', 'DESC']],
+        limit,
+        offset
+    });
+    return {
+        count: assignments.count,
+        user: toUserResponse(user),
+        rows: assignments.rows.map(toAssignmentResponse)
+    };
+}
+
 export {
-    assignAppUserRoleService
+    assignAppUserRoleService,
+    getAppUserRolesByUserService,
+    getAllAppUserRolesByUserService
 };
