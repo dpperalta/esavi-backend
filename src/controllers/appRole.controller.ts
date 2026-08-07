@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
 import {
     createAppRoleService,
     getActiveAppRolesService,
-    getAllAppRolesService
+    getAllAppRolesService,
+    getAppRoleByIdService
 } from '../services/appRole.service';
 
 // Create App Role Controller
@@ -70,8 +72,30 @@ const getAllAppRoles = async (req: Request, res: Response, next: NextFunction): 
     }
 }
 
+// Get App Role By ID Controller
+// Code: ESAVI-APPROLE-003
+const getAppRoleById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getAppRoleByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appRole.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-APPROLE-003: Error fetching App Role by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appRole.getFailed', req.lang), 500, 'APPROLE_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createAppRole,
     getAppRoles,
-    getAllAppRoles
+    getAllAppRoles,
+    getAppRoleById
 }

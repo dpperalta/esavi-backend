@@ -1,5 +1,5 @@
 import { AppError, getMessage, toConstantCase } from '../helpers';
-import { AppRole } from '../models';
+import { AppRole, AppUserRole } from '../models';
 import { AppDetails, AuthUser, CreateAppRoleInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -83,8 +83,23 @@ const getAllAppRolesService = async (limit: number = DEFAULT_LIMIT, offset: numb
     });
 }
 
+// Get App Role By ID Service
+// Code: ESAVI-APPROLE-003
+const getAppRoleByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const where = canViewInactive ? { roleId: id } : { roleId: id, isActive: true };
+    const appRole = await AppRole.findOne({ where, attributes: LIST_EXCLUDE });
+    if( !appRole ) {
+        throw new AppError(getMessage('appRole.notFound', lang), 404, 'APPROLE_003_NOT_FOUND');
+    }
+    // 005A refuses to retire a role with carriers. Without this count the client only finds out
+    // by receiving the 409, and has no other way of asking beforehand
+    const activeUserCount = await AppUserRole.count({ where: { roleId: id, isActive: true } });
+    return { ...appRole.toJSON(), activeUserCount };
+}
+
 export {
     createAppRoleService,
     getActiveAppRolesService,
-    getAllAppRolesService
+    getAllAppRolesService,
+    getAppRoleByIdService
 }
