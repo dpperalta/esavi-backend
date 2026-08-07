@@ -179,5 +179,23 @@
         "geoLocationsNotFound": "{{count}} geographic locations do not exist or are inactive. Please check the IDs and try again.",
         "coverageSuccess": "User geographic coverage retrieved successfully",
         "coverageFailed": "Failed to retrieve the user geographic coverage. Please try again later."
+    },
+    "appUserRole": {
+        "assignSuccess": "Role assigned successfully",
+        "reactivateSuccess": "Role assignment reactivated successfully",
+        "assignFailed": "Failed to assign the role. Please try again later.",
+        "getSuccess": "Role assignment retrieved successfully",
+        "fetchFailed": "Failed to retrieve the role assignment. Please try again later.",
+        "notFound": "Role assignment not found. Please check the assignment ID and try again.",
+        "assignmentExists": "The user already has this role actively assigned",
+        "roleLevelExceeded": "You cannot assign a role with a level higher than your own",
+        "lastSuperAdmin": "The last active SUPERADMIN role assignment cannot be revoked",
+        "alreadyActive": "The role assignment with ID {{id}} is already active",
+        "alreadyInactive": "The role assignment with ID {{id}} is already inactive",
+        "revokeSuccess": "Role revoked successfully",
+        "reinstateSuccess": "Role reinstated successfully",
+        "bulkSuccess": "Roles assigned successfully",
+        "bulkFailed": "Failed to assign the roles. Please try again later.",
+        "rolesNotFound": "{{count}} roles do not exist or are inactive. Please check the IDs and try again."
     }
 }

@@ -179,5 +179,23 @@
         "geoLocationsNotFound": "{{count}} geografische locaties bestaan niet of zijn inactief. Controleer de IDs en probeer het opnieuw.",
         "coverageSuccess": "Geografische dekking van de gebruiker succesvol opgehaald",
         "coverageFailed": "Ophalen van de geografische dekking van de gebruiker mislukt. Probeer het later opnieuw."
+    },
+    "appUserRole": {
+        "assignSuccess": "Rol succesvol toegewezen",
+        "reactivateSuccess": "Roltoewijzing succesvol heractiveerd",
+        "assignFailed": "Toewijzen van de rol mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Roltoewijzing succesvol opgehaald",
+        "fetchFailed": "Ophalen van de roltoewijzing mislukt. Probeer het later opnieuw.",
+        "notFound": "Roltoewijzing niet gevonden. Controleer het ID van de toewijzing en probeer het opnieuw.",
+        "assignmentExists": "De gebruiker heeft deze rol al actief toegewezen",
+        "roleLevelExceeded": "U kunt geen rol toewijzen met een hoger niveau dan uw eigen niveau",
+        "lastSuperAdmin": "De laatste actieve toewijzing van de rol SUPERADMIN kan niet worden ingetrokken",
+        "alreadyActive": "De roltoewijzing met ID {{id}} is al actief",
+        "alreadyInactive": "De roltoewijzing met ID {{id}} is al inactief",
+        "revokeSuccess": "Rol succesvol ingetrokken",
+        "reinstateSuccess": "Rol succesvol hersteld",
+        "bulkSuccess": "Rollen succesvol toegewezen",
+        "bulkFailed": "Toewijzen van de rollen mislukt. Probeer het later opnieuw.",
+        "rolesNotFound": "{{count}} rollen bestaan niet of zijn inactief. Controleer de IDs en probeer het opnieuw."
     }
 }
