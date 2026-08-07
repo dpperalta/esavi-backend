@@ -77,6 +77,16 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'delete', path: `/api/user-geo-locations/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-USERGEO-005A' },
     { method: 'patch',  path: `/api/user-geo-locations/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-USERGEO-005B' },
 
+    // appUserRole
+    { method: 'post',   path: '/api/user-roles',                          minRole: 'ADMIN',      code: 'ESAVI-USERROLE-001' },
+    { method: 'post',   path: '/api/user-roles/bulk',                     minRole: 'ADMIN',      code: 'ESAVI-USERROLE-007' },
+    { method: 'get',    path: `/api/user-roles/user/${ UUID }`,           minRole: 'USER',       code: 'ESAVI-USERROLE-002A' },
+    { method: 'get',    path: `/api/user-roles/admin/user/${ UUID }`,     minRole: 'ADMIN',      code: 'ESAVI-USERROLE-002B' },
+    { method: 'get',    path: `/api/user-roles/role/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-USERROLE-006' },
+    { method: 'get',    path: `/api/user-roles/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-USERROLE-003' },
+    { method: 'delete', path: `/api/user-roles/${ UUID }`,                minRole: 'ADMIN',      code: 'ESAVI-USERROLE-005A' },
+    { method: 'patch',  path: `/api/user-roles/activate/${ UUID }`,       minRole: 'SUPERADMIN', code: 'ESAVI-USERROLE-005B' },
+
     // user
     { method: 'post',   path: '/api/users', minRole: 'SUPERADMIN', code: 'ESAVI-USER-001' }
 ];
@@ -134,7 +144,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(43);
+            expect(ROUTE_RULES).toHaveLength(51);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
