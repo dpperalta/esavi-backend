@@ -72,6 +72,7 @@ AppRole.init(
         appDetails: {
             type: DataTypes.JSONB,
             allowNull: true,
+            defaultValue: []
         }
     },
     {
