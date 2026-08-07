@@ -45,7 +45,15 @@ const tokenValidation = async( req: Request, res: Response, next: NextFunction )
             {
                 model: AppRole,
                 as: 'roles',
-                through: { attributes: [] }
+                // A revoked assignment must stop authorizing on the next request, and a role
+                // deactivated system-wide must stop authorizing without revoking it user by user.
+                // validTo is deliberately not filtered: isActive governs the state of an assignment
+                where: { isActive: true },
+                required: false,
+                through: {
+                    attributes: [],
+                    where: { isActive: true, deletedAt: null }
+                }
             }
         ]
     });

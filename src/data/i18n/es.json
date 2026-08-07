@@ -179,5 +179,23 @@
         "geoLocationsNotFound": "{{count}} ubicaciones geográficas no existen o están inactivas. Por favor, verifique los IDs e inténtelo de nuevo.",
         "coverageSuccess": "Cobertura geográfica del usuario obtenida exitosamente",
         "coverageFailed": "Error al obtener la cobertura geográfica del usuario. Por favor, inténtelo de nuevo más tarde."
+    },
+    "appUserRole": {
+        "assignSuccess": "Rol asignado exitosamente",
+        "reactivateSuccess": "Asignación de rol reactivada exitosamente",
+        "assignFailed": "Error al asignar el rol. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Asignación de rol obtenida exitosamente",
+        "fetchFailed": "Error al obtener la asignación de rol. Por favor, inténtelo de nuevo más tarde.",
+        "notFound": "Asignación de rol no encontrada. Por favor, verifique el ID de la asignación e inténtelo de nuevo.",
+        "assignmentExists": "El usuario ya tiene asignado este rol de forma activa",
+        "roleLevelExceeded": "No puede asignar un rol de nivel superior al suyo",
+        "lastSuperAdmin": "No se puede revocar la última asignación activa del rol SUPERADMIN",
+        "alreadyActive": "La asignación de rol con ID {{id}} ya está activa",
+        "alreadyInactive": "La asignación de rol con ID {{id}} ya está inactiva",
+        "revokeSuccess": "Rol revocado exitosamente",
+        "reinstateSuccess": "Rol reinstaurado exitosamente",
+        "bulkSuccess": "Roles asignados exitosamente",
+        "bulkFailed": "Error al asignar los roles. Por favor, inténtelo de nuevo más tarde.",
+        "rolesNotFound": "{{count}} roles no existen o están inactivos. Por favor, verifique los IDs e inténtelo de nuevo."
     }
 }

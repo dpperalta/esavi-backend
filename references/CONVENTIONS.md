@@ -157,6 +157,8 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | appUserGeoLocation | `006` | reasignar — cierra la asignación origen y abre la del destino, transaccional |
 | appUserGeoLocation | `007` | asignación masiva — un usuario a varias geolocalizaciones, todo o nada |
 | appUserGeoLocation | `008` | cobertura efectiva — asignaciones vigentes más sus descendientes |
+| appUserRole | `006` | listar por rol — quiénes tienen asignado un rol concreto |
+| appUserRole | `007` | asignación masiva — varios roles a un usuario, todo o nada |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
@@ -231,6 +233,7 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 | Entidad | Abreviatura |
 |---|---|
 | appUserGeoLocation | `USERGEO` |
+| appUserRole | `USERROLE` |
 | catalogItem | `CATITEM` |
 | catalogType | `CATTYPE` |
 | geoLevelType | `GEOTYPE` |

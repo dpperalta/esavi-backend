@@ -8,11 +8,11 @@ export class AppUserRole
         declare roleId: string
         declare validFrom?: Date;
         declare validTo?: Date;
-        declare assignedByUserId?: string;
+        declare assignedByUserId?: string | null;
         declare isActive?: boolean;
         declare readonly createdAt?: CreationOptional<Date>;
         declare readonly updatedAt?: CreationOptional<Date>;
-        declare deletedAt?: CreationOptional<Date>;
+        declare deletedAt?: CreationOptional<Date | null>;
         declare sysDetails?: CreationOptional<object | null>;
         declare appDetails?: CreationOptional<object | null>;
 }
@@ -36,7 +36,7 @@ AppUserRole.init(
         validFrom: {
             type: DataTypes.DATE,
             allowNull: false,
-            defaultValue: DataTypes.NOW,
+            defaultValue: sequelize.literal('current_timestamp'),
         },
         validTo: {
             type: DataTypes.DATE,
@@ -71,6 +71,7 @@ AppUserRole.init(
         appDetails: {
             type: DataTypes.JSONB,
             allowNull: true,
+            defaultValue: [],
         }
     },
     {

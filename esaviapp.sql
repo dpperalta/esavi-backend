@@ -236,7 +236,7 @@ CREATE INDEX IF NOT EXISTS "IX_catalogItem_active" ON "catalogItem" ("isActive")
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS "appUser" (
   "userId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  "username" citext NOT NULL,
+  "username" citext,
   "email" citext,
   "passwordHash" text,
   "externalProvider" varchar(100),

@@ -68,11 +68,15 @@ if( env === 'development' ) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    message: 'Too many requests from this IP, please try again later.'
-}));
+// Not mounted under test: the role matrix suite issues more than 100 requests from a single
+// IP in one run, and the limiter would turn its last assertions into 429s
+if( env !== 'test' ) {
+    app.use(rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 100, // Limit each IP to 100 requests per windowMs
+        message: 'Too many requests from this IP, please try again later.'
+    }));
+}
 
 // Language middleware
 app.use(languageMiddleware);

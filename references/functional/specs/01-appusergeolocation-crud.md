@@ -1,6 +1,6 @@
 # SPEC F01 — CRUD de appUserGeoLocation
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 04 (consistencia del contrato), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios)
 > **Fecha:** 2026-08-03
 > **Objetivo:** Dar de alta la entidad `appUserGeoLocation` con sus siete artefactos, las siete operaciones canónicas y una octava de reasignación, para que un administrador pueda asignar usuarios a geolocalizaciones con vigencia temporal.
