@@ -15,6 +15,12 @@ const roleInclude = {
     attributes: ROLE_ATTRIBUTES
 };
 
+const userInclude = {
+    model: AppUser,
+    as: 'user',
+    attributes: USER_ATTRIBUTES
+};
+
 // AppUser PII is stored encrypted, so a raw email is useless to any client.
 // Null-safe because firstName and lastName are optional columns
 const decryptField = (value?: string | null) => value ? esaviDecrypt(value) : value ?? null;
@@ -157,8 +163,26 @@ const getAllAppUserRolesByUserService = async (userId: string, lang: string, lim
     };
 }
 
+// ESAVI-USERROLE-003 - Get App User Role By ID Service
+// A revoked assignment is a 404 unless the requester can see inactive rows, which today
+// means SUPERADMIN. includeInactive is resolved at the controller with canViewInactive
+const getAppUserRoleByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const assignment = await AppUserRole.findOne({
+        where: {
+            userRoleId: id,
+            ...( includeInactive ? {} : { isActive: true } )
+        },
+        include: [userInclude, roleInclude]
+    });
+    if (!assignment) {
+        throw new AppError(getMessage('appUserRole.notFound', lang), 404, 'USERROLE_003_NOT_FOUND');
+    }
+    return toAssignmentResponse(assignment);
+}
+
 export {
     assignAppUserRoleService,
     getAppUserRolesByUserService,
-    getAllAppUserRolesByUserService
+    getAllAppUserRolesByUserService,
+    getAppUserRoleByIdService
 };

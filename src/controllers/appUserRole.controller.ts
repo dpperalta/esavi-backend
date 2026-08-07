@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
 import {
     assignAppUserRoleService,
     getAppUserRolesByUserService,
-    getAllAppUserRolesByUserService
+    getAllAppUserRolesByUserService,
+    getAppUserRoleByIdService
 } from '../services/appUserRole.service';
 
 // Assign App User Role Controller
@@ -75,8 +77,30 @@ const getAllAppUserRolesByUser = async (req: Request, res: Response, next: NextF
     }
 }
 
+// Get App User Role By ID Controller
+// Code: ESAVI-USERROLE-003
+const getAppUserRoleById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getAppUserRoleByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserRole.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERROLE-003: Error getting App User Role by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserRole.fetchFailed', req.lang), 500, 'USERROLE_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     assignAppUserRole,
     getAppUserRolesByUser,
-    getAllAppUserRolesByUser
+    getAllAppUserRolesByUser,
+    getAppUserRoleById
 };

@@ -4,9 +4,11 @@ import { ROLES } from '../constants/roles.constants';
 import {
     assignAppUserRole,
     getAppUserRolesByUser,
-    getAllAppUserRolesByUser
+    getAllAppUserRolesByUser,
+    getAppUserRoleById
 } from '../controllers/appUserRole.controller';
 import {
+    appUserRoleIdValidator,
     appUserRoleListValidator,
     createAppUserRoleValidator,
     userIdParamValidator
@@ -27,5 +29,10 @@ router.get('/user/:userId', tokenValidation, validateUserRole(USER), ...userIdPa
 // Get All App User Roles By User - For Admin
 // Code: ESAVI-USERROLE-002B
 router.get('/admin/user/:userId', tokenValidation, validateUserRole(ADMIN), ...userIdParamValidator, ...appUserRoleListValidator, validateFields, getAllAppUserRolesByUser);
+
+// Get App User Role by ID
+// Code: ESAVI-USERROLE-003
+// Declared after the literal paths so Express does not capture 'bulk', 'user', 'admin', 'role' or 'activate' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...appUserRoleIdValidator, validateFields, getAppUserRoleById);
 
 export default router;
