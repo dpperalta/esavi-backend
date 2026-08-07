@@ -5,7 +5,8 @@ import {
     createAppRoleService,
     getActiveAppRolesService,
     getAllAppRolesService,
-    getAppRoleByIdService
+    getAppRoleByIdService,
+    updateAppRoleService
 } from '../services/appRole.service';
 
 // Create App Role Controller
@@ -93,9 +94,31 @@ const getAppRoleById = async (req: Request, res: Response, next: NextFunction): 
     }
 }
 
+// Update App Role Controller
+// Code: ESAVI-APPROLE-004
+const updateAppRole = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateAppRoleService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appRole.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-APPROLE-004: Error updating App Role: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appRole.updatedFailed', req.lang), 500, 'APPROLE_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createAppRole,
     getAppRoles,
     getAllAppRoles,
-    getAppRoleById
+    getAppRoleById,
+    updateAppRole
 }

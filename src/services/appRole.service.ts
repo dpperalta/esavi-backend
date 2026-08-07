@@ -1,4 +1,5 @@
-import { AppError, getMessage, toConstantCase } from '../helpers';
+import { Op } from 'sequelize';
+import { AppError, getMessage, isSuperAdmin, toConstantCase } from '../helpers';
 import { AppRole, AppUserRole } from '../models';
 import { AppDetails, AuthUser, CreateAppRoleInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -9,6 +10,14 @@ const LIST_EXCLUDE = { exclude: ['sysDetails'] };
 // A role list is read from most to least authority; alphabetical would put
 // ANALYTICS first and SUPERADMIN last
 const LIST_ORDER: [string, string][] = [['level', 'DESC'], ['name', 'ASC']];
+
+// create and update return the row through `returning: true`, which brings the trigger-written
+// sysDetails along. Dropped here so 001 and 004 answer with the same shape as a listing row
+const toAppRoleResponse = (appRole: AppRole) => {
+    const plain = appRole.toJSON() as Record<string, unknown>;
+    delete plain.sysDetails;
+    return plain;
+}
 
 // Highest level the requester currently holds, taken from the roles tokenValidation reloads
 // on every request. validateUserRole cannot express this guard: it compares against a fixed
@@ -49,7 +58,7 @@ const createAppRoleService = async (data: CreateAppRoleInput, authUser: AuthUser
     };
     // isSystemRole is written explicitly rather than left to the DDL default: it is an invariant
     // of the spec, not just a promise of the schema. Marking a system role is a seed or SQL job
-    return await AppRole.create({
+    const appRole = await AppRole.create({
         code,
         name,
         description: data.description.trim(),
@@ -58,6 +67,7 @@ const createAppRoleService = async (data: CreateAppRoleInput, authUser: AuthUser
         isActive: true,
         appDetails: [newEntry]
     });
+    return toAppRoleResponse(appRole);
 }
 
 // Get Active App Roles Service
@@ -97,9 +107,69 @@ const getAppRoleByIdService = async (id: string, lang: string, canViewInactive: 
     return { ...appRole.toJSON(), activeUserCount };
 }
 
+// Update App Role Service
+// Code: ESAVI-APPROLE-004
+const updateAppRoleService = async (id: string, data: Partial<CreateAppRoleInput>, authUser: AuthUser | undefined, lang: string) => {
+    const appRole = await AppRole.findByPk(id);
+    if( !appRole ) {
+        throw new AppError(getMessage('appRole.notFound', lang), 404, 'APPROLE_004_NOT_FOUND');
+    }
+    // System role guard: it depends on the record being touched, not on the threshold declared
+    // on the route, so validateUserRole cannot express it and it lives here
+    if( appRole.isSystemRole && !isSuperAdmin(authUser) ) {
+        throw new AppError(getMessage('appRole.systemRole', lang), 403, 'APPROLE_004_SYSTEM_ROLE');
+    }
+    // Lowering the level of a carried role takes authority away from its carriers on their next
+    // request. That is the intended consequence of the column being the source of truth:
+    // a mistyped level has to be correctable
+    if( data.level !== undefined && data.level > requesterLevel(authUser) ) {
+        throw new AppError(getMessage('appRole.levelExceeded', lang), 403, 'APPROLE_004_LEVEL_EXCEEDED');
+    }
+    const code = data.code ? toConstantCase(data.code.trim()) : undefined;
+    if( code && code !== appRole.code ) {
+        const existingCode = await AppRole.findOne({ where: { code, roleId: { [Op.ne]: id } } });
+        if( existingCode ) {
+            throw new AppError(getMessage('appRole.codeExists', lang, { code }), 409, 'APPROLE_004_CODE_EXISTS');
+        }
+    }
+    const name = data.name ? toConstantCase(data.name.trim()) : undefined;
+    if( name && name !== appRole.name ) {
+        const existingName = await AppRole.findOne({ where: { name, roleId: { [Op.ne]: id } } });
+        if( existingName ) {
+            throw new AppError(getMessage('appRole.nameExists', lang, { name }), 409, 'APPROLE_004_NAME_EXISTS');
+        }
+    }
+    const currentAppDetails = Array.isArray(appRole.appDetails) ? appRole.appDetails : [];
+    const objectToUpdate = {
+        code: code && code !== appRole.code ? code : undefined,
+        name: name && name !== appRole.name ? name : undefined,
+        description: data.description && data.description.trim() !== appRole.description ? data.description.trim() : undefined,
+        level: data.level !== undefined && data.level !== appRole.level ? data.level : undefined
+    };
+    if( objectToUpdate.code === undefined ) delete objectToUpdate.code;
+    if( objectToUpdate.name === undefined ) delete objectToUpdate.name;
+    if( objectToUpdate.description === undefined ) delete objectToUpdate.description;
+    if( objectToUpdate.level === undefined ) delete objectToUpdate.level;
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-APPROLE-004',
+        detail: 'App role updated by service'
+    };
+    // The audit entry is written even when no field changed: an update that touched nothing is
+    // still an update someone attempted, and appDetails is the only record of who tried
+    const updatedAppRole = await appRole.update({
+        ...objectToUpdate,
+        updatedAt: new Date(),
+        appDetails: [...currentAppDetails, newEntry]
+    }, { returning: true });
+    return toAppRoleResponse(updatedAppRole);
+}
+
 export {
     createAppRoleService,
     getActiveAppRolesService,
     getAllAppRolesService,
-    getAppRoleByIdService
+    getAppRoleByIdService,
+    updateAppRoleService
 }

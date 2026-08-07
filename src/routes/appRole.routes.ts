@@ -5,12 +5,14 @@ import {
     createAppRole,
     getAllAppRoles,
     getAppRoleById,
-    getAppRoles
+    getAppRoles,
+    updateAppRole
 } from '../controllers/appRole.controller';
 import {
     appRoleIdValidator,
     appRoleListValidator,
-    createAppRoleValidator
+    createAppRoleValidator,
+    updateAppRoleValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -34,5 +36,9 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...appRoleListVal
 // Code: ESAVI-APPROLE-003
 // Declared after the literal paths so Express does not capture 'admin' or 'activate' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...appRoleIdValidator, validateFields, getAppRoleById);
+
+// Update App Role
+// Code: ESAVI-APPROLE-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...appRoleIdValidator, ...updateAppRoleValidator, validateFields, updateAppRole);
 
 export default router;
