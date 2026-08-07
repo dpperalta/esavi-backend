@@ -7,3 +7,4 @@ export * from './catalogType.validator';
 export * from './catalogItem.validator';
 export * from './healthFacility.validator';
 export * from './appUserGeoLocation.validator';
+export * from './appUserRole.validator';
