@@ -5,7 +5,8 @@ import {
     assignAppUserRoleService,
     getAppUserRolesByUserService,
     getAllAppUserRolesByUserService,
-    getAppUserRoleByIdService
+    getAppUserRoleByIdService,
+    setAppUserRoleActivationService
 } from '../services/appUserRole.service';
 
 // Assign App User Role Controller
@@ -98,9 +99,51 @@ const getAppUserRoleById = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Revoke App User Role Controller
+// Code: ESAVI-USERROLE-005A
+const revokeAppUserRole = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setAppUserRoleActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserRole.revokeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERROLE-005A: Error revoking App User Role: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserRole.assignFailed', req.lang), 500, 'USERROLE_005A_DELETE_FAILED', error));
+    }
+}
+
+// Reinstate App User Role Controller - For SuperAdmin
+// Code: ESAVI-USERROLE-005B
+const reinstateAppUserRole = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setAppUserRoleActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserRole.reinstateSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERROLE-005B: Error reinstating App User Role: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserRole.assignFailed', req.lang), 500, 'USERROLE_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     assignAppUserRole,
     getAppUserRolesByUser,
     getAllAppUserRolesByUser,
-    getAppUserRoleById
+    getAppUserRoleById,
+    revokeAppUserRole,
+    reinstateAppUserRole
 };

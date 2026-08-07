@@ -1,8 +1,12 @@
+import { Op } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, CreateAppUserRoleInput } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { ROLES } from '../constants/roles.constants';
 
 // The PII columns returned for the assigned user, and the appRole attributes.
 // Both are listed column by column so no listing drags the password hash or the audit JSONB along
@@ -180,9 +184,87 @@ const getAppUserRoleByIdService = async (id: string, lang: string, includeInacti
     return toAssignmentResponse(assignment);
 }
 
+// ESAVI-USERROLE-005A / 005B - Setting App User Role Active/Inactive Service
+// Revoking is the operation this whole spec exists for, so it carries two guards that
+// entityActivation.service.ts knows nothing about. validTo is never touched: isActive governs
+const setAppUserRoleActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const assignment = await AppUserRole.findByPk(id, { transaction });
+        if (assignment && !isActive) {
+            // Last SUPERADMIN guard. 005B requires SUPERADMIN, so revoking the last active one
+            // would leave nobody able to undo it and direct SQL as the only way back.
+            // The role is matched by code, the only column with a UNIQUE constraint
+            const role = await AppRole.findOne({
+                where: { roleId: assignment.roleId },
+                attributes: ['roleId', 'code'],
+                transaction
+            });
+            if (role && role.code === ROLES.SUPERADMIN) {
+                // A SUPERADMIN sitting on a deactivated user cannot log in, so it is no lifeline
+                const activeSuperAdmins = await AppUserRole.count({
+                    where: { roleId: assignment.roleId, isActive: true },
+                    include: [{
+                        model: AppUser,
+                        as: 'user',
+                        attributes: [],
+                        where: { isActive: true },
+                        required: true
+                    }],
+                    distinct: true,
+                    col: 'userRoleId',
+                    transaction
+                });
+                if (activeSuperAdmins === 1) {
+                    throw new AppError(getMessage('appUserRole.lastSuperAdmin', lang), 409, 'USERROLE_005A_LAST_SUPERADMIN');
+                }
+            }
+        }
+        // Reopening a pair whose twin is already active would break the one-row-per-pair
+        // invariant. It can only happen through direct SQL, which the partial index allows
+        if (assignment && isActive) {
+            const activeTwin = await AppUserRole.findOne({
+                where: {
+                    userId: assignment.userId,
+                    roleId: assignment.roleId,
+                    userRoleId: { [Op.ne]: id },
+                    isActive: true
+                },
+                transaction
+            });
+            if (activeTwin) {
+                throw new AppError(getMessage('appUserRole.assignmentExists', lang), 409, 'USERROLE_005B_ASSIGNMENT_EXISTS');
+            }
+        }
+        const updated = await setEntityActiveStatusService({
+            model: AppUserRole,
+            where: { userRoleId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('appUserRole.notFound', lang),
+            notFoundCode: `USERROLE_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`appUserRole.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `USERROLE_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-USERROLE-${ op }`,
+                detail: `Role ${ isActive ? 'reinstated' : 'revoked' } by service`
+            }
+        });
+        await transaction.commit();
+        return updated;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     assignAppUserRoleService,
     getAppUserRolesByUserService,
     getAllAppUserRolesByUserService,
-    getAppUserRoleByIdService
+    getAppUserRoleByIdService,
+    setAppUserRoleActivationService
 };
