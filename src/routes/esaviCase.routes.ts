@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createEsaviCase, getAllEsaviCases, getEsaviCaseById, getEsaviCases } from '../controllers/esaviCase.controller';
-import { createEsaviCaseValidator, esaviCaseIdValidator, esaviCaseListValidator } from '../validators';
+import { createEsaviCase, getAllEsaviCases, getEsaviCaseById, getEsaviCases, updateEsaviCase } from '../controllers/esaviCase.controller';
+import { createEsaviCaseValidator, esaviCaseIdValidator, esaviCaseListValidator, updateEsaviCaseValidator } from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -27,5 +27,10 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...esaviCaseListV
 // Code: ESAVI-CASE-003
 // Declared after the literal paths so Express does not capture 'admin' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...esaviCaseIdValidator, validateFields, getEsaviCaseById);
+
+// Update ESAVI Case
+// Code: ESAVI-CASE-004
+// USER for the same reason as 001: correcting the case is part of reporting the ESAVI
+router.put('/:id', tokenValidation, validateUserRole(USER), ...esaviCaseIdValidator, ...updateEsaviCaseValidator, validateFields, updateEsaviCase);
 
 export default router;

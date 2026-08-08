@@ -31,7 +31,7 @@ A eso se suma una ausencia respecto a `healthFacility`: el DDL declara `TRG_heal
 
 - Los siete artefactos completos de `esaviCase`: modelo, asociaciones, tipos, validadores, servicio, controlador y ruta.
 - Las siete operaciones canónicas: `001` crear, `002A` listar público, `002B` listar admin, `003` obtener por ID, `004` actualizar, `005A` desactivar, `005B` reactivar.
-- Generación por el sistema de `caseCode` con formato `<localCode>-DDMMYYYY-NNNN`: el `localCode` de la instalación, la `reportDate` del caso en `DDMMYYYY`, y un secuencial de cuatro dígitos que empieza en `0001` y reinicia por **instalación y fecha**. Nunca recibido del cliente, nunca modificable.
+- Generación por el sistema de `caseCode` con formato `<localCode>-DDMMYYYY-NNNN`: el `localCode` de la instalación, la **fecha de registro en el sistema** en `DDMMYYYY`, y un secuencial de cuatro dígitos que empieza en `0001` y reinicia por **instalación y fecha de registro**. Nunca recibido del cliente, nunca modificable.
 - Reintento acotado a tres intentos ante violación de `UQ_esaviCase_caseCode`, recalculando el secuencial en cada intento.
 - Rechazo del alta cuando la instalación no tiene `localCode`: sin prefijo no hay código, y no se inventa uno.
 - Validación de las dos FK obligatorias en create **y** en update: `patientId` y `healthFacilityId` deben existir y estar activos.
@@ -123,7 +123,7 @@ export interface CreateEsaviCaseInput {
 
 `caseCode` **no aparece en la interfaz**. Lo genera el servicio; si el cliente lo manda, se ignora sin error.
 
-`reportDate` es opcional en la entrada aunque sea `NOT NULL` en el DDL: si no llega, el servicio usa la fecha de hoy antes de calcular el `caseCode`. No se delega en el `DEFAULT current_date` de la base, porque el código de caso necesita conocer la fecha **antes** del `INSERT`.
+`reportDate` es opcional en la entrada aunque sea `NOT NULL` en el DDL: si no llega, el servicio usa la fecha de hoy. No se delega en el `DEFAULT current_date` de la base para que la fila y la respuesta coincidan en el mismo valor sin releer. No interviene en el `caseCode`.
 
 El update usa `Partial<CreateEsaviCaseInput>`. No se declara `UpdateEsaviCaseInput`.
 
@@ -156,15 +156,19 @@ No hay operaciones no canónicas: los filtros de listado van por query sobre `00
 5. Normaliza: `.trim().toUpperCase()` en `countryIsoCode`, `toTitleCase` en `notificationOrganization`.
 6. Genera `caseCode` (ver abajo) e inserta con la entrada de auditoría `method: 'ESAVI-CASE-001'`.
 
-**Generación del `caseCode`.** Prefijo `<localCode>` tal cual está guardado, separador `-`, la `reportDate` formateada `DDMMYYYY`, separador `-`, y el secuencial de cuatro dígitos con relleno de ceros. Para `HOSP` y el 6 de agosto de 2026: `HOSP-06082026-0001`.
+**Generación del `caseCode`.** Prefijo `<localCode>` tal cual está guardado, separador `-`, la **fecha de registro en el sistema** formateada `DDMMYYYY`, separador `-`, y el secuencial de cuatro dígitos con relleno de ceros. Para `HOSP` y un caso registrado el 6 de agosto de 2026: `HOSP-06082026-0001`, sea cual sea su `reportDate`.
 
-El secuencial sale de una sola consulta:
+El código se acuña una sola vez, en el alta, y muere con el caso: no lo altera ningún cambio posterior de `reportDate`, `healthFacilityId` ni de ninguna otra columna.
+
+El secuencial sale de una sola consulta sobre el prefijo ya acuñado:
 
 ```
-MAX("caseCode") WHERE "healthFacilityId" = <id> AND "reportDate" = <fecha>
+MAX("caseCode") WHERE "caseCode" LIKE '<localCode>-DDMMYYYY-%'
 ```
 
 y se le suma uno. El máximo lexicográfico coincide con el numérico porque el secuencial tiene ancho fijo con ceros a la izquierda, así que no hace falta parsear la cadena. La consulta **no filtra por `isActive`**: un caso desactivado sigue ocupando su código, y reutilizarlo produciría una violación de `UQ_esaviCase_caseCode`.
+
+El `WHERE` mira el prefijo del código y no columnas de la fila. Filtrar por `healthFacilityId` y `reportDate` —como decía la versión anterior de este spec— abría un agujero determinista: `004` puede mover la `reportDate` de un caso sin regenerar su código, la fila sale del conjunto que el `MAX` consulta, y el siguiente alta propone un código que ya existe. El resultado era un 409 `CASE_001_CODE_EXISTS` **permanente** para esa instalación y esa fecha, no una carrera. Con la fecha de registro congelada dentro del código, ninguna actualización puede sacar una fila del conjunto. Filtrar además por `healthFacilityId` sería redundante: `UQ_healthFacility_localCode` garantiza que el prefijo nombra una sola instalación, que es justo lo que `UQ_esaviCase_caseCode` protege.
 
 **El reintento.** El cálculo no es atómico: dos altas simultáneas en la misma instalación y fecha obtienen el mismo `MAX`. El servicio envuelve el `create` en un bucle de **hasta tres intentos**; ante un `SequelizeUniqueConstraintError` sobre `caseCode` recalcula el máximo y reintenta. Agotados los tres, responde 409 `CASE_001_CODE_EXISTS`. Cualquier otro error se propaga sin reintentar.
 
@@ -257,14 +261,14 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 2. **Claves i18n.** El bloque `esaviCase` completo de §3.6 en `es.json`, `en.json` y `nl.json`.
    *Verificación:* `npm run i18n:check` en 0 y `npm test -- messages` pasa.
 
-3. **Helper de formato del código.** `formatCaseCode(localCode, reportDate, sequence)` en `src/helpers/identifier.helper.ts` —el archivo que crea el SPEC F05—, registrado en `src/helpers/index.ts`. Función pura: no lee la base, no calcula el secuencial, solo compone `<localCode>-DDMMYYYY-NNNN` con relleno de cuatro ceros. El cálculo del secuencial vive en el servicio, que es quien tiene la transacción.
+3. **Helper de formato del código.** `formatCaseCode(localCode, registrationDate, sequence)` y `caseCodePrefix(localCode, registrationDate)` en `src/helpers/identifier.helper.ts` —el archivo que crea el SPEC F05—, registrados en `src/helpers/index.ts`. Funciones puras: no leen la base, no calculan el secuencial; una compone `<localCode>-DDMMYYYY-NNNN` con relleno de cuatro ceros y la otra devuelve el prefijo `<localCode>-DDMMYYYY-` con el que el servicio consulta el máximo. El cálculo del secuencial vive en el servicio, que es quien tiene la transacción.
    *Verificación:* `formatCaseCode('HOSP', '2026-08-06', 1)` devuelve `HOSP-06082026-0001`; con `sequence: 42` devuelve `HOSP-06082026-0042`; con `sequence: 10000` la función lanza en vez de producir un código de cinco dígitos.
 
 4. **Validadores.** `src/validators/esaviCase.validator.ts` con cuatro arrays: `esaviCaseIdValidator`, `esaviCaseListValidator` (los tres filtros de §3.5 más `limit` y `offset`), `createEsaviCaseValidator` (`patientId` y `healthFacilityId` obligatorios y UUID; las tres fechas ISO 8601 y no futuras; `eventDate` no posterior a `reportDate`; `countryIsoCode` de 2 a 5 alfabéticos) y `updateEsaviCaseValidator` (todo opcional, mismas reglas de formato). Alta en `src/validators/index.ts`.
    *Verificación:* `npm run build` en 0; los validadores existen aunque aún no haya rutas que los usen.
 
-5. **`ESAVI-CASE-001` — crear.** `createEsaviCaseService` con los seis pasos de §3.5 en ese orden, la consulta de `MAX("caseCode")` sin filtro de `isActive`, y el bucle de tres reintentos que solo captura `SequelizeUniqueConstraintError` sobre `caseCode`. Controlador y ruta `POST /` con `validateUserRole(USER)`.
-   *Verificación:* el primer caso del día en una instalación devuelve `...-0001` y el segundo `...-0002`; desactivar el `-0002` y crear otro devuelve `-0003`, no `-0002`; un caso en otra instalación el mismo día vuelve a empezar en `-0001`; una instalación sin `localCode` devuelve **409**; un `patientId` inactivo devuelve **404**; enviar `caseCode: "MIO"` en el body no altera el generado; `eventDate` posterior a `reportDate` devuelve **400**.
+5. **`ESAVI-CASE-001` — crear.** `createEsaviCaseService` con los seis pasos de §3.5 en ese orden, la consulta de `MAX("caseCode")` sobre el prefijo y sin filtro de `isActive`, y el bucle de tres reintentos que solo captura `SequelizeUniqueConstraintError` sobre `caseCode`. Controlador y ruta `POST /` con `validateUserRole(USER)`.
+   *Verificación:* el primer caso del día en una instalación devuelve `...-0001` y el segundo `...-0002`; desactivar el `-0002` y crear otro devuelve `-0003`, no `-0002`; un caso en otra instalación el mismo día vuelve a empezar en `-0001`; un alta con `reportDate` de la semana pasada lleva la fecha de hoy en el código y continúa la numeración del día; una instalación sin `localCode` devuelve **409**; un `patientId` inactivo devuelve **404**; enviar `caseCode: "MIO"` en el body no altera el generado; `eventDate` posterior a `reportDate` devuelve **400**.
 
 6. **`ESAVI-CASE-002A` y `002B` — listados.** Dos servicios con `findAndCountAll`, los tres filtros acumulativos de §3.5, includes `patient` y `healthFacility`, orden `reportDate DESC, caseCode DESC`, paginación y forma reducida de §3.7. Dos rutas: `GET /` en USER y `GET /admin` en ADMIN.
    *Verificación:* `/` no devuelve casos inactivos y `/admin` sí; un USER recibe 403 en `/admin`; `?patientId=` de un paciente con dos casos devuelve `count: 2`; `?patientId=` de un UUID inexistente devuelve **200** con `count: 0`; `?reportDateFrom` y `?reportDateTo` juntos acotan el rango por ambos extremos, y cada uno por separado acota solo el suyo; los tres filtros combinados se aplican con `AND`; ninguna fila trae `details` ni `sysDetails`; `?limit=2` devuelve dos filas con el `count` total.
@@ -284,7 +288,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 11. **Cubrir las siete rutas en `tests/auth/roles.test.ts`.** Siete filas nuevas en `ROUTE_RULES` con su `minRole` y su código, y subir el total esperado en siete.
     *Verificación:* `npm test -- roles` pasa.
 
-12. **Suite de contrato `tests/contract/esaviCase.test.ts`.** Recorrido completo con `supertest`, siguiendo el molde de `healthFacility.test.ts`: crear → obtener por ID → listar público y admin con cada filtro → actualizar → desactivar → reactivar. Más los caminos de error: instalación sin `localCode` (409), `patientId` inactivo (404), `healthFacilityId` inexistente (404), `eventDate` posterior a `reportDate` (400), fecha futura (400), alta sin `patientId` (400). Y la secuencia del código: tres altas consecutivas en la misma instalación y fecha producen `-0001`, `-0002` y `-0003`.
+12. **Suite de contrato `tests/contract/esaviCase.test.ts`.** Recorrido completo con `supertest`, siguiendo el molde de `healthFacility.test.ts`: crear → obtener por ID → listar público y admin con cada filtro → actualizar → desactivar → reactivar. Más los caminos de error: instalación sin `localCode` (409), `patientId` inactivo (404), `healthFacilityId` inexistente (404), `eventDate` posterior a `reportDate` (400), fecha futura (400), alta sin `patientId` (400). Y la secuencia del código: tres altas consecutivas en la misma instalación producen `-0001`, `-0002` y `-0003`, con la fecha de registro en el código y sin que una `reportDate` distinta o corregida altere la numeración.
     *Verificación:* `npm test` en verde.
 
 La carrera del secuencial **no queda cubierta por la suite**. Jest corre con `--runInBand` y supertest emite peticiones secuenciales, así que dos altas nunca se solapan de verdad. El reintento del paso 5 se verifica por lectura del código y por el 409 tras agotar los intentos, no por un test de concurrencia. Queda anotado en §7.
@@ -306,11 +310,13 @@ La carrera del secuencial **no queda cubierta por la suite**. Jest corre con `--
 
 **`caseCode`**
 
-- [ ] El primer caso de una instalación en una fecha recibe el sufijo `-0001`, el segundo `-0002` y el tercero `-0003`.
-- [ ] El prefijo es exactamente el `localCode` de la instalación y la fecha es la `reportDate` en `DDMMYYYY`.
+- [ ] El primer caso de una instalación en una fecha de registro recibe el sufijo `-0001`, el segundo `-0002` y el tercero `-0003`.
+- [ ] El prefijo es exactamente el `localCode` de la instalación y la fecha es la de **registro** en `DDMMYYYY`, no la `reportDate`.
+- [ ] Un caso creado hoy con `reportDate` de la semana pasada lleva la fecha de hoy en el código y **no** reinicia el secuencial.
 - [ ] Dos instalaciones distintas el mismo día empiezan las dos en `-0001`.
-- [ ] La misma instalación en dos fechas distintas empieza las dos veces en `-0001`.
-- [ ] Desactivar un caso y crear otro en la misma instalación y fecha **no** reutiliza el código liberado.
+- [ ] La misma instalación en dos fechas de registro distintas empieza las dos veces en `-0001`.
+- [ ] Desactivar un caso y crear otro en la misma instalación y fecha de registro **no** reutiliza el código liberado.
+- [ ] Cambiar la `reportDate` de un caso por `PUT /:id` y crear otro caso a continuación devuelve el siguiente secuencial, nunca un 409.
 - [ ] Crear en una instalación sin `localCode` devuelve **409**, no 500 ni un código con prefijo vacío.
 - [ ] Enviar `caseCode` en el body de `POST /` no altera el código generado.
 - [ ] Enviar `caseCode` en el body de `PUT /:id` deja el código intacto.
@@ -368,10 +374,10 @@ La carrera del secuencial **no queda cubierta por la suite**. Jest corre con `--
 - **Sí:** el prefijo sale de `localCode` y de ningún otro campo. Es el único de `healthFacility` con `UNIQUE` (`UQ_healthFacility_localCode`), así que es el único que garantiza que dos instalaciones no compartan prefijo.
 - **No:** caer a `shortName`, a las primeras letras de `name` o a un literal fijo cuando falta `localCode`. Un prefijo inventado hace que el código deje de identificar la instalación, que es justo lo que el formato promete; y `shortName` no es único, así que dos instalaciones podrían generar el mismo código.
 - **Sí:** 409 y no 400 cuando la instalación no tiene `localCode`. El body del cliente es correcto: lo que impide el alta es el estado de un recurso referenciado.
-- **Sí:** la fecha del código es `reportDate`, no la de creación de la fila. Es el dato de negocio, y es el que el operador tiene delante cuando busca el caso.
-- **No:** usar la fecha de creación para que el código sea monótono. Un caso capturado hoy con fecha de reporte de ayer llevaría la fecha de hoy, y el código diría algo distinto de lo que dice el registro.
-- **Sí:** el secuencial reinicia por instalación y fecha. Cuatro dígitos dan 9999 casos por instalación y día, muy por encima de cualquier volumen real.
-- **Sí:** `MAX("caseCode")` lexicográfico en vez de parsear el sufijo. Con ancho fijo y ceros a la izquierda el orden alfabético coincide con el numérico, y la consulta se resuelve sin `substring` ni casts.
+- **Sí:** la fecha del código es la de **registro en el sistema**, no la `reportDate`. El código se acuña una vez y no cambia nunca: no puede depender de un campo que `004` sí puede corregir. Un caso registrado hoy con reporte de la semana pasada lleva la fecha de hoy, y eso es correcto — el código dice cuándo entró el caso al sistema, no cuándo ocurrió el evento, que para eso están `reportDate` y `eventDate` en la respuesta.
+- **No:** usar `reportDate` para el código, como decía la primera versión de este spec. Con la `reportDate` editable en `004` y el código inmutable, la fecha del código y la de la fila divergen, y el `MAX` filtrado por la columna deja de ver el código ya acuñado: el siguiente alta propone uno que ya existe y la instalación queda bloqueada para esa fecha con un 409 permanente.
+- **Sí:** el secuencial reinicia por instalación y fecha de registro. Cuatro dígitos dan 9999 casos por instalación y día, muy por encima de cualquier volumen real.
+- **Sí:** `MAX("caseCode")` lexicográfico sobre el prefijo, en vez de parsear el sufijo o filtrar por columnas de la fila. Con ancho fijo y ceros a la izquierda el orden alfabético coincide con el numérico, la consulta se resuelve sin `substring` ni casts, y mira el mismo espacio de nombres que `UQ_esaviCase_caseCode` protege.
 - **Sí:** la consulta del máximo **no** filtra por `isActive`. Un caso desactivado conserva su código: reutilizarlo violaría `UQ_esaviCase_caseCode`, y además dos casos históricos distintos compartirían identificador.
 - **Sí:** inmutable en `004`, incluso al cambiar `healthFacilityId` o `reportDate`. Un identificador que cambia deja de identificar, y cualquier documento impreso con el valor anterior queda huérfano. Es la misma decisión que tomó el SPEC F05.
 
@@ -400,7 +406,7 @@ La carrera del secuencial **no queda cubierta por la suite**. Jest corre con `--
 
 - **Sí:** validar `patientId` y `healthFacilityId` existentes **y activos**, en create y en update. `ON DELETE RESTRICT` protege contra el borrado físico, que los triggers ya impiden; no dice nada sobre referenciar una fila desactivada.
 - **Sí:** las tres fechas como `DATEONLY`. Con `DATE`, Sequelize arrastra zona horaria y desplaza la fecha un día según el huso — y esa fecha va dentro del `caseCode`.
-- **Sí:** `reportDate` opcional en la entrada aunque sea `NOT NULL` en el DDL, resuelta en el servicio. El `DEFAULT current_date` de la base llega demasiado tarde: el código de caso necesita la fecha **antes** del `INSERT`.
+- **Sí:** `reportDate` opcional en la entrada aunque sea `NOT NULL` en el DDL, resuelta en el servicio. Con el `DEFAULT current_date` de la base habría que releer la fila para saber qué se guardó; resolverla arriba deja la fila y la respuesta con el mismo valor.
 - **Sí:** rechazar fechas futuras y `eventDate` posterior a `reportDate`. Un evento reportado antes de ocurrir es un error de captura, y es la única coherencia que los datos admiten sin inventar reglas clínicas.
 - **Sí:** comparar las fechas en `004` contra el estado **resultante**, no contra el body. Validar solo lo que llega deja pasar un `eventDate` incoherente con la `reportDate` ya guardada.
 - **No:** validar `countryIsoCode` contra un catálogo. No existe la tabla de países en el esquema; se valida la forma y nada más.
@@ -420,7 +426,7 @@ La carrera del secuencial **no queda cubierta por la suite**. Jest corre con `--
 | La carrera del secuencial no queda cubierta por las pruebas: Jest corre con `--runInBand` y supertest emite peticiones secuenciales, así que dos altas nunca se solapan de verdad | El reintento se verifica por lectura del código y por el 409 tras agotar los tres intentos. Un test de concurrencia real necesitaría un runner paralelo y un esquema de pruebas por worker, que es un cambio de infraestructura de test ajeno a este spec |
 | Tres reintentos pueden no bastar bajo una ráfaga sostenida de altas simultáneas en la misma instalación y fecha, y el operador recibe un 409 por un conflicto que no provocó | El volumen real de casos por instalación y día se cuenta por decenas, no por decenas simultáneas. Si el 409 `CASE_001_CODE_EXISTS` aparece en el log, la salida es subir el número de intentos o pasar al bloqueo explícito, en su propio spec |
 | `localCode` es nullable en `healthFacility` (`esaviapp.sql:449`), así que instalaciones ya cargadas pueden no tenerlo y bloquear el alta de casos con un 409 que el operador no sabe resolver | El mensaje `esaviCase.facilityLocalCodeMissing` nombra la causa. La solución de fondo —hacer `localCode` obligatorio en `healthFacility`— está fuera de alcance y necesita su propio spec, más una revisión de los datos ya cargados |
-| Cambiar el `localCode` de una instalación deja los casos anteriores con un prefijo que ya no corresponde a ningún código vigente | Es la consecuencia de que el `caseCode` sea inmutable, y es la correcta: el código refleja el estado en el momento del reporte. Quien necesite el `localCode` actual lo tiene en el include `healthFacility` de la respuesta |
+| Cambiar el `localCode` de una instalación deja los casos anteriores con un prefijo que ya no corresponde a ningún código vigente | Es la consecuencia de que el `caseCode` sea inmutable, y es la correcta: el código refleja el estado en el momento del registro. Quien necesite el `localCode` actual lo tiene en el include `healthFacility` de la respuesta. La numeración no se rompe: el nuevo `localCode` estrena su propio prefijo y empieza en `-0001`, y los códigos viejos siguen siendo únicos |
 | `GET /:id` captura `admin` como UUID | Las rutas literales se declaran antes de `/:id`; cubierto por la suite de contrato |
 | Las tres fechas como `DATEONLY` devuelven `string`, no `Date`, y un consumidor que espere ISO completo se rompe | Es la representación correcta de una columna `date`. Queda documentado en §3.7; conviene avisar a los consumidores de la API |
 | `createEsaviCase()` (`esaviapp.sql:1379-1396`) omite `healthFacilityId`, que es `NOT NULL`: cualquier llamada falla, y además produciría un caso sin `caseCode` válido | El servicio no la usa y este spec no la corrige. Queda documentada en §1 para que nadie la tome por una vía alternativa de alta |

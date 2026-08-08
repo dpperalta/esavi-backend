@@ -1,6 +1,6 @@
 import { Op, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { EsaviCase, HealthFacility, Patient } from '../models';
-import { AppError, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
+import { AppError, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -115,13 +115,20 @@ const assertHealthFacilityIsValid = async (healthFacilityId: string, op: string,
     return healthFacility;
 }
 
-// The next sequence for a facility and a date. The query does NOT filter by isActive: a
-// deactivated case keeps its code, and reusing it would violate UQ_esaviCase_caseCode.
-// MAX is read lexicographically — the fixed four-digit width with leading zeros makes the
-// alphabetical order match the numeric one, so no substring or cast is needed in SQL
-const nextCaseSequence = async (healthFacilityId: string, reportDate: string): Promise<number> => {
+// The next sequence for a facility and a registration date, read from the codes already minted
+// with that prefix. The query does NOT filter by isActive: a deactivated case keeps its code, and
+// reusing it would violate UQ_esaviCase_caseCode. MAX is read lexicographically — the fixed
+// four-digit width with leading zeros makes the alphabetical order match the numeric one, so no
+// substring or cast is needed in SQL.
+//
+// It matches on the code prefix and not on a column of the row: the registration date is frozen
+// inside the code, so no later update can move a row out of the set this MAX looks at. Filtering
+// by healthFacilityId instead would reopen that hole, and it is redundant anyway — localCode is
+// UNIQUE, so the prefix already names one facility, which is exactly what UQ_esaviCase_caseCode
+// protects
+const nextCaseSequence = async (codePrefix: string): Promise<number> => {
     const maxCaseCode = await EsaviCase.max<string | null, EsaviCase>('caseCode', {
-        where: { healthFacilityId, reportDate }
+        where: { caseCode: { [Op.like]: `${ codePrefix }%` } }
     });
     if( !maxCaseCode ) return 1;
     const suffix = String(maxCaseCode).split('-').pop();
@@ -140,9 +147,14 @@ const isCaseCodeCollision = (error: unknown): boolean =>
 // ignored without an error. If the client chose it, two operators would compete for the same
 // code and the 409 would land on whoever arrived second, for a mistake they did not make
 const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: AuthUser | undefined, lang: string) => {
-    // Resolved here and not left to the DEFAULT current_date of the table: the case code needs
-    // the date BEFORE the insert
+    // Resolved here and not left to the DEFAULT current_date of the table, so the row and the
+    // response agree on the same value
     const reportDate = data.reportDate ? normalizeIsoDate(data.reportDate) : todayIsoDate();
+
+    // The date that goes into the code is the one the case is registered on, never reportDate:
+    // reportDate can still be corrected through 004, and a code minted from a field that can
+    // change would end up naming a day the row no longer claims. Registration happens once
+    const registrationDate = todayIsoDate();
 
     await assertPatientIsValid(data.patientId, '001', lang);
     const healthFacility = await assertHealthFacilityIsValid(data.healthFacilityId, '001', lang);
@@ -174,10 +186,12 @@ const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: Auth
         appDetails: [newEntry]
     };
 
+    const codePrefix = caseCodePrefix(localCode, registrationDate);
+
     let newEsaviCase: EsaviCase | null = null;
     for( let attempt = 1; attempt <= CASE_CODE_MAX_ATTEMPTS; attempt++ ) {
-        const sequence = await nextCaseSequence(data.healthFacilityId, reportDate);
-        const caseCode = formatCaseCode(localCode, reportDate, sequence);
+        const sequence = await nextCaseSequence(codePrefix);
+        const caseCode = formatCaseCode(localCode, registrationDate, sequence);
         try {
             newEsaviCase = await EsaviCase.create({ ...values, caseCode });
             break;
@@ -262,9 +276,74 @@ const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive
     return toEsaviCaseResponse(esaviCase);
 }
 
+// Update ESAVI Case Service
+// Code: ESAVI-CASE-004
+// caseCode is ignored whether or not it arrives in the body, and it is NOT regenerated when
+// healthFacilityId or reportDate change: an identifier that changes stops identifying, and any
+// document already printed with the old value would be orphaned
+const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseInput>, authUser: AuthUser | undefined, lang: string) => {
+    const esaviCase = await EsaviCase.findByPk(id);
+    if( !esaviCase ) {
+        throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_004_NOT_FOUND');
+    }
+
+    if( data.patientId ) {
+        await assertPatientIsValid(data.patientId, '004', lang);
+    }
+    if( data.healthFacilityId ) {
+        await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang);
+    }
+
+    // Coherence is checked against the RESULTING state, not against the body: validating only what
+    // arrives would let through an eventDate incoherent with the reportDate already stored
+    const resultingReportDate = data.reportDate !== undefined
+        ? ( data.reportDate ? normalizeIsoDate(data.reportDate) : null )
+        : esaviCase.reportDate;
+    const resultingEventDate = data.eventDate !== undefined
+        ? ( data.eventDate ? normalizeIsoDate(data.eventDate) : null )
+        : esaviCase.eventDate ?? null;
+    if( resultingEventDate && resultingReportDate && resultingEventDate > resultingReportDate ) {
+        throw new AppError(getMessage('esaviCase.invalidDateRange', lang), 400, 'CASE_004_INVALID_DATE_RANGE');
+    }
+
+    const objectToUpdate: Record<string, unknown> = {
+        patientId: data.patientId ?? undefined,
+        healthFacilityId: data.healthFacilityId ?? undefined,
+        reportDate: data.reportDate ? normalizeIsoDate(data.reportDate) : undefined,
+        eventDate: data.eventDate !== undefined ? ( data.eventDate ? normalizeIsoDate(data.eventDate) : null ) : undefined,
+        countryIsoCode: data.countryIsoCode !== undefined ? ( data.countryIsoCode ? normalizeCountryIsoCode(data.countryIsoCode) : null ) : undefined,
+        reportFillingDate: data.reportFillingDate !== undefined ? ( data.reportFillingDate ? normalizeIsoDate(data.reportFillingDate) : null ) : undefined,
+        notificationOrganization: data.notificationOrganization !== undefined ? ( data.notificationOrganization ? normalizeOrganization(data.notificationOrganization) : null ) : undefined,
+        details: data.details !== undefined ? ( data.details ? data.details.trim() : null ) : undefined
+    };
+    for( const key of Object.keys(objectToUpdate) ) {
+        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    }
+
+    // The entry is written even when nothing changed: the attempt is part of the audit trail
+    const currentAppDetails = Array.isArray(esaviCase.appDetails) ? esaviCase.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CASE-004',
+        detail: 'ESAVI Case updated by service'
+    };
+    await esaviCase.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updatedEsaviCase = await findEsaviCaseWithRelations(id, true);
+    return updatedEsaviCase ? toEsaviCaseResponse(updatedEsaviCase) : null;
+}
+
 export {
     createEsaviCaseService,
     getEsaviCasesService,
     getAllEsaviCasesService,
-    getEsaviCaseByIdService
+    getEsaviCaseByIdService,
+    updateEsaviCaseService
 }

@@ -5,7 +5,8 @@ import {
     createEsaviCaseService,
     getAllEsaviCasesService,
     getEsaviCaseByIdService,
-    getEsaviCasesService
+    getEsaviCasesService,
+    updateEsaviCaseService
 } from '../services/esaviCase.service';
 
 // The three query filters of 002A and 002B. Only what actually arrives travels to the service,
@@ -102,9 +103,31 @@ const getEsaviCaseById = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
+// Update ESAVI Case Controller
+// Code: ESAVI-CASE-004
+const updateEsaviCase = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateEsaviCaseService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('esaviCase.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASE-004: Error updating ESAVI Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('esaviCase.updatedFailed', req.lang), 500, 'CASE_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createEsaviCase,
     getEsaviCases,
     getAllEsaviCases,
-    getEsaviCaseById
+    getEsaviCaseById,
+    updateEsaviCase
 }
