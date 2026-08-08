@@ -15,9 +15,13 @@ interface LoginInput {
 
 // ESAVI-AUTH-001 - Login Service
 const loginService =async({ email, password }: LoginInput, lang: string) => {
+    // Normalized exactly like the creation does. citext does not help here: the column stores
+    // the ciphertext, so Postgres case insensitivity applies to the encrypted text and not to
+    // the address. Without this, a login typed in uppercase produces a different ciphertext
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await AppUser.findOne({
         where: {
-            email: esaviCrypt(email),
+            email: esaviCrypt(normalizedEmail),
             isActive: true
         },
         include: [
@@ -35,6 +39,9 @@ const loginService =async({ email, password }: LoginInput, lang: string) => {
     if( !isPasswordValid ) {
         throw new AppError(getMessage('auth.invalidCredentials', lang), 401, 'AUTH_001_INVALID_CREDENTIALS');
     }
+    // No appDetails entry: a login is not a data audit operation, and one entry per sign-in
+    // would grow the array without a ceiling for something that already has its own column
+    await user.update({ lastLoginAt: new Date() });
     const roles = user.roles?.map((role: AppRole) => ({
         roleId: role.getDataValue('roleId'),
         name: role.getDataValue('name'),
