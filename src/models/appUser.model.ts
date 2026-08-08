@@ -1,5 +1,6 @@
-import { DataTypes, Model, InferAttributes, InferCreationAttributes, CreationOptional, NonAttribute } from 'sequelize';
+import { DataTypes, Model, InferAttributes, InferCreationAttributes, CreationOptional, ForeignKey, NonAttribute } from 'sequelize';
 import { AppRole } from './appRole.model';
+import { CatalogItem } from './catalogItem.model';
 import { sequelize }  from '../database/connection';
 
 export class AppUser
@@ -14,6 +15,8 @@ export class AppUser
         declare firstName?: string;
         declare lastName?: string
         declare phone? : string;
+        declare statusItemId?: ForeignKey<CatalogItem['catalogItemId']> | null;
+        declare lastLoginAt?: CreationOptional<Date | null>;
         declare requiresPasswordChange: boolean;
         declare isActive: boolean;
         declare readonly createdAt?: CreationOptional<Date>;
@@ -23,6 +26,7 @@ export class AppUser
         declare appDetails?: CreationOptional<object | null>;
 
         declare roles?: NonAttribute<AppRole[]>;
+        declare status?: NonAttribute<CatalogItem>;
 }
 
 AppUser.init(
@@ -68,7 +72,15 @@ AppUser.init(
             allowNull: true,
         },
         phone: {
-            type: DataTypes.STRING(150),
+            type: DataTypes.STRING(50),
+            allowNull: true,
+        },
+        statusItemId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+        },
+        lastLoginAt: {
+            type: DataTypes.DATE,
             allowNull: true,
         },
         requiresPasswordChange: {
@@ -101,6 +113,7 @@ AppUser.init(
         appDetails: {
             type: DataTypes.JSONB,
             allowNull: true,
+            defaultValue: [],
         }
     }, 
     {
