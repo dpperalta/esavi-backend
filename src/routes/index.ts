@@ -11,6 +11,7 @@ import healthFacilityRoutes from './healthFacility.routes';
 import appUserGeoLocationRoutes from './appUserGeoLocation.routes';
 import appUserRoleRoutes from './appUserRole.routes';
 import appRoleRoutes from './appRole.routes';
+import patientRoutes from './patient.routes';
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use('/health-facilities', healthFacilityRoutes);
 router.use('/user-geo-locations', appUserGeoLocationRoutes);
 router.use('/user-roles', appUserRoleRoutes);
 router.use('/roles', appRoleRoutes);
+router.use('/patients', patientRoutes);
 
 export default router;

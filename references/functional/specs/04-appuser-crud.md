@@ -1,6 +1,6 @@
 # SPEC F04 — CRUD completo de appUser
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 04 (consistencia del contrato), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios)
 > **Relacionado con:** SPEC F02 (`appUserRole`), que gobierna los roles de un usuario y cuya guarda de escalada se replica aquí en `001`; y SPEC F03 (`appRole`), que hace que `appRole.level` sea la fuente del nivel con el que esa guarda compara
 > **Fecha:** 2026-08-05

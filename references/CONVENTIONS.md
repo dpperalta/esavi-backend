@@ -161,6 +161,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | appUserRole | `007` | asignación masiva — varios roles a un usuario, todo o nada |
 | appUser | `006` | cambiar la propia contraseña — actúa siempre sobre el usuario del token |
 | appUser | `007` | consultar el propio perfil — la ficha del usuario del token |
+| patient | `006` | búsqueda por identificador — documento, pasaporte o código de sistema |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
@@ -242,6 +243,7 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
 | healthFacility | `HFAC` |
+| patient | `PATIENT` |
 | user | `USER` |
 | auth | `AUTH` |
 | seed | `SEED` |

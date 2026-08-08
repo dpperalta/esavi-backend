@@ -105,7 +105,18 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/users/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-USER-003' },
     { method: 'put',    path: `/api/users/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-USER-004' },
     { method: 'delete', path: `/api/users/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-USER-005A' },
-    { method: 'patch',  path: `/api/users/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-USER-005B' }
+    { method: 'patch',  path: `/api/users/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-USER-005B' },
+
+    // patient — 001 and 004 sit at USER on purpose (SPEC F05 §3.4): whoever reports an
+    // ESAVI is operational staff and needs to register the patient who does not exist yet
+    { method: 'post',   path: '/api/patients',                          minRole: 'USER',       code: 'ESAVI-PATIENT-001' },
+    { method: 'get',    path: '/api/patients',                          minRole: 'USER',       code: 'ESAVI-PATIENT-002A' },
+    { method: 'get',    path: '/api/patients/admin',                    minRole: 'ADMIN',      code: 'ESAVI-PATIENT-002B' },
+    { method: 'get',    path: `/api/patients/search/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PATIENT-006' },
+    { method: 'get',    path: `/api/patients/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-PATIENT-003' },
+    { method: 'put',    path: `/api/patients/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-PATIENT-004' },
+    { method: 'delete', path: `/api/patients/${ UUID }`,                minRole: 'ADMIN',      code: 'ESAVI-PATIENT-005A' },
+    { method: 'patch',  path: `/api/patients/activate/${ UUID }`,       minRole: 'SUPERADMIN', code: 'ESAVI-PATIENT-005B' }
 ];
 
 /**
@@ -161,7 +172,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(66);
+            expect(ROUTE_RULES).toHaveLength(74);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

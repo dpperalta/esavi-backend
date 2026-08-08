@@ -1,6 +1,6 @@
 # SPEC F05 — CRUD completo de patient
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F04 (patrón de cifrado PII sobre `appUser`)
 > **Fecha:** 2026-08-05
 > **Objetivo:** Dar de alta la entidad `patient` con sus siete artefactos, sus siete operaciones canónicas y un endpoint de búsqueda por identificador, cifrando los datos personales del paciente.
@@ -41,7 +41,7 @@ A eso se suma una ausencia respecto a `healthFacility`: el DDL declara `TRG_heal
 - Rechazo de `birthDate` en el futuro. La fecha de hoy es el máximo admitido.
 - Alta de la abreviatura `PATIENT` en `references/CONVENTIONS.md` §6, y de `ESAVI-PATIENT-006` en la tabla de operaciones no canónicas de la misma sección.
 - Claves i18n nuevas en `es`, `en` y `nl`.
-- Ocho filas nuevas en `ROUTE_RULES` de `tests/auth/roles.test.ts` y suite `tests/contract/patient.test.ts`.
+- Ocho filas nuevas en `ROUTE_RULES` de `tests/auth/roles.test.ts` (total 66 → 74) y suite `tests/contract/patient.test.ts`.
 
 **Fuera de alcance (otros specs):**
 
@@ -165,7 +165,7 @@ No se comprueba unicidad de `email` ni de `passportNumber`: el DDL no la impone 
 
 **`ESAVI-PATIENT-002B` — listar, admin.** Idéntica, sin `isActive` en el `where`.
 
-**`ESAVI-PATIENT-003` — obtener por ID.** `where` con `isActive: true` salvo que `canViewInactive(req.user)` sea verdadero → 404 `PATIENT_003_NOT_FOUND`. Devuelve la forma completa de §3.7 con los siete campos descifrados.
+**`ESAVI-PATIENT-003` — obtener por ID.** `where` con `isActive: true` salvo que `canViewInactive(req.user)` sea verdadero — hoy **SUPERADMIN**, según `permissions.helper.ts:24-26` → 404 `PATIENT_003_NOT_FOUND`. Devuelve la forma completa de §3.7 con los siete campos descifrados.
 
 **`ESAVI-PATIENT-004` — actualizar.** En este orden:
 
@@ -252,7 +252,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 2. **Claves i18n.** El bloque `patient` completo de §3.6 en `es.json`, `en.json` y `nl.json`.
    *Verificación:* `npm run i18n:check` en 0 y `npm test -- messages` pasa.
 
-3. **Helper de generación del código.** `generateHealthSystemCode()` en `src/helpers/identifier.helper.ts` — archivo nuevo, registrado en `src/helpers/index.ts`. Doce caracteres tomados de `crypto.randomBytes` sobre el alfabeto `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, sin lectura de base de datos. El sesgo del módulo se evita descartando los bytes ≥ 248 en vez de aplicar `% 32` a ciegas.
+3. **Helper de generación del código.** `generateHealthSystemCode()` en `src/helpers/identifier.helper.ts` — archivo nuevo, registrado en `src/helpers/index.ts`. Doce caracteres tomados de `crypto.randomBytes` sobre el alfabeto `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, sin lectura de base de datos. `byte % 32` se aplica directamente, sin rechazo de bytes: el alfabeto tiene exactamente 32 símbolos y 32 divide 256, así que la distribución ya es uniforme. Descartar los bytes ≥ 248 —el umbral que corresponde a un alfabeto de 31— introduciría el sesgo que pretende evitar, favoreciendo los residuos 0–23 en un 14 %.
    *Verificación:* diez mil invocaciones devuelven diez mil cadenas de 12 caracteres, todas distintas, ninguna con `I`, `L`, `O` ni `U`.
 
 4. **Validadores.** `src/validators/patient.validator.ts` con los cinco arrays: `patientIdValidator`, `patientListValidator`, `patientIdentifierValidator` (segmento de `006`: no vacío, máximo 100 caracteres), `createPatientValidator` (`firstName`, `lastName` y `documentNumber` obligatorios; `birthDate` con `.isISO8601()` y rechazo de fechas posteriores a hoy; `sexItemId` y `residenceGeoLocationId` con `.isUUID()` opcional) y `updatePatientValidator` (todo opcional, mismas reglas de formato). Alta en `src/validators/index.ts`.
@@ -265,7 +265,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
    *Verificación:* `/` no devuelve pacientes inactivos y `/admin` sí; un USER recibe 403 en `/admin`; ninguna fila trae `email`, `phoneNumber` ni `sysDetails`; `?limit=2` devuelve dos filas con el `count` total.
 
 7. **`ESAVI-PATIENT-003` — obtener por ID.** `getPatientByIdService(id, lang, includeInactive)` con los dos includes y la forma completa; controlador que pasa `canViewInactive(req.user)`; ruta `GET /:id` declarada **después** de las literales.
-   *Verificación:* un ID inexistente devuelve 404; un paciente desactivado devuelve 404 para USER y 200 para ADMIN; los siete campos PII llegan legibles; `sysDetails` no aparece.
+   *Verificación:* un ID inexistente devuelve 404; un paciente desactivado devuelve 404 para USER y ADMIN, y 200 para SUPERADMIN; los siete campos PII llegan legibles; `sysDetails` no aparece.
 
 8. **`ESAVI-PATIENT-006` — buscar por identificador.** `searchPatientsByIdentifierService` con el `Op.or` de tres condiciones de §3.5, paginado, forma reducida. Ruta `GET /search/:identifier` en USER, declarada antes de `/:id`. El controlador elige el mensaje: `getSuccessPlural` si `count > 0`, `searchEmpty` si `count === 0`.
    *Verificación:* buscar el documento de un paciente lo encuentra; buscar su pasaporte lo encuentra; buscar su `healthSystemCode` lo encuentra; buscar en minúsculas encuentra igual; un valor inexistente devuelve **200** con `count: 0` y el mensaje de búsqueda vacía; dos pacientes con el mismo pasaporte devuelven `count: 2`.
@@ -279,7 +279,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 11. **Registrar la entidad en las convenciones.** Fila `patient` → `PATIENT` en la tabla de abreviaturas de `references/CONVENTIONS.md` §6, y fila `patient` → `006` → «búsqueda por identificador — documento, pasaporte o código de sistema» en la tabla de operaciones no canónicas de la misma sección.
     *Verificación:* la abreviatura aparece una sola vez en la tabla y no colisiona con las nueve existentes.
 
-12. **Cubrir las ocho rutas en `tests/auth/roles.test.ts`.** Ocho filas nuevas en `ROUTE_RULES` con su `minRole` y su código, y subir el total esperado de **43 a 51**.
+12. **Cubrir las ocho rutas en `tests/auth/roles.test.ts`.** Ocho filas nuevas en `ROUTE_RULES` con su `minRole` y su código, y subir el total esperado de **66 a 74**. *(La cifra de 43 que traía este spec quedó obsoleta: `ROUTE_RULES` creció con `appRole`, `appUser`, `appUserRole` y `appUserGeoLocation` después de redactarse.)*
     *Verificación:* `npm test -- roles` pasa.
 
 13. **Suite de contrato `tests/contract/patient.test.ts`.** Recorrido completo con `supertest`, siguiendo el molde de `healthFacility.test.ts`: crear → obtener por ID → buscar por los tres identificadores → actualizar → listar público y admin → desactivar → reactivar. Más los caminos de error: documento duplicado en create y en update (409), `sexItemId` de otro catálogo (404), `residenceGeoLocationId` inactivo (404), `birthDate` futura (400), alta sin `documentNumber` (400), y búsqueda sin resultados (200 con `count: 0`). Verifica además que los campos llegan descifrados y que `sysDetails` no aparece en ninguna respuesta.
@@ -331,11 +331,11 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 
 - [ ] Buscar por documento, por pasaporte y por `healthSystemCode` encuentra al mismo paciente en los tres casos.
 - [ ] Una búsqueda sin coincidencias devuelve **200** con `{ count: 0, rows: [] }` y el mensaje de `patient.searchEmpty`, nunca 404.
-- [ ] Un paciente desactivado no aparece en `006` para USER y sí para ADMIN.
+- [ ] Un paciente desactivado no aparece en `006` para USER ni para ADMIN, y sí para SUPERADMIN.
 
 **Ciclo de vida y auditoría**
 
-- [ ] `GET /:id` de un paciente inactivo: 404 para USER, 200 para ADMIN.
+- [ ] `GET /:id` de un paciente inactivo: 404 para USER y ADMIN, 200 para SUPERADMIN. `canViewInactive` es hoy solo SUPERADMIN (`permissions.helper.ts:24-26`), y el SPEC 06 §«Decisiones» decidió no ampliarlo a ADMIN.
 - [ ] `DELETE /:id` deja `isActive: false` y `deletedAt` con fecha; `PATCH /activate/:id` lo revierte y deja `deletedAt` en `null`.
 - [ ] Desactivar dos veces devuelve 409 `ALREADY_INACTIVE`.
 - [ ] `DELETE /:id` de un paciente con casos ESAVI asociados devuelve 200: no se comprueba ninguna referencia entrante.
@@ -346,7 +346,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 **Cierre**
 
 - [ ] Las claves de §3.6 existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
-- [ ] `ROUTE_RULES` tiene 51 entradas y `npm test -- roles` pasa.
+- [ ] `ROUTE_RULES` tiene 74 entradas y `npm test -- roles` pasa.
 - [ ] `npm run check` sale en 0.
 
 ---

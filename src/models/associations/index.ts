@@ -3,6 +3,7 @@ import { initCatalogAssociations } from './catalog.associations';
 import { initGeographicAssociations } from './geographic.associations';
 import { initHealthFacilityAssociations } from './healthFacility.associations';
 import { initAppUserGeoLocationAssociations } from './appUserGeoLocation.associations';
+import { initPatientAssociations } from './patient.associations';
 
 export const initAssociations = (): void => {
     initAuthAssociations();
@@ -10,4 +11,5 @@ export const initAssociations = (): void => {
     initCatalogAssociations();
     initHealthFacilityAssociations();
     initAppUserGeoLocationAssociations();
+    initPatientAssociations();
 }
