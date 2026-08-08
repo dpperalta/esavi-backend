@@ -252,8 +252,19 @@ const getAllEsaviCasesService = async (
     return { count, rows: rows.map(toEsaviCaseListRow) };
 }
 
+// Get ESAVI Case By ID Service
+// Code: ESAVI-CASE-003
+const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const esaviCase = await findEsaviCaseWithRelations(id, canViewInactive);
+    if( !esaviCase ) {
+        throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_003_NOT_FOUND');
+    }
+    return toEsaviCaseResponse(esaviCase);
+}
+
 export {
     createEsaviCaseService,
     getEsaviCasesService,
-    getAllEsaviCasesService
+    getAllEsaviCasesService,
+    getEsaviCaseByIdService
 }

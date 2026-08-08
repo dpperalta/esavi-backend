@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { EsaviCaseListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, EsaviCaseListFilters } from '../types';
 import {
     createEsaviCaseService,
     getAllEsaviCasesService,
+    getEsaviCaseByIdService,
     getEsaviCasesService
 } from '../services/esaviCase.service';
 
@@ -80,8 +81,30 @@ const getAllEsaviCases = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
+// Get ESAVI Case By ID Controller
+// Code: ESAVI-CASE-003
+const getEsaviCaseById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getEsaviCaseByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('esaviCase.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASE-003: Error fetching ESAVI Case by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('esaviCase.getFailed', req.lang), 500, 'CASE_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createEsaviCase,
     getEsaviCases,
-    getAllEsaviCases
+    getAllEsaviCases,
+    getEsaviCaseById
 }
