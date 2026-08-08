@@ -4,11 +4,12 @@ import { createUserValidator } from '../validators';
 import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
-const { SUPERADMIN } = ROLES;
+const { ADMIN } = ROLES;
 
 const router = Router();
 
-// POST /api/users - Create a new user (SUPERADMIN only)
-router.post('/', tokenValidation, validateUserRole(SUPERADMIN), ...createUserValidator, validateFields, createUser);
+// Create User
+// Code: ESAVI-USER-001
+router.post('/', tokenValidation, validateUserRole(ADMIN), ...createUserValidator, validateFields, createUser);
 
 export default router;
