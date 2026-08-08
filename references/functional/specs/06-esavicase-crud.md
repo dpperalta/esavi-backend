@@ -349,7 +349,7 @@ La carrera del secuencial **no queda cubierta por la suite**. Jest corre con `--
 
 **Ciclo de vida y auditoría**
 
-- [ ] `GET /:id` de un caso inactivo: 404 para USER, 200 para ADMIN.
+- [ ] `GET /:id` de un caso inactivo: 404 para USER y para ADMIN, 200 para SUPERADMIN. La visibilidad la decide `canViewInactive`, que hoy es solo SUPERADMIN (`src/helpers/permissions.helper.ts:24-26`); ampliarlo a ADMIN afectaría a todas las entidades ya implementadas y necesita su propio spec.
 - [ ] `DELETE /:id` deja `isActive: false` y `deletedAt` con fecha; `PATCH /activate/:id` lo revierte y deja `deletedAt` en `null`.
 - [ ] Desactivar dos veces devuelve 409 `CASE_005A_ALREADY_INACTIVE`.
 - [ ] `DELETE` y `PATCH /activate` responden `{ ok, message }` sin `data`.
