@@ -41,7 +41,7 @@ A eso se suma una ausencia respecto a `healthFacility`: el DDL declara `TRG_heal
 - Rechazo de `birthDate` en el futuro. La fecha de hoy es el máximo admitido.
 - Alta de la abreviatura `PATIENT` en `references/CONVENTIONS.md` §6, y de `ESAVI-PATIENT-006` en la tabla de operaciones no canónicas de la misma sección.
 - Claves i18n nuevas en `es`, `en` y `nl`.
-- Ocho filas nuevas en `ROUTE_RULES` de `tests/auth/roles.test.ts` y suite `tests/contract/patient.test.ts`.
+- Ocho filas nuevas en `ROUTE_RULES` de `tests/auth/roles.test.ts` (total 66 → 74) y suite `tests/contract/patient.test.ts`.
 
 **Fuera de alcance (otros specs):**
 
@@ -279,7 +279,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 11. **Registrar la entidad en las convenciones.** Fila `patient` → `PATIENT` en la tabla de abreviaturas de `references/CONVENTIONS.md` §6, y fila `patient` → `006` → «búsqueda por identificador — documento, pasaporte o código de sistema» en la tabla de operaciones no canónicas de la misma sección.
     *Verificación:* la abreviatura aparece una sola vez en la tabla y no colisiona con las nueve existentes.
 
-12. **Cubrir las ocho rutas en `tests/auth/roles.test.ts`.** Ocho filas nuevas en `ROUTE_RULES` con su `minRole` y su código, y subir el total esperado de **43 a 51**.
+12. **Cubrir las ocho rutas en `tests/auth/roles.test.ts`.** Ocho filas nuevas en `ROUTE_RULES` con su `minRole` y su código, y subir el total esperado de **66 a 74**. *(La cifra de 43 que traía este spec quedó obsoleta: `ROUTE_RULES` creció con `appRole`, `appUser`, `appUserRole` y `appUserGeoLocation` después de redactarse.)*
     *Verificación:* `npm test -- roles` pasa.
 
 13. **Suite de contrato `tests/contract/patient.test.ts`.** Recorrido completo con `supertest`, siguiendo el molde de `healthFacility.test.ts`: crear → obtener por ID → buscar por los tres identificadores → actualizar → listar público y admin → desactivar → reactivar. Más los caminos de error: documento duplicado en create y en update (409), `sexItemId` de otro catálogo (404), `residenceGeoLocationId` inactivo (404), `birthDate` futura (400), alta sin `documentNumber` (400), y búsqueda sin resultados (200 con `count: 0`). Verifica además que los campos llegan descifrados y que `sysDetails` no aparece en ninguna respuesta.
@@ -346,7 +346,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 **Cierre**
 
 - [ ] Las claves de §3.6 existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
-- [ ] `ROUTE_RULES` tiene 51 entradas y `npm test -- roles` pasa.
+- [ ] `ROUTE_RULES` tiene 74 entradas y `npm test -- roles` pasa.
 - [ ] `npm run check` sale en 0.
 
 ---
