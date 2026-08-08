@@ -1,6 +1,7 @@
 import { CatalogItem, CatalogType, GeoLocation, Patient } from '../models';
 import { AppError, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreatePatientInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Code of the catalogType that groups the valid sex values. Unlike healthFacility, there is
 // no TRG_patient_validateCatalogs trigger in esaviapp.sql: without this check any active
@@ -32,9 +33,33 @@ const RESIDENCE_INCLUDE = {
     attributes: ['geoLocationId', 'name', 'geoLevelTypeId', 'level']
 };
 
+// A list row carries only three of the seven encrypted columns, so the reduced shape must not
+// grow the other four back as nulls: only the fields actually selected are touched
+const LIST_ATTRIBUTES = ['patientId', 'firstName', 'lastName', 'documentNumber', 'birthDate', 'healthSystemCode', 'isActive'];
+
+// The reduced shape drops the level of the residence: a list needs the name, not the hierarchy
+const LIST_RESIDENCE_INCLUDE = {
+    model: GeoLocation,
+    as: 'residence',
+    attributes: ['geoLocationId', 'name']
+};
+
+// Newest first. Alphabetical is impossible: the names are encrypted and ORDER BY "lastName"
+// would sort by the ciphertext — an arbitrary but stable order that looks like it works
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
+
 // sysDetails is trigger metadata and never leaves the service. The two raw foreign keys go with
 // it: the response carries the resolved sex and residence objects instead
 const DETAIL_EXCLUDE = { exclude: ['sysDetails', 'sexItemId', 'residenceGeoLocationId'] };
+
+const decryptPii = (plain: Record<string, unknown>) => {
+    for( const field of PII_FIELDS ) {
+        if( !( field in plain ) ) continue;
+        const value = plain[field];
+        plain[field] = typeof value === 'string' ? esaviDecrypt(value) : null;
+    }
+    return plain;
+}
 
 // The seven encrypted columns are returned in clear text
 const toPatientResponse = (patient: Patient) => {
@@ -42,12 +67,12 @@ const toPatientResponse = (patient: Patient) => {
     delete plain.sysDetails;
     delete plain.sexItemId;
     delete plain.residenceGeoLocationId;
-    for( const field of PII_FIELDS ) {
-        const value = plain[field];
-        plain[field] = typeof value === 'string' ? esaviDecrypt(value) : null;
-    }
-    return plain;
+    return decryptPii(plain);
 }
+
+// A list has no reason to dump the email and the phone of every person on the page, nor the
+// audit history of each one. Whoever needs them asks for the patient through 003
+const toPatientListRow = (patient: Patient) => decryptPii(patient.toJSON() as Record<string, unknown>);
 
 // The read the write operations share to build their response
 const findPatientWithRelations = async (id: string, includeInactive: boolean = false) => {
@@ -147,6 +172,35 @@ const createPatientService = async (data: CreatePatientInput, authUser: AuthUser
     return createdPatient ? toPatientResponse(createdPatient) : null;
 }
 
+// Get Active Patients Service
+// Code: ESAVI-PATIENT-002A
+const getPatientsService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const { count, rows } = await Patient.findAndCountAll({
+        where: { isActive: true },
+        attributes: LIST_ATTRIBUTES,
+        include: [SEX_INCLUDE, LIST_RESIDENCE_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toPatientListRow) };
+}
+
+// Get All Patients Service - For Admin
+// Code: ESAVI-PATIENT-002B
+const getAllPatientsService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const { count, rows } = await Patient.findAndCountAll({
+        attributes: LIST_ATTRIBUTES,
+        include: [SEX_INCLUDE, LIST_RESIDENCE_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toPatientListRow) };
+}
+
 export {
-    createPatientService
+    createPatientService,
+    getPatientsService,
+    getAllPatientsService
 }
