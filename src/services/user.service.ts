@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole, CatalogItem, CatalogType } from '../models';
 import { AppDetails, AuthUser, CreateUserServiceParams } from '../types';
 import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The catalog statusItemId must belong to. Validated in the service: appUser has no
 // trigger checking the item against its catalog, unlike healthFacility
@@ -28,6 +29,20 @@ const ROLES_INCLUDE = {
     attributes: ['roleId', 'name', 'code', 'level']
 };
 
+// The status catalog item, when the user carries one
+const STATUS_INCLUDE = {
+    model: CatalogItem,
+    as: 'status',
+    attributes: ['catalogItemId', 'code', 'name']
+};
+
+// passwordHash and sysDetails never leave the service
+const LIST_EXCLUDE = { exclude: ['passwordHash', 'sysDetails'] };
+
+// A user list is read newest first. Alphabetical is impossible: the names are encrypted and
+// ORDER BY would sort by the ciphertext
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
+
 // sysDetails is trigger metadata and passwordHash never leaves the service. The five
 // encrypted columns are returned in clear text
 const toUserResponse = (user: AppUser) => {
@@ -38,6 +53,14 @@ const toUserResponse = (user: AppUser) => {
         const value = plain[field];
         plain[field] = typeof value === 'string' ? esaviDecrypt(value) : null;
     }
+    return plain;
+}
+
+// The audit history of every user multiplied by the page size makes the response unreadable.
+// Whoever needs it asks for the user through 003
+const toUserListRow = (user: AppUser) => {
+    const plain = toUserResponse(user);
+    delete plain.appDetails;
     return plain;
 }
 
@@ -156,15 +179,8 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
             where: {
                 userId: user.userId
             },
-            attributes: { exclude: ['passwordHash'] },
-            include: [
-                ROLES_INCLUDE,
-                {
-                    model: CatalogItem,
-                    as: 'status',
-                    attributes: ['catalogItemId', 'code', 'name']
-                }
-            ]
+            attributes: LIST_EXCLUDE,
+            include: [ROLES_INCLUDE, STATUS_INCLUDE]
         });
 
         return userWithRoles ? toUserResponse(userWithRoles) : null;
@@ -174,4 +190,38 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
     }
 }
 
-export { createUserService };
+// Get Active Users Service
+// Code: ESAVI-USER-002A
+const getUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    // distinct keeps the count on users, not on the rows the roles join multiplies
+    const { count, rows } = await AppUser.findAndCountAll({
+        where: { isActive: true },
+        attributes: LIST_EXCLUDE,
+        include: [ROLES_INCLUDE, STATUS_INCLUDE],
+        distinct: true,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toUserListRow) };
+}
+
+// Get All Users Service - For Admin
+// Code: ESAVI-USER-002B
+const getAllUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const { count, rows } = await AppUser.findAndCountAll({
+        attributes: LIST_EXCLUDE,
+        include: [ROLES_INCLUDE, STATUS_INCLUDE],
+        distinct: true,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toUserListRow) };
+}
+
+export {
+    createUserService,
+    getUsersService,
+    getAllUsersService
+};
