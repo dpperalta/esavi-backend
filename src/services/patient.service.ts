@@ -210,6 +210,75 @@ const getPatientByIdService = async (id: string, lang: string, canViewInactive: 
     return toPatientResponse(patient);
 }
 
+// Update Patient Service
+// Code: ESAVI-PATIENT-004
+// healthSystemCode is ignored whether or not it arrives in the body: an identifier that changes
+// stops identifying, and any document already printed with the old value would be orphaned
+const updatePatientService = async (id: string, data: Partial<CreatePatientInput>, authUser: AuthUser | undefined, lang: string) => {
+    const patient = await Patient.findByPk(id);
+    if( !patient ) {
+        throw new AppError(getMessage('patient.notFound', lang), 404, 'PATIENT_004_NOT_FOUND');
+    }
+
+    // Same criterion as 001: uniqueness does not filter by isActive and excludes this record
+    const targetDocumentNumber = data.documentNumber ? esaviCrypt(normalizeDocument(data.documentNumber)) : undefined;
+    if( targetDocumentNumber && targetDocumentNumber !== patient.documentNumber ) {
+        const existingDocument = await Patient.findOne({
+            where: {
+                documentNumber: targetDocumentNumber,
+                patientId: { [Op.ne]: id }
+            },
+            attributes: ['patientId']
+        });
+        if( existingDocument ) {
+            throw new AppError(getMessage('patient.documentExists', lang), 409, 'PATIENT_004_DOCUMENT_EXISTS');
+        }
+    }
+
+    if( data.sexItemId ) {
+        await assertSexItemIsValid(data.sexItemId, '004', lang);
+    }
+    if( data.residenceGeoLocationId ) {
+        await assertResidenceIsValid(data.residenceGeoLocationId, '004', lang);
+    }
+
+    const objectToUpdate: Record<string, unknown> = {
+        firstName: data.firstName ? esaviCrypt(normalizeName(data.firstName)) : undefined,
+        lastName: data.lastName ? esaviCrypt(normalizeName(data.lastName)) : undefined,
+        documentNumber: targetDocumentNumber,
+        middleName: data.middleName !== undefined ? ( data.middleName ? esaviCrypt(normalizeName(data.middleName)) : null ) : undefined,
+        secondLastName: data.secondLastName !== undefined ? ( data.secondLastName ? esaviCrypt(normalizeName(data.secondLastName)) : null ) : undefined,
+        passportNumber: data.passportNumber !== undefined ? ( data.passportNumber ? esaviCrypt(normalizeDocument(data.passportNumber)) : null ) : undefined,
+        email: data.email !== undefined ? ( data.email ? esaviCrypt(normalizeEmail(data.email)) : null ) : undefined,
+        birthDate: data.birthDate !== undefined ? ( data.birthDate ? normalizeBirthDate(data.birthDate) : null ) : undefined,
+        phoneNumber: data.phoneNumber !== undefined ? ( data.phoneNumber ? data.phoneNumber.trim() : null ) : undefined,
+        sexItemId: data.sexItemId !== undefined ? ( data.sexItemId || null ) : undefined,
+        residenceGeoLocationId: data.residenceGeoLocationId !== undefined ? ( data.residenceGeoLocationId || null ) : undefined
+    };
+    for( const key of Object.keys(objectToUpdate) ) {
+        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    }
+
+    // The entry is written even when nothing changed: the attempt is part of the audit trail
+    const currentAppDetails = Array.isArray(patient.appDetails) ? patient.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-PATIENT-004',
+        detail: 'Patient updated by service'
+    };
+    await patient.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updatedPatient = await findPatientWithRelations(id, true);
+    return updatedPatient ? toPatientResponse(updatedPatient) : null;
+}
+
 // Search Patients By Identifier Service
 // Code: ESAVI-PATIENT-006
 // One query over the three identifiers a client can type into a single box. findAndCountAll and
@@ -251,5 +320,6 @@ export {
     getPatientsService,
     getAllPatientsService,
     getPatientByIdService,
+    updatePatientService,
     searchPatientsByIdentifierService
 }

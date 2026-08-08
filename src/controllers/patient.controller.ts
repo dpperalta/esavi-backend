@@ -6,7 +6,8 @@ import {
     getAllPatientsService,
     getPatientByIdService,
     getPatientsService,
-    searchPatientsByIdentifierService
+    searchPatientsByIdentifierService,
+    updatePatientService
 } from '../services/patient.service';
 
 // Create Patient Controller
@@ -94,6 +95,27 @@ const getPatientById = async (req: Request, res: Response, next: NextFunction): 
     }
 }
 
+// Update Patient Controller
+// Code: ESAVI-PATIENT-004
+const updatePatient = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updatePatientService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('patient.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PATIENT-004: Error updating Patient: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('patient.updatedFailed', req.lang), 500, 'PATIENT_004_UPDATE_FAILED', error));
+    }
+}
+
 // Search Patients By Identifier Controller
 // Code: ESAVI-PATIENT-006
 const searchPatientsByIdentifier = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -128,5 +150,6 @@ export {
     getPatients,
     getAllPatients,
     getPatientById,
+    updatePatient,
     searchPatientsByIdentifier
 }

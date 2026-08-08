@@ -6,13 +6,15 @@ import {
     getAllPatients,
     getPatientById,
     getPatients,
-    searchPatientsByIdentifier
+    searchPatientsByIdentifier,
+    updatePatient
 } from '../controllers/patient.controller';
 import {
     createPatientValidator,
     patientIdentifierValidator,
     patientIdValidator,
-    patientListValidator
+    patientListValidator,
+    updatePatientValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -41,5 +43,10 @@ router.get('/search/:identifier', tokenValidation, validateUserRole(USER), ...pa
 // Code: ESAVI-PATIENT-003
 // Declared after the literal paths so Express does not capture 'admin' or 'search' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...patientIdValidator, validateFields, getPatientById);
+
+// Update Patient
+// Code: ESAVI-PATIENT-004
+// USER for the same reason as 001: correcting the patient is part of reporting the ESAVI
+router.put('/:id', tokenValidation, validateUserRole(USER), ...patientIdValidator, ...updatePatientValidator, validateFields, updatePatient);
 
 export default router;
