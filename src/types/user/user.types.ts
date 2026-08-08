@@ -4,7 +4,14 @@ export interface CreateUserInput {
     password: string;
     firstName: string;
     lastName: string;
+    phone?: string | null;
+    statusItemId?: string | null;
     roleId: string | string[];
+}
+
+export interface ChangePasswordInput {
+    currentPassword: string;
+    newPassword: string;
 }
 
 export interface UserRole {
