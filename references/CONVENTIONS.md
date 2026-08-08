@@ -159,6 +159,8 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | appUserGeoLocation | `008` | cobertura efectiva — asignaciones vigentes más sus descendientes |
 | appUserRole | `006` | listar por rol — quiénes tienen asignado un rol concreto |
 | appUserRole | `007` | asignación masiva — varios roles a un usuario, todo o nada |
+| appUser | `006` | cambiar la propia contraseña — actúa siempre sobre el usuario del token |
+| appUser | `007` | consultar el propio perfil — la ficha del usuario del token |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 

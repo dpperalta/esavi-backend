@@ -1,6 +1,16 @@
 ﻿import { NextFunction, Request, Response } from 'express';
-import { createUserService } from '../services/user.service';
-import { esaviLog, getMessage, AppError } from '../helpers';
+import {
+    createUserService,
+    getUsersService,
+    getAllUsersService,
+    getUserByIdService,
+    getOwnProfileService,
+    updateUserService,
+    setUserActivationService,
+    changePasswordService
+} from '../services/user.service';
+import { esaviLog, getMessage, AppError, canViewInactive } from '../helpers';
+import { AuthUser } from '../types';
 
 // Create User Controller
 // Code: ESAVI-USER-001
@@ -22,6 +32,179 @@ const createUser = async ( req: Request, res: Response, next: NextFunction ): Pr
     }
 }
 
+// Get Active Users Controller
+// Code: ESAVI-USER-002A
+const getUsers = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getUsersService(limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-002A: Error getting users: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.getFailedPlural', req.lang), 500, 'USER_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Users Controller - For Admin
+// Code: ESAVI-USER-002B
+const getAllUsers = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllUsersService(limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-002B: Error getting all users: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.getFailedPlural', req.lang), 500, 'USER_002B_FETCH_FAILED', error));
+    }
+}
+
+// Get User By ID Controller
+// Code: ESAVI-USER-003
+const getUserById = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getUserByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-003: Error getting user by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.getFailed', req.lang), 500, 'USER_003_FETCH_FAILED', error));
+    }
+}
+
+// Get Own Profile Controller
+// Code: ESAVI-USER-007
+const getOwnProfile = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try {
+        const data = await getOwnProfileService(req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-007: Error getting own profile: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.getFailed', req.lang), 500, 'USER_007_FETCH_FAILED', error));
+    }
+}
+
+// Update User Controller
+// Code: ESAVI-USER-004
+const updateUser = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateUserService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-004: Error updating user: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.updatedFailed', req.lang), 500, 'USER_004_UPDATE_FAILED', error));
+    }
+}
+
+// Delete User Controller
+// Code: ESAVI-USER-005A
+const deleteUser = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setUserActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-005A: Error deactivating user: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.deletedFailed', req.lang), 500, 'USER_005A_DEACTIVATION_FAILED', error));
+    }
+}
+
+// Activate User Controller
+// Code: ESAVI-USER-005B
+const activateUser = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setUserActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-005B: Error activating user: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.activatedFailed', req.lang), 500, 'USER_005B_ACTIVATION_FAILED', error));
+    }
+}
+
+// Change Own Password Controller
+// Code: ESAVI-USER-006
+const changePassword = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try {
+        await changePasswordService(req.user, req.body, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.passwordChangedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-006: Error changing own password: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.passwordChangedFailed', req.lang), 500, 'USER_006_PASSWORD_CHANGE_FAILED', error));
+    }
+}
+
 export {
-    createUser
+    createUser,
+    getUsers,
+    getAllUsers,
+    getUserById,
+    getOwnProfile,
+    updateUser,
+    deleteUser,
+    activateUser,
+    changePassword
 }

@@ -37,7 +37,27 @@
         "createdSuccess": "Usuario creado exitosamente",
         "createdSuccessPlural": "Usuarios creados exitosamente",
         "createdFailed": "Error al crear el usuario. Por favor, inténtelo de nuevo más tarde.",
-        "createdFailedPlural": "Error al crear los usuarios. Por favor, inténtelo de nuevo más tarde."
+        "createdFailedPlural": "Error al crear los usuarios. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Usuario obtenido exitosamente",
+        "getFailed": "Error al obtener el usuario. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Usuarios obtenidos exitosamente",
+        "getFailedPlural": "Error al obtener los usuarios. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Usuario actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el usuario. Por favor, inténtelo de nuevo más tarde.",
+        "deletedSuccess": "Usuario eliminado exitosamente",
+        "deletedFailed": "Error al eliminar el usuario. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Usuario activado exitosamente",
+        "activatedFailed": "Error al activar el usuario. Por favor, inténtelo de nuevo más tarde.",
+        "passwordChangedSuccess": "Contraseña actualizada exitosamente",
+        "passwordChangedFailed": "Error al actualizar la contraseña. Por favor, inténtelo de nuevo más tarde.",
+        "usernameExists": "Un usuario con el nombre de usuario {{username}} ya existe",
+        "roleLevelExceeded": "No puede asignar un rol de nivel superior al suyo",
+        "selfDeactivation": "No puede desactivar su propio usuario",
+        "lastSuperAdmin": "El usuario no puede desactivarse porque es el último superadministrador activo del sistema",
+        "samePassword": "La nueva contraseña debe ser distinta de la actual",
+        "alreadyActive": "El usuario con ID {{id}} ya está activo",
+        "alreadyInactive": "El usuario con ID {{id}} ya está inactivo",
+        "idRequired": "El ID del usuario es obligatorio"
     },
     "role": {
         "notFound": "Uno o más roles no han sido encontrados. Por favor, verifique los nombres de los roles e inténtelo de nuevo."

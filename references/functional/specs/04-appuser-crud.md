@@ -1,10 +1,12 @@
 # SPEC F04 — CRUD completo de appUser
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 04 (consistencia del contrato), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios)
 > **Relacionado con:** SPEC F02 (`appUserRole`), que gobierna los roles de un usuario y cuya guarda de escalada se replica aquí en `001`; y SPEC F03 (`appRole`), que hace que `appRole.level` sea la fuente del nivel con el que esa guarda compara
 > **Fecha:** 2026-08-05
-> **Objetivo:** Completar las siete operaciones canónicas de `appUser` sobre el único `001` que existe hoy, alinear el modelo con las dos columnas que le faltan, y añadir el cambio de contraseña y la consulta del propio perfil, que hoy no tienen forma de ejecutarse.
+> **Objetivo:** Completar las siete operaciones canónicas de `appUser` sobre el único `001` que existe hoy, y añadir el cambio de contraseña y la consulta del propio perfil, que hoy no tienen forma de ejecutarse.
+>
+> **Enmienda del 2026-08-08 (durante la implementación):** `statusItemId` y `lastLoginAt` **salen del alcance**. `esaviapp.sql:248-249` las declara, pero las bases de datos ya desplegadas se crearon con un esquema anterior y no las tienen; como el DDL usa `CREATE TABLE IF NOT EXISTS`, volver a ejecutarlo no las añade. Antes que arrastrar una migración en un spec de CRUD, se decidió no tocar esas dos columnas. Todo lo que dependía de ellas —el ajuste del modelo, la asociación con `catalogItem`, la validación contra el catálogo `userStatus` en `001` y `004`, y la escritura de `lastLoginAt` en el login— queda **fuera**, y las secciones de abajo se leen con esa enmienda por delante. La normalización del correo en el login **sí se implementó**.
 
 ---
 
@@ -16,7 +18,7 @@ La consecuencia es directa: **un usuario dado de alta no se puede consultar, lis
 
 Cuatro desajustes verificados que este spec resuelve:
 
-**A — El modelo ignora dos columnas que el SQL sí tiene.** `esaviapp.sql:248-249` declara `statusItemId` (FK a `catalogItem`) y `lastLoginAt`, y ninguna de las dos existe en `src/models/appUser.model.ts`. `lastLoginAt` no se escribe nunca: `src/services/auth.service.ts:17-57` autentica, genera el token y no deja rastro de cuándo. Es el dato que responde "¿quién sigue usando el sistema?", y hoy la respuesta solo está en los logs. El catálogo `userStatus` está sembrado en `esaviapp.sql:1579-1582` con `ACTIVE`, `INACTIVE`, `LOCKED` y `PENDING_ACTIVATION`, esperando a que alguien lo use.
+**A — El modelo ignora dos columnas que el SQL sí tiene.** *(Fuera de alcance por la enmienda: las bases desplegadas no tienen esas columnas.)* `esaviapp.sql:248-249` declara `statusItemId` (FK a `catalogItem`) y `lastLoginAt`, y ninguna de las dos existe en `src/models/appUser.model.ts`. `lastLoginAt` no se escribe nunca: `src/services/auth.service.ts:17-57` autentica, genera el token y no deja rastro de cuándo. Es el dato que responde "¿quién sigue usando el sistema?", y hoy la respuesta solo está en los logs. El catálogo `userStatus` está sembrado en `esaviapp.sql:1579-1582` con `ACTIVE`, `INACTIVE`, `LOCKED` y `PENDING_ACTIVATION`, esperando a que alguien lo use.
 
 **B — La unicidad está mal delimitada, y por partida doble.** `src/services/user.service.ts:18-24` busca el correo existente filtrando por `isActive: true`, contra el canon de §11: un correo ocupado por un usuario dado de baja **sigue ocupado** para `UQ_appUser_email`, así que la validación lo deja pasar y Postgres lo rechaza con `23505` — el cliente recibe **500** donde le corresponde **409**. Y `username` no se comprueba en absoluto: `UQ_appUser_username` existe en `esaviapp.sql:257` y el servicio no lo mira, con el mismo desenlace.
 
@@ -35,10 +37,9 @@ Dos divergencias que **no** son desajustes y se documentan en §3.2: `email` y `
 - Las **seis operaciones canónicas que faltan**: `002A` listar, `002B` listar para administración, `003` obtener por ID, `004` actualizar, `005A` desactivar y `005B` reactivar. El `001` ya existe y se corrige.
 - **Dos operaciones no canónicas:** `006` cambiar la propia contraseña (`PATCH /me/password`) y `007` consultar el propio perfil (`GET /me`). Se registran en la tabla de operaciones no canónicas de `references/CONVENTIONS.md` §6, siguiendo el precedente de `USERGEO`.
 - **`001` baja de SUPERADMIN a ADMIN**, alineándose con la matriz canónica de §9, **con guarda de escalada**: un ADMIN solo puede dar de alta usuarios con roles de nivel menor o igual al suyo; un SUPERADMIN puede asignar cualquiera. Es la misma guarda que SPEC F02 §3.5 aplica a `USERROLE-001`, aquí sobre el `roleId` del alta.
-- **Ajustes del modelo:** se añaden `statusItemId` y `lastLoginAt`; `phone` corrige su longitud de 150 a 50; `appDetails` recibe `defaultValue: []`.
+- **Ajustes del modelo:** `phone` corrige su longitud de 150 a 50; `appDetails` recibe `defaultValue: []`. *(Enmienda: `statusItemId` y `lastLoginAt` no se añaden.)*
 - **Unicidad corregida:** `email` y `username` se comprueban **sin filtrar por `isActive`**, sobre el valor ya cifrado, y excluyendo el propio registro en update con `[Op.ne]`. `username` solo se comprueba cuando viene, porque es opcional; sin la comprobación, `UQ_appUser_username` devolvería 500 en vez de 409.
-- **`statusItemId` validado contra `catalogType.code = 'userStatus'`** en `001` y `004`, con el filtro **activo** — no comentado, como quedó en `healthFacility` hasta el SPEC 09.
-- **`lastLoginAt` escrito por `loginService`** en cada autenticación correcta, y **normalización del correo en el login**, igual que en el alta. Son las dos únicas modificaciones de `src/services/auth.service.ts`.
+- **Normalización del correo en el login**, igual que en el alta. Es la única modificación de `src/services/auth.service.ts`. *(Enmienda: `lastLoginAt` no se escribe.)*
 - **Normalización antes de cifrar:** `email` a minúsculas y `.trim()`, `firstName` y `lastName` con `toTitleCase`, `username` con `.trim()`. `displayName` se recalcula desde `firstName` y `lastName` en `001` y en `004`, y nunca se acepta en el cuerpo.
 - **Guardas de `005A`:** un usuario no puede desactivarse a sí mismo (409), y no se puede desactivar al último SUPERADMIN activo del sistema (409).
 - **Los cuatro validadores de §4 completos**, más el de `006`. La longitud mínima de contraseña sube de 6 a **8** en `001` y en `006`.
@@ -53,7 +54,7 @@ Dos divergencias que **no** son desajustes y se documentan en §3.2: `email` y `
 - **Restablecer la contraseña de un tercero.** `006` actúa siempre sobre el usuario del token; ni un SUPERADMIN cambia la de otro. Es un endpoint distinto, con sus propias decisiones de seguridad.
 - **Recuperación de contraseña por correo** y **bloqueo por intentos fallidos**. El ítem `LOCKED` del catálogo `userStatus` se queda sin quien lo escriba.
 - **Cambiar los roles de un usuario existente.** `004` no acepta `roleId`: asignar y revocar roles es SPEC F02.
-- **Sincronizar `statusItemId` con `isActive`.** Son dos estados independientes; `005A` y `005B` solo tocan `isActive`, y el `statusItemId` lo gobierna quien llame a `004`.
+- **`statusItemId` y `lastLoginAt` por completo** *(enmienda del 2026-08-08)*. Las dos columnas se quedan en `esaviapp.sql` sin modelo ni consumidor, como `externalProvider`. Incorporarlas exige una migración sobre las bases ya desplegadas, y eso va en su propio spec. Con ellas se caen la asociación `appUser` ↔ `catalogItem`, la validación contra el catálogo `userStatus`, la clave `user.statusNotFound` y los códigos `USER_001_STATUS_NOT_FOUND` / `USER_004_STATUS_NOT_FOUND`.
 - **Filtros y búsqueda en el listado.** Solo `limit` y `offset`. Buscar por nombre o correo es imposible sobre campos cifrados sin un cambio de esquema, y ordenar por ellos ordenaría por el criptograma.
 - **Cambiar el esquema de cifrado o migrar los datos ya cifrados.** `esaviCrypt` se usa tal cual está.
 - **CRUD de `appUserGeoLocation` (SPEC F01) y de `appUserRole` (SPEC F02).**
@@ -103,12 +104,10 @@ Dos divergencias que **no** son desajustes y se documentan en §3.2: `email` y `
 
 `src/models/appUser.model.ts` **ya existe**, clase `AppUser`, dada de alta en `src/models/index.ts`. Cumple §12: `timestamps: false`, `freezeTableName: true`, `tableName: 'appUser'`, PK UUID con `sequelize.literal('gen_random_uuid()')`.
 
-Cuatro ajustes:
+Dos ajustes *(los otros dos, `statusItemId` y `lastLoginAt`, caen por la enmienda)*:
 
 | Antes | Después |
 |---|---|
-| *(ausente)* | `statusItemId: { type: UUID, allowNull: true }` |
-| *(ausente)* | `lastLoginAt: { type: DATE, allowNull: true }` |
 | `phone: { type: STRING(150) }` | `STRING(50)` — alineado a `esaviapp.sql:247` |
 | `appDetails: { allowNull: true }` | `defaultValue: []`, como `geoLocation.model.ts:114` |
 
@@ -117,14 +116,7 @@ Y dos divergencias con el DDL que **se mantienen a propósito**:
 - **`email` sigue en `allowNull: false`** aunque el SQL lo permita nulo. Sin autenticación externa, un usuario sin correo no puede iniciar sesión: `loginService` busca precisamente por ahí.
 - **`passwordHash` sigue en `allowNull: false`** por la misma razón. Es lo que hace que `CK_appUser_authSource` sea inviolable mientras el MVP no tenga autenticación externa. La aplicación puede ser más estricta que el esquema; al revés, no.
 
-**Asociación nueva — una sola.** En `src/models/associations/auth.associations.ts`, siguiendo el patrón de `healthFacility.associations.ts:7-8`, que es donde vive el enlace de una entidad con su `catalogItem`:
-
-```
-CatalogItem.hasMany(AppUser, { foreignKey: 'statusItemId', as: 'statusUsers' })
-AppUser.belongsTo(CatalogItem, { foreignKey: 'statusItemId', as: 'status' })
-```
-
-Las seis asociaciones de `appUser` con `appUserRole` y `appRole` ya están declaradas en ese mismo archivo (`:7-8`, `:13-14`, `:16-17`) y no se tocan.
+**Ninguna asociación nueva** *(enmienda: el enlace con `catalogItem` bajo el alias `status` se cae con `statusItemId`)*. Las seis asociaciones de `appUser` con `appUserRole` y `appRole` ya están declaradas en ese mismo archivo (`:7-8`, `:13-14`, `:16-17`) y no se tocan.
 
 ### 3.3 Tipos
 
@@ -138,7 +130,6 @@ export interface CreateUserInput {
     firstName: string;
     lastName: string;
     phone?: string | null;
-    statusItemId?: string | null;
     roleId: string | string[];
 }
 
@@ -148,7 +139,7 @@ export interface ChangePasswordInput {
 }
 ```
 
-`phone` y `statusItemId` se añaden; `roleId` se queda como `string | string[]` y **el validador se alinea a esa forma**, en vez de al revés — hoy `user.validator.ts:8` rechaza el array que el tipo promete.
+`phone` se añade *(enmienda: `statusItemId` no)*; `roleId` se queda como `string | string[]` y **el validador se alinea a esa forma**, en vez de al revés — hoy `user.validator.ts:8` rechaza el array que el tipo promete.
 
 Para `004` **no se declara `UpdateUserInput`** — está prohibido por §4. El update usa `Partial<CreateUserInput>`, del que el servicio ignora `password` y `roleId`: el primero es territorio de `006`, el segundo de SPEC F02.
 
@@ -172,6 +163,8 @@ El router ya está dado de alta en `src/routes/index.ts:26` bajo `/users`.
 
 **`002A` y `002B` exigen los dos ADMIN**, no USER. Es la desviación de la matriz canónica de §9 que se decidió: un listado de usuarios devuelve nombres, correos y teléfonos descifrados de toda la plantilla. La diferencia entre ambos sigue siendo la de siempre — `002B` incluye los desactivados—, y `002B` no sube a SUPERADMIN porque `canViewInactive` ya distingue quién ve qué dentro de `003`.
 
+*(Enmienda: `statusItemId` no viaja en ningún cuerpo y `status` no aparece en ninguna respuesta.)*
+
 **`006` y `007` extienden el rango `001`–`005B`** de §6, siguiendo el precedente que abrió `appUserGeoLocation`. Se registran en la tabla de operaciones no canónicas.
 
 **Orden de declaración en `user.routes.ts`:** las cuatro rutas literales (`/admin`, `/me`, `/me/password`, `/activate/:id`) van **antes** de `/:id`, o Express capturará `admin` y `me` como un `:id` y el validador de UUID responderá 400.
@@ -189,10 +182,9 @@ El router ya está dado de alta en `src/routes/index.ts:26` bajo `/users`.
 1. Normaliza y cifra los cinco campos.
 2. `email` libre → si no, **409** `USER_001_EMAIL_EXISTS`, clave `user.alreadyExists`. **Sin filtrar por `isActive`**: es lo que garantiza `UQ_appUser_email`.
 3. Si viene `username`, libre → si no, **409** `USER_001_USERNAME_EXISTS`, clave `user.usernameExists`. Misma regla.
-4. Si viene `statusItemId`, existe y está activo **y pertenece al catálogo `userStatus`** → si no, **404** `USER_001_STATUS_NOT_FOUND`.
-5. Los roles de `roleId` existen y están activos, en una sola consulta → si no, **404** `USER_001_ROLE_NOT_FOUND`, clave `role.notFound` (comportamiento actual, se conserva).
-6. **Guarda de escalada:** ningún rol pedido puede tener `appRole.level` mayor que el nivel máximo del solicitante → **403** `USER_001_ROLE_LEVEL_EXCEEDED`, clave `user.roleLevelExceeded`. Un ADMIN da de alta ADMIN o inferior; un SUPERADMIN, cualquiera.
-7. Crea el usuario y sus filas de `appUserRole` **en la transacción que ya existe**, con `requiresPasswordChange: true`.
+4. Los roles de `roleId` existen y están activos, en una sola consulta → si no, **404** `USER_001_ROLE_NOT_FOUND`, clave `role.notFound` (comportamiento actual, se conserva).
+5. **Guarda de escalada:** ningún rol pedido puede tener `appRole.level` mayor que el nivel máximo del solicitante → **403** `USER_001_ROLE_LEVEL_EXCEEDED`, clave `user.roleLevelExceeded`. Un ADMIN da de alta ADMIN o inferior; un SUPERADMIN, cualquiera.
+6. Crea el usuario y sus filas de `appUserRole` **en la transacción que ya existe**, con `requiresPasswordChange: true`.
 
 Responde **201**. El servicio pasa a importar los modelos desde `'../models'`.
 
@@ -200,25 +192,24 @@ Responde **201**. El servicio pasa a importar los modelos desde `'../models'`.
 
 **`ESAVI-USER-002B` — listar, administración.** Idéntico, **sin `isActive` en el `where`**.
 
-**`ESAVI-USER-003` — obtener por ID.** Existencia → **404** `USER_003_NOT_FOUND`. Un usuario desactivado devuelve 404 salvo que `canViewInactive(req.user)` sea verdadero — hoy **SUPERADMIN**, según `permissions.helper.ts:24-26`. Incluye `roles` y `status` (§3.7).
+**`ESAVI-USER-003` — obtener por ID.** Existencia → **404** `USER_003_NOT_FOUND`. Un usuario desactivado devuelve 404 salvo que `canViewInactive(req.user)` sea verdadero — hoy **SUPERADMIN**, según `permissions.helper.ts:24-26`. Incluye `roles` *(enmienda: ya no hay `status`)*.
 
-**`ESAVI-USER-004` — actualizar.** Acepta **solo** `username`, `email`, `firstName`, `lastName`, `phone` y `statusItemId`. En este orden:
+**`ESAVI-USER-004` — actualizar.** Acepta **solo** `username`, `email`, `firstName`, `lastName` y `phone` *(enmienda: `statusItemId` se cae)*. En este orden:
 
 1. Existencia → **404** `USER_004_NOT_FOUND`.
 2. Si viene `email`, normalizado, cifrado y distinto del actual: unicidad excluyendo el propio id con `{ [Op.ne]: id }` → **409** `USER_004_EMAIL_EXISTS`.
 3. Si viene `username`: misma comprobación → **409** `USER_004_USERNAME_EXISTS`.
-4. Si viene `statusItemId`: activo y del catálogo `userStatus` → **404** `USER_004_STATUS_NOT_FOUND`.
-5. Si cambió `firstName` o `lastName`, recalcula y cifra `displayName`.
-6. Actualiza con el patrón `objectToUpdate` y preserva el historial con `[...currentAppDetails, newEntry]`.
+4. Si cambió `firstName` o `lastName`, recalcula y cifra `displayName`.
+5. Actualiza con el patrón `objectToUpdate` y preserva el historial con `[...currentAppDetails, newEntry]`.
 
-`password`, `roleId`, `displayName`, `isActive`, `requiresPasswordChange`, `lastLoginAt`, `externalProvider` y `externalSubject` en el cuerpo devuelven **400**.
+`password`, `roleId`, `displayName`, `isActive`, `requiresPasswordChange`, `externalProvider` y `externalSubject` en el cuerpo devuelven **400**.
 
 **`ESAVI-USER-005A` — desactivar.** Antes de delegar, dos guardas:
 
 1. Si `id` es igual a `authUser.userId` → **409** `USER_005A_SELF_DEACTIVATION`, clave `user.selfDeactivation`. Nadie se cierra la puerta desde dentro.
 2. Si el usuario porta el rol SUPERADMIN y es el **último** con ese rol activo —contando asignaciones activas en `appUserRole` cuyo usuario esté también activo— → **409** `USER_005A_LAST_SUPERADMIN`, clave `user.lastSuperAdmin`. Es la hermana de la guarda de SPEC F02 §3.5: allí se protege la última asignación, aquí el último portador.
 
-Después delega en `setEntityActiveStatusService` con transacción, igual que `setCatalogItemActivationService`. Escribe `isActive: false` y `deletedAt: now()`; **no toca `statusItemId`**. Doble desactivación → **409** `USER_005A_ALREADY_INACTIVE`.
+Después delega en `setEntityActiveStatusService` con transacción, igual que `setCatalogItemActivationService`. Escribe `isActive: false` y `deletedAt: now()`. Doble desactivación → **409** `USER_005A_ALREADY_INACTIVE`.
 
 **`ESAVI-USER-005B` — reactivar.** Revierte `isActive: true` y `deletedAt: null`. Doble reactivación → **409** `USER_005B_ALREADY_ACTIVE`. Antes comprueba que ni el `email` ni el `username` del usuario estén ocupados por **otro usuario activo** → **409**. `appDetails.method` guarda `'ESAVI-USER-005B'`, sin sufijos (§6).
 
@@ -233,10 +224,9 @@ Responde **200** `{ ok, message }` **sin `data`**: la respuesta de un cambio de 
 
 **`ESAVI-USER-007` — consultar el propio perfil.** Devuelve el usuario de `authUser.userId` con la misma forma que `003`, sin comprobar rol más allá de `USER`. No admite parámetros. Es el único punto por el que un USER accede a datos de `appUser`.
 
-**`loginService` — dos cambios.** En `src/services/auth.service.ts`:
+**`loginService` — un cambio** *(enmienda: eran dos; la escritura de `lastLoginAt` se cae)*. En `src/services/auth.service.ts`:
 
 1. **Normaliza el correo** —minúsculas y `.trim()`— antes de `esaviCrypt`, exactamente igual que el alta. Sin esto, `001` guardaría el cifrado de la forma en minúsculas y un login que teclee mayúsculas produciría otro criptograma: credenciales correctas con respuesta 401.
-2. **Escribe `lastLoginAt: new Date()`** tras validar la contraseña y antes de generar el token. No se añade entrada a `appDetails`: un login no es una operación de auditoría de datos, y una entrada por inicio de sesión haría crecer el array sin límite.
 
 El resto del archivo —la forma de la respuesta del login y el mapeo de roles— **no cambia**.
 
@@ -259,10 +249,9 @@ Se amplía el bloque `user` existente (`es.json:33-41`, hoy con siete claves). E
 | `user.samePassword` | 409 cuando la contraseña nueva es igual a la actual |
 | `user.alreadyActive` | 409 al reactivar un usuario ya activo |
 | `user.alreadyInactive` | 409 al desactivar un usuario ya desactivado |
-| `user.statusNotFound` | 404 de `statusItemId` inexistente o de otro catálogo |
 | `user.idRequired` | parámetro ausente |
 
-Diecinueve claves nuevas sobre las siete que ya existen. `user.alreadyExists`, `user.notFound`, `user.createdSuccess` y `user.createdFailed` se reutilizan; `auth.invalidCredentials` también, en `006`. `tests/i18n/messages.test.ts` exige paridad exacta: las diecinueve van en los tres archivos o la suite falla.
+Veinte claves nuevas sobre las siete que ya existen —la tabla enumeraba 21 y la enmienda retira `user.statusNotFound`—. `user.alreadyExists`, `user.notFound`, `user.createdSuccess` y `user.createdFailed` se reutilizan; `auth.invalidCredentials` también, en `006`. `tests/i18n/messages.test.ts` exige paridad exacta: las diecinueve van en los tres archivos o la suite falla.
 
 ### 3.7 Forma de la respuesta
 
@@ -273,14 +262,11 @@ Diecinueve claves nuevas sobre las siete que ya existen. `user.alreadyExists`, `
 ```
 { ok, message, data: {
     userId, username, email, displayName, firstName, lastName, phone,
-    statusItemId, lastLoginAt, requiresPasswordChange, isActive,
+    requiresPasswordChange, isActive,
     createdAt, updatedAt, deletedAt, appDetails,
-    status: { catalogItemId, code, name },
     roles: [ { roleId, code, name, level } ]
 } }
 ```
-
-`status` es `null` cuando `statusItemId` lo es.
 
 **`002A` / `002B` — listados:** `data` es `{ count, rows }` tal cual lo devuelve `findAndCountAll` (§11). Cada fila lleva las mismas claves **menos `appDetails`**: el historial de auditoría de cada usuario multiplicado por el tamaño de la página hace la respuesta ilegible, y quien lo necesita entra por `003`.
 
@@ -297,26 +283,26 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 1. **Registrar las operaciones no canónicas.** Dos filas en la tabla de `references/CONVENTIONS.md` §6: `appUser` → `006` cambiar la propia contraseña, y `appUser` → `007` consultar el propio perfil. La abreviatura `USER` ya está registrada y no se toca.
    *Verificación:* las dos filas aparecen junto a las tres de `appUserGeoLocation`; no se ha añadido ninguna abreviatura nueva.
 
-2. **Ajustar el modelo y la asociación.** En `src/models/appUser.model.ts`: añadir `statusItemId` y `lastLoginAt`, corregir `phone` a `STRING(50)`, y `appDetails` con `defaultValue: []`. En `src/models/associations/auth.associations.ts`, las dos líneas de la asociación con `CatalogItem` bajo el alias `status`.
-   *Verificación:* `npm run build` en 0; `AppUser.findOne({ include: [{ association: 'status' }] })` no lanza; un `AppUser.create(...)` deja `appDetails` como array vacío.
+2. **Ajustar el modelo.** En `src/models/appUser.model.ts`: corregir `phone` a `STRING(50)` y `appDetails` con `defaultValue: []`. *(Enmienda: sin `statusItemId`, sin `lastLoginAt` y sin asociación con `CatalogItem`.)*
+   *Verificación:* `npm run build` en 0; un `AppUser.create(...)` deja `appDetails` como array vacío.
 
-3. **Tipos.** En `src/types/user/user.types.ts`: `phone` y `statusItemId` en `CreateUserInput`, e interfaz `ChangePasswordInput`. `UserRole`, `AuthUser` y `CreateUserServiceParams` no cambian.
+3. **Tipos.** En `src/types/user/user.types.ts`: `phone` en `CreateUserInput` *(enmienda: sin `statusItemId`)*, e interfaz `ChangePasswordInput`. `UserRole`, `AuthUser` y `CreateUserServiceParams` no cambian.
    *Verificación:* `import { ChangePasswordInput } from '../types'` compila; `grep -rn "UpdateUserInput" src/` no devuelve nada.
 
-4. **Las 19 claves i18n** de §3.6 en `es.json`, `en.json` y `nl.json`, ampliando el bloque `user` existente.
+4. **Las 20 claves i18n** de §3.6 en `es.json`, `en.json` y `nl.json`, ampliando el bloque `user` existente.
    *Verificación:* `npm run i18n:check` en 0 y `npm test -- messages` pasa.
 
-5. **Validadores.** En `src/validators/user.validator.ts`: añadir `userIdValidator`, `userListValidator`, `updateUserValidator` y `changePasswordValidator`; y corregir `createUserValidator` — `roleId` que acepte UUID o array de UUID, `username` opcional con `.trim()`, `phone` opcional ≤ 50, `password` con mínimo **8**, y rechazo explícito de `displayName`, `isActive`, `requiresPasswordChange` y `lastLoginAt`. Alta en `src/validators/index.ts`.
+5. **Validadores.** En `src/validators/user.validator.ts`: añadir `userIdValidator`, `userListValidator`, `updateUserValidator` y `changePasswordValidator`; y corregir `createUserValidator` — `roleId` que acepte UUID o array de UUID, `username` opcional con `.trim()`, `phone` opcional ≤ 50, `password` con mínimo **8**, y rechazo explícito de `displayName`, `isActive` y `requiresPasswordChange` *(enmienda: `lastLoginAt` ya no se menciona)*. Alta en `src/validators/index.ts`.
    *Verificación:* `roleId` como array de dos UUID devuelve 201 en vez del 400 actual; `password` de 7 caracteres devuelve 400; enviar `displayName` devuelve 400; un `phone` de 51 caracteres devuelve 400.
 
-6. **Corregir `ESAVI-USER-001`.** En `user.service.ts`: importar los modelos desde `'../models'`, quitar el filtro `isActive: true` de la comprobación de unicidad, añadir la de `username`, validar `statusItemId` contra `catalogType.code = 'userStatus'`, y aplicar la guarda de escalada sobre los roles pedidos. En `user.routes.ts`: bajar el rol a `validateUserRole(ADMIN)` y poner el comentario de dos líneas de §7.
-   *Verificación:* crear con el correo de un usuario **desactivado** devuelve 409, no 500; repetir un `username` devuelve 409; un `statusItemId` de otro catálogo devuelve 404; un ADMIN dando de alta con rol SUPERADMIN recibe 403 y con rol ADMIN recibe 201; un SUPERADMIN puede asignar cualquiera.
+6. **Corregir `ESAVI-USER-001`.** En `user.service.ts`: importar los modelos desde `'../models'`, quitar el filtro `isActive: true` de la comprobación de unicidad, añadir la de `username`, y aplicar la guarda de escalada sobre los roles pedidos. En `user.routes.ts`: bajar el rol a `validateUserRole(ADMIN)` y poner el comentario de dos líneas de §7.
+   *Verificación:* crear con el correo de un usuario **desactivado** devuelve 409, no 500; repetir un `username` devuelve 409; un ADMIN dando de alta con rol SUPERADMIN recibe 403 y con rol ADMIN recibe 201; un SUPERADMIN puede asignar cualquiera.
 
 7. **`ESAVI-USER-002A` y `002B` — listados.** Dos servicios y dos rutas (`GET /` y `GET /admin`, ambas ADMIN), con `findAndCountAll`, `include` de roles, orden `createdAt DESC`, paginación, `passwordHash` excluido y los cinco campos descifrados.
    *Verificación:* un usuario desactivado no aparece en `/` y sí en `/admin`; un USER recibe 403 en las dos; ninguna fila contiene `passwordHash` ni `appDetails`; los correos llegan en claro.
 
-8. **`ESAVI-USER-003` — obtener por ID.** `getUserByIdService(id, lang, canViewInactive)` con los includes de `roles` y `status`. Ruta `GET /:id` declarada **después** de todas las literales.
-   *Verificación:* un ID inexistente devuelve 404; un usuario desactivado devuelve 404 para ADMIN y 200 para SUPERADMIN; `status` es `null` cuando no hay `statusItemId`; `roles[].level` viene poblado.
+8. **`ESAVI-USER-003` — obtener por ID.** `getUserByIdService(id, lang, canViewInactive)` con el include de `roles`. Ruta `GET /:id` declarada **después** de todas las literales.
+   *Verificación:* un ID inexistente devuelve 404; un usuario desactivado devuelve 404 para ADMIN y 200 para SUPERADMIN; `roles[].level` viene poblado.
 
 9. **`ESAVI-USER-007` — perfil propio.** Servicio que reutiliza el de `003` sobre `authUser.userId`, controlador y ruta `GET /me` con `validateUserRole(USER)`, declarada **antes** de `/:id`.
    *Verificación:* un USER recibe 200 con su propia ficha y sigue recibiendo 403 en `GET /:id`; la respuesta no contiene `passwordHash`.
@@ -330,13 +316,13 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 12. **`ESAVI-USER-006` — cambiar la propia contraseña.** `changePasswordService(authUser, data, lang)` con los cuatro pasos de §3.5. Ruta `PATCH /me/password` con `validateUserRole(USER)`, declarada antes de `/:id`.
     *Verificación:* con la contraseña actual correcta devuelve 200 y el login siguiente funciona con la nueva y falla con la vieja; una contraseña actual equivocada devuelve 401; repetir la misma devuelve 409; tras el cambio, `requiresPasswordChange` queda en `false`; la respuesta no trae `data`.
 
-13. **`loginService` — normalización y `lastLoginAt`.** Normalizar el correo antes de cifrar, y una escritura de `lastLoginAt` tras validar la contraseña, antes de generar el token. Ninguna entrada en `appDetails`.
-    *Verificación:* un usuario creado con `email: "Juan@Correo.EC"` inicia sesión escribiendo `juan@correo.ec` y también `JUAN@CORREO.EC`; dos logins seguidos dejan `lastLoginAt` distinto y creciente; un login fallido **no** lo modifica; `npm test -- roles` sigue pasando.
+13. **`loginService` — normalización.** Normalizar el correo antes de cifrar. *(Enmienda: sin la escritura de `lastLoginAt`.)*
+    *Verificación:* un usuario creado con `email: "Juan@Correo.EC"` inicia sesión escribiendo `juan@correo.ec` y también `JUAN@CORREO.EC`; `npm test -- roles` sigue pasando.
 
-14. **Cubrir las rutas en `tests/auth/roles.test.ts`.** Ocho filas nuevas en `ROUTE_RULES`, **más la corrección del `minRole` de la fila existente** de `POST /api/users` (`:81`), que pasa de `SUPERADMIN` a `ADMIN`. Subir el total esperado de **43 a 51** en `:137`.
+14. **Cubrir las rutas en `tests/auth/roles.test.ts`.** Ocho filas nuevas en `ROUTE_RULES`, **más la corrección del `minRole` de la fila existente** de `POST /api/users` (`:81`), que pasa de `SUPERADMIN` a `ADMIN`. Subir el total esperado. *(Enmienda: la base real era **58**, no 43, porque SPEC F02 y F03 ya estaban implementados; el total pasa a **66**.)*
     *Verificación:* `npm test -- roles` pasa y la fila de `POST /api/users` declara `ADMIN`.
 
-15. **Suite de contrato `tests/contract/appUser.test.ts`.** Recorrido con `supertest`: crear → perfil propio → obtener por ID → listar (público y admin) → actualizar → cambiar contraseña → login con la nueva → desactivar → reactivar. Más los caminos de error: correo duplicado de un usuario desactivado, `username` duplicado, escalada de rol en el alta, `statusItemId` de otro catálogo, autodesactivación, último SUPERADMIN, y contraseña actual equivocada.
+15. **Suite de contrato `tests/contract/appUser.test.ts`.** Recorrido con `supertest`: crear → perfil propio → obtener por ID → listar (público y admin) → actualizar → cambiar contraseña → login con la nueva → desactivar → reactivar. Más los caminos de error: correo duplicado de un usuario desactivado, `username` duplicado, escalada de rol en el alta, autodesactivación, último SUPERADMIN, y contraseña actual equivocada.
     *Verificación:* `npm test` en verde y `npm run check` en 0.
 
 Dos apuntes sobre el orden:
@@ -364,8 +350,7 @@ Dos apuntes sobre el orden:
 - [ ] Crear con `firstName: "juan carlos"` guarda el cifrado de `Juan Carlos`, y `displayName` es el cifrado de `Juan Carlos <apellido>`.
 - [ ] Crear con `password` de 7 caracteres devuelve **400**.
 - [ ] Crear con `roleId` como array de dos UUID válidos devuelve **201** y deja dos filas en `appUserRole`.
-- [ ] Crear con un `statusItemId` que no pertenece al catálogo `userStatus` devuelve **404**, no 500.
-- [ ] Enviar `displayName`, `isActive`, `requiresPasswordChange` o `lastLoginAt` en el cuerpo de `001` o `004` devuelve **400**.
+- [ ] Enviar `displayName`, `isActive` o `requiresPasswordChange` en el cuerpo de `001` o `004` devuelve **400**.
 - [ ] Todo usuario creado por la API tiene `requiresPasswordChange: true`.
 
 **Escalada de rol**
@@ -381,7 +366,7 @@ Dos apuntes sobre el orden:
 - [ ] Ninguna respuesta de ninguna operación contiene `passwordHash` ni `sysDetails`.
 - [ ] Ninguna fila de `002A`/`002B` contiene `appDetails`.
 - [ ] `username`, `email`, `firstName`, `lastName` y `displayName` llegan **descifrados** en las nueve operaciones que devuelven usuario.
-- [ ] `GET /:id` devuelve `roles` con `level` poblado y `status` con `code` y `name`, o `status: null` si no hay `statusItemId`.
+- [ ] `GET /:id` devuelve `roles` con `level` poblado.
 - [ ] `GET /:id` de un usuario desactivado: 404 para ADMIN, 200 para SUPERADMIN.
 - [ ] `GET /me` devuelve 200 a un USER, y ese mismo USER recibe 403 en `GET /:id` y en `GET /`.
 - [ ] `GET /:id` no captura `admin`, `me` ni `activate` como UUID.
@@ -397,7 +382,7 @@ Dos apuntes sobre el orden:
 
 - [ ] Desactivarse a uno mismo devuelve **409**.
 - [ ] Desactivar al último SUPERADMIN activo devuelve **409**; con dos SUPERADMIN activos, la primera desactivación devuelve **200**.
-- [ ] `DELETE /:id` deja `isActive: false`, `deletedAt` con fecha y **`statusItemId` intacto**.
+- [ ] `DELETE /:id` deja `isActive: false` y `deletedAt` con fecha.
 - [ ] Desactivar dos veces devuelve **409** `ALREADY_INACTIVE`; reactivar dos veces devuelve **409** `ALREADY_ACTIVE`.
 - [ ] `PATCH /activate/:id` exige SUPERADMIN y deja `deletedAt` en `null`.
 - [ ] `DELETE` y `PATCH /activate` responden `{ ok, message }` **sin `data`**.
@@ -412,8 +397,6 @@ Dos apuntes sobre el orden:
 - [ ] Tras el cambio, `requiresPasswordChange` queda en **`false`**.
 - [ ] `006` responde `{ ok, message }` **sin `data`**, y no hay ninguna ruta que permita cambiar la contraseña de otro usuario.
 - [ ] Un usuario creado con el correo en mayúsculas inicia sesión escribiéndolo en minúsculas, y al revés.
-- [ ] Un login correcto actualiza `lastLoginAt`; dos logins seguidos dejan valores distintos y crecientes.
-- [ ] Un login fallido **no** modifica `lastLoginAt`.
 - [ ] Un login no añade ninguna entrada a `appDetails`.
 
 **Cierre**
@@ -423,8 +406,8 @@ Dos apuntes sobre el orden:
 - [ ] `src/helpers/crypto.helper.ts` no cambia.
 - [ ] El tipo `AuthUser` no cambia y `req.user` conserva la misma forma.
 - [ ] `esaviapp.sql` no cambia.
-- [ ] Las 19 claves de §3.6 existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
-- [ ] `ROUTE_RULES` tiene 51 entradas, la fila de `POST /api/users` declara `ADMIN`, y `npm test -- roles` pasa.
+- [ ] Las 20 claves de §3.6 existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
+- [ ] `ROUTE_RULES` tiene 66 entradas, la fila de `POST /api/users` declara `ADMIN`, y `npm test -- roles` pasa.
 - [ ] `npm run check` sale en 0.
 
 ---
@@ -478,14 +461,14 @@ Dos apuntes sobre el orden:
 
 - **Sí:** `statusItemId` e `isActive` son **independientes**. Es lo que hace el resto del repositorio con `isActive`, y sincronizarlos ataría dos servicios a unos códigos de catálogo sembrados que nadie garantiza que existan en cada despliegue.
 - **No:** que `005A` ponga además el ítem `INACTIVE`. Obligaría a resolver un `catalogItem` por `code` dentro del servicio de activación genérico, que hoy no sabe nada de catálogos.
-- **Sí:** validar `statusItemId` contra `catalogType.code = 'userStatus'`, con el filtro **activo**. Es exactamente el error que SPEC 09 tuvo que corregir en `healthFacility`, donde el filtro quedó comentado y cualquier `catalogItem` pasaba como tipo de instalación.
+- **~~Sí~~ → No, por la enmienda:** validar `statusItemId` contra `catalogType.code = 'userStatus'`. La validación era correcta y seguirá siéndolo el día que la columna exista en las bases desplegadas; se retira porque la columna no existe, no porque la regla estuviera mal.
 - **Sí:** prohibir la autodesactivación. Un administrador que se desactiva a sí mismo deja de poder reactivarse, y `005B` exige SUPERADMIN.
 - **Sí:** proteger al último SUPERADMIN activo. Es la hermana de la guarda de SPEC F02 §3.5: allí se protege la última asignación de rol, aquí el último portador. Sin las dos, el sistema puede quedarse sin gobierno por dos caminos distintos.
 - **No:** extender la guarda a "el último ADMIN". Un despliegue sin ADMIN sigue teniendo SUPERADMIN, que puede crear otro.
 
 **Sobre la forma**
 
-- **Sí:** `lastLoginAt` como columna y nada más. Un login no añade entrada a `appDetails`: haría crecer el array de auditoría sin techo con un dato que ya tiene su columna.
+- **~~Sí~~ → No, por la enmienda:** `lastLoginAt` escrito en el login. Se retira con la columna. Que un login no deba añadir entrada a `appDetails` sigue en pie: es lo que hace que hoy el login no deje rastro alguno.
 - **Sí:** `appDetails` fuera de los listados. El historial completo de cada usuario multiplicado por el tamaño de página hace la respuesta ilegible; quien lo necesita entra por `003`.
 - **Sí:** `006` responde sin `data`. §10 lo pide para `delete` y `activate`; aquí se extiende porque devolver el usuario tras cambiar la contraseña no aporta nada y agranda una respuesta sensible.
 - **Sí:** `email` y `passwordHash` siguen siendo `allowNull: false` en el modelo aunque el SQL los permita nulos. Sin autenticación externa, un usuario sin correo o sin contraseña no puede entrar. Es lo que hace inviolable el `CK_appUser_authSource`.
@@ -521,10 +504,8 @@ El spec añade ocho endpoints nuevos, que por sí solos no cambian nada de lo qu
 | Crear con un `username` repetido | **500**, `23505` de `UQ_appUser_username` | **409** `USER_001_USERNAME_EXISTS` |
 | Crear con `password` de 6 o 7 caracteres | **201** | **400** de `validateFields` |
 | Crear con `roleId` como array | **400**: el validador exige un UUID único | **201**, con una fila de `appUserRole` por rol |
-| Crear con `statusItemId` de otro catálogo | **201**, con un estado incoherente guardado | **404** `USER_001_STATUS_NOT_FOUND` |
 | Crear con `email` en mayúsculas | Se guarda cifrado tal cual se escribió | Se guarda el cifrado de la forma en minúsculas |
 | Login escribiendo el correo con otras mayúsculas que en el alta | **401**: el criptograma no coincide | **200**: los dos lados normalizan igual |
-| Login correcto | No deja rastro | Actualiza `lastLoginAt`; la respuesta del login **no cambia** |
 
 Las tres filas de `500` → `409`/`404` son correcciones: esas peticiones ya fallaban, solo que con el código equivocado y sin mensaje útil.
 
@@ -544,7 +525,7 @@ No cambia la forma de `req.user`, ni el tipo `AuthUser`, ni la emisión de token
 - Política de contraseñas más allá de la longitud mínima.
 - Cambiar los roles de un usuario existente: es SPEC F02 (`appUserRole`).
 - Asignar geolocalizaciones a un usuario: es SPEC F01 (`appUserGeoLocation`).
-- Sincronizar `statusItemId` con `isActive`.
+- `statusItemId` y `lastLoginAt`: las dos columnas se quedan en `esaviapp.sql` sin modelo ni consumidor. Incorporarlas exige migrar las bases ya desplegadas y va en su propio spec.
 - Búsqueda o filtros por nombre, correo o estado en los listados; ordenación alfabética.
 - Cifrar `phone`, cambiar el esquema de `esaviCrypt` o migrar los datos ya cifrados.
 - Descifrado tolerante a filas cargadas en claro por SQL directo.

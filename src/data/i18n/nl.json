@@ -37,7 +37,27 @@
         "createdSuccess": "Gebruiker succesvol aangemaakt",
         "createdSuccessPlural": "Gebruikers succesvol aangemaakt",
         "createdFailed": "Aanmaken van de gebruiker mislukt. Probeer het later opnieuw.",
-        "createdFailedPlural": "Aanmaken van de gebruikers mislukt. Probeer het later opnieuw."
+        "createdFailedPlural": "Aanmaken van de gebruikers mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Gebruiker succesvol opgehaald",
+        "getFailed": "Ophalen van de gebruiker mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Gebruikers succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de gebruikers mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Gebruiker succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de gebruiker mislukt. Probeer het later opnieuw.",
+        "deletedSuccess": "Gebruiker succesvol verwijderd",
+        "deletedFailed": "Verwijderen van de gebruiker mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Gebruiker succesvol geactiveerd",
+        "activatedFailed": "Activeren van de gebruiker mislukt. Probeer het later opnieuw.",
+        "passwordChangedSuccess": "Wachtwoord succesvol bijgewerkt",
+        "passwordChangedFailed": "Bijwerken van het wachtwoord mislukt. Probeer het later opnieuw.",
+        "usernameExists": "Er bestaat al een gebruiker met de gebruikersnaam {{username}}",
+        "roleLevelExceeded": "U kunt geen rol toewijzen met een hoger niveau dan uw eigen niveau",
+        "selfDeactivation": "U kunt uw eigen gebruiker niet deactiveren",
+        "lastSuperAdmin": "De gebruiker kan niet worden gedeactiveerd omdat dit de laatste actieve superbeheerder van het systeem is",
+        "samePassword": "Het nieuwe wachtwoord moet verschillen van het huidige",
+        "alreadyActive": "De gebruiker met ID {{id}} is al actief",
+        "alreadyInactive": "De gebruiker met ID {{id}} is al inactief",
+        "idRequired": "De gebruikers-ID is verplicht"
     },
     "role": {
         "notFound": "Een of meer rollen zijn niet gevonden. Controleer de rolnamen en probeer het opnieuw."

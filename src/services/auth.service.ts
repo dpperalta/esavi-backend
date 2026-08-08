@@ -15,9 +15,13 @@ interface LoginInput {
 
 // ESAVI-AUTH-001 - Login Service
 const loginService =async({ email, password }: LoginInput, lang: string) => {
+    // Normalized exactly like the creation does. citext does not help here: the column stores
+    // the ciphertext, so Postgres case insensitivity applies to the encrypted text and not to
+    // the address. Without this, a login typed in uppercase produces a different ciphertext
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await AppUser.findOne({
         where: {
-            email: esaviCrypt(email),
+            email: esaviCrypt(normalizedEmail),
             isActive: true
         },
         include: [

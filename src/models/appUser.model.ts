@@ -68,7 +68,7 @@ AppUser.init(
             allowNull: true,
         },
         phone: {
-            type: DataTypes.STRING(150),
+            type: DataTypes.STRING(50),
             allowNull: true,
         },
         requiresPasswordChange: {
@@ -101,6 +101,7 @@ AppUser.init(
         appDetails: {
             type: DataTypes.JSONB,
             allowNull: true,
+            defaultValue: [],
         }
     }, 
     {
