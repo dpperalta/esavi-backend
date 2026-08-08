@@ -39,9 +39,6 @@ const loginService =async({ email, password }: LoginInput, lang: string) => {
     if( !isPasswordValid ) {
         throw new AppError(getMessage('auth.invalidCredentials', lang), 401, 'AUTH_001_INVALID_CREDENTIALS');
     }
-    // No appDetails entry: a login is not a data audit operation, and one entry per sign-in
-    // would grow the array without a ceiling for something that already has its own column
-    await user.update({ lastLoginAt: new Date() });
     const roles = user.roles?.map((role: AppRole) => ({
         roleId: role.getDataValue('roleId'),
         name: role.getDataValue('name'),

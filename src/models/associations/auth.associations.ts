@@ -1,7 +1,6 @@
 import { AppUser }  from '../appUser.model';
 import { AppRole }  from '../appRole.model';
 import { AppUserRole } from '../appUserRole.model';
-import { CatalogItem } from '../catalogItem.model';
 
 export const initAuthAssociations = ():void => {
     // appUser <-> appUserRole
@@ -16,7 +15,4 @@ export const initAuthAssociations = ():void => {
     // User-Role Many-to-Many through AppUserRole
     AppUser.belongsToMany(AppRole, { through: AppUserRole, foreignKey: 'userId', otherKey: 'roleId', as: 'roles' });
     AppRole.belongsToMany(AppUser, { through: AppUserRole, foreignKey: 'roleId', otherKey: 'userId', as: 'users' });
-    // appUser -> catalogItem (userStatus)
-    CatalogItem.hasMany(AppUser, { foreignKey: 'statusItemId', as: 'statusUsers' });
-    AppUser.belongsTo(CatalogItem, { foreignKey: 'statusItemId', as: 'status' });
 };

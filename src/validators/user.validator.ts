@@ -21,9 +21,9 @@ export const userListValidator = [
         .withMessage('Offset must be a non-negative integer')
 ];
 
-// displayName is calculated from firstName and lastName; isActive, requiresPasswordChange
-// and lastLoginAt are governed by the system. They are rejected instead of ignored so the
-// client knows the field has no effect.
+// displayName is calculated from firstName and lastName, and isActive and
+// requiresPasswordChange are governed by the system. They are rejected instead of ignored
+// so the client knows the field has no effect.
 export const createUserValidator = [
     body('username').optional().trim().notEmpty().withMessage('Username cannot be empty')
         .isLength({ max: 250 }).withMessage('Username must be at most 250 characters long'),
@@ -38,7 +38,6 @@ export const createUserValidator = [
         .isLength({ max: 150 }).withMessage('Last name must be at most 150 characters long'),
     body('phone').optional().trim()
         .isLength({ max: 50 }).withMessage('Phone must be at most 50 characters long'),
-    body('statusItemId').optional().isUUID().withMessage('Status Item ID must be a valid UUID').trim(),
     body('roleId').notEmpty().withMessage('Role ID is required')
         .custom(isUuidOrUuidArray)
         .withMessage('Role ID must be a valid UUID or an array of valid UUIDs'),
@@ -47,9 +46,7 @@ export const createUserValidator = [
     body('isActive').not().exists()
         .withMessage('Is Active is not accepted. Activation is governed by its own endpoints.'),
     body('requiresPasswordChange').not().exists()
-        .withMessage('Requires Password Change is not accepted. It is governed by the system.'),
-    body('lastLoginAt').not().exists()
-        .withMessage('Last Login At is not accepted. It is written by the login operation.')
+        .withMessage('Requires Password Change is not accepted. It is governed by the system.')
 ];
 
 // password and roleId are out of this operation's scope: the first belongs to the password
@@ -66,7 +63,6 @@ export const updateUserValidator = [
         .isLength({ max: 150 }).withMessage('Last name must be at most 150 characters long'),
     body('phone').optional().trim()
         .isLength({ max: 50 }).withMessage('Phone must be at most 50 characters long'),
-    body('statusItemId').optional().isUUID().withMessage('Status Item ID must be a valid UUID').trim(),
     body('password').not().exists()
         .withMessage('Password is not accepted. Use the change password endpoint instead.'),
     body('roleId').not().exists()
@@ -77,8 +73,6 @@ export const updateUserValidator = [
         .withMessage('Is Active is not accepted. Activation is governed by its own endpoints.'),
     body('requiresPasswordChange').not().exists()
         .withMessage('Requires Password Change is not accepted. It is governed by the system.'),
-    body('lastLoginAt').not().exists()
-        .withMessage('Last Login At is not accepted. It is written by the login operation.'),
     body('externalProvider').not().exists()
         .withMessage('External Provider is not accepted. External authentication is not supported.'),
     body('externalSubject').not().exists()

@@ -57,7 +57,6 @@
         "samePassword": "Het nieuwe wachtwoord moet verschillen van het huidige",
         "alreadyActive": "De gebruiker met ID {{id}} is al actief",
         "alreadyInactive": "De gebruiker met ID {{id}} is al inactief",
-        "statusNotFound": "De gebruikersstatus bestaat niet of is inactief",
         "idRequired": "De gebruikers-ID is verplicht"
     },
     "role": {

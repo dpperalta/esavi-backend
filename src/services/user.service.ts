@@ -1,16 +1,12 @@
 import bcrypt from 'bcrypt';
 import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { AppRole, AppUser, AppUserRole, CatalogItem, CatalogType } from '../models';
+import { AppRole, AppUser, AppUserRole } from '../models';
 import { AppDetails, AuthUser, ChangePasswordInput, CreateUserInput, CreateUserServiceParams } from '../types';
 import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
-
-// The catalog statusItemId must belong to. Validated in the service: appUser has no
-// trigger checking the item against its catalog, unlike healthFacility
-const USER_STATUS_CATALOG_CODE = 'userStatus';
 
 // Encrypted columns. Normalized before encrypting: normalizing afterwards would produce a
 // different ciphertext for the same value and break the equality lookups the fixed IV allows
@@ -30,13 +26,6 @@ const ROLES_INCLUDE = {
     as: 'roles',
     through: { attributes: [] },
     attributes: ['roleId', 'name', 'code', 'level']
-};
-
-// The status catalog item, when the user carries one
-const STATUS_INCLUDE = {
-    model: CatalogItem,
-    as: 'status',
-    attributes: ['catalogItemId', 'code', 'name']
 };
 
 // passwordHash and sysDetails never leave the service
@@ -71,7 +60,7 @@ const toUserListRow = (user: AppUser) => {
 // Code: ESAVI-USER-001
 const createUserService = async ({ data, authUser, lang }: CreateUserServiceParams) => {
     const transaction = await sequelize.transaction();
-    const { email, password, username, firstName, lastName, phone, statusItemId, roleId } = data;
+    const { email, password, username, firstName, lastName, phone, roleId } = data;
     const { userId: creatorId } = authUser || {};
     try {
         // Normalization happens before encryption, and displayName is composed from the
@@ -97,26 +86,6 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
             });
             if( existingUsername ) {
                 throw new AppError(getMessage('user.usernameExists', lang, { username: normalizedUsername }), 409, 'USER_001_USERNAME_EXISTS');
-            }
-        }
-        // Validate that the referenced CatalogItem for user status exists, is active and
-        // belongs to the userStatus catalog
-        if( statusItemId ) {
-            const status = await CatalogItem.findOne({
-                where: {
-                    catalogItemId: statusItemId,
-                    isActive: true
-                },
-                include: [{
-                    model: CatalogType,
-                    as: 'catalogType',
-                    where: { code: USER_STATUS_CATALOG_CODE },
-                    attributes: []
-                }],
-                transaction
-            });
-            if( !status ) {
-                throw new AppError(getMessage('user.statusNotFound', lang), 404, 'USER_001_STATUS_NOT_FOUND');
             }
         }
         // Role existence check
@@ -152,7 +121,6 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
             email: esaviCrypt(normalizedEmail),
             displayName: esaviCrypt(`${normalizedFirstName} ${normalizedLastName}`),
             phone: phone ?? undefined,
-            statusItemId: statusItemId ?? null,
             passwordHash: passwordHash,
             requiresPasswordChange: true,
             isActive: true,
@@ -183,7 +151,7 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
                 userId: user.userId
             },
             attributes: LIST_EXCLUDE,
-            include: [ROLES_INCLUDE, STATUS_INCLUDE]
+            include: [ROLES_INCLUDE]
         });
 
         return userWithRoles ? toUserResponse(userWithRoles) : null;
@@ -200,7 +168,7 @@ const getUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = D
     const { count, rows } = await AppUser.findAndCountAll({
         where: { isActive: true },
         attributes: LIST_EXCLUDE,
-        include: [ROLES_INCLUDE, STATUS_INCLUDE],
+        include: [ROLES_INCLUDE],
         distinct: true,
         order: LIST_ORDER,
         limit,
@@ -214,7 +182,7 @@ const getUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = D
 const getAllUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const { count, rows } = await AppUser.findAndCountAll({
         attributes: LIST_EXCLUDE,
-        include: [ROLES_INCLUDE, STATUS_INCLUDE],
+        include: [ROLES_INCLUDE],
         distinct: true,
         order: LIST_ORDER,
         limit,
@@ -230,7 +198,7 @@ const findUserWithRelations = async (id: string, includeInactive: boolean = fals
     return await AppUser.findOne({
         where,
         attributes: LIST_EXCLUDE,
-        include: [ROLES_INCLUDE, STATUS_INCLUDE]
+        include: [ROLES_INCLUDE]
     });
 }
 
@@ -261,7 +229,7 @@ const getOwnProfileService = async (authUser: AuthUser | undefined, lang: string
 // appUserRole endpoints. The validator already rejects both, this is the second line
 const updateUserService = async (id: string, data: Partial<CreateUserInput>, authUser: AuthUser | undefined, lang: string) => {
     const { userId } = authUser || {};
-    const { username, email, firstName, lastName, phone, statusItemId } = data;
+    const { username, email, firstName, lastName, phone } = data;
     const user = await AppUser.findByPk(id);
     if( !user ) {
         throw new AppError(getMessage('user.notFound', lang), 404, 'USER_004_NOT_FOUND');
@@ -293,25 +261,6 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
             throw new AppError(getMessage('user.usernameExists', lang, { username: normalizedUsername }), 409, 'USER_004_USERNAME_EXISTS');
         }
     }
-    // Validate that the referenced CatalogItem for user status exists, is active and
-    // belongs to the userStatus catalog
-    if( statusItemId && statusItemId !== user.statusItemId ) {
-        const status = await CatalogItem.findOne({
-            where: {
-                catalogItemId: statusItemId,
-                isActive: true
-            },
-            include: [{
-                model: CatalogType,
-                as: 'catalogType',
-                where: { code: USER_STATUS_CATALOG_CODE },
-                attributes: []
-            }]
-        });
-        if( !status ) {
-            throw new AppError(getMessage('user.statusNotFound', lang), 404, 'USER_004_STATUS_NOT_FOUND');
-        }
-    }
     const targetFirstName = firstName ? esaviCrypt(toTitleCase(firstName.trim())) : undefined;
     const targetLastName = lastName ? esaviCrypt(toTitleCase(lastName.trim())) : undefined;
     const currentAppDetails = Array.isArray(user.appDetails) ? user.appDetails : [];
@@ -320,8 +269,7 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
         email: targetEmail && targetEmail !== user.email ? targetEmail : undefined,
         firstName: targetFirstName && targetFirstName !== user.firstName ? targetFirstName : undefined,
         lastName: targetLastName && targetLastName !== user.lastName ? targetLastName : undefined,
-        phone: phone && phone.trim() !== user.phone ? phone.trim() : undefined,
-        statusItemId: statusItemId && statusItemId !== user.statusItemId ? statusItemId : undefined
+        phone: phone && phone.trim() !== user.phone ? phone.trim() : undefined
     };
     for( const key of Object.keys(objectToUpdate) ) {
         if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
@@ -422,7 +370,6 @@ const setUserActivationService = async (id: string, authUser: AuthUser | undefin
                 }
             }
         }
-        // statusItemId is deliberately left untouched: it and isActive are independent states
         await setEntityActiveStatusService({
             model: AppUser,
             where: { userId: id },

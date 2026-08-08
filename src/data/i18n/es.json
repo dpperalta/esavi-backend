@@ -57,7 +57,6 @@
         "samePassword": "La nueva contraseña debe ser distinta de la actual",
         "alreadyActive": "El usuario con ID {{id}} ya está activo",
         "alreadyInactive": "El usuario con ID {{id}} ya está inactivo",
-        "statusNotFound": "El estado de usuario no existe o está inactivo",
         "idRequired": "El ID del usuario es obligatorio"
     },
     "role": {

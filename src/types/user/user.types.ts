@@ -5,7 +5,6 @@ export interface CreateUserInput {
     firstName: string;
     lastName: string;
     phone?: string | null;
-    statusItemId?: string | null;
     roleId: string | string[];
 }
 
