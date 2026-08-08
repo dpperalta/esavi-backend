@@ -241,5 +241,28 @@
         "bulkSuccess": "Roles assigned successfully",
         "bulkFailed": "Failed to assign the roles. Please try again later.",
         "rolesNotFound": "{{count}} roles do not exist or are inactive. Please check the IDs and try again."
+    },
+    "patient": {
+        "documentExists": "A patient with that document number is already registered",
+        "sexNotFound": "The given sex does not exist, is inactive or does not belong to the sex catalog",
+        "geoLocationNotFound": "The residence geolocation does not exist or is inactive",
+        "notFound": "Patient not found. Please check the patient ID and try again.",
+        "idRequired": "The patient ID is required",
+        "identifierRequired": "The search identifier is required",
+        "createdSuccess": "Patient created successfully",
+        "createdFailed": "Failed to create the patient. Please try again later.",
+        "getSuccess": "Patient fetched successfully",
+        "getFailed": "Failed to fetch the patient. Please try again later.",
+        "getSuccessPlural": "Patients fetched successfully",
+        "getFailedPlural": "Failed to fetch the patients. Please try again later.",
+        "searchEmpty": "No results found for the search",
+        "updatedSuccess": "Patient updated successfully",
+        "updatedFailed": "Failed to update the patient. Please try again later.",
+        "alreadyInactive": "The patient with ID {{id}} is already inactive",
+        "alreadyActive": "The patient with ID {{id}} is already active",
+        "deletedSuccess": "Patient deleted successfully",
+        "deletedFailed": "Failed to delete the patient. Please try again later.",
+        "activatedSuccess": "Patient activated successfully",
+        "activatedFailed": "Failed to activate the patient. Please try again later."
     }
 }

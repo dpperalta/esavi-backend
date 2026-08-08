@@ -241,5 +241,28 @@
         "bulkSuccess": "Roles asignados exitosamente",
         "bulkFailed": "Error al asignar los roles. Por favor, inténtelo de nuevo más tarde.",
         "rolesNotFound": "{{count}} roles no existen o están inactivos. Por favor, verifique los IDs e inténtelo de nuevo."
+    },
+    "patient": {
+        "documentExists": "Ya existe un paciente registrado con ese número de documento",
+        "sexNotFound": "El sexo indicado no existe, está inactivo o no pertenece al catálogo de sexo",
+        "geoLocationNotFound": "La geolocalización de residencia no existe o está inactiva",
+        "notFound": "Paciente no encontrado. Por favor, verifique el ID del paciente e inténtelo de nuevo.",
+        "idRequired": "El ID del paciente es obligatorio",
+        "identifierRequired": "El identificador de búsqueda es obligatorio",
+        "createdSuccess": "Paciente creado exitosamente",
+        "createdFailed": "Error al crear el paciente. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Paciente obtenido exitosamente",
+        "getFailed": "Error al obtener el paciente. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Pacientes obtenidos exitosamente",
+        "getFailedPlural": "Error al obtener los pacientes. Por favor, inténtelo de nuevo más tarde.",
+        "searchEmpty": "No existen resultados de la búsqueda",
+        "updatedSuccess": "Paciente actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el paciente. Por favor, inténtelo de nuevo más tarde.",
+        "alreadyInactive": "El paciente con ID {{id}} ya está inactivo",
+        "alreadyActive": "El paciente con ID {{id}} ya está activo",
+        "deletedSuccess": "Paciente eliminado exitosamente",
+        "deletedFailed": "Error al eliminar el paciente. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Paciente activado exitosamente",
+        "activatedFailed": "Error al activar el paciente. Por favor, inténtelo de nuevo más tarde."
     }
 }

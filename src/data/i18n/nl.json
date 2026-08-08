@@ -241,5 +241,28 @@
         "bulkSuccess": "Rollen succesvol toegewezen",
         "bulkFailed": "Toewijzen van de rollen mislukt. Probeer het later opnieuw.",
         "rolesNotFound": "{{count}} rollen bestaan niet of zijn inactief. Controleer de IDs en probeer het opnieuw."
+    },
+    "patient": {
+        "documentExists": "Er is al een patiënt geregistreerd met dat documentnummer",
+        "sexNotFound": "Het opgegeven geslacht bestaat niet, is inactief of behoort niet tot de geslachtscatalogus",
+        "geoLocationNotFound": "De woonlocatie bestaat niet of is inactief",
+        "notFound": "Patiënt niet gevonden. Controleer de ID van de patiënt en probeer het opnieuw.",
+        "idRequired": "De ID van de patiënt is verplicht",
+        "identifierRequired": "De zoekidentificatie is verplicht",
+        "createdSuccess": "Patiënt succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de patiënt mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Patiënt succesvol opgehaald",
+        "getFailed": "Ophalen van de patiënt mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Patiënten succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de patiënten mislukt. Probeer het later opnieuw.",
+        "searchEmpty": "Geen zoekresultaten gevonden",
+        "updatedSuccess": "Patiënt succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de patiënt mislukt. Probeer het later opnieuw.",
+        "alreadyInactive": "De patiënt met ID {{id}} is al inactief",
+        "alreadyActive": "De patiënt met ID {{id}} is al actief",
+        "deletedSuccess": "Patiënt succesvol verwijderd",
+        "deletedFailed": "Verwijderen van de patiënt mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Patiënt succesvol geactiveerd",
+        "activatedFailed": "Activeren van de patiënt mislukt. Probeer het later opnieuw."
     }
 }
