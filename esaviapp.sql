@@ -245,8 +245,6 @@ CREATE TABLE IF NOT EXISTS "appUser" (
   "firstName" varchar(150),
   "lastName" varchar(150),
   "phone" varchar(50),
-  "statusItemId" uuid,
-  "lastLoginAt" timestamptz,
   "requiresPasswordChange" boolean NOT NULL DEFAULT false,
   "isActive" boolean NOT NULL DEFAULT true,
   "createdAt" timestamptz NOT NULL DEFAULT current_timestamp,
@@ -256,10 +254,8 @@ CREATE TABLE IF NOT EXISTS "appUser" (
   "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
   CONSTRAINT "UQ_appUser_username" UNIQUE ("username"),
   CONSTRAINT "UQ_appUser_email" UNIQUE ("email"),
-  CONSTRAINT "FK_appUser_statusItem" FOREIGN KEY ("statusItemId") REFERENCES "catalogItem" ("catalogItemId") ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT "CK_appUser_authSource" CHECK ("passwordHash" IS NOT NULL OR "externalSubject" IS NOT NULL)
 );
-CREATE INDEX IF NOT EXISTS "IX_appUser_statusItemId" ON "appUser" ("statusItemId");
 CREATE INDEX IF NOT EXISTS "IX_appUser_active" ON "appUser" ("isActive") WHERE "deletedAt" IS NULL;
 
 CREATE TABLE IF NOT EXISTS "appRole" (

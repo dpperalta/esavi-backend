@@ -9,6 +9,7 @@ import { CatalogType } from './catalogType.model';
 import { CatalogItem } from './catalogItem.model';
 import { HealthFacility } from './healthFacility.model';
 import { AppUserGeoLocation } from './appUserGeoLocation.model';
+import { Patient } from './patient.model';
 
 export const initModels = (): void => {
     initAssociations();
@@ -24,5 +25,6 @@ export {
     CatalogType,
     CatalogItem,
     HealthFacility,
-    AppUserGeoLocation
+    AppUserGeoLocation,
+    Patient
 };
