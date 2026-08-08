@@ -5,7 +5,8 @@ import {
     createPatientService,
     getAllPatientsService,
     getPatientByIdService,
-    getPatientsService
+    getPatientsService,
+    searchPatientsByIdentifierService
 } from '../services/patient.service';
 
 // Create Patient Controller
@@ -93,9 +94,39 @@ const getPatientById = async (req: Request, res: Response, next: NextFunction): 
     }
 }
 
+// Search Patients By Identifier Controller
+// Code: ESAVI-PATIENT-006
+const searchPatientsByIdentifier = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const identifier = (req.params.identifier).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await searchPatientsByIdentifierService(identifier, req.lang, canViewInactive(req.user as AuthUser), limit, offset);
+        // A search with no matches is a result, not a missing resource: 200 with an empty page
+        // and its own message, so the frontend does not have to branch on the status.
+        // Both keys are spelled out so i18n-check can verify them statically
+        const message = data.count > 0
+            ? getMessage('patient.getSuccessPlural', req.lang)
+            : getMessage('patient.searchEmpty', req.lang);
+        return res.status(200).json({
+            ok: true,
+            message,
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PATIENT-006: Error searching Patients by identifier: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('patient.getFailedPlural', req.lang), 500, 'PATIENT_006_SEARCH_FAILED', error));
+    }
+}
+
 export {
     createPatient,
     getPatients,
     getAllPatients,
-    getPatientById
+    getPatientById,
+    searchPatientsByIdentifier
 }

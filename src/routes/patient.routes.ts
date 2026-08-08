@@ -5,9 +5,15 @@ import {
     createPatient,
     getAllPatients,
     getPatientById,
-    getPatients
+    getPatients,
+    searchPatientsByIdentifier
 } from '../controllers/patient.controller';
-import { createPatientValidator, patientIdValidator, patientListValidator } from '../validators';
+import {
+    createPatientValidator,
+    patientIdentifierValidator,
+    patientIdValidator,
+    patientListValidator
+} from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -26,6 +32,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...patientListValidator
 // Get All Patients - For Admin
 // Code: ESAVI-PATIENT-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...patientListValidator, validateFields, getAllPatients);
+
+// Search Patients by Identifier - documentNumber, passportNumber or healthSystemCode
+// Code: ESAVI-PATIENT-006
+router.get('/search/:identifier', tokenValidation, validateUserRole(USER), ...patientIdentifierValidator, ...patientListValidator, validateFields, searchPatientsByIdentifier);
 
 // Get Patient by ID
 // Code: ESAVI-PATIENT-003

@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import { CatalogItem, CatalogType, GeoLocation, Patient } from '../models';
 import { AppError, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreatePatientInput } from '../types';
@@ -209,9 +210,46 @@ const getPatientByIdService = async (id: string, lang: string, canViewInactive: 
     return toPatientResponse(patient);
 }
 
+// Search Patients By Identifier Service
+// Code: ESAVI-PATIENT-006
+// One query over the three identifiers a client can type into a single box. findAndCountAll and
+// not findOne: passportNumber has no UNIQUE in the DDL, so findOne would return an arbitrary row
+// and hide the rest. An empty result is a result — it never raises a 404
+const searchPatientsByIdentifierService = async (
+    identifier: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const normalized = normalizeDocument(identifier);
+    if( !normalized ) {
+        throw new AppError(getMessage('patient.identifierRequired', lang), 400, 'PATIENT_006_IDENTIFIER_REQUIRED');
+    }
+    // healthSystemCode is the only one of the three stored in clear text
+    const encrypted = esaviCrypt(normalized);
+    const { count, rows } = await Patient.findAndCountAll({
+        where: {
+            ...( canViewInactive ? {} : { isActive: true } ),
+            [Op.or]: [
+                { documentNumber: encrypted },
+                { passportNumber: encrypted },
+                { healthSystemCode: normalized }
+            ]
+        },
+        attributes: LIST_ATTRIBUTES,
+        include: [SEX_INCLUDE, LIST_RESIDENCE_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toPatientListRow) };
+}
+
 export {
     createPatientService,
     getPatientsService,
     getAllPatientsService,
-    getPatientByIdService
+    getPatientByIdService,
+    searchPatientsByIdentifierService
 }
