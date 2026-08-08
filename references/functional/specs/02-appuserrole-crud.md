@@ -1,6 +1,6 @@
 # SPEC F02 — CRUD de appUserRole
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 04 (consistencia del contrato), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F01 (molde de entidad de asignación)
 > **Fecha:** 2026-08-05
 > **Objetivo:** Dar superficie HTTP a `appUserRole` — asignar, consultar y revocar roles de usuario — y hacer que revocar un rol deje efectivamente de autorizar.

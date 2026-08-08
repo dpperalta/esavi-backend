@@ -65,6 +65,15 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'delete', path: `/api/health-facilities/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-HFAC-005A' },
     { method: 'patch',  path: `/api/health-facilities/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-HFAC-005B' },
 
+    // appRole
+    { method: 'post',   path: '/api/roles',                                           minRole: 'ADMIN',      code: 'ESAVI-APPROLE-001' },
+    { method: 'get',    path: '/api/roles',                                           minRole: 'USER',       code: 'ESAVI-APPROLE-002A' },
+    { method: 'get',    path: '/api/roles/admin',                                     minRole: 'ADMIN',      code: 'ESAVI-APPROLE-002B' },
+    { method: 'get',    path: `/api/roles/${ UUID }`,                                 minRole: 'USER',       code: 'ESAVI-APPROLE-003' },
+    { method: 'put',    path: `/api/roles/${ UUID }`,                                 minRole: 'ADMIN',      code: 'ESAVI-APPROLE-004' },
+    { method: 'delete', path: `/api/roles/${ UUID }`,                                 minRole: 'ADMIN',      code: 'ESAVI-APPROLE-005A' },
+    { method: 'patch',  path: `/api/roles/activate/${ UUID }`,                        minRole: 'SUPERADMIN', code: 'ESAVI-APPROLE-005B' },
+
     // appUserGeoLocation
     { method: 'post',   path: '/api/user-geo-locations',                              minRole: 'ADMIN',      code: 'ESAVI-USERGEO-001' },
     { method: 'post',   path: '/api/user-geo-locations/bulk',                         minRole: 'ADMIN',      code: 'ESAVI-USERGEO-007' },
@@ -144,7 +153,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(51);
+            expect(ROUTE_RULES).toHaveLength(58);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

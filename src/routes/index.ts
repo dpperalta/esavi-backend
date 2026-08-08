@@ -10,6 +10,7 @@ import catalogItemRoutes from './catalogItem.routes';
 import healthFacilityRoutes from './healthFacility.routes';
 import appUserGeoLocationRoutes from './appUserGeoLocation.routes';
 import appUserRoleRoutes from './appUserRole.routes';
+import appRoleRoutes from './appRole.routes';
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use('/catalog-items', catalogItemRoutes);
 router.use('/health-facilities', healthFacilityRoutes);
 router.use('/user-geo-locations', appUserGeoLocationRoutes);
 router.use('/user-roles', appUserRoleRoutes);
+router.use('/roles', appRoleRoutes);
 
 export default router;

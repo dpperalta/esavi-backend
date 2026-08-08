@@ -27,7 +27,7 @@ const executeAdminSeed = async (req: Request, res: Response): Promise<Response> 
             const [role] = await AppRole.findOrCreate({
                 where: { name: roleName },
                 defaults: { 
-                    code: 'SAD',
+                    code: 'SUPERADMIN',
                     name: roleName,
                     description: 'Superadmin role with all permissions',
                     isSystemRole: true,
@@ -85,7 +85,7 @@ const executeAdminSeed = async (req: Request, res: Response): Promise<Response> 
             await AppRole.findOrCreate({
                 where: { name: process.env.ESAVI_USER || 'USER' },
                 defaults: { 
-                    code: 'USR',
+                    code: 'USER',
                     name: process.env.ESAVI_USER || 'USER',
                     description: 'Default role for regular users',
                     isSystemRole: false,

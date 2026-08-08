@@ -232,6 +232,7 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 
 | Entidad | Abreviatura |
 |---|---|
+| appRole | `APPROLE` |
 | appUserGeoLocation | `USERGEO` |
 | appUserRole | `USERROLE` |
 | catalogItem | `CATITEM` |
