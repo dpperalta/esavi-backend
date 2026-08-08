@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { createUser, getUsers, getAllUsers, getUserById } from '../controllers/user.controller';
+import { createUser, getUsers, getAllUsers, getUserById, getOwnProfile } from '../controllers/user.controller';
 import { createUserValidator, userListValidator, userIdValidator } from '../validators';
 import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
-const { ADMIN } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -19,6 +19,10 @@ router.get('/', tokenValidation, validateUserRole(ADMIN), ...userListValidator, 
 // Get All Users - For Admin
 // Code: ESAVI-USER-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...userListValidator, validateFields, getAllUsers);
+
+// Get Own Profile
+// Code: ESAVI-USER-007
+router.get('/me', tokenValidation, validateUserRole(USER), getOwnProfile);
 
 // Literal routes are declared above this point: Express would capture them as an :id
 // and the UUID validator would answer 400

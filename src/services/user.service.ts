@@ -220,17 +220,34 @@ const getAllUsersService = async (limit: number = DEFAULT_LIMIT, offset: number 
     return { count, rows: rows.map(toUserListRow) };
 }
 
-// Get User By ID Service
-// Code: ESAVI-USER-003
-const getUserByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
-    const where = canViewInactive ? { userId: id } : { userId: id, isActive: true };
-    const user = await AppUser.findOne({
+// The read 003 and 007 share. Each one raises its own 404 so the operation code stays
+// the same in the five places the convention requires
+const findUserWithRelations = async (id: string, includeInactive: boolean = false) => {
+    const where = includeInactive ? { userId: id } : { userId: id, isActive: true };
+    return await AppUser.findOne({
         where,
         attributes: LIST_EXCLUDE,
         include: [ROLES_INCLUDE, STATUS_INCLUDE]
     });
+}
+
+// Get User By ID Service
+// Code: ESAVI-USER-003
+const getUserByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const user = await findUserWithRelations(id, canViewInactive);
     if( !user ) {
         throw new AppError(getMessage('user.notFound', lang), 404, 'USER_003_NOT_FOUND');
+    }
+    return toUserResponse(user);
+}
+
+// Get Own Profile Service
+// Code: ESAVI-USER-007
+const getOwnProfileService = async (authUser: AuthUser | undefined, lang: string) => {
+    // tokenValidation only attaches active users, so the inactive branch is unreachable here
+    const user = authUser?.userId ? await findUserWithRelations(authUser.userId) : null;
+    if( !user ) {
+        throw new AppError(getMessage('user.notFound', lang), 404, 'USER_007_NOT_FOUND');
     }
     return toUserResponse(user);
 }
@@ -239,5 +256,6 @@ export {
     createUserService,
     getUsersService,
     getAllUsersService,
-    getUserByIdService
+    getUserByIdService,
+    getOwnProfileService
 };

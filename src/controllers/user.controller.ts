@@ -3,7 +3,8 @@ import {
     createUserService,
     getUsersService,
     getAllUsersService,
-    getUserByIdService
+    getUserByIdService,
+    getOwnProfileService
 } from '../services/user.service';
 import { esaviLog, getMessage, AppError, canViewInactive } from '../helpers';
 import { AuthUser } from '../types';
@@ -93,9 +94,30 @@ const getUserById = async ( req: Request, res: Response, next: NextFunction ): P
     }
 }
 
+// Get Own Profile Controller
+// Code: ESAVI-USER-007
+const getOwnProfile = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try {
+        const data = await getOwnProfileService(req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-007: Error getting own profile: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.getFailed', req.lang), 500, 'USER_007_FETCH_FAILED', error));
+    }
+}
+
 export {
     createUser,
     getUsers,
     getAllUsers,
-    getUserById
+    getUserById,
+    getOwnProfile
 }
