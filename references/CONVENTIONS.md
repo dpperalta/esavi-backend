@@ -240,6 +240,7 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 | appUserRole | `USERROLE` |
 | catalogItem | `CATITEM` |
 | catalogType | `CATTYPE` |
+| esaviCase | `CASE` |
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
 | healthFacility | `HFAC` |
