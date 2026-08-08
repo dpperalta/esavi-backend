@@ -4,7 +4,8 @@ import {
     getUsersService,
     getAllUsersService,
     getUserByIdService,
-    getOwnProfileService
+    getOwnProfileService,
+    updateUserService
 } from '../services/user.service';
 import { esaviLog, getMessage, AppError, canViewInactive } from '../helpers';
 import { AuthUser } from '../types';
@@ -114,10 +115,32 @@ const getOwnProfile = async ( req: Request, res: Response, next: NextFunction ):
     }
 }
 
+// Update User Controller
+// Code: ESAVI-USER-004
+const updateUser = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateUserService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-004: Error updating user: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.updatedFailed', req.lang), 500, 'USER_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createUser,
     getUsers,
     getAllUsers,
     getUserById,
-    getOwnProfile
+    getOwnProfile,
+    updateUser
 }

@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { createUser, getUsers, getAllUsers, getUserById, getOwnProfile } from '../controllers/user.controller';
-import { createUserValidator, userListValidator, userIdValidator } from '../validators';
+import { createUser, getUsers, getAllUsers, getUserById, getOwnProfile, updateUser } from '../controllers/user.controller';
+import { createUserValidator, userListValidator, userIdValidator, updateUserValidator } from '../validators';
 import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
@@ -30,5 +30,9 @@ router.get('/me', tokenValidation, validateUserRole(USER), getOwnProfile);
 // Get User By ID
 // Code: ESAVI-USER-003
 router.get('/:id', tokenValidation, validateUserRole(ADMIN), ...userIdValidator, validateFields, getUserById);
+
+// Update User
+// Code: ESAVI-USER-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...userIdValidator, ...updateUserValidator, validateFields, updateUser);
 
 export default router;

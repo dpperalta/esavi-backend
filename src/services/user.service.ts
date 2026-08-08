@@ -1,7 +1,8 @@
 import bcrypt from 'bcrypt';
+import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole, CatalogItem, CatalogType } from '../models';
-import { AppDetails, AuthUser, CreateUserServiceParams } from '../types';
+import { AppDetails, AuthUser, CreateUserInput, CreateUserServiceParams } from '../types';
 import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -252,10 +253,107 @@ const getOwnProfileService = async (authUser: AuthUser | undefined, lang: string
     return toUserResponse(user);
 }
 
+// Update User Service
+// Code: ESAVI-USER-004
+// password and roleId are ignored on purpose: the first belongs to 006, the second to the
+// appUserRole endpoints. The validator already rejects both, this is the second line
+const updateUserService = async (id: string, data: Partial<CreateUserInput>, authUser: AuthUser | undefined, lang: string) => {
+    const { userId } = authUser || {};
+    const { username, email, firstName, lastName, phone, statusItemId } = data;
+    const user = await AppUser.findByPk(id);
+    if( !user ) {
+        throw new AppError(getMessage('user.notFound', lang), 404, 'USER_004_NOT_FOUND');
+    }
+    // Uniqueness does not filter by isActive — that is what the UNIQUE constraints guarantee —
+    // and it excludes the record being updated
+    const targetEmail = email ? esaviCrypt(normalizeEmail(email)) : undefined;
+    if( targetEmail && targetEmail !== user.email ) {
+        const existingEmail = await AppUser.findOne({
+            where: {
+                email: targetEmail,
+                userId: { [Op.ne]: id }
+            }
+        });
+        if( existingEmail ) {
+            throw new AppError(getMessage('user.alreadyExists', lang), 409, 'USER_004_EMAIL_EXISTS');
+        }
+    }
+    const normalizedUsername = username?.trim();
+    const targetUsername = normalizedUsername ? esaviCrypt(normalizedUsername) : undefined;
+    if( targetUsername && targetUsername !== user.username ) {
+        const existingUsername = await AppUser.findOne({
+            where: {
+                username: targetUsername,
+                userId: { [Op.ne]: id }
+            }
+        });
+        if( existingUsername ) {
+            throw new AppError(getMessage('user.usernameExists', lang, { username: normalizedUsername }), 409, 'USER_004_USERNAME_EXISTS');
+        }
+    }
+    // Validate that the referenced CatalogItem for user status exists, is active and
+    // belongs to the userStatus catalog
+    if( statusItemId && statusItemId !== user.statusItemId ) {
+        const status = await CatalogItem.findOne({
+            where: {
+                catalogItemId: statusItemId,
+                isActive: true
+            },
+            include: [{
+                model: CatalogType,
+                as: 'catalogType',
+                where: { code: USER_STATUS_CATALOG_CODE },
+                attributes: []
+            }]
+        });
+        if( !status ) {
+            throw new AppError(getMessage('user.statusNotFound', lang), 404, 'USER_004_STATUS_NOT_FOUND');
+        }
+    }
+    const targetFirstName = firstName ? esaviCrypt(toTitleCase(firstName.trim())) : undefined;
+    const targetLastName = lastName ? esaviCrypt(toTitleCase(lastName.trim())) : undefined;
+    const currentAppDetails = Array.isArray(user.appDetails) ? user.appDetails : [];
+    const objectToUpdate: Record<string, unknown> = {
+        username: targetUsername && targetUsername !== user.username ? targetUsername : undefined,
+        email: targetEmail && targetEmail !== user.email ? targetEmail : undefined,
+        firstName: targetFirstName && targetFirstName !== user.firstName ? targetFirstName : undefined,
+        lastName: targetLastName && targetLastName !== user.lastName ? targetLastName : undefined,
+        phone: phone && phone.trim() !== user.phone ? phone.trim() : undefined,
+        statusItemId: statusItemId && statusItemId !== user.statusItemId ? statusItemId : undefined
+    };
+    for( const key of Object.keys(objectToUpdate) ) {
+        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    }
+    // displayName is never received: it is recomposed from whichever of the two names changed,
+    // over the value already stored for the one that did not
+    if( objectToUpdate.firstName !== undefined || objectToUpdate.lastName !== undefined ) {
+        const nextFirstName = esaviDecrypt((objectToUpdate.firstName as string) ?? user.firstName as string);
+        const nextLastName = esaviDecrypt((objectToUpdate.lastName as string) ?? user.lastName as string);
+        objectToUpdate.displayName = esaviCrypt(`${nextFirstName} ${nextLastName}`);
+    }
+    // The entry is written even when nothing changed: the attempt is part of the audit trail
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: userId || 'undefined',
+        method: 'ESAVI-USER-004',
+        detail: 'User updated by service'
+    };
+    await user.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+    const updatedUser = await findUserWithRelations(id, true);
+    return updatedUser ? toUserResponse(updatedUser) : null;
+}
+
 export {
     createUserService,
     getUsersService,
     getAllUsersService,
     getUserByIdService,
-    getOwnProfileService
+    getOwnProfileService,
+    updateUserService
 };
