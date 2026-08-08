@@ -220,8 +220,24 @@ const getAllUsersService = async (limit: number = DEFAULT_LIMIT, offset: number 
     return { count, rows: rows.map(toUserListRow) };
 }
 
+// Get User By ID Service
+// Code: ESAVI-USER-003
+const getUserByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const where = canViewInactive ? { userId: id } : { userId: id, isActive: true };
+    const user = await AppUser.findOne({
+        where,
+        attributes: LIST_EXCLUDE,
+        include: [ROLES_INCLUDE, STATUS_INCLUDE]
+    });
+    if( !user ) {
+        throw new AppError(getMessage('user.notFound', lang), 404, 'USER_003_NOT_FOUND');
+    }
+    return toUserResponse(user);
+}
+
 export {
     createUserService,
     getUsersService,
-    getAllUsersService
+    getAllUsersService,
+    getUserByIdService
 };

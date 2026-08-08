@@ -2,9 +2,11 @@
 import {
     createUserService,
     getUsersService,
-    getAllUsersService
+    getAllUsersService,
+    getUserByIdService
 } from '../services/user.service';
-import { esaviLog, getMessage, AppError } from '../helpers';
+import { esaviLog, getMessage, AppError, canViewInactive } from '../helpers';
+import { AuthUser } from '../types';
 
 // Create User Controller
 // Code: ESAVI-USER-001
@@ -70,8 +72,30 @@ const getAllUsers = async ( req: Request, res: Response, next: NextFunction ): P
     }
 }
 
+// Get User By ID Controller
+// Code: ESAVI-USER-003
+const getUserById = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getUserByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-003: Error getting user by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.getFailed', req.lang), 500, 'USER_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createUser,
     getUsers,
-    getAllUsers
+    getAllUsers,
+    getUserById
 }

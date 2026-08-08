@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { createUser, getUsers, getAllUsers } from '../controllers/user.controller';
-import { createUserValidator, userListValidator } from '../validators';
+import { createUser, getUsers, getAllUsers, getUserById } from '../controllers/user.controller';
+import { createUserValidator, userListValidator, userIdValidator } from '../validators';
 import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
@@ -19,5 +19,12 @@ router.get('/', tokenValidation, validateUserRole(ADMIN), ...userListValidator, 
 // Get All Users - For Admin
 // Code: ESAVI-USER-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...userListValidator, validateFields, getAllUsers);
+
+// Literal routes are declared above this point: Express would capture them as an :id
+// and the UUID validator would answer 400
+
+// Get User By ID
+// Code: ESAVI-USER-003
+router.get('/:id', tokenValidation, validateUserRole(ADMIN), ...userIdValidator, validateFields, getUserById);
 
 export default router;
