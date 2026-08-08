@@ -1,10 +1,19 @@
 import { Router } from 'express';
-import { createUser, getUsers, getAllUsers, getUserById, getOwnProfile, updateUser } from '../controllers/user.controller';
+import {
+    createUser,
+    getUsers,
+    getAllUsers,
+    getUserById,
+    getOwnProfile,
+    updateUser,
+    deleteUser,
+    activateUser
+} from '../controllers/user.controller';
 import { createUserValidator, userListValidator, userIdValidator, updateUserValidator } from '../validators';
 import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -24,6 +33,10 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...userListValida
 // Code: ESAVI-USER-007
 router.get('/me', tokenValidation, validateUserRole(USER), getOwnProfile);
 
+// Activate User
+// Code: ESAVI-USER-005B
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...userIdValidator, validateFields, activateUser);
+
 // Literal routes are declared above this point: Express would capture them as an :id
 // and the UUID validator would answer 400
 
@@ -34,5 +47,9 @@ router.get('/:id', tokenValidation, validateUserRole(ADMIN), ...userIdValidator,
 // Update User
 // Code: ESAVI-USER-004
 router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...userIdValidator, ...updateUserValidator, validateFields, updateUser);
+
+// Soft delete User
+// Code: ESAVI-USER-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...userIdValidator, validateFields, deleteUser);
 
 export default router;

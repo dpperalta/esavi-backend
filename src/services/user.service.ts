@@ -1,10 +1,12 @@
 import bcrypt from 'bcrypt';
-import { Op } from 'sequelize';
+import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole, CatalogItem, CatalogType } from '../models';
 import { AppDetails, AuthUser, CreateUserInput, CreateUserServiceParams } from '../types';
 import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { ROLES } from '../constants/roles.constants';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 // The catalog statusItemId must belong to. Validated in the service: appUser has no
 // trigger checking the item against its catalog, unlike healthFacility
@@ -349,11 +351,107 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
     return updatedUser ? toUserResponse(updatedUser) : null;
 }
 
+// Users who currently carry the SUPERADMIN role: the assignment is active and so is the user.
+// Sibling of the guard SPEC F02 applies to the last assignment — there the assignment is
+// protected, here the last carrier
+const activeSuperAdminIds = async (transaction: Transaction): Promise<Set<string>> => {
+    const superAdminRole = await AppRole.findOne({
+        where: { name: ROLES.SUPERADMIN, isActive: true },
+        transaction
+    });
+    if( !superAdminRole ) return new Set();
+    const assignments = await AppUserRole.findAll({
+        where: { roleId: superAdminRole.roleId, isActive: true },
+        attributes: ['userId'],
+        include: [{
+            model: AppUser,
+            as: 'user',
+            where: { isActive: true },
+            attributes: []
+        }],
+        transaction
+    });
+    return new Set(assignments.map(assignment => assignment.userId));
+}
+
+// Setting User Active/Inactive Service
+// Code: ESAVI-USER-005A / ESAVI-USER-005B
+const setUserActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        if( !isActive ) {
+            // Nobody closes the door from the inside: 005B requires SUPERADMIN, so an
+            // administrator who deactivates themselves cannot undo it
+            if( id === authUser?.userId ) {
+                throw new AppError(getMessage('user.selfDeactivation', lang), 409, 'USER_005A_SELF_DEACTIVATION');
+            }
+            // The check and the write share the transaction the service already opens
+            const superAdminIds = await activeSuperAdminIds(transaction);
+            if( superAdminIds.has(id) && superAdminIds.size <= 1 ) {
+                throw new AppError(getMessage('user.lastSuperAdmin', lang), 409, 'USER_005A_LAST_SUPERADMIN');
+            }
+        } else {
+            // The unique constraints do not filter by isActive, so reactivating cannot collide
+            // today. Checked anyway: the guard is what keeps a 409 from turning into a 23505
+            const user = await AppUser.findByPk(id, { transaction });
+            if( user ) {
+                const takenEmail = await AppUser.findOne({
+                    where: {
+                        email: user.email,
+                        userId: { [Op.ne]: id },
+                        isActive: true
+                    },
+                    transaction
+                });
+                if( takenEmail ) {
+                    throw new AppError(getMessage('user.alreadyExists', lang), 409, 'USER_005B_EMAIL_EXISTS');
+                }
+                if( user.username ) {
+                    const takenUsername = await AppUser.findOne({
+                        where: {
+                            username: user.username,
+                            userId: { [Op.ne]: id },
+                            isActive: true
+                        },
+                        transaction
+                    });
+                    if( takenUsername ) {
+                        throw new AppError(getMessage('user.usernameExists', lang, { username: esaviDecrypt(user.username) }), 409, 'USER_005B_USERNAME_EXISTS');
+                    }
+                }
+            }
+        }
+        // statusItemId is deliberately left untouched: it and isActive are independent states
+        await setEntityActiveStatusService({
+            model: AppUser,
+            where: { userId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('user.notFound', lang),
+            notFoundCode: `USER_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`user.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `USER_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-USER-${ op }`,
+                detail: `User ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createUserService,
     getUsersService,
     getAllUsersService,
     getUserByIdService,
     getOwnProfileService,
-    updateUserService
+    updateUserService,
+    setUserActivationService
 };

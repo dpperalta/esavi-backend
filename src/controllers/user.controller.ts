@@ -5,7 +5,8 @@ import {
     getAllUsersService,
     getUserByIdService,
     getOwnProfileService,
-    updateUserService
+    updateUserService,
+    setUserActivationService
 } from '../services/user.service';
 import { esaviLog, getMessage, AppError, canViewInactive } from '../helpers';
 import { AuthUser } from '../types';
@@ -136,11 +137,53 @@ const updateUser = async ( req: Request, res: Response, next: NextFunction ): Pr
     }
 }
 
+// Delete User Controller
+// Code: ESAVI-USER-005A
+const deleteUser = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setUserActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-005A: Error deactivating user: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.deletedFailed', req.lang), 500, 'USER_005A_DEACTIVATION_FAILED', error));
+    }
+}
+
+// Activate User Controller
+// Code: ESAVI-USER-005B
+const activateUser = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setUserActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-005B: Error activating user: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.activatedFailed', req.lang), 500, 'USER_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createUser,
     getUsers,
     getAllUsers,
     getUserById,
     getOwnProfile,
-    updateUser
+    updateUser,
+    deleteUser,
+    activateUser
 }
