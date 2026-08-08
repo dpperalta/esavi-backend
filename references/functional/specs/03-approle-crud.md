@@ -1,6 +1,6 @@
 # SPEC F03 — CRUD de appRole
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 04 (consistencia del contrato), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios)
 > **Relacionado con:** SPEC F02 (`appUserRole`), que difiere aquí el CRUD de roles y cuya guarda de escalada se apoya en la columna `level` que este spec pasa a gobernar
 > **Fecha:** 2026-08-05
