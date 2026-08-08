@@ -199,8 +199,19 @@ const getAllPatientsService = async (limit: number = DEFAULT_LIMIT, offset: numb
     return { count, rows: rows.map(toPatientListRow) };
 }
 
+// Get Patient By ID Service
+// Code: ESAVI-PATIENT-003
+const getPatientByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const patient = await findPatientWithRelations(id, canViewInactive);
+    if( !patient ) {
+        throw new AppError(getMessage('patient.notFound', lang), 404, 'PATIENT_003_NOT_FOUND');
+    }
+    return toPatientResponse(patient);
+}
+
 export {
     createPatientService,
     getPatientsService,
-    getAllPatientsService
+    getAllPatientsService,
+    getPatientByIdService
 }

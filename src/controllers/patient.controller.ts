@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
 import {
     createPatientService,
     getAllPatientsService,
+    getPatientByIdService,
     getPatientsService
 } from '../services/patient.service';
 
@@ -70,8 +72,30 @@ const getAllPatients = async (req: Request, res: Response, next: NextFunction): 
     }
 }
 
+// Get Patient By ID Controller
+// Code: ESAVI-PATIENT-003
+const getPatientById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getPatientByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('patient.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PATIENT-003: Error fetching Patient by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('patient.getFailed', req.lang), 500, 'PATIENT_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createPatient,
     getPatients,
-    getAllPatients
+    getAllPatients,
+    getPatientById
 }

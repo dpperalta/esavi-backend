@@ -4,9 +4,10 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createPatient,
     getAllPatients,
+    getPatientById,
     getPatients
 } from '../controllers/patient.controller';
-import { createPatientValidator, patientListValidator } from '../validators';
+import { createPatientValidator, patientIdValidator, patientListValidator } from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -25,5 +26,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...patientListValidator
 // Get All Patients - For Admin
 // Code: ESAVI-PATIENT-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...patientListValidator, validateFields, getAllPatients);
+
+// Get Patient by ID
+// Code: ESAVI-PATIENT-003
+// Declared after the literal paths so Express does not capture 'admin' or 'search' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...patientIdValidator, validateFields, getPatientById);
 
 export default router;

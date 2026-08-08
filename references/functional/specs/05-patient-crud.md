@@ -165,7 +165,7 @@ No se comprueba unicidad de `email` ni de `passportNumber`: el DDL no la impone 
 
 **`ESAVI-PATIENT-002B` — listar, admin.** Idéntica, sin `isActive` en el `where`.
 
-**`ESAVI-PATIENT-003` — obtener por ID.** `where` con `isActive: true` salvo que `canViewInactive(req.user)` sea verdadero → 404 `PATIENT_003_NOT_FOUND`. Devuelve la forma completa de §3.7 con los siete campos descifrados.
+**`ESAVI-PATIENT-003` — obtener por ID.** `where` con `isActive: true` salvo que `canViewInactive(req.user)` sea verdadero — hoy **SUPERADMIN**, según `permissions.helper.ts:24-26` → 404 `PATIENT_003_NOT_FOUND`. Devuelve la forma completa de §3.7 con los siete campos descifrados.
 
 **`ESAVI-PATIENT-004` — actualizar.** En este orden:
 
@@ -265,7 +265,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
    *Verificación:* `/` no devuelve pacientes inactivos y `/admin` sí; un USER recibe 403 en `/admin`; ninguna fila trae `email`, `phoneNumber` ni `sysDetails`; `?limit=2` devuelve dos filas con el `count` total.
 
 7. **`ESAVI-PATIENT-003` — obtener por ID.** `getPatientByIdService(id, lang, includeInactive)` con los dos includes y la forma completa; controlador que pasa `canViewInactive(req.user)`; ruta `GET /:id` declarada **después** de las literales.
-   *Verificación:* un ID inexistente devuelve 404; un paciente desactivado devuelve 404 para USER y 200 para ADMIN; los siete campos PII llegan legibles; `sysDetails` no aparece.
+   *Verificación:* un ID inexistente devuelve 404; un paciente desactivado devuelve 404 para USER y ADMIN, y 200 para SUPERADMIN; los siete campos PII llegan legibles; `sysDetails` no aparece.
 
 8. **`ESAVI-PATIENT-006` — buscar por identificador.** `searchPatientsByIdentifierService` con el `Op.or` de tres condiciones de §3.5, paginado, forma reducida. Ruta `GET /search/:identifier` en USER, declarada antes de `/:id`. El controlador elige el mensaje: `getSuccessPlural` si `count > 0`, `searchEmpty` si `count === 0`.
    *Verificación:* buscar el documento de un paciente lo encuentra; buscar su pasaporte lo encuentra; buscar su `healthSystemCode` lo encuentra; buscar en minúsculas encuentra igual; un valor inexistente devuelve **200** con `count: 0` y el mensaje de búsqueda vacía; dos pacientes con el mismo pasaporte devuelven `count: 2`.
@@ -331,11 +331,11 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo. Lo
 
 - [ ] Buscar por documento, por pasaporte y por `healthSystemCode` encuentra al mismo paciente en los tres casos.
 - [ ] Una búsqueda sin coincidencias devuelve **200** con `{ count: 0, rows: [] }` y el mensaje de `patient.searchEmpty`, nunca 404.
-- [ ] Un paciente desactivado no aparece en `006` para USER y sí para ADMIN.
+- [ ] Un paciente desactivado no aparece en `006` para USER ni para ADMIN, y sí para SUPERADMIN.
 
 **Ciclo de vida y auditoría**
 
-- [ ] `GET /:id` de un paciente inactivo: 404 para USER, 200 para ADMIN.
+- [ ] `GET /:id` de un paciente inactivo: 404 para USER y ADMIN, 200 para SUPERADMIN. `canViewInactive` es hoy solo SUPERADMIN (`permissions.helper.ts:24-26`), y el SPEC 06 §«Decisiones» decidió no ampliarlo a ADMIN.
 - [ ] `DELETE /:id` deja `isActive: false` y `deletedAt` con fecha; `PATCH /activate/:id` lo revierte y deja `deletedAt` en `null`.
 - [ ] Desactivar dos veces devuelve 409 `ALREADY_INACTIVE`.
 - [ ] `DELETE /:id` de un paciente con casos ESAVI asociados devuelve 200: no se comprueba ninguna referencia entrante.
