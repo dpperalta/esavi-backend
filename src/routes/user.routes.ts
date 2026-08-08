@@ -7,9 +7,16 @@ import {
     getOwnProfile,
     updateUser,
     deleteUser,
-    activateUser
+    activateUser,
+    changePassword
 } from '../controllers/user.controller';
-import { createUserValidator, userListValidator, userIdValidator, updateUserValidator } from '../validators';
+import {
+    createUserValidator,
+    userListValidator,
+    userIdValidator,
+    updateUserValidator,
+    changePasswordValidator
+} from '../validators';
 import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
@@ -32,6 +39,10 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...userListValida
 // Get Own Profile
 // Code: ESAVI-USER-007
 router.get('/me', tokenValidation, validateUserRole(USER), getOwnProfile);
+
+// Change Own Password
+// Code: ESAVI-USER-006
+router.patch('/me/password', tokenValidation, validateUserRole(USER), ...changePasswordValidator, validateFields, changePassword);
 
 // Activate User
 // Code: ESAVI-USER-005B

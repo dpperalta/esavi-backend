@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole, CatalogItem, CatalogType } from '../models';
-import { AppDetails, AuthUser, CreateUserInput, CreateUserServiceParams } from '../types';
+import { AppDetails, AuthUser, ChangePasswordInput, CreateUserInput, CreateUserServiceParams } from '../types';
 import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
@@ -446,6 +446,46 @@ const setUserActivationService = async (id: string, authUser: AuthUser | undefin
     }
 }
 
+// Change Own Password Service
+// Code: ESAVI-USER-006
+// Always acts on the token holder: no user identifier is accepted, not even from a SUPERADMIN.
+// The token in flight is NOT invalidated — there is no appSession table to revoke it in
+const changePasswordService = async (authUser: AuthUser | undefined, data: ChangePasswordInput, lang: string) => {
+    const { currentPassword, newPassword } = data;
+    const user = authUser?.userId
+        ? await AppUser.findOne({ where: { userId: authUser.userId, isActive: true } })
+        : null;
+    if( !user ) {
+        throw new AppError(getMessage('auth.invalidCredentials', lang), 401, 'USER_006_INVALID_CREDENTIALS');
+    }
+    // Verifying the current password is what keeps a stolen token from taking the account over
+    // permanently in a single request. 401 and not 403: §10 attributes it to invalid credentials
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if( !isPasswordValid ) {
+        throw new AppError(getMessage('auth.invalidCredentials', lang), 401, 'USER_006_INVALID_CREDENTIALS');
+    }
+    // A password change that changes nothing would clear requiresPasswordChange while the
+    // imposed password stays in use
+    if( newPassword === currentPassword ) {
+        throw new AppError(getMessage('user.samePassword', lang), 409, 'USER_006_SAME_PASSWORD');
+    }
+    const currentAppDetails = Array.isArray(user.appDetails) ? user.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-USER-006',
+        detail: 'Password changed by service'
+    };
+    await user.update({
+        passwordHash: await bcrypt.hash(newPassword, 10),
+        requiresPasswordChange: false,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+}
+
 export {
     createUserService,
     getUsersService,
@@ -453,5 +493,6 @@ export {
     getUserByIdService,
     getOwnProfileService,
     updateUserService,
-    setUserActivationService
+    setUserActivationService,
+    changePasswordService
 };

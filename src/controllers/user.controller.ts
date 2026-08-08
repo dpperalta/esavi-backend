@@ -6,7 +6,8 @@ import {
     getUserByIdService,
     getOwnProfileService,
     updateUserService,
-    setUserActivationService
+    setUserActivationService,
+    changePasswordService
 } from '../services/user.service';
 import { esaviLog, getMessage, AppError, canViewInactive } from '../helpers';
 import { AuthUser } from '../types';
@@ -177,6 +178,25 @@ const activateUser = async ( req: Request, res: Response, next: NextFunction ): 
     }
 }
 
+// Change Own Password Controller
+// Code: ESAVI-USER-006
+const changePassword = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try {
+        await changePasswordService(req.user, req.body, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.passwordChangedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-006: Error changing own password: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.passwordChangedFailed', req.lang), 500, 'USER_006_PASSWORD_CHANGE_FAILED', error));
+    }
+}
+
 export {
     createUser,
     getUsers,
@@ -185,5 +205,6 @@ export {
     getOwnProfile,
     updateUser,
     deleteUser,
-    activateUser
+    activateUser,
+    changePassword
 }
