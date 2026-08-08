@@ -1,7 +1,8 @@
-import { UniqueConstraintError } from 'sequelize';
+import { Op, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { EsaviCase, HealthFacility, Patient } from '../models';
 import { AppError, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
-import { AppDetails, AuthUser, CreateEsaviCaseInput } from '../types';
+import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -41,6 +42,23 @@ const HEALTH_FACILITY_INCLUDE = {
 // it: the response carries the resolved patient and healthFacility objects instead
 const DETAIL_EXCLUDE = { exclude: ['sysDetails', 'patientId', 'healthFacilityId'] };
 
+// The reduced shape drops details, countryIsoCode, reportFillingDate, notificationOrganization and
+// appDetails: details is free text with no length limit, and dumping it on every row of a page
+// makes the response size unpredictable
+const LIST_ATTRIBUTES = ['caseId', 'caseCode', 'reportDate', 'eventDate', 'isActive'];
+
+// A list row needs to name the patient, not to identify them: documentNumber only shows up in the
+// full shape of 003
+const LIST_PATIENT_INCLUDE = {
+    model: Patient,
+    as: 'patient',
+    attributes: ['patientId', 'firstName', 'lastName', 'healthSystemCode']
+};
+
+// Newest report first, breaking ties by code. Without the second criterion the cases of the same
+// day come out in an arbitrary order and pagination can repeat or skip rows between pages
+const LIST_ORDER: [string, string][] = [['reportDate', 'DESC'], ['caseCode', 'DESC']];
+
 const decryptPatient = (plain: Record<string, unknown>) => {
     const patient = plain.patient as Record<string, unknown> | null | undefined;
     if( !patient ) return plain;
@@ -51,6 +69,8 @@ const decryptPatient = (plain: Record<string, unknown>) => {
     }
     return plain;
 }
+
+const toEsaviCaseListRow = (esaviCase: EsaviCase) => decryptPatient(esaviCase.toJSON() as Record<string, unknown>);
 
 const toEsaviCaseResponse = (esaviCase: EsaviCase) => {
     const plain = esaviCase.toJSON() as Record<string, unknown>;
@@ -174,6 +194,66 @@ const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: Auth
     return createdEsaviCase ? toEsaviCaseResponse(createdEsaviCase) : null;
 }
 
+// The three filters are accumulated with AND, and each one is optional. A filter pointing at a
+// row that does not exist yields an empty page, never a 404: searching for something absent is an
+// empty search, not a missing resource
+const buildListWhere = (filters: EsaviCaseListFilters = {}): WhereOptions => {
+    const where: Record<string, unknown> = {};
+
+    if( filters.patientId ) where.patientId = filters.patientId;
+    if( filters.healthFacilityId ) where.healthFacilityId = filters.healthFacilityId;
+
+    const from = filters.reportDateFrom ? normalizeIsoDate(filters.reportDateFrom) : undefined;
+    const to = filters.reportDateTo ? normalizeIsoDate(filters.reportDateTo) : undefined;
+    if( from && to ) {
+        where.reportDate = { [Op.between]: [from, to] };
+    } else if( from ) {
+        where.reportDate = { [Op.gte]: from };
+    } else if( to ) {
+        where.reportDate = { [Op.lte]: to };
+    }
+
+    return where as WhereOptions;
+}
+
+// Get Active ESAVI Cases Service
+// Code: ESAVI-CASE-002A
+const getEsaviCasesService = async (
+    filters: EsaviCaseListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await EsaviCase.findAndCountAll({
+        where: { ...buildListWhere(filters), isActive: true },
+        attributes: LIST_ATTRIBUTES,
+        include: [LIST_PATIENT_INCLUDE, HEALTH_FACILITY_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toEsaviCaseListRow) };
+}
+
+// Get All ESAVI Cases Service - For Admin
+// Code: ESAVI-CASE-002B
+const getAllEsaviCasesService = async (
+    filters: EsaviCaseListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await EsaviCase.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: LIST_ATTRIBUTES,
+        include: [LIST_PATIENT_INCLUDE, HEALTH_FACILITY_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toEsaviCaseListRow) };
+}
+
 export {
-    createEsaviCaseService
+    createEsaviCaseService,
+    getEsaviCasesService,
+    getAllEsaviCasesService
 }
