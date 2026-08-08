@@ -1,8 +1,10 @@
 import { Op } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, Patient } from '../models';
 import { AppError, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreatePatientInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 // Code of the catalogType that groups the valid sex values. Unlike healthFacility, there is
 // no TRG_patient_validateCatalogs trigger in esaviapp.sql: without this check any active
@@ -315,11 +317,45 @@ const searchPatientsByIdentifierService = async (
     return { count, rows: rows.map(toPatientListRow) };
 }
 
+// Setting Patient Active/Inactive Service
+// Code: ESAVI-PATIENT-005A / ESAVI-PATIENT-005B
+// No incoming reference is checked, not esaviCase nor any other: this is a logical delete, so
+// ON DELETE RESTRICT never fires, and esaviCase has no model yet
+const setPatientActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // The where filters by the primary key only: the generic service is the one that tells
+        // 'does not exist' (404) from 'already in that state' (409)
+        await setEntityActiveStatusService({
+            model: Patient,
+            where: { patientId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('patient.notFound', lang),
+            notFoundCode: `PATIENT_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`patient.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `PATIENT_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-PATIENT-${ op }`,
+                detail: `Patient ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createPatientService,
     getPatientsService,
     getAllPatientsService,
     getPatientByIdService,
     updatePatientService,
+    setPatientActivationService,
     searchPatientsByIdentifierService
 }

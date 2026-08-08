@@ -7,6 +7,7 @@ import {
     getPatientByIdService,
     getPatientsService,
     searchPatientsByIdentifierService,
+    setPatientActivationService,
     updatePatientService
 } from '../services/patient.service';
 
@@ -145,11 +146,53 @@ const searchPatientsByIdentifier = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Delete Patient Controller - Soft delete
+// Code: ESAVI-PATIENT-005A
+const deletePatient = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setPatientActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('patient.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PATIENT-005A: Error deleting Patient: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('patient.deletedFailed', req.lang), 500, 'PATIENT_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Patient Controller - For SuperAdmin
+// Code: ESAVI-PATIENT-005B
+const activatePatient = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setPatientActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('patient.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PATIENT-005B: Error activating Patient: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('patient.activatedFailed', req.lang), 500, 'PATIENT_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createPatient,
     getPatients,
     getAllPatients,
     getPatientById,
     updatePatient,
+    deletePatient,
+    activatePatient,
     searchPatientsByIdentifier
 }

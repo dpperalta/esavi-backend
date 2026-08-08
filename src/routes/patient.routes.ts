@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activatePatient,
     createPatient,
+    deletePatient,
     getAllPatients,
     getPatientById,
     getPatients,
@@ -17,7 +19,7 @@ import {
     updatePatientValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -35,6 +37,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...patientListValidator
 // Code: ESAVI-PATIENT-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...patientListValidator, validateFields, getAllPatients);
 
+// Activate Patient - For SuperAdmin
+// Code: ESAVI-PATIENT-005B
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...patientIdValidator, validateFields, activatePatient);
+
 // Search Patients by Identifier - documentNumber, passportNumber or healthSystemCode
 // Code: ESAVI-PATIENT-006
 router.get('/search/:identifier', tokenValidation, validateUserRole(USER), ...patientIdentifierValidator, ...patientListValidator, validateFields, searchPatientsByIdentifier);
@@ -48,5 +54,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...patientIdValidato
 // Code: ESAVI-PATIENT-004
 // USER for the same reason as 001: correcting the patient is part of reporting the ESAVI
 router.put('/:id', tokenValidation, validateUserRole(USER), ...patientIdValidator, ...updatePatientValidator, validateFields, updatePatient);
+
+// Soft delete Patient
+// Code: ESAVI-PATIENT-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...patientIdValidator, validateFields, deletePatient);
 
 export default router;
