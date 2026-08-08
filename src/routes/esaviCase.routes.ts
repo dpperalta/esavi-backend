@@ -1,10 +1,18 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createEsaviCase, getAllEsaviCases, getEsaviCaseById, getEsaviCases, updateEsaviCase } from '../controllers/esaviCase.controller';
+import {
+    activateEsaviCase,
+    createEsaviCase,
+    deleteEsaviCase,
+    getAllEsaviCases,
+    getEsaviCaseById,
+    getEsaviCases,
+    updateEsaviCase
+} from '../controllers/esaviCase.controller';
 import { createEsaviCaseValidator, esaviCaseIdValidator, esaviCaseListValidator, updateEsaviCaseValidator } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -23,6 +31,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...esaviCaseListValidat
 // Code: ESAVI-CASE-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...esaviCaseListValidator, validateFields, getAllEsaviCases);
 
+// Activate ESAVI Case - For SuperAdmin
+// Code: ESAVI-CASE-005B
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...esaviCaseIdValidator, validateFields, activateEsaviCase);
+
 // Get ESAVI Case by ID
 // Code: ESAVI-CASE-003
 // Declared after the literal paths so Express does not capture 'admin' as an :id
@@ -32,5 +44,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...esaviCaseIdValida
 // Code: ESAVI-CASE-004
 // USER for the same reason as 001: correcting the case is part of reporting the ESAVI
 router.put('/:id', tokenValidation, validateUserRole(USER), ...esaviCaseIdValidator, ...updateEsaviCaseValidator, validateFields, updateEsaviCase);
+
+// Soft delete ESAVI Case
+// Code: ESAVI-CASE-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...esaviCaseIdValidator, validateFields, deleteEsaviCase);
 
 export default router;

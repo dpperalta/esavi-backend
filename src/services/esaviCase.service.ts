@@ -1,8 +1,10 @@
 import { Op, UniqueConstraintError, WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { EsaviCase, HealthFacility, Patient } from '../models';
 import { AppError, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -340,10 +342,45 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
     return updatedEsaviCase ? toEsaviCaseResponse(updatedEsaviCase) : null;
 }
 
+// Setting ESAVI Case Active/Inactive Service
+// Code: ESAVI-CASE-005A / ESAVI-CASE-005B
+// No satellite table is touched: none of the five that hang off caseId has a model yet. The
+// ON DELETE CASCADE of the DDL only fires on physical deletes, which TRG_esaviCase_preventPhysicalDelete
+// forbids, so the spec that introduces the first satellite has to carry the cascade over
+const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // The where filters by the primary key only: the generic service is the one that tells
+        // 'does not exist' (404) from 'already in that state' (409)
+        await setEntityActiveStatusService({
+            model: EsaviCase,
+            where: { caseId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('esaviCase.notFound', lang),
+            notFoundCode: `CASE_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`esaviCase.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `CASE_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-CASE-${ op }`,
+                detail: `ESAVI Case ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createEsaviCaseService,
     getEsaviCasesService,
     getAllEsaviCasesService,
     getEsaviCaseByIdService,
-    updateEsaviCaseService
+    updateEsaviCaseService,
+    setEsaviCaseActivationService
 }

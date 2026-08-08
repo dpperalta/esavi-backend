@@ -6,6 +6,7 @@ import {
     getAllEsaviCasesService,
     getEsaviCaseByIdService,
     getEsaviCasesService,
+    setEsaviCaseActivationService,
     updateEsaviCaseService
 } from '../services/esaviCase.service';
 
@@ -124,10 +125,52 @@ const updateEsaviCase = async (req: Request, res: Response, next: NextFunction):
     }
 }
 
+// Delete ESAVI Case Controller - Soft delete
+// Code: ESAVI-CASE-005A
+const deleteEsaviCase = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setEsaviCaseActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('esaviCase.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASE-005A: Error deleting ESAVI Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('esaviCase.deletedFailed', req.lang), 500, 'CASE_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate ESAVI Case Controller - For SuperAdmin
+// Code: ESAVI-CASE-005B
+const activateEsaviCase = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setEsaviCaseActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('esaviCase.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASE-005B: Error activating ESAVI Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('esaviCase.activatedFailed', req.lang), 500, 'CASE_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createEsaviCase,
     getEsaviCases,
     getAllEsaviCases,
     getEsaviCaseById,
-    updateEsaviCase
+    updateEsaviCase,
+    deleteEsaviCase,
+    activateEsaviCase
 }
