@@ -8,6 +8,7 @@ import {
     getAppUserGeoLocationByIdService,
     updateAppUserGeoLocationService,
     setAppUserGeoLocationActivationService,
+    purgeAppUserGeoLocationService,
     reassignAppUserGeoLocationService,
     bulkAssignGeoLocationsService,
     resolveUserCoverageService
@@ -170,6 +171,26 @@ const activateAppUserGeoLocation = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Purge App User Geo Location Controller - For SuperAdmin
+// Code: ESAVI-USERGEO-005C
+const purgeAppUserGeoLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeAppUserGeoLocationService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('appUserGeoLocation.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USERGEO-005C: Error purging App User Geo Location: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('appUserGeoLocation.purgeFailed', req.lang), 500, 'USERGEO_005C_PURGE_FAILED', error));
+    }
+}
+
 // Reassign App User Geo Location Controller
 // Code: ESAVI-USERGEO-006
 const reassignAppUserGeoLocation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -240,6 +261,7 @@ export {
     updateAppUserGeoLocation,
     deleteAppUserGeoLocation,
     activateAppUserGeoLocation,
+    purgeAppUserGeoLocation,
     reassignAppUserGeoLocation,
     bulkAssignGeoLocations,
     getUserCoverage

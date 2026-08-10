@@ -5,6 +5,7 @@ import { AppError, getMessage } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, BulkAssignGeoLocationsInput, CreateAppUserGeoLocationInput, ReassignGeoLocationInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Upper bound for the descendant walk of ESAVI-USERGEO-008. Together with UNION it keeps the
@@ -312,6 +313,30 @@ const setAppUserGeoLocationActivationService = async (id: string, authUser: Auth
     }
 }
 
+// ESAVI-USERGEO-005C - Purging App User Geo Location Service - For SuperAdmin
+// appUserGeoLocation is outside the preventPhysicalDelete trigger of esaviapp.sql:1354-1360,
+// so the row can really be destroyed. No satellite table references it, so nothing cascades
+const purgeAppUserGeoLocationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: AppUserGeoLocation,
+            where: { userGeoLocationId: id },
+            transaction,
+            operationCode: 'ESAVI-USERGEO-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('appUserGeoLocation.notFound', lang),
+            notFoundCode: 'USERGEO_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('appUserGeoLocation.stillActive', lang, { id }),
+            stillActiveCode: 'USERGEO_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 // ESAVI-USERGEO-006 - Reassign App User Geo Location Service
 // Two rows change, so the whole thing runs in one transaction: either the user moves,
 // or nothing happened. Modelling this as a PUT that swaps geoLocationId would mean an
@@ -554,6 +579,7 @@ export {
     getAppUserGeoLocationByIdService,
     updateAppUserGeoLocationService,
     setAppUserGeoLocationActivationService,
+    purgeAppUserGeoLocationService,
     reassignAppUserGeoLocationService,
     bulkAssignGeoLocationsService,
     resolveUserCoverageService
