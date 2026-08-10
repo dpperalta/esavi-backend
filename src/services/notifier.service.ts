@@ -231,9 +231,71 @@ const getNotifierByIdService = async (id: string, lang: string, canViewInactive:
     return toNotifierResponse(notifier);
 }
 
+// Update Notifier Service
+// Code: ESAVI-NOTIFIER-004
+// caseId is ignored whether or not it arrives in the body: a notifier is not moved between
+// cases, it is deactivated and created again on the right one. Moving it would leave two cases
+// with an incoherent audit trail — the origin records a departure its history does not explain
+const updateNotifierService = async (id: string, data: Partial<CreateNotifierInput>, authUser: AuthUser | undefined, lang: string) => {
+    const notifier = await Notifier.findByPk(id);
+    if( !notifier ) {
+        throw new AppError(getMessage('notifier.notFound', lang), 404, 'NOTIFIER_004_NOT_FOUND');
+    }
+
+    if( data.professionItemId ) {
+        await assertProfessionIsValid(data.professionItemId, '004', lang);
+    }
+    if( data.geoLocationId ) {
+        await assertGeoLocationIsValid(data.geoLocationId, '004', lang);
+    }
+
+    // Normalize first, encrypt second, same as in 001. Only the fields that actually arrive are
+    // touched: an absent one keeps its stored ciphertext and is never re-encrypted
+    const objectToUpdate: Record<string, unknown> = {
+        professionItemId: data.professionItemId !== undefined ? ( data.professionItemId ?? null ) : undefined,
+        geoLocationId: data.geoLocationId !== undefined ? ( data.geoLocationId ?? null ) : undefined,
+        firstName: data.firstName ? esaviCrypt(normalizeName(data.firstName)) : undefined,
+        lastName: data.lastName ? esaviCrypt(normalizeName(data.lastName)) : undefined,
+        address: data.address !== undefined ? ( data.address ? esaviCrypt(normalizeName(data.address)) : null ) : undefined,
+        email: data.email !== undefined ? ( data.email ? esaviCrypt(normalizeEmail(data.email)) : null ) : undefined,
+        room: data.room !== undefined ? ( data.room ? data.room.trim() : null ) : undefined,
+        phoneNumber: data.phoneNumber !== undefined ? ( data.phoneNumber ? data.phoneNumber.trim() : null ) : undefined,
+        details: data.details !== undefined ? ( data.details ? data.details.trim() : null ) : undefined
+    };
+    for( const key of Object.keys(objectToUpdate) ) {
+        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns. The
+    // named TRG_<table>_setUpdatedAt really is dropped and never created by the generic loop of
+    // esaviapp.sql, but setSysDetails does the job anyway: it runs BEFORE UPDATE on every table
+    // carrying sysDetails and overwrites this value with current_timestamp
+    objectToUpdate.updatedAt = new Date();
+
+    // The entry is written even when nothing changed: the attempt is part of the audit trail
+    const currentAppDetails = Array.isArray(notifier.appDetails) ? notifier.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-NOTIFIER-004',
+        detail: 'Notifier updated by service'
+    };
+    await notifier.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updatedNotifier = await findNotifierWithRelations(id, true);
+    return updatedNotifier ? toNotifierResponse(updatedNotifier) : null;
+}
+
 export {
     createNotifierService,
     getNotifiersService,
     getAllNotifiersService,
-    getNotifierByIdService
+    getNotifierByIdService,
+    updateNotifierService
 }

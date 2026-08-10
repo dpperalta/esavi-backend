@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createNotifier, getAllNotifiers, getNotifierById, getNotifiers } from '../controllers/notifier.controller';
-import { createNotifierValidator, notifierIdValidator, notifierListValidator } from '../validators';
+import { createNotifier, getAllNotifiers, getNotifierById, getNotifiers, updateNotifier } from '../controllers/notifier.controller';
+import { createNotifierValidator, notifierIdValidator, notifierListValidator, updateNotifierValidator } from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -26,5 +26,10 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...notifierListVa
 // Code: ESAVI-NOTIFIER-003
 // Declared after the literal paths so Express does not capture 'admin' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidator, validateFields, getNotifierById);
+
+// Update Notifier
+// Code: ESAVI-NOTIFIER-004
+// USER for the same reason as 001: correcting the notifier is part of reporting the ESAVI
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidator, ...updateNotifierValidator, validateFields, updateNotifier);
 
 export default router;

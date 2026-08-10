@@ -5,7 +5,8 @@ import {
     createNotifierService,
     getAllNotifiersService,
     getNotifierByIdService,
-    getNotifiersService
+    getNotifiersService,
+    updateNotifierService
 } from '../services/notifier.service';
 
 // The three query filters of 002A and 002B. Only what actually arrives travels to the service,
@@ -101,9 +102,31 @@ const getNotifierById = async (req: Request, res: Response, next: NextFunction):
     }
 }
 
+// Update Notifier Controller
+// Code: ESAVI-NOTIFIER-004
+const updateNotifier = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateNotifierService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notifier.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFIER-004: Error updating Notifier: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notifier.updatedFailed', req.lang), 500, 'NOTIFIER_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createNotifier,
     getNotifiers,
     getAllNotifiers,
-    getNotifierById
+    getNotifierById,
+    updateNotifier
 }
