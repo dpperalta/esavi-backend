@@ -6,6 +6,7 @@ import {
     getAllNotifiersService,
     getNotifierByIdService,
     getNotifiersService,
+    setNotifierActivationService,
     updateNotifierService
 } from '../services/notifier.service';
 
@@ -123,10 +124,52 @@ const updateNotifier = async (req: Request, res: Response, next: NextFunction): 
     }
 }
 
+// Delete Notifier Controller - Soft delete
+// Code: ESAVI-NOTIFIER-005A
+const deleteNotifier = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotifierActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notifier.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFIER-005A: Error deleting Notifier: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notifier.deletedFailed', req.lang), 500, 'NOTIFIER_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Notifier Controller - For SuperAdmin
+// Code: ESAVI-NOTIFIER-005B
+const activateNotifier = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotifierActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notifier.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFIER-005B: Error activating Notifier: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notifier.activatedFailed', req.lang), 500, 'NOTIFIER_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createNotifier,
     getNotifiers,
     getAllNotifiers,
     getNotifierById,
-    updateNotifier
+    updateNotifier,
+    deleteNotifier,
+    activateNotifier
 }

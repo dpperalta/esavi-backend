@@ -1,10 +1,18 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createNotifier, getAllNotifiers, getNotifierById, getNotifiers, updateNotifier } from '../controllers/notifier.controller';
+import {
+    activateNotifier,
+    createNotifier,
+    deleteNotifier,
+    getAllNotifiers,
+    getNotifierById,
+    getNotifiers,
+    updateNotifier
+} from '../controllers/notifier.controller';
 import { createNotifierValidator, notifierIdValidator, notifierListValidator, updateNotifierValidator } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -22,6 +30,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...notifierListValidato
 // Code: ESAVI-NOTIFIER-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...notifierListValidator, validateFields, getAllNotifiers);
 
+// Activate Notifier - For SuperAdmin
+// Code: ESAVI-NOTIFIER-005B
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notifierIdValidator, validateFields, activateNotifier);
+
 // Get Notifier by ID
 // Code: ESAVI-NOTIFIER-003
 // Declared after the literal paths so Express does not capture 'admin' as an :id
@@ -31,5 +43,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidat
 // Code: ESAVI-NOTIFIER-004
 // USER for the same reason as 001: correcting the notifier is part of reporting the ESAVI
 router.put('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidator, ...updateNotifierValidator, validateFields, updateNotifier);
+
+// Soft delete Notifier
+// Code: ESAVI-NOTIFIER-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notifierIdValidator, validateFields, deleteNotifier);
 
 export default router;
