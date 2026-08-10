@@ -145,6 +145,7 @@ ESAVI-<ENTIDAD>-<NNN>[A|B|C]
 | `004` | update | PUT | `/:id` | 200 |
 | `005A` | soft delete | DELETE | `/:id` | 200 |
 | `005B` | activate | PATCH | `/activate/:id` | 200 |
+| `005C` | borrado físico | DELETE | `/purge/:id` | 200 |
 
 `002` sin letra cuando hay un solo listado; `002A`/`002B` cuando existen ambas variantes. Los sufijos `A`/`B`/`C` **solo** distinguen variantes de la misma operación, nunca operaciones distintas.
 
@@ -207,7 +208,7 @@ Formato paralelo, con guion bajo y **sin** el prefijo `ESAVI-`:
 <ENTIDAD>_<NNN>_<ACCION>
 ```
 
-`CATITEM_001_CREATION_FAILED`, `CATITEM_003_NOT_FOUND`, `CATITEM_005B_ACTIVATION_FAILED`. Acciones estándar: `CREATION_FAILED`, `FETCH_FAILED`, `UPDATE_FAILED`, `DELETE_FAILED`, `ACTIVATION_FAILED`, `NOT_FOUND`, `CODE_EXISTS`, `ALREADY_ACTIVE`, `ALREADY_INACTIVE`, `<FK>_NOT_FOUND`.
+`CATITEM_001_CREATION_FAILED`, `CATITEM_003_NOT_FOUND`, `CATITEM_005B_ACTIVATION_FAILED`. Acciones estándar: `CREATION_FAILED`, `FETCH_FAILED`, `UPDATE_FAILED`, `DELETE_FAILED`, `ACTIVATION_FAILED`, `PURGE_FAILED`, `NOT_FOUND`, `CODE_EXISTS`, `ALREADY_ACTIVE`, `ALREADY_INACTIVE`, `STILL_ACTIVE`, `<FK>_NOT_FOUND`.
 
 ### Sufijo de activación — `005A` / `005B`
 
@@ -231,6 +232,33 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 
 `appDetails.method` guarda el código y **solo** el código: nunca `_ACTIVATION` ni `_DEACTIVATION` pegados detrás. Esos sufijos describen el resultado, no la operación, y rompen la búsqueda por código en la auditoría.
 
+### Borrado físico — `005C`
+
+`005A` retira una fila; `005C` la destruye. Es la única operación irreversible del repositorio, y por eso es la más reglada.
+
+**`005C` es una variante de `005`, no una operación nueva.** Por eso lleva letra y no un número desde `006`: los sufijos `A`/`B`/`C` distinguen variantes de la misma operación, y las tres son formas de borrar o de deshacer el borrado. Numerarla `006` la habría dejado con un número distinto en cada entidad —`006` en `notifier`, `009` en `appUserGeoLocation`— y el mismo concepto sería imposible de buscar de forma uniforme en el log.
+
+**Regla de disponibilidad.** Una entidad expone `005C` **si y solo si** su tabla **no** figura en el bucle `preventPhysicalDelete` de `esaviapp.sql:1354-1360`. La regla es objetiva y se verifica contra el DDL, no se decide por entidad. En las 18 tablas protegidas el endpoint **no se declara**: el trigger rechazaría el `DELETE` en la base y el cliente recibiría un 500 por una operación que la norma nunca debió ofrecer.
+
+Protegidas, y por tanto **sin** `005C` — `catalogType`, `catalogItem`, `geoLevelType`, `geoLocation`, `healthFacility`, `diagnosticTerm`, `vaccineWhodrug`, `diluentCatalog`, `patient`, `esaviCase`, `appUser`, `appRole`, `appPermission`, `appUserRole`, `appRolePermission`, `appSession`, `systemConfig`, `systemConfigHistory`.
+
+Habilitadas, y por tanto **con** `005C` — las 27 restantes:
+
+| Dominio | Tablas |
+|---|---|
+| Auth | `appUserGeoLocation` |
+| Núcleo ESAVI | `notifier`, `classification`, `finalClassification` |
+| Notificación | `notification`, `severeNotification`, `nonSevereNotification`, `notificationEvent`, `notificationMedication`, `notificationVaccine`, `notificationDiluent`, `notificationPregnancy`, `notificationPregnancyComplication` |
+| Investigación | `investigation`, `investigationSource`, `investigationAutopsy`, `investigationTeamMember`, `investigationCovidHistory`, `investigationMedicalHistory`, `investigationPregnancyCondition`, `investigationClinicalEvaluation`, `evaluationInstitution`, `investigationVaccinationContext`, `investigationVaccineAdministered`, `investigationColdChain`, `investigationAdministrationError`, `investigationCommunity` |
+
+**Contrato de la operación.** Rol **SUPERADMIN**, uno solo. Ruta `DELETE /purge/:id`, literal declarado **antes** de `/:id` como `/activate/:id`. Responde 200 con `{ ok, message }` **sin `data`**: no queda nada que devolver.
+
+La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **409**, no 200: el borrado físico solo alcanza a lo que alguien retiró antes de forma deliberada y reversible. Son dos pasos y eso es la red de seguridad, no una molestia.
+
+**Aviso de cascada.** El `ON DELETE CASCADE` del DDL **sí dispara** en las tablas sin protección, porque no hay trigger que impida el borrado físico. Purgar una fila de `investigation` destruye sus **14** tablas satélite; purgar una de `notification` destruye las **8** suyas. La norma avisa y no lo bloquea: es el comportamiento declarado del esquema, y quien tiene SUPERADMIN puede provocarlo también por SQL directo. Las demás habilitadas no tienen hijos.
+
+**Ésta es la única operación del repositorio donde el código no aparece en los cinco lugares, sino en cuatro.** El quinto es `appDetails.method`, y aquí no existe: la fila se destruye en la misma transacción, así que escribir auditoría dentro de ella es trabajo que se borra a sí mismo. El rastro va al log, en nivel `warn`, con el volcado de la fila completa antes del `destroy` (ver §11). El checklist de §15 no debe marcar esa ausencia como incumplimiento.
+
 ### Abreviaturas registradas
 
 | Entidad | Abreviatura |
@@ -240,6 +268,7 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 | appUserRole | `USERROLE` |
 | catalogItem | `CATITEM` |
 | catalogType | `CATTYPE` |
+| esaviCase | `CASE` |
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
 | healthFacility | `HFAC` |
@@ -352,6 +381,7 @@ Dos consecuencias que son regla:
 | update (`004`) | `ADMIN` |
 | soft delete (`005A`) | `ADMIN` |
 | activate (`005B`) | `SUPERADMIN` |
+| borrado físico (`005C`) | `SUPERADMIN` |
 
 Los predicados de `src/helpers/permissions.helper.ts` (`canViewInactive`, `isAdmin`, …) **no autorizan**: modulan comportamiento dentro de un endpoint ya autorizado — típicamente si se ven o no los registros inactivos:
 
@@ -375,7 +405,7 @@ return res.status(200).json({
 
 - `message` **siempre** desde `getMessage(key, req.lang)`. Nunca un literal.
 - `201` en create, `200` en el resto.
-- `delete` y `activate` responden **sin** `data`.
+- `delete`, `activate` y `purge` responden **sin** `data`.
 
 ### Error
 
@@ -395,7 +425,7 @@ Los produce `errorHandler` (`src/middlewares/errorHandler.middleware.ts`), últi
 | `401` | Token ausente, inválido o expirado · **credenciales inválidas en login** |
 | `403` | Nivel de rol insuficiente (lo emite `validateUserRole`) |
 | `404` | El recurso o una FK referenciada no existe |
-| `409` | Conflicto: `code`/`email` duplicado — **en create y en update por igual** |
+| `409` | Conflicto: `code`/`email` duplicado, **en create y en update por igual**; la fila ya está en el estado pedido en `005A`/`005B`; la fila **sigue activa** al intentar purgarla en `005C` |
 | `500` | Error inesperado |
 
 Un duplicado es `409` siempre. Usar `400` en create y `409` en update para el mismo caso, como ocurre hoy, hace imposible que el frontend distinga.
@@ -527,7 +557,24 @@ El `where` filtra **solo por la PK**. El estado lo compara el servicio genérico
 
 Meter `isActive: !isActive` en el `where` convierte el segundo caso en un 404 que miente: el recurso existe. Cada entidad necesita sus claves `alreadyActive` y `alreadyInactive` en los tres idiomas.
 
-Un `DELETE` nunca borra físicamente: pone `isActive: false` y sella `deletedAt`.
+`DELETE /:id` nunca borra físicamente: pone `isActive: false` y sella `deletedAt`. El borrado físico es una operación aparte, con su propia ruta, su propio rol y su propio servicio.
+
+### Borrado físico — `005C`
+
+Tampoco se implementa a mano: se delega en `purgeEntityService` (`src/services/common/entityPurge.service.ts`), envuelto en una transacción propia igual que el de activación.
+
+El genérico hace cuatro cosas, en este orden:
+
+1. `findOne` por la PK con `paranoid: false`, dentro de la transacción → 404 con `notFoundCode` si no existe.
+2. Comprueba `isActive`. Si sigue en `true` → 409 con `stillActiveCode`. Solo se purga lo que ya fue retirado con `005A`.
+3. `esaviLog` en nivel **`warn`** con el código de operación, el `userId`, la PK y el volcado de la fila completa.
+4. `destroy({ transaction })`.
+
+**No toca `appDetails`.** Es la única operación de escritura del repositorio que no añade entrada de auditoría, y no es un olvido: la fila desaparece en la misma transacción, así que cualquier cosa escrita en ella se destruye con ella.
+
+El volcado al log es el **único** rastro que queda de una operación irreversible, y por eso es obligatorio y va antes del `destroy`. Sale de la instancia de Sequelize, así que los campos cifrados con `esaviCrypt` se escriben **cifrados**: el descifrado ocurre al construir la respuesta, no al leer de la base. Ninguna entidad filtra PII en claro al log por esta vía.
+
+El `where` filtra **solo por la PK**, como en la activación. Meter `isActive: false` en el `where` convertiría el 409 del segundo caso en un 404 que miente: el recurso existe, lo que pasa es que todavía está vivo.
 
 ### Transacciones
 
@@ -969,7 +1016,9 @@ La ruta base va en **kebab-case plural**: `/catalog-items`, `/geo-level-types`, 
 - [ ] Los nombres de archivo llevan el sufijo canónico, en plural donde corresponde (`.routes.ts`, `.types.ts`, `.associations.ts`).
 - [ ] Los símbolos siguen el patrón: controlador sin sufijo, servicio con `Service`, tipo con `Input`.
 - [ ] El código `ESAVI-*` es **idéntico** en los cinco lugares (ruta, controlador, servicio, `AppError`, `appDetails.method`).
-- [ ] La numeración respeta el esquema fijo (`001` create … `005B` activate).
+- [ ] La numeración respeta el esquema fijo (`001` create … `005C` borrado físico).
+- [ ] Si la tabla **no** figura en `preventPhysicalDelete` (`esaviapp.sql:1354-1360`), la entidad expone su `005C` en `DELETE /purge/:id` con `validateUserRole(SUPERADMIN)`; si figura, **no** lo expone.
+- [ ] El `005C` exige `isActive: false` (409 si sigue activa) y vuelca la fila a `esaviLog` en nivel `warn` **antes** del `destroy`. Que no escriba en `appDetails` es correcto y no cuenta como incumplimiento del código en cinco lugares.
 - [ ] La abreviatura de entidad está registrada en la tabla de la sección 6.
 - [ ] Toda función exportada lleva el comentario de dos líneas.
 - [ ] La cadena de middlewares está completa y con el spread `...`.

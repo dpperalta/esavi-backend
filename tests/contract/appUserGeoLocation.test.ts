@@ -565,6 +565,64 @@ describe('appUserGeoLocation contract', () => {
 
     });
 
+    describe('ESAVI-USERGEO-005C - purge', () => {
+
+        let purgeId: string;
+
+        beforeAll(async () => {
+            const purgeGeoId = await createGeoLocation('purgable', 1);
+            const created = await assign(walkUserId, purgeGeoId);
+            purgeId = created.body.data.userGeoLocationId;
+        });
+
+        it('refuses to purge a row that is still active', async () => {
+            const response = await request(app)
+                .delete(`/api/user-geo-locations/purge/${ purgeId }`)
+                .set(authHeader('SUPERADMIN'));
+
+            expect(response.status).toBe(409);
+            expect(response.body.code).toBe('USERGEO_005C_STILL_ACTIVE');
+
+            // the row survives the refusal
+            expect(await AppUserGeoLocation.findByPk(purgeId)).not.toBeNull();
+        });
+
+        it('is closed to ADMIN', async () => {
+            const response = await request(app)
+                .delete(`/api/user-geo-locations/purge/${ purgeId }`)
+                .set(authHeader('ADMIN'));
+
+            expect(response.status).toBe(403);
+        });
+
+        it('destroys the row once it has been closed, and answers without data', async () => {
+            await request(app)
+                .delete(`/api/user-geo-locations/${ purgeId }`)
+                .set(authHeader('ADMIN'));
+
+            const response = await request(app)
+                .delete(`/api/user-geo-locations/purge/${ purgeId }`)
+                .set(authHeader('SUPERADMIN'));
+
+            expect(response.status).toBe(200);
+            expect(response.body).not.toHaveProperty('data');
+            expect(Object.keys(response.body).sort()).toEqual(['message', 'ok']);
+
+            // gone for good: paranoid false, so this is not a soft-delete filter talking
+            expect(await AppUserGeoLocation.findByPk(purgeId, { paranoid: false })).toBeNull();
+        });
+
+        it('answers 404 once the row no longer exists', async () => {
+            const response = await request(app)
+                .delete(`/api/user-geo-locations/purge/${ purgeId }`)
+                .set(authHeader('SUPERADMIN'));
+
+            expect(response.status).toBe(404);
+            expect(response.body.code).toBe('USERGEO_005C_NOT_FOUND');
+        });
+
+    });
+
     describe('ESAVI-USERGEO-001 - create over a closed pair', () => {
 
         it('reactivates with 200 instead of inserting a second row', async () => {

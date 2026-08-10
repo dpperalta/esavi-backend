@@ -9,6 +9,7 @@ import {
     updateAppUserGeoLocation,
     deleteAppUserGeoLocation,
     activateAppUserGeoLocation,
+    purgeAppUserGeoLocation,
     reassignAppUserGeoLocation,
     bulkAssignGeoLocations,
     getUserCoverage
@@ -56,6 +57,10 @@ router.patch('/reassign/:id', tokenValidation, validateUserRole(ADMIN), ...appUs
 // Activate App User Geo Location - For SuperAdmin
 // Code: ESAVI-USERGEO-005B
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...appUserGeoLocationIdValidator, validateFields, activateAppUserGeoLocation);
+
+// Purge App User Geo Location - For SuperAdmin
+// Code: ESAVI-USERGEO-005C
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...appUserGeoLocationIdValidator, validateFields, purgeAppUserGeoLocation);
 
 // Get App User Geo Location by ID
 // Code: ESAVI-USERGEO-003

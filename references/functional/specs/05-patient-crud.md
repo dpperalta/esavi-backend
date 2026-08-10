@@ -1,6 +1,6 @@
 # SPEC F05 — CRUD completo de patient
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F04 (patrón de cifrado PII sobre `appUser`)
 > **Fecha:** 2026-08-05
 > **Objetivo:** Dar de alta la entidad `patient` con sus siete artefactos, sus siete operaciones canónicas y un endpoint de búsqueda por identificador, cifrando los datos personales del paciente.
