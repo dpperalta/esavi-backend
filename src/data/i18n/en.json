@@ -291,5 +291,29 @@
         "deletedFailed": "Failed to delete the ESAVI case. Please try again later.",
         "activatedSuccess": "ESAVI case activated successfully",
         "activatedFailed": "Failed to activate the ESAVI case. Please try again later."
+    },
+    "notifier": {
+        "notFound": "Notifier not found. Please check the notifier ID and try again.",
+        "idRequired": "The notifier ID is required",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "professionNotFound": "The given profession does not exist, is inactive or does not belong to the profession catalog",
+        "geoLocationNotFound": "The given geolocation does not exist or is inactive",
+        "createdSuccess": "Notifier created successfully",
+        "createdFailed": "Failed to create the notifier. Please try again later.",
+        "getSuccess": "Notifier fetched successfully",
+        "getFailed": "Failed to fetch the notifier. Please try again later.",
+        "getSuccessPlural": "Notifiers fetched successfully",
+        "getFailedPlural": "Failed to fetch the notifiers. Please try again later.",
+        "updatedSuccess": "Notifier updated successfully",
+        "updatedFailed": "Failed to update the notifier. Please try again later.",
+        "alreadyInactive": "The notifier with ID {{id}} is already inactive",
+        "alreadyActive": "The notifier with ID {{id}} is already active",
+        "deletedSuccess": "Notifier deleted successfully",
+        "deletedFailed": "Failed to delete the notifier. Please try again later.",
+        "activatedSuccess": "Notifier activated successfully",
+        "activatedFailed": "Failed to activate the notifier. Please try again later.",
+        "stillActive": "The notifier with ID {{id}} is still active. Deactivate it before deleting it permanently.",
+        "purgeSuccess": "Notifier permanently deleted",
+        "purgeFailed": "Error permanently deleting the notifier. Please try again later."
     }
 }
