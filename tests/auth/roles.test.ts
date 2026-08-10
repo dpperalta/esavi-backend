@@ -127,7 +127,19 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/esavi-cases/${ UUID }`,             minRole: 'USER',       code: 'ESAVI-CASE-003' },
     { method: 'put',    path: `/api/esavi-cases/${ UUID }`,             minRole: 'USER',       code: 'ESAVI-CASE-004' },
     { method: 'delete', path: `/api/esavi-cases/${ UUID }`,             minRole: 'ADMIN',      code: 'ESAVI-CASE-005A' },
-    { method: 'patch',  path: `/api/esavi-cases/activate/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-CASE-005B' }
+    { method: 'patch',  path: `/api/esavi-cases/activate/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-CASE-005B' },
+
+    // notifier — 001 and 004 sit at USER for the same reason as esaviCase (SPEC F07 §3.4):
+    // the notifier is captured in the same operational flow as the case. 005C exists because
+    // notifier is outside the preventPhysicalDelete loop of esaviapp.sql:1354-1360
+    { method: 'post',   path: '/api/notifiers',                          minRole: 'USER',       code: 'ESAVI-NOTIFIER-001' },
+    { method: 'get',    path: '/api/notifiers',                          minRole: 'USER',       code: 'ESAVI-NOTIFIER-002A' },
+    { method: 'get',    path: '/api/notifiers/admin',                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFIER-002B' },
+    { method: 'get',    path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-003' },
+    { method: 'put',    path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-004' },
+    { method: 'delete', path: `/api/notifiers/${ UUID }`,                minRole: 'ADMIN',      code: 'ESAVI-NOTIFIER-005A' },
+    { method: 'patch',  path: `/api/notifiers/activate/${ UUID }`,       minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005B' },
+    { method: 'delete', path: `/api/notifiers/purge/${ UUID }`,          minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005C' }
 ];
 
 /**
@@ -183,7 +195,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(82);
+            expect(ROUTE_RULES).toHaveLength(90);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
