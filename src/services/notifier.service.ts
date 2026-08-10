@@ -1,6 +1,8 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, Notifier } from '../models';
 import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
-import { AppDetails, AuthUser, CreateNotifierInput } from '../types';
+import { AppDetails, AuthUser, CreateNotifierInput, NotifierListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Code of the catalogType that groups the valid professions. Without this check any active
 // catalogItem of the system — a facility type, a sex — would enter as a profession and the
@@ -37,6 +39,15 @@ const GEOLOCATION_INCLUDE = {
 // with it: the response carries the resolved case, profession and geoLocation objects instead
 const DETAIL_EXCLUDE = { exclude: ['sysDetails', 'caseId', 'professionItemId', 'geoLocationId'] };
 
+// The reduced shape drops only details and appDetails: details is free text with no length
+// limit and dumping it on every row of a page makes the response size unpredictable. The
+// contact fields do travel, because locating the notifier is what the list is for
+const LIST_ATTRIBUTES = ['notifierId', 'firstName', 'lastName', 'email', 'phoneNumber', 'room', 'address', 'isActive'];
+
+// Newest first. Alphabetical is impossible: the names are encrypted and ORDER BY "lastName"
+// would sort by the ciphertext — an arbitrary but stable order that looks like it works
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
+
 const decryptPii = (plain: Record<string, unknown>) => {
     for( const field of PII_FIELDS ) {
         if( !( field in plain ) ) continue;
@@ -45,6 +56,10 @@ const decryptPii = (plain: Record<string, unknown>) => {
     }
     return plain;
 }
+
+// A list row carries the same four encrypted columns as the full shape, so nothing is added
+// back as null here: decryptPii only touches the fields actually selected
+const toNotifierListRow = (notifier: Notifier) => decryptPii(notifier.toJSON() as Record<string, unknown>);
 
 // The four encrypted columns are returned in clear text
 const toNotifierResponse = (notifier: Notifier) => {
@@ -153,6 +168,61 @@ const createNotifierService = async (data: CreateNotifierInput, authUser: AuthUs
     return createdNotifier ? toNotifierResponse(createdNotifier) : null;
 }
 
+// The three filters are accumulated with AND, and each one is optional. A filter pointing at a
+// row that does not exist yields an empty page, never a 404: searching for something absent is
+// an empty search, not a missing resource. There is no filter over the encrypted columns:
+// only exact equality would work on them, and this spec exposes no search endpoint
+const buildListWhere = (filters: NotifierListFilters = {}): WhereOptions => {
+    const where: Record<string, unknown> = {};
+
+    if( filters.caseId ) where.caseId = filters.caseId;
+    if( filters.professionItemId ) where.professionItemId = filters.professionItemId;
+    if( filters.geoLocationId ) where.geoLocationId = filters.geoLocationId;
+
+    return where as WhereOptions;
+}
+
+// Get Active Notifiers Service
+// Code: ESAVI-NOTIFIER-002A
+// The where filters by the isActive of the notifier, not by the one of its case: with the
+// cascade of ESAVI-CASE-005A the notifiers of a retired case are already inactive, so the
+// result is the same without conditioning the include with a required: true
+const getNotifiersService = async (
+    filters: NotifierListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await Notifier.findAndCountAll({
+        where: { ...buildListWhere(filters), isActive: true },
+        attributes: LIST_ATTRIBUTES,
+        include: [CASE_INCLUDE, PROFESSION_INCLUDE, GEOLOCATION_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toNotifierListRow) };
+}
+
+// Get All Notifiers Service - For Admin
+// Code: ESAVI-NOTIFIER-002B
+const getAllNotifiersService = async (
+    filters: NotifierListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await Notifier.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: LIST_ATTRIBUTES,
+        include: [CASE_INCLUDE, PROFESSION_INCLUDE, GEOLOCATION_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toNotifierListRow) };
+}
+
 export {
-    createNotifierService
+    createNotifierService,
+    getNotifiersService,
+    getAllNotifiersService
 }
