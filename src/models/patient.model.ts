@@ -47,20 +47,24 @@ Patient.init({
         type: DataTypes.UUID,
         allowNull: true,
     },
+    // TEXT and not STRING(n) on the six encrypted columns: they store the esaviCrypt ciphertext,
+    // which is about twice the length of the plain text plus block padding. A fixed width here
+    // would cap what the user may write at a number nobody could derive. The real limit is in
+    // the validator, over the plain text
     firstName: {
-        type: DataTypes.STRING(150),
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     middleName: {
-        type: DataTypes.STRING(150),
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     lastName: {
-        type: DataTypes.STRING(150),
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     secondLastName: {
-        type: DataTypes.STRING(150),
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     // DATEONLY and not DATE: the column is `date`, and DATE would carry a time zone
@@ -70,11 +74,11 @@ Patient.init({
         allowNull: true,
     },
     documentNumber: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     passportNumber: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     email: {

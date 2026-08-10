@@ -52,14 +52,18 @@ Notifier.init({
         type: DataTypes.UUID,
         allowNull: true,
     },
+    // TEXT and not STRING(n) on the four encrypted columns: they store the esaviCrypt ciphertext,
+    // which is about twice the length of the plain text plus block padding. A fixed width here
+    // would cap what the user may write at a number nobody could derive. The real limit is in
+    // the validator, over the plain text
     firstName: {
-        type: DataTypes.STRING(150),
+        type: DataTypes.TEXT,
         allowNull: false,
     },
     // Nullable in the model because the DDL allows it; the create validator still demands it.
     // The model mirrors the table, the rule lives in the validator
     lastName: {
-        type: DataTypes.STRING(150),
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     room: {
@@ -67,17 +71,17 @@ Notifier.init({
         allowNull: true,
     },
     address: {
-        type: DataTypes.STRING(250),
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     phoneNumber: {
         type: DataTypes.STRING(50),
         allowNull: true,
     },
-    // STRING and not CITEXT: the column stores the ciphertext, so the case insensitivity of
+    // TEXT and not CITEXT: the column stores the ciphertext, so the case insensitivity of
     // Postgres would apply to the encrypted value. The service lowercases before encrypting
     email: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     details: {
