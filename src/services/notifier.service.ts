@@ -221,8 +221,19 @@ const getAllNotifiersService = async (
     return { count, rows: rows.map(toNotifierListRow) };
 }
 
+// Get Notifier By ID Service
+// Code: ESAVI-NOTIFIER-003
+const getNotifierByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const notifier = await findNotifierWithRelations(id, canViewInactive);
+    if( !notifier ) {
+        throw new AppError(getMessage('notifier.notFound', lang), 404, 'NOTIFIER_003_NOT_FOUND');
+    }
+    return toNotifierResponse(notifier);
+}
+
 export {
     createNotifierService,
     getNotifiersService,
-    getAllNotifiersService
+    getAllNotifiersService,
+    getNotifierByIdService
 }

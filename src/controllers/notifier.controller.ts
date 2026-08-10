@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { NotifierListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, NotifierListFilters } from '../types';
 import {
     createNotifierService,
     getAllNotifiersService,
+    getNotifierByIdService,
     getNotifiersService
 } from '../services/notifier.service';
 
@@ -79,8 +80,30 @@ const getAllNotifiers = async (req: Request, res: Response, next: NextFunction):
     }
 }
 
+// Get Notifier By ID Controller
+// Code: ESAVI-NOTIFIER-003
+const getNotifierById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getNotifierByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notifier.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFIER-003: Error fetching Notifier by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notifier.getFailed', req.lang), 500, 'NOTIFIER_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotifier,
     getNotifiers,
-    getAllNotifiers
+    getAllNotifiers,
+    getNotifierById
 }
