@@ -8,6 +8,7 @@ import {
     getAllNotifiers,
     getNotifierById,
     getNotifiers,
+    purgeNotifier,
     updateNotifier
 } from '../controllers/notifier.controller';
 import { createNotifierValidator, notifierIdValidator, notifierListValidator, updateNotifierValidator } from '../validators';
@@ -33,6 +34,10 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...notifierListVa
 // Activate Notifier - For SuperAdmin
 // Code: ESAVI-NOTIFIER-005B
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notifierIdValidator, validateFields, activateNotifier);
+
+// Purge Notifier - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFIER-005C
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notifierIdValidator, validateFields, purgeNotifier);
 
 // Get Notifier by ID
 // Code: ESAVI-NOTIFIER-003

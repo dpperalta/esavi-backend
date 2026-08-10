@@ -6,6 +6,7 @@ import {
     getAllNotifiersService,
     getNotifierByIdService,
     getNotifiersService,
+    purgeNotifierService,
     setNotifierActivationService,
     updateNotifierService
 } from '../services/notifier.service';
@@ -164,6 +165,26 @@ const activateNotifier = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
+// Purge Notifier Controller - For SuperAdmin
+// Code: ESAVI-NOTIFIER-005C
+const purgeNotifier = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotifierService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notifier.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFIER-005C: Error purging Notifier: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notifier.purgeFailed', req.lang), 500, 'NOTIFIER_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createNotifier,
     getNotifiers,
@@ -171,5 +192,6 @@ export {
     getNotifierById,
     updateNotifier,
     deleteNotifier,
-    activateNotifier
+    activateNotifier,
+    purgeNotifier
 }

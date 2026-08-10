@@ -5,6 +5,7 @@ import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../
 import { AppDetails, AuthUser, CreateNotifierInput, NotifierListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the valid professions. Without this check any active
 // catalogItem of the system — a facility type, a sex — would enter as a profession and the
@@ -329,11 +330,38 @@ const setNotifierActivationService = async (id: string, authUser: AuthUser | und
     }
 }
 
+// Purging Notifier Service - For SuperAdmin
+// Code: ESAVI-NOTIFIER-005C
+// notifier is outside the preventPhysicalDelete loop of esaviapp.sql:1354-1360, so the row can
+// really be destroyed. Purging a notifier does not touch its case: the foreign key runs from
+// the notifier to the case and not the other way round, and no table references notifierId
+const purgeNotifierService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: Notifier,
+            where: { notifierId: id },
+            transaction,
+            operationCode: 'ESAVI-NOTIFIER-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('notifier.notFound', lang),
+            notFoundCode: 'NOTIFIER_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('notifier.stillActive', lang, { id }),
+            stillActiveCode: 'NOTIFIER_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotifierService,
     getNotifiersService,
     getAllNotifiersService,
     getNotifierByIdService,
     updateNotifierService,
-    setNotifierActivationService
+    setNotifierActivationService,
+    purgeNotifierService
 }
