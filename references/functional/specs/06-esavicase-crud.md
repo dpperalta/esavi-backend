@@ -1,6 +1,6 @@
 # SPEC F06 — CRUD completo de esaviCase
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F05 (`patient` — dependencia dura: sin el modelo `Patient` este spec no se puede implementar)**
 > **Fecha:** 2026-08-06
 > **Objetivo:** Dar de alta la entidad `esaviCase` con sus siete artefactos y sus siete operaciones canónicas, generando el `caseCode` a partir del código de la instalación, la fecha de reporte y un secuencial diario.

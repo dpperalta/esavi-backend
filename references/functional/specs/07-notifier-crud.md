@@ -1,6 +1,6 @@
 # SPEC F07 — CRUD completo de notifier
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F04 (patrón de cifrado PII sobre `appUser`), SPEC F08 (operación `005C` de borrado físico), **SPEC F06 (`esaviCase` — dependencia dura: sin el modelo `EsaviCase` este spec no se puede implementar, y además se modifica su servicio de desactivación)**
 > **Fecha:** 2026-08-10
 > **Objetivo:** Dar de alta la entidad `notifier` con sus siete artefactos y sus siete operaciones canónicas, cifrando los datos personales del notificador, y saldar la deuda de desactivación en cascada que el SPEC F06 dejó declarada.
