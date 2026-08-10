@@ -1,6 +1,6 @@
-import { Op, UniqueConstraintError, WhereOptions } from 'sequelize';
+import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { EsaviCase, HealthFacility, Patient } from '../models';
+import { EsaviCase, HealthFacility, Notifier, Patient } from '../models';
 import { AppError, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -342,11 +342,49 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
     return updatedEsaviCase ? toEsaviCaseResponse(updatedEsaviCase) : null;
 }
 
+// Deactivating a case drags its active notifiers along, inside the same transaction. The
+// ON DELETE CASCADE of FK_notifier_case never fires, because TRG_esaviCase_preventPhysicalDelete
+// forbids every physical delete of esaviCase, so keeping case and satellites coherent is the
+// application's job alone.
+//
+// One mass update and not N per-row ones: the cascade takes no decision per row, and a case with
+// many notifiers would pay for every extra statement inside the transaction. That is why the
+// audit entry is appended in SQL — Model.update writes the same value to every row, and the
+// history of each notifier has to be preserved, not overwritten.
+//
+// Only rows already in isActive: true are touched, so a notifier retired by hand beforehand keeps
+// its own deletedAt and receives no new entry
+const cascadeDeactivateNotifiers = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    // The method is the code of the operation that deactivated it, not ESAVI-NOTIFIER-005A:
+    // that one would suggest somebody retired this notifier individually
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CASE-005A',
+        detail: 'Notifier deactivated by cascade from its ESAVI Case'
+    };
+    // The DDL defaults appDetails to '{}', an object rather than an array, so a row written
+    // outside the services could hold one. The guard keeps || from folding it into the result
+    const appendedAppDetails = sequelize.literal(
+        `CASE WHEN jsonb_typeof("appDetails") = 'array' THEN "appDetails" ELSE '[]'::jsonb END || jsonb_build_array(${ sequelize.escape(JSON.stringify(newEntry)) }::jsonb)`
+    );
+    await Notifier.update(
+        {
+            isActive: false,
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails as unknown as AppDetails[]
+        },
+        { where: { caseId, isActive: true }, transaction }
+    );
+}
+
 // Setting ESAVI Case Active/Inactive Service
 // Code: ESAVI-CASE-005A / ESAVI-CASE-005B
-// No satellite table is touched: none of the five that hang off caseId has a model yet. The
-// ON DELETE CASCADE of the DDL only fires on physical deletes, which TRG_esaviCase_preventPhysicalDelete
-// forbids, so the spec that introduces the first satellite has to carry the cascade over
+// 005A also deactivates every active notifier of the case; 005B reactivates none of them. The
+// asymmetry is deliberate: reactivating in cascade would resurrect notifiers somebody retired
+// on purpose before touching the case, and that information cannot be recovered afterwards
 const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
@@ -369,6 +407,13 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
                 detail: `ESAVI Case ${ isActive ? 'activated' : 'deactivated' } by service`
             }
         });
+
+        // Only downwards, and only after the case itself went down: if the case was already
+        // inactive, the generic service threw a 409 above and the cascade is never reached
+        if( !isActive ) {
+            await cascadeDeactivateNotifiers(id, authUser, transaction);
+        }
+
         await transaction.commit();
     } catch (error) {
         await transaction.rollback();
