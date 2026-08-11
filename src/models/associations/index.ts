@@ -6,6 +6,7 @@ import { initAppUserGeoLocationAssociations } from './appUserGeoLocation.associa
 import { initPatientAssociations } from './patient.associations';
 import { initEsaviCaseAssociations } from './esaviCase.associations';
 import { initNotifierAssociations } from './notifier.associations';
+import { initClassificationAssociations } from './classification.associations';
 
 export const initAssociations = (): void => {
     initAuthAssociations();
@@ -16,4 +17,5 @@ export const initAssociations = (): void => {
     initPatientAssociations();
     initEsaviCaseAssociations();
     initNotifierAssociations();
+    initClassificationAssociations();
 }
