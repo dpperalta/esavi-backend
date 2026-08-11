@@ -269,6 +269,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | appUserRole | `USERROLE` |
 | catalogItem | `CATITEM` |
 | catalogType | `CATTYPE` |
+| classification | `CLASSIF` |
 | esaviCase | `CASE` |
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
