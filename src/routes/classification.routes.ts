@@ -4,9 +4,14 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createClassification,
     getAllClassifications,
+    getClassificationById,
     getClassifications
 } from '../controllers/classification.controller';
-import { classificationListValidator, createClassificationValidator } from '../validators';
+import {
+    classificationIdValidator,
+    classificationListValidator,
+    createClassificationValidator
+} from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -25,5 +30,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...classificationListVa
 // Get All Classifications - For Admin
 // Code: ESAVI-CLASSIF-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...classificationListValidator, validateFields, getAllClassifications);
+
+// Get Classification by ID
+// Code: ESAVI-CLASSIF-003
+// Declared after the literal paths so Express does not capture 'admin' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...classificationIdValidator, validateFields, getClassificationById);
 
 export default router;

@@ -289,8 +289,19 @@ const getAllClassificationsService = async (
     });
 }
 
+// Get Classification By ID Service
+// Code: ESAVI-CLASSIF-003
+const getClassificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const classification = await findClassificationWithRelations(id, canViewInactive);
+    if( !classification ) {
+        throw new AppError(getMessage('classification.notFound', lang), 404, 'CLASSIF_003_NOT_FOUND');
+    }
+    return toClassificationResponse(classification);
+}
+
 export {
     createClassificationService,
     getClassificationsService,
-    getAllClassificationsService
+    getAllClassificationsService,
+    getClassificationByIdService
 }

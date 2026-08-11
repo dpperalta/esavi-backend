@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { ClassificationListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, ClassificationListFilters } from '../types';
 import {
     createClassificationService,
     getAllClassificationsService,
+    getClassificationByIdService,
     getClassificationsService
 } from '../services/classification.service';
 
@@ -82,8 +83,34 @@ const getAllClassifications = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Get Classification By ID Controller
+// Code: ESAVI-CLASSIF-003
+const getClassificationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getClassificationByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-003: Error fetching Classification by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.getFailed', req.lang), 500, 'CLASSIF_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createClassification,
     getClassifications,
-    getAllClassifications
+    getAllClassifications,
+    getClassificationById
 }
