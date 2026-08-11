@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { EsaviCase, HealthFacility, Notifier, Patient } from '../models';
+import { Classification, EsaviCase, HealthFacility, Notifier, Patient } from '../models';
 import { AppError, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -354,6 +354,12 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
 //
 // Only rows already in isActive: true are touched, so a notifier retired by hand beforehand keeps
 // its own deletedAt and receives no new entry
+// The DDL defaults appDetails to '{}', an object rather than an array, so a row written
+// outside the services could hold one. The guard keeps || from folding it into the result
+const appendedAppDetails = (entry: AppDetails) => sequelize.literal(
+    `CASE WHEN jsonb_typeof("appDetails") = 'array' THEN "appDetails" ELSE '[]'::jsonb END || jsonb_build_array(${ sequelize.escape(JSON.stringify(entry)) }::jsonb)`
+) as unknown as AppDetails[];
+
 const cascadeDeactivateNotifiers = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
     const now = new Date();
     // The method is the code of the operation that deactivated it, not ESAVI-NOTIFIER-005A:
@@ -364,17 +370,35 @@ const cascadeDeactivateNotifiers = async (caseId: string, authUser: AuthUser | u
         method: 'ESAVI-CASE-005A',
         detail: 'Notifier deactivated by cascade from its ESAVI Case'
     };
-    // The DDL defaults appDetails to '{}', an object rather than an array, so a row written
-    // outside the services could hold one. The guard keeps || from folding it into the result
-    const appendedAppDetails = sequelize.literal(
-        `CASE WHEN jsonb_typeof("appDetails") = 'array' THEN "appDetails" ELSE '[]'::jsonb END || jsonb_build_array(${ sequelize.escape(JSON.stringify(newEntry)) }::jsonb)`
-    );
     await Notifier.update(
         {
             isActive: false,
             deletedAt: now,
             updatedAt: now,
-            appDetails: appendedAppDetails as unknown as AppDetails[]
+            appDetails: appendedAppDetails(newEntry)
+        },
+        { where: { caseId, isActive: true }, transaction }
+    );
+}
+
+// The classification of the case joins the same cascade, on the same terms. It is at most one
+// row — UQ_classification_case is a one to one — but the update is still a mass one filtered by
+// caseId: it takes no decision per row, and a case with no classification updates zero rows and
+// does not fail. SPEC F09 adds this satellite to the mechanism SPEC F07 left in place
+const cascadeDeactivateClassification = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CASE-005A',
+        detail: 'Classification deactivated by cascade from its ESAVI Case'
+    };
+    await Classification.update(
+        {
+            isActive: false,
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
         },
         { where: { caseId, isActive: true }, transaction }
     );
@@ -382,7 +406,8 @@ const cascadeDeactivateNotifiers = async (caseId: string, authUser: AuthUser | u
 
 // Setting ESAVI Case Active/Inactive Service
 // Code: ESAVI-CASE-005A / ESAVI-CASE-005B
-// 005A also deactivates every active notifier of the case; 005B reactivates none of them. The
+// 005A also deactivates every active notifier of the case and its active classification; 005B
+// reactivates none of them. The
 // asymmetry is deliberate: reactivating in cascade would resurrect notifiers somebody retired
 // on purpose before touching the case, and that information cannot be recovered afterwards
 const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
@@ -412,6 +437,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
         // inactive, the generic service threw a 409 above and the cascade is never reached
         if( !isActive ) {
             await cascadeDeactivateNotifiers(id, authUser, transaction);
+            await cascadeDeactivateClassification(id, authUser, transaction);
         }
 
         await transaction.commit();
