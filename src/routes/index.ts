@@ -14,6 +14,7 @@ import appRoleRoutes from './appRole.routes';
 import patientRoutes from './patient.routes';
 import esaviCaseRoutes from './esaviCase.routes';
 import notifierRoutes from './notifier.routes';
+import classificationRoutes from './classification.routes';
 
 const router = Router();
 
@@ -38,5 +39,6 @@ router.use('/roles', appRoleRoutes);
 router.use('/patients', patientRoutes);
 router.use('/esavi-cases', esaviCaseRoutes);
 router.use('/notifiers', notifierRoutes);
+router.use('/classifications', classificationRoutes);
 
 export default router;
