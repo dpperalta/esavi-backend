@@ -67,28 +67,28 @@ export const createClassificationValidator = [
         .withMessage('First Consultation Date must be a valid ISO 8601 date')
         .custom(isNotFutureDate).withMessage('First Consultation Date cannot be in the future'),
     body('isSeriousEvent').optional({ nullable: true }).isBoolean()
-        .withMessage('Is Serious Event must be a boolean'),
+        .withMessage('Is Serious Event must be a boolean').toBoolean(),
     body('causedDeath').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Death must be a boolean'),
+        .withMessage('Caused Death must be a boolean').toBoolean(),
     body('causedDisability').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Disability must be a boolean'),
+        .withMessage('Caused Disability must be a boolean').toBoolean(),
     body('causedCongenitalAnomaly').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Congenital Anomaly must be a boolean'),
+        .withMessage('Caused Congenital Anomaly must be a boolean').toBoolean(),
     body('causedFetalDeath').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Fetal Death must be a boolean'),
+        .withMessage('Caused Fetal Death must be a boolean').toBoolean(),
     body('causedLifeThreatening').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Life Threatening must be a boolean'),
+        .withMessage('Caused Life Threatening must be a boolean').toBoolean(),
     body('causedHospitalization').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Hospitalization must be a boolean'),
+        .withMessage('Caused Hospitalization must be a boolean').toBoolean(),
     body('causedAbortion').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Abortion must be a boolean'),
+        .withMessage('Caused Abortion must be a boolean').toBoolean(),
     body('causedOtherCondition').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Other Condition must be a boolean'),
+        .withMessage('Caused Other Condition must be a boolean').toBoolean(),
     body('otherSeriousConditionDescription').optional({ nullable: true }).isString()
         .withMessage('Other Serious Condition Description must be a string'),
     body('notes').optional({ nullable: true }).isString()
         .withMessage('Notes must be a string'),
-    body('isActive').optional().isBoolean().withMessage('Is Active must be a boolean'),
+    body('isActive').optional().isBoolean().withMessage('Is Active must be a boolean').toBoolean(),
     // Declared without .optional() so the chain runs even when isSeriousEvent is absent, which
     // is precisely one of the three situations the matrix rejects
     body('isSeriousEvent').custom((value, { req }) => {
@@ -116,26 +116,26 @@ export const updateClassificationValidator = [
         .withMessage('First Consultation Date must be a valid ISO 8601 date')
         .custom(isNotFutureDate).withMessage('First Consultation Date cannot be in the future'),
     body('isSeriousEvent').optional({ nullable: true }).isBoolean()
-        .withMessage('Is Serious Event must be a boolean'),
+        .withMessage('Is Serious Event must be a boolean').toBoolean(),
     body('causedDeath').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Death must be a boolean'),
+        .withMessage('Caused Death must be a boolean').toBoolean(),
     body('causedDisability').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Disability must be a boolean'),
+        .withMessage('Caused Disability must be a boolean').toBoolean(),
     body('causedCongenitalAnomaly').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Congenital Anomaly must be a boolean'),
+        .withMessage('Caused Congenital Anomaly must be a boolean').toBoolean(),
     body('causedFetalDeath').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Fetal Death must be a boolean'),
+        .withMessage('Caused Fetal Death must be a boolean').toBoolean(),
     body('causedLifeThreatening').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Life Threatening must be a boolean'),
+        .withMessage('Caused Life Threatening must be a boolean').toBoolean(),
     body('causedHospitalization').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Hospitalization must be a boolean'),
+        .withMessage('Caused Hospitalization must be a boolean').toBoolean(),
     body('causedAbortion').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Abortion must be a boolean'),
+        .withMessage('Caused Abortion must be a boolean').toBoolean(),
     body('causedOtherCondition').optional({ nullable: true }).isBoolean()
-        .withMessage('Caused Other Condition must be a boolean'),
+        .withMessage('Caused Other Condition must be a boolean').toBoolean(),
     body('otherSeriousConditionDescription').optional({ nullable: true }).isString()
         .withMessage('Other Serious Condition Description must be a string'),
     body('notes').optional({ nullable: true }).isString()
         .withMessage('Notes must be a string'),
-    body('isActive').optional().isBoolean().withMessage('Is Active must be a boolean')
+    body('isActive').optional().isBoolean().withMessage('Is Active must be a boolean').toBoolean()
 ];

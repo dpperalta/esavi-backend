@@ -246,8 +246,8 @@ Devuelve **el objeto**, no `{ count, rows }`: la relación es uno a uno y envolv
 3. Recalcula la edad con las seis reglas de arriba, **siempre**, aunque el `PUT` no toque nada relacionado. Es la vía manual de corrección hasta que llegue el spec de propagación.
 4. Evalúa la matriz de coherencia sobre el estado resultante y deriva `isSeriousEvent`.
 5. Normaliza con `.trim()` los dos textos libres que lleguen.
-6. Escribe `updatedAt` explícitamente. No hay trigger que lo haga.
-7. Preserva el historial con `[...currentAppDetails, newEntry]`.
+6. Aplica el **update diferencial** de §11 de `CONVENTIONS.md`: al `UPDATE` solo viajan los campos cuyo valor —ya normalizado, y ya derivado en el caso de `age`, `ageUnitItemId` e `isSeriousEvent`— difiere del guardado. Si no difiere ninguno, **no hay escritura**: ni `UPDATE`, ni `updatedAt`, ni entrada en `appDetails`, y se responde 200 con la ficha tal como está.
+7. Si hubo cambios, escribe `updatedAt` explícitamente —no hay trigger que lo haga— y preserva el historial con `[...currentAppDetails, newEntry]`.
 
 **`ESAVI-CLASSIF-005A` / `005B` — desactivar y reactivar.** `setClassificationActivationService(id, authUser, lang, isActive)` sobre `setEntityActiveStatusService`, con transacción, calculando `const op = isActive ? '005B' : '005A'`. El `where` filtra **solo por la PK**. `DELETE` sella `deletedAt`; `PATCH /activate` lo deja en `null`. Ambos responden `{ ok, message }` sin `data`.
 
@@ -349,7 +349,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
    *Verificación:* un caso con clasificación devuelve 200 con la ficha completa, no envuelta en un array; un caso sin clasificación devuelve 404 `CLASSIF_006_NOT_FOUND`; un `caseId` inexistente devuelve 404 `CLASSIF_006_CASE_NOT_FOUND` — un código distinto del anterior; un caso cuya clasificación está inactiva devuelve 404 para USER y 200 para SUPERADMIN; `GET /case/no-es-uuid` devuelve 400.
 
 9. **`ESAVI-CLASSIF-004` — actualizar.** `updateClassificationService` con los siete pasos de §3.5, recalculando la edad siempre, evaluando la matriz sobre el **estado resultante** y escribiendo `updatedAt` explícitamente. Ruta `PUT /:id` en USER.
-   *Verificación:* enviar `caseId` no lo modifica; enviar `age` y `ageUnitItemId` con las dos fechas presentes no cambia la edad y **no** devuelve error; corregir el `birthDate` del paciente y hacer un `PUT` vacío actualiza `age` a su nuevo valor; un `PUT` con `causedDeath: false` sobre una clasificación cuyo único criterio era ése devuelve **400**, porque el estado resultante deja `isSeriousEvent: true` sin criterio; un `PUT` que añade `causedAbortion: true` deriva `isSeriousEvent: true` aunque el body lo mande en `false`; un `PUT` sin cambios devuelve 200 con una entrada más en `appDetails`, las anteriores intactas y `updatedAt` actualizado.
+   *Verificación:* enviar `caseId` no lo modifica; enviar `age` y `ageUnitItemId` con las dos fechas presentes no cambia la edad y **no** devuelve error; corregir el `birthDate` del paciente y hacer un `PUT` vacío actualiza `age` a su nuevo valor; un `PUT` con `causedDeath: false` sobre una clasificación cuyo único criterio era ése devuelve **400**, porque el estado resultante deja `isSeriousEvent: true` sin criterio; un `PUT` que añade `causedAbortion: true` deriva `isSeriousEvent: true` aunque el body lo mande en `false`; un `PUT` sin cambios —vacío o idéntico al estado guardado— devuelve 200 **sin** entrada nueva en `appDetails` y sin mover `updatedAt`; un `PUT` que cambia un solo campo escribe ese campo y añade una sola entrada.
 
 10. **`ESAVI-CLASSIF-005A` y `005B` — desactivar y reactivar.** `setClassificationActivationService` sobre `setEntityActiveStatusService`, con transacción y `const op = isActive ? '005B' : '005A'`. El `where` filtra solo por la PK. Dos controladores y dos rutas: `DELETE /:id` en ADMIN, `PATCH /activate/:id` en SUPERADMIN, ambas respondiendo sin `data`.
     *Verificación:* desactivar deja `isActive: false` y `deletedAt` con fecha; desactivar dos veces devuelve 409 `CLASSIF_005A_ALREADY_INACTIVE`; reactivar deja `deletedAt` en `null`; un ADMIN recibe 403 en `PATCH /activate/:id`; reactivar una clasificación cuyo caso está inactivo devuelve **200**; tras desactivar, `POST` sobre el mismo caso sigue devolviendo **409**, no 201.
@@ -449,9 +449,10 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [x] Desactivar dos veces devuelve 409 `CLASSIF_005A_ALREADY_INACTIVE`.
 - [x] `DELETE`, `PATCH /activate` y `DELETE /purge` responden `{ ok, message }` sin `data`.
 - [x] `PATCH /activate/:id` sobre una clasificación cuyo caso está inactivo devuelve **200**.
-- [x] Cada create, update y activación añade una entrada a `appDetails` sin borrar las anteriores.
+- [x] Cada create, activación y update **que cambia algo** añade una entrada a `appDetails` sin borrar las anteriores. Un `PUT` que no cambia nada no añade ninguna ni mueve `updatedAt`: es el update diferencial de §11 de `CONVENTIONS.md`.
 - [x] `appDetails.method` guarda solo el código, sin `_ACTIVATION` ni `_DEACTIVATION` detrás.
-- [x] `PUT /:id` actualiza `updatedAt`: ningún trigger lo hace por la aplicación.
+- [x] `PUT /:id` actualiza `updatedAt` cuando cambia algún campo: ningún trigger lo hace por la aplicación en el `UPDATE`.
+- [x] Los nueve booleanos se aceptan también citados como cadena (`"true"`): el validador los sanea con `.toBoolean()` antes de que la matriz los compare en estricto.
 
 **Cascada desde `esaviCase`**
 
@@ -503,6 +504,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - **No, todavía:** recalcular las clasificaciones guardadas cuando cambien `patient.birthDate` o `esaviCase.eventDate`. Obliga a modificar dos servicios cerrados y a decidir qué pasa con las inactivas. Va en su propio spec.
 - **Sí:** mantener `age` y `ageUnitItemId` en `CreateClassificationInput` aunque casi siempre se ignoren. Son la vía de respaldo, y quitarlos dejaría sin forma de informar la edad cuando falta una fecha — que en este esquema es posible, porque las dos columnas son nulables.
 - **Sí:** juntos o ninguno por la vía de respaldo. Un número sin unidad es menos útil que ningún número: obliga a adivinar, y quien adivine elegirá años.
+- **Sí:** update diferencial en el `004`, contra el precedente de `notifier` y `appRole`, que escriben y auditan aunque no cambie nada. Un `appDetails` con una entrada por cada formulario abierto y cerrado no es trazabilidad: esconde las modificaciones reales entre las que no lo son. La regla se elevó a norma en §11 de `CONVENTIONS.md` durante esta implementación, y las siete entidades que no la cumplen están catalogadas en `DEUDA-041`.
 - **Sí:** en el `004`, conservar la edad de respaldo cuando el body no la menciona y las fechas siguen sin permitir el cálculo. La regla queda enunciada así: **el cálculo es lo único que sobrescribe la edad**. Borrarla con un `PUT` vacío sería destruir en silencio un dato que alguien capturó a mano por la única vía que el sistema le ofrecía. Decidido durante la implementación, contra la lectura literal de la primera redacción de la regla 6.
 
 **Sobre el catálogo `ageUnit`**

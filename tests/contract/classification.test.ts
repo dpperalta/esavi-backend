@@ -704,6 +704,28 @@ describe('classification contract', () => {
             expect(response.body.data.isSeriousEvent).toBe(true);
         });
 
+        // isBoolean() accepts the string 'true' but does not convert it, and the matrix compares
+        // strictly against true so that null never counts as false. Without the toBoolean()
+        // sanitiser a JSON body quoting its booleans looked like a body with no criterion at all
+        it('accepts the booleans quoted as strings, on create and on update', async () => {
+            const caseId = await createCaseFixture();
+            const created = await request(app)
+                .post('/api/classifications')
+                .set(authHeader('USER'))
+                .send({ caseId, isSeriousEvent: 'false' });
+
+            const response = await updateClassification(created.body.data.classificationId, {
+                causedOtherCondition: 'true',
+                otherSeriousConditionDescription: 'Description of the new condition'
+            });
+
+            expect(created.status).toBe(201);
+            expect(created.body.data.isSeriousEvent).toBe(false);
+            expect(response.status).toBe(200);
+            expect(response.body.data.causedOtherCondition).toBe(true);
+            expect(response.body.data.isSeriousEvent).toBe(true);
+        });
+
         it('answers 400 when the update sets causedOtherCondition true with no description', async () => {
             const { id } = await classifyNewCase();
 
@@ -712,14 +734,51 @@ describe('classification contract', () => {
             expect(response.status).toBe(400);
         });
 
-        it('an empty update answers 200 and adds one audit entry', async () => {
+        // The differential update of CONVENTIONS.md section 11: a PUT that changes nothing
+        // writes nothing, so appDetails records changes and not visits to the form
+        // updatedAt is already sealed on insert by TRG_classification_setSysDetails, so what
+        // proves nothing was written is that it does not move
+        it('an empty update answers 200 and writes nothing', async () => {
             const { id } = await classifyNewCase({ notes: 'Untouched' });
+            const before = await getClassification(id);
 
             const response = await updateClassification(id, {});
 
             expect(response.status).toBe(200);
             expect(response.body.data.notes).toBe('Untouched');
+            expect(response.body.data.appDetails).toHaveLength(1);
+            expect(response.body.data.updatedAt).toBe(before.body.data.updatedAt);
+        });
+
+        it('an update identical to the stored state writes nothing either', async () => {
+            const { id } = await classifyNewCase({
+                causedDeath: true,
+                firstConsultationDate: '2024-05-06',
+                notes: 'Identical'
+            });
+            const before = await getClassification(id);
+
+            const response = await updateClassification(id, {
+                isSeriousEvent: true,
+                causedDeath: true,
+                firstConsultationDate: '2024-05-06',
+                notes: 'Identical'
+            });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.appDetails).toHaveLength(1);
+            expect(response.body.data).toEqual(before.body.data);
+        });
+
+        it('writes only the field that actually changed', async () => {
+            const { id } = await classifyNewCase({ notes: 'First' });
+            const before = await getClassification(id);
+
+            const response = await updateClassification(id, { isSeriousEvent: false, notes: 'Second' });
+
+            expect(response.body.data.notes).toBe('Second');
             expect(response.body.data.appDetails).toHaveLength(2);
+            expect(response.body.data.updatedAt).not.toBe(before.body.data.updatedAt);
         });
 
         it('answers 404 for an unknown id', async () => {

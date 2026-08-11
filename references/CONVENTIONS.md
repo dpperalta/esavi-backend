@@ -494,6 +494,46 @@ Es lo que garantizan de verdad las `UNIQUE` del DDL, que tampoco filtran por `is
 
 `toConstantCase` para `code`, `toTitleCase` para `name`, `.trim()` para el resto (`src/helpers/stringHandling.helper.ts`). **La comprobación de unicidad se hace sobre el valor ya normalizado**, nunca sobre el crudo.
 
+### Update diferencial — solo se escribe lo que cambió
+
+Un `PUT` **no** es «guarda lo que te mando». Es «deja el registro en este estado». De ahí tres reglas, en cascada:
+
+1. **Lo que no viaja en el body no se toca.** Un campo ausente conserva su valor guardado; nunca se sobrescribe con `null` ni con un valor por defecto.
+2. **Lo que viaja igual a lo que ya hay tampoco se toca.** La comparación se hace contra el valor **ya normalizado** (`toConstantCase`, `toTitleCase`, `.trim()`), porque `"  ana  "` y `"Ana"` son el mismo dato y guardarlos como distintos es un cambio inventado.
+3. **Si no cambió nada, no hay escritura.** Ni `UPDATE`, ni `updatedAt`, ni entrada en `appDetails`. Se responde 200 con el registro tal como está.
+
+La razón de la tercera es la auditoría. Un cliente que reenvía entera la ficha que acaba de leer con un `GET` —que es el uso normal de un formulario— generaría una entrada de auditoría por cada vez que alguien abre y cierra la pantalla. Un `appDetails` lleno de entradas que no registran ningún cambio no es trazabilidad: es ruido que esconde las modificaciones reales.
+
+El patrón canónico es el de `updateCatalogItemService` (`src/services/catalogItem.service.ts:152-183`):
+
+```ts
+const currentAppDetails = Array.isArray(entity.appDetails) ? entity.appDetails : [];
+const objectToUpdate = {
+    code: data.code && toConstantCase(data.code.trim()) !== entity.code ? toConstantCase(data.code.trim()) : undefined,
+    name: data.name && toTitleCase(data.name.trim()) !== entity.name ? toTitleCase(data.name.trim()) : undefined,
+    sortOrder: data.sortOrder !== undefined && data.sortOrder !== entity.sortOrder ? data.sortOrder : undefined
+};
+for( const key of Object.keys(objectToUpdate) ) {
+    if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+}
+// Sin diferencias no hay escritura: ni UPDATE, ni updatedAt, ni entrada de auditoría
+if( Object.keys(objectToUpdate).length === 0 ) {
+    return entity;
+}
+return await entity.update({
+    ...objectToUpdate,
+    updatedAt: new Date(),
+    appDetails: [ ...currentAppDetails, newEntry ]
+}, { returning: true });
+```
+
+Cuatro precisiones:
+
+- **Los campos anulables se comparan contra `undefined`, no por veracidad.** `data.x !== undefined ? (data.x ?? null) : undefined` distingue «no vino» de «vino en `null`». Un `if( data.x )` descarta en silencio el `false`, el `0` y la cadena vacía, que son valores legítimos.
+- **Los campos cifrados se comparan sobre el texto plano**, descifrando el guardado, no comparando ciphertext contra ciphertext.
+- **Los derivados cuentan como cambio.** Si el servicio recalcula un valor —una edad, un código— y el resultado difiere del guardado, eso es una diferencia aunque el cliente no haya enviado nada.
+- **La validación de FK va antes y es independiente** de si la FK cambió o no: una FK que llega apuntando a una fila inactiva es 404 aunque coincida con la guardada.
+
 ### Auditoría — `appDetails`
 
 Array JSONB append-only, tipado con `AppDetails` (`src/types/common/audit.types.ts`).
@@ -769,12 +809,25 @@ const updateEntityService = async (id: string, data: Partial<CreateEntityInput>,
             throw new AppError(getMessage('entity.codeExists', lang, { code }), 409, 'ENTITY_004_CODE_EXISTS');
         }
     }
+    // Only what actually changed travels to the UPDATE, compared against the normalized value
+    const objectToUpdate: Record<string, unknown> = {
+        code: code && code !== entity.code ? code : undefined,
+        name: data.name && toTitleCase(data.name.trim()) !== entity.name ? toTitleCase(data.name.trim()) : undefined,
+        description: data.description !== undefined && ( data.description?.trim() ?? null ) !== entity.description
+            ? ( data.description?.trim() ?? null ) : undefined,
+        sortOrder: data.sortOrder !== undefined && data.sortOrder !== entity.sortOrder ? data.sortOrder : undefined
+    };
+    for( const key of Object.keys(objectToUpdate) ) {
+        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    }
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        return entity;
+    }
     const currentAppDetails = Array.isArray(entity.appDetails) ? entity.appDetails : [];
     return await entity.update({
-        ...(code && code !== entity.code ? { code } : {}),
-        ...(data.name ? { name: toTitleCase(data.name.trim()) } : {}),
-        ...(data.description !== undefined ? { description: data.description?.trim() ?? null } : {}),
-        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+        ...objectToUpdate,
+        updatedAt: new Date(),
         appDetails: [
             ...currentAppDetails,
             {
@@ -1031,6 +1084,7 @@ La ruta base va en **kebab-case plural**: `/catalog-items`, `/geo-level-types`, 
 - [ ] Los status codes siguen la tabla: `409` para duplicados en create **y** update.
 - [ ] El `catch` del controlador sigue el idiom de tres pasos.
 - [ ] El servicio valida las FK, normaliza en escritura y extiende `appDetails` sin sobrescribirlo.
+- [ ] El update es **diferencial**: solo viajan al `UPDATE` los campos cuyo valor normalizado difiere del guardado, y sin diferencias no hay escritura ni entrada de auditoría.
 - [ ] Hay transacción si se hace más de una escritura dependiente.
 - [ ] Las claves i18n existen en `es.json`, `en.json` **y** `nl.json`, y todas las referenciadas desde el código existen.
 - [ ] No queda código comentado.
