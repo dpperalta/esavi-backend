@@ -1,6 +1,8 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, Classification, EsaviCase, Patient } from '../models';
 import { AppError, getMessage, hasAnySeriousCriterion, resolveAgeAtEvent } from '../helpers';
-import { AppDetails, AuthUser, CreateClassificationInput } from '../types';
+import { AppDetails, AuthUser, ClassificationListFilters, CreateClassificationInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Code of the catalogType that groups the three age units. Without this check any active
 // catalogItem of the system would enter as a unit and the stored age would mean nothing
@@ -23,6 +25,31 @@ const AGE_UNIT_INCLUDE = {
 // sysDetails is trigger metadata and never leaves the service. The two raw foreign keys go with
 // it: the response carries the resolved case and ageUnit objects instead
 const DETAIL_EXCLUDE = { exclude: ['sysDetails', 'caseId', 'ageUnitItemId'] };
+
+// The reduced shape of the listings drops notes and appDetails, plus the three timestamps.
+// The nine booleans and otherSeriousConditionDescription do travel: the use case of the list is
+// seeing at a glance which cases are serious and under which criterion, and without them the
+// list says nothing. notes stays out because it is free text with no length limit and dumping it
+// on every row makes the response size unpredictable
+const LIST_ATTRIBUTES = [
+    'classificationId',
+    'age',
+    'firstConsultationDate',
+    'isSeriousEvent',
+    'causedDeath',
+    'causedDisability',
+    'causedCongenitalAnomaly',
+    'causedFetalDeath',
+    'causedLifeThreatening',
+    'causedHospitalization',
+    'causedAbortion',
+    'causedOtherCondition',
+    'otherSeriousConditionDescription',
+    'isActive'
+];
+
+// Newest first, the same order as notifier and esaviCase
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
 
 // The nine booleans are returned exactly as stored, null included: they are never normalized to
 // false when building the response. In surveillance "not known" and "no" are not the same thing
@@ -211,6 +238,59 @@ const createClassificationService = async (data: CreateClassificationInput, auth
     return createdClassification ? toClassificationResponse(createdClassification) : null;
 }
 
+// The three filters are accumulated with AND, and each one is optional. A filter pointing at a
+// row that does not exist yields an empty page, never a 404: searching for something absent is
+// an empty search, not a missing resource. isSeriousEvent is compared against undefined and not
+// by truthiness, or filtering by false would silently drop the condition
+const buildListWhere = (filters: ClassificationListFilters = {}): WhereOptions => {
+    const where: Record<string, unknown> = {};
+
+    if( filters.caseId ) where.caseId = filters.caseId;
+    if( filters.isSeriousEvent !== undefined ) where.isSeriousEvent = filters.isSeriousEvent;
+    if( filters.ageUnitItemId ) where.ageUnitItemId = filters.ageUnitItemId;
+
+    return where as WhereOptions;
+}
+
+// Get Active Classifications Service
+// Code: ESAVI-CLASSIF-002A
+// The where filters by the isActive of the classification, not by the one of its case: with the
+// cascade of ESAVI-CASE-005A the classification of a retired case is already inactive, so the
+// result is the same without conditioning the include with a required: true
+const getClassificationsService = async (
+    filters: ClassificationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    return await Classification.findAndCountAll({
+        where: { ...buildListWhere(filters), isActive: true },
+        attributes: LIST_ATTRIBUTES,
+        include: [CASE_INCLUDE, AGE_UNIT_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
+// Get All Classifications Service - For Admin
+// Code: ESAVI-CLASSIF-002B
+const getAllClassificationsService = async (
+    filters: ClassificationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    return await Classification.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: LIST_ATTRIBUTES,
+        include: [CASE_INCLUDE, AGE_UNIT_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
 export {
-    createClassificationService
+    createClassificationService,
+    getClassificationsService,
+    getAllClassificationsService
 }

@@ -21,3 +21,12 @@ export interface CreateClassificationInput {
     notes?: string | null;
     isActive?: boolean;
 }
+
+// The three query filters of 002A and 002B, accumulated with AND. Filtering by a foreign key
+// that does not exist is an empty search, not a missing resource: it answers 200 with count 0.
+// isSeriousEvent admits only true or false — there is no way to filter by "not informed"
+export interface ClassificationListFilters {
+    caseId?: string;
+    isSeriousEvent?: boolean;
+    ageUnitItemId?: string;
+}

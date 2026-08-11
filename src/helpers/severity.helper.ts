@@ -20,7 +20,8 @@ export interface SeverityState {
     otherSeriousConditionDescription?: string | null;
 }
 
-// The eight criteria that make an event serious, plus causedOtherCondition, which is the ninth
+// The eight criteria that make an event serious. isSeriousEvent is the ninth boolean of the
+// table, but it is the conclusion and not a criterion, so it does not belong here
 export const SERIOUS_CRITERION_FIELDS = [
     'causedDeath',
     'causedDisability',
