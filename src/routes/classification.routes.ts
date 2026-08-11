@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createClassification,
     getAllClassifications,
+    getClassificationByCaseId,
     getClassificationById,
     getClassifications
 } from '../controllers/classification.controller';
 import {
+    classificationCaseIdValidator,
     classificationIdValidator,
     classificationListValidator,
     createClassificationValidator
@@ -30,6 +32,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...classificationListVa
 // Get All Classifications - For Admin
 // Code: ESAVI-CLASSIF-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...classificationListValidator, validateFields, getAllClassifications);
+
+// Get Classification by Case
+// Code: ESAVI-CLASSIF-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared
+// before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...classificationCaseIdValidator, validateFields, getClassificationByCaseId);
 
 // Get Classification by ID
 // Code: ESAVI-CLASSIF-003

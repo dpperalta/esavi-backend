@@ -71,6 +71,17 @@ const findClassificationWithRelations = async (id: string, includeInactive: bool
     });
 }
 
+// The same read as above, entered through the foreign key instead of the primary one. It needs
+// no LIMIT beyond findOne because UQ_classification_case guarantees there is at most one row
+const findClassificationByCaseId = async (caseId: string, includeInactive: boolean = false) => {
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    return await Classification.findOne({
+        where,
+        attributes: DETAIL_EXCLUDE,
+        include: [CASE_INCLUDE, AGE_UNIT_INCLUDE]
+    });
+}
+
 // The case must exist and be active: FK_classification_case declares ON DELETE CASCADE, but
 // TRG_esaviCase_preventPhysicalDelete forbids every physical delete of esaviCase, so that
 // cascade never fires and nothing in the DDL stops a classification from pointing at a retired
@@ -299,9 +310,27 @@ const getClassificationByIdService = async (id: string, lang: string, canViewIna
     return toClassificationResponse(classification);
 }
 
+// Get Classification By Case ID Service
+// Code: ESAVI-CLASSIF-006
+// The real query of the domain: the client holds the caseId, not the classificationId. It
+// returns the record itself and not { count, rows } — the relation is one to one, and wrapping a
+// single record in a collection would force unwrapping a one-element array on every screen.
+// The two 404 are deliberately distinct: a case that does not exist is a broken link, a case
+// without classification is a pending task, and the client acts differently on each
+const getClassificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+    await assertCaseIsValid(caseId, '006', lang);
+
+    const classification = await findClassificationByCaseId(caseId, canViewInactive);
+    if( !classification ) {
+        throw new AppError(getMessage('classification.notFound', lang), 404, 'CLASSIF_006_NOT_FOUND');
+    }
+    return toClassificationResponse(classification);
+}
+
 export {
     createClassificationService,
     getClassificationsService,
     getAllClassificationsService,
-    getClassificationByIdService
+    getClassificationByIdService,
+    getClassificationByCaseIdService
 }

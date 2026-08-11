@@ -4,6 +4,7 @@ import { AuthUser, ClassificationListFilters } from '../types';
 import {
     createClassificationService,
     getAllClassificationsService,
+    getClassificationByCaseIdService,
     getClassificationByIdService,
     getClassificationsService
 } from '../services/classification.service';
@@ -108,9 +109,35 @@ const getClassificationById = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Get Classification By Case ID Controller
+// Code: ESAVI-CLASSIF-006
+const getClassificationByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getClassificationByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-006: Error fetching Classification by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.getFailed', req.lang), 500, 'CLASSIF_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createClassification,
     getClassifications,
     getAllClassifications,
-    getClassificationById
+    getClassificationById,
+    getClassificationByCaseId
 }

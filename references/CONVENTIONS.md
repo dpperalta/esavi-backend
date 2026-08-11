@@ -163,6 +163,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | appUser | `006` | cambiar la propia contraseña — actúa siempre sobre el usuario del token |
 | appUser | `007` | consultar el propio perfil — la ficha del usuario del token |
 | patient | `006` | búsqueda por identificador — documento, pasaporte o código de sistema |
+| classification | `006` | obtener la clasificación de un caso — la relación es uno a uno y se entra por el `caseId` |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
