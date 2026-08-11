@@ -7,6 +7,8 @@ import {
     getClassificationByCaseIdService,
     getClassificationByIdService,
     getClassificationsService,
+    purgeClassificationService,
+    setClassificationActivationService,
     updateClassificationService
 } from '../services/classification.service';
 
@@ -156,11 +158,74 @@ const updateClassification = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Delete Classification Controller - Soft delete
+// Code: ESAVI-CLASSIF-005A
+const deleteClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setClassificationActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-005A: Error deleting Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.deletedFailed', req.lang), 500, 'CLASSIF_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Classification Controller - For SuperAdmin
+// Code: ESAVI-CLASSIF-005B
+const activateClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setClassificationActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-005B: Error activating Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.activatedFailed', req.lang), 500, 'CLASSIF_005B_ACTIVATION_FAILED', error));
+    }
+}
+
+// Purge Classification Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-CLASSIF-005C
+const purgeClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeClassificationService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-005C: Error purging Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.purgeFailed', req.lang), 500, 'CLASSIF_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createClassification,
     getClassifications,
     getAllClassifications,
     getClassificationById,
     getClassificationByCaseId,
-    updateClassification
+    updateClassification,
+    deleteClassification,
+    activateClassification,
+    purgeClassification
 }

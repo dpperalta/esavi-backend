@@ -1,4 +1,5 @@
 import { WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, Classification, EsaviCase, Patient } from '../models';
 import {
     AppError,
@@ -12,6 +13,8 @@ import {
 } from '../helpers';
 import { AppDetails, AuthUser, ClassificationListFilters, CreateClassificationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the three age units. Without this check any active
 // catalogItem of the system would enter as a unit and the stored age would mean nothing
@@ -436,11 +439,81 @@ const updateClassificationService = async (
     return updatedClassification ? toClassificationResponse(updatedClassification) : null;
 }
 
+// Setting Classification Active/Inactive Service
+// Code: ESAVI-CLASSIF-005A / ESAVI-CLASSIF-005B
+// Reactivating does NOT require the case to be active, for the same reason as in notifier: the
+// cascade only goes down, and whoever reactivates is SUPERADMIN. There can be no conflict with
+// UQ_classification_case either, because the caseId was never released: step 2 of 001 prevents
+// a second classification from waiting for the slot
+const setClassificationActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // The where filters by the primary key only: the generic service is the one that tells
+        // 'does not exist' (404) from 'already in that state' (409)
+        await setEntityActiveStatusService({
+            model: Classification,
+            where: { classificationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('classification.notFound', lang),
+            notFoundCode: `CLASSIF_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`classification.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `CLASSIF_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-CLASSIF-${ op }`,
+                detail: `Classification ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
+// Purging Classification Service - For SuperAdmin
+// Code: ESAVI-CLASSIF-005C
+// classification is outside the preventPhysicalDelete loop of esaviapp.sql:1354-1360, so the row
+// can really be destroyed. This is the only path that releases the caseId: once the row is gone
+// UQ_classification_case is free and the case admits a new classification. It does not touch the
+// case — the foreign key runs from the classification to the case and not the other way round,
+// and no table references classificationId
+const purgeClassificationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: Classification,
+            where: { classificationId: id },
+            transaction,
+            operationCode: 'ESAVI-CLASSIF-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('classification.notFound', lang),
+            notFoundCode: 'CLASSIF_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('classification.stillActive', lang, { id }),
+            stillActiveCode: 'CLASSIF_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createClassificationService,
     getClassificationsService,
     getAllClassificationsService,
     getClassificationByIdService,
     getClassificationByCaseIdService,
-    updateClassificationService
+    updateClassificationService,
+    setClassificationActivationService,
+    purgeClassificationService
 }
