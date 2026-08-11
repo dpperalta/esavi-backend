@@ -1,6 +1,6 @@
 # SPEC F09 — CRUD completo de classification
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F06 (`esaviCase` — dependencia dura: `caseId` es `NOT NULL` y la edad se calcula desde `esaviCase.eventDate`)**, **SPEC F05 (`patient` — dependencia dura: la edad se calcula desde `patient.birthDate`)**, SPEC F07 (mecanismo de cascada de `ESAVI-CASE-005A`, al que esta entidad se suma), SPEC F08 (operación `005C` de borrado físico)
 > **Fecha:** 2026-08-10
 > **Objetivo:** Dar de alta la entidad `classification` con sus siete artefactos, sus siete operaciones canónicas más el acceso por caso, calculando la edad del paciente al momento del evento en vez de aceptarla del cliente, y sumando la entidad a la cascada de desactivación de `esaviCase`.
@@ -58,7 +58,9 @@ El único trigger que alcanza a la tabla es `TRG_classification_setSysDetails`, 
 - Extender la cascada de `ESAVI-CASE-005A` a los otros tres satélites.
 - **Recalcular la edad de las clasificaciones ya guardadas cuando cambien `patient.birthDate` o `esaviCase.eventDate`.** Va en su propio spec: obliga a modificar dos servicios cerrados y a decidir qué pasa con las clasificaciones inactivas. Hasta entonces, la vía de corrección es un `PUT` sobre la clasificación, que recalcula.
 - Sembrar el `catalogType` de código `ageUnit` y sus tres items. **Es precondición de la implementación, no parte de ella:** sin ese catálogo, toda alta con las dos fechas presentes devuelve 404. La carga se hace por los endpoints ya existentes de `catalogType` y `catalogItem`.
-- Cualquier modificación de `esaviapp.sql`: ni el índice único parcial que liberaría el `caseId` de una clasificación inactiva, ni un `CHECK` que imponga la coherencia de gravedad en la base, ni añadir `classification` a `preventPhysicalDelete`, ni el índice `IX_classification_case` que la tabla no tiene, ni el trigger `TRG_*_setUpdatedAt` que el esquema hace `DROP` y nunca crea.
+- Cualquier modificación de `esaviapp.sql` **salvo una**: ni el índice único parcial que liberaría el `caseId` de una clasificación inactiva, ni un `CHECK` que imponga la coherencia de gravedad en la base, ni añadir `classification` a `preventPhysicalDelete`, ni el índice `IX_classification_case` que la tabla no tiene, ni el trigger `TRG_*_setUpdatedAt` que el esquema hace `DROP` y nunca crea.
+
+  La excepción, detectada durante la implementación: los nueve booleanos estaban declarados `boolean NOT NULL DEFAULT false`, lo que hace **imposible** el tri-estado que este spec exige en §2, §3.2 y §3.7. Se dejan nulables. Es un cambio de nueve líneas, acotado a `classification`, y sin él el spec es incoherente consigo mismo.
 - Cifrado de ningún campo. La tabla no contiene datos identificativos: la edad sin fecha de nacimiento no identifica a nadie, y el paciente ya está cifrado en su propia tabla.
 - Filtrar u ordenar por rangos de edad o por rangos de `firstConsultationDate`. Los tres filtros de §3.5 son por igualdad.
 - Cualquier endpoint de estadística, conteo por criterio de gravedad o exportación.
@@ -190,7 +192,7 @@ Se aplica igual en las dos operaciones, y es lo primero que hay que entender del
 
    Un evento el mismo día del nacimiento da `age: 0` con `DAYS`, que el `CHECK` admite.
 5. El item se resuelve buscando `catalogItem.code` igual a `YEARS`, `MONTHS` o `DAYS` —en `toConstantCase`, como los guarda `catalogItem.service.ts:22`— con `isActive: true` y dentro del `catalogType` de código `ageUnit`. Si no aparece → **404** `CLASSIF_<op>_AGEUNIT_CATALOG_MISSING`, con una clave i18n que nombra la precondición: el catálogo no está sembrado.
-6. Si **falta** `birthDate` o falta `eventDate` → prevalece el body: `age` y `ageUnitItemId` se guardan tal cual, obligatoriamente **juntos o ninguno** —enviar uno solo es 400, lo emite el validador— y el `ageUnitItemId` recibido se valida como cualquier FK: existente, activo y del `catalogType` `ageUnit` → si no, **404** `CLASSIF_<op>_AGEUNIT_NOT_FOUND`. Si el body tampoco los trae, ambos quedan en `null`.
+6. Si **falta** `birthDate` o falta `eventDate` → prevalece el body: `age` y `ageUnitItemId` se guardan tal cual, obligatoriamente **juntos o ninguno** —enviar uno solo es 400, lo emite el validador— y el `ageUnitItemId` recibido se valida como cualquier FK: existente, activo y del `catalogType` `ageUnit` → si no, **404** `CLASSIF_<op>_AGEUNIT_NOT_FOUND`. Si el body tampoco los trae: en `001` ambos quedan en `null`, porque no hay nada guardado; en `004` **se conserva lo que ya estaba**. Solo el cálculo sobrescribe lo que el cliente informó a mano; un `PUT` que no menciona la edad no la borra.
 
 `smallint` no se desborda por ninguna vía: la rama de días nunca pasa de 30, la de meses de 11, y la de años no alcanza 32 767.
 
@@ -325,13 +327,13 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 1. **Modelo, asociaciones y tipos.** `src/models/classification.model.ts` con `caseId` en `allowNull: false`, `age` como `SMALLINT` y los nueve booleanos **sin `defaultValue`**; `src/models/associations/classification.associations.ts` con `case` y `ageUnit`, más el inverso `EsaviCase.hasOne(Classification, { as: 'classification' })`, registrado en `initModels()`; `src/types/classification/classification.types.ts` con `CreateClassificationInput` y su `index.ts` de barrel. Alta en `src/models/index.ts` y `src/types/index.ts`.
    *Verificación:* `npm run build` en 0; un `Classification.findAndCountAll({ include: ['case', 'ageUnit'] })` desde un script suelto devuelve filas sin error de asociación; `npm test` sigue en verde, porque el `hasOne` nuevo no se incluye en ninguna respuesta de `esaviCase`.
 
-2. **Claves i18n.** El bloque `classification` completo de §3.6 en `es.json`, `en.json` y `nl.json`, con las diecinueve claves.
+2. **Claves i18n.** El bloque `classification` completo de §3.6 en `es.json`, `en.json` y `nl.json`: **diecinueve filas, veinticuatro claves** —cinco filas declaran pares `Success`/`Failed`—.
    *Verificación:* `npm run i18n:check` en 0 y `npm test -- messages` pasa.
 
 3. **Helper de cálculo de edad.** `src/helpers/age.helper.ts` con una función pura `resolveAgeAtEvent(birthDate, eventDate)` que devuelve `{ age, unitCode }` con `unitCode` en `'YEARS' | 'MONTHS' | 'DAYS'`, o `null` si falta alguna fecha, y que **lanza** cuando `eventDate` precede a `birthDate` para que el servicio lo traduzca al 409. Períodos cumplidos por aritmética de calendario, nunca por división de milisegundos. Alta en `src/helpers/index.ts`.
    *Verificación:* suite unitaria nueva `tests/unit/age.helper.test.ts` con los bordes: nacimiento y evento el mismo día → `0 DAYS`; 30 días → `30 DAYS`; un mes exacto → `1 MONTHS`; 11 meses y 29 días → `11 MONTHS`; 12 meses exactos → `1 YEARS`; un 29 de febrero con evento el 28 de febrero del año siguiente → `0 YEARS` con `11 MONTHS`; evento anterior al nacimiento → lanza. **Este paso introduce el directorio `tests/unit/`**, que no existe: las cuatro suites actuales son de rol, contrato e i18n. Es una extensión deliberada y pequeña, porque estos bordes son de aritmética pura y cubrirlos por HTTP obligaría a fabricar un paciente y un caso por cada caso de prueba.
 
-4. **Validadores.** `src/validators/classification.validator.ts` con cuatro arrays: `classificationIdValidator`, `classificationListValidator` (los tres filtros de §3.5 más `limit` y `offset`), `createClassificationValidator` y `updateClassificationValidator`. Ambos de cuerpo incluyen las validaciones de forma de §3.5, la regla de `age` y `ageUnitItemId` **juntos o ninguno**, y las tres reglas cruzadas de la matriz de coherencia, siguiendo el patrón de `esaviCase.validator.ts:59`. Un quinto array `classificationCaseIdValidator` para el `param('caseId')` del `006`. Alta en `src/validators/index.ts`.
+4. **Validadores.** `src/validators/classification.validator.ts` con cuatro arrays: `classificationIdValidator`, `classificationListValidator` (los tres filtros de §3.5 más `limit` y `offset`), `createClassificationValidator` y `updateClassificationValidator`. Ambos de cuerpo incluyen las validaciones de forma de §3.5 y la regla de `age` y `ageUnitItemId` **juntos o ninguno**. Las tres reglas cruzadas de la matriz de coherencia van **solo en el de create**, siguiendo el patrón de `esaviCase.validator.ts:59`: en el `004` la matriz se evalúa sobre el estado resultante y por tanto en el servicio, como fija §3.5 — aplicarla también sobre el body del `PUT` haría que todo `PUT` parcial devolviera 400 y rompería dos criterios de aceptación. Las dos vías comparten el predicado puro de §7. Un quinto array `classificationCaseIdValidator` para el `param('caseId')` del `006`. Alta en `src/validators/index.ts`.
    *Verificación:* `npm run build` en 0; los validadores existen aunque aún no haya rutas que los usen.
 
 5. **`ESAVI-CLASSIF-001` — crear.** `createClassificationService` con los seis pasos de §3.5 en ese orden: FK del caso, unicidad del `caseId` sin filtrar por `isActive`, cálculo de la edad, derivación de `isSeriousEvent`, `.trim()` de los textos, inserción con auditoría. Controlador y ruta `POST /` con `validateUserRole(USER)`.
@@ -376,105 +378,106 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 
 **Superficie y convenciones**
 
-- [ ] Las nueve rutas de §3.4 responden con su código de estado esperado.
-- [ ] Los cinco puntos del código de operación (ruta, controlador, servicio, `AppError`, `appDetails.method`) coinciden en las ocho operaciones que escriben o leen con auditoría. En `005C` son cuatro: no hay `appDetails.method`, y eso es correcto según `CONVENTIONS.md` §6.
-- [ ] `grep -rn "ESAVI-CLASSIF-002[^AB]" src/` no devuelve resultados: todo listado es `002A` o `002B`.
-- [ ] `grep -rn "ESAVI-CLASSIF-00[7-9]" src/` no devuelve resultados: la única operación no canónica es `006`.
-- [ ] `CLASSIF` aparece en la tabla de abreviaturas de `references/CONVENTIONS.md` §6, y la fila `classification` · `006` en la de operaciones no canónicas.
-- [ ] Existen los siete artefactos y `src/types/classification/index.ts` está presente.
-- [ ] `GET /api/classifications/admin` y `GET /api/classifications/case/:caseId` no responden 400 por validación de UUID: las literales se declaran antes de `/:id`.
-- [ ] `EsaviCase.hasOne(Classification)` está declarado, y `classification` **no** aparece en ninguna respuesta de `/api/esavi-cases`.
-- [ ] `esaviapp.sql` no tiene ni una línea modificada.
+- [x] Las nueve rutas de §3.4 responden con su código de estado esperado.
+- [x] Los cinco puntos del código de operación (ruta, controlador, servicio, `AppError`, `appDetails.method`) coinciden en las ocho operaciones que escriben o leen con auditoría. En `005C` son cuatro: no hay `appDetails.method`, y eso es correcto según `CONVENTIONS.md` §6.
+- [x] `grep -rn "ESAVI-CLASSIF-002[^AB]" src/` no devuelve resultados: todo listado es `002A` o `002B`.
+- [x] `grep -rn "ESAVI-CLASSIF-00[7-9]" src/` no devuelve resultados: la única operación no canónica es `006`.
+- [x] `CLASSIF` aparece en la tabla de abreviaturas de `references/CONVENTIONS.md` §6, y la fila `classification` · `006` en la de operaciones no canónicas.
+- [x] Existen los siete artefactos y `src/types/classification/index.ts` está presente.
+- [x] `GET /api/classifications/admin` y `GET /api/classifications/case/:caseId` no responden 400 por validación de UUID: las literales se declaran antes de `/:id`.
+- [x] `EsaviCase.hasOne(Classification)` está declarado, y `classification` **no** aparece en ninguna respuesta de `/api/esavi-cases`.
+- [x] La **única** modificación de `esaviapp.sql` es la de los nueve booleanos de `classification`, que pasan de `boolean NOT NULL DEFAULT false` a `boolean` nulable. Sin ella el tri-estado es imposible y ocho criterios de este spec no se pueden cumplir. Ningún otro cambio: ni índice único parcial, ni `CHECK` de coherencia, ni `IX_classification_case`, ni `preventPhysicalDelete`, ni `TRG_*_setUpdatedAt`.
 
 **Cálculo de la edad**
 
-- [ ] Con `birthDate` y `eventDate` presentes, un `POST` que manda `age: 40` y un `ageUnitItemId` cualquiera guarda la edad **calculada** y responde **201**, sin 400 y sin aviso.
-- [ ] Un paciente nacido tres años antes del evento produce `age: 3` con el item de código `YEARS`.
-- [ ] Un paciente nacido siete meses antes del evento produce `age: 7` con `MONTHS`.
-- [ ] Un paciente nacido doce días antes del evento produce `age: 12` con `DAYS`.
-- [ ] Doce meses exactos producen `1 YEARS`, no `12 MONTHS`; un mes exacto produce `1 MONTHS`, no `30 DAYS`; el mismo día produce `0 DAYS`.
-- [ ] El cálculo usa aritmética de calendario: un nacimiento el 29 de febrero con evento el 28 de febrero del año siguiente no produce `1 YEARS`.
-- [ ] Sin `birthDate` en el paciente, o sin `eventDate` en el caso, se guardan el `age` y el `ageUnitItemId` del body tal cual.
-- [ ] En ese escenario, enviar solo `age` o solo `ageUnitItemId` devuelve **400**; no enviar ninguno de los dos guarda ambos en `null` y responde 201.
-- [ ] Un `ageUnitItemId` recibido que no existe, está inactivo o pertenece a otro `catalogType` devuelve **404** `ageUnitNotFound`.
-- [ ] Si falta el item `YEARS`, `MONTHS` o `DAYS` del `catalogType` `ageUnit`, la operación devuelve **404** `ageUnitCatalogMissing`, con un código de `AppError` distinto del anterior.
-- [ ] Un `eventDate` anterior al `birthDate` devuelve **409** `invalidAgeRange` y no inserta ninguna fila. El `CHECK ("age" >= 0)` de Postgres nunca llega a dispararse.
-- [ ] `esaviCase.reportDate` no aparece en ninguna rama del cálculo.
+- [x] Con `birthDate` y `eventDate` presentes, un `POST` que manda `age: 40` y un `ageUnitItemId` cualquiera guarda la edad **calculada** y responde **201**, sin 400 y sin aviso.
+- [x] Un paciente nacido tres años antes del evento produce `age: 3` con el item de código `YEARS`.
+- [x] Un paciente nacido siete meses antes del evento produce `age: 7` con `MONTHS`.
+- [x] Un paciente nacido doce días antes del evento produce `age: 12` con `DAYS`.
+- [x] Doce meses exactos producen `1 YEARS`, no `12 MONTHS`; un mes exacto produce `1 MONTHS`, no `30 DAYS`; el mismo día produce `0 DAYS`.
+- [x] El cálculo usa aritmética de calendario: un nacimiento el 29 de febrero con evento el 28 de febrero del año siguiente no produce `1 YEARS`.
+- [x] Sin `birthDate` en el paciente, o sin `eventDate` en el caso, se guardan el `age` y el `ageUnitItemId` del body tal cual.
+- [x] En ese escenario, enviar solo `age` o solo `ageUnitItemId` devuelve **400**; no enviar ninguno de los dos guarda ambos en `null` y responde 201.
+- [x] En ese mismo escenario, un `PUT` que no menciona la edad **conserva** la que ya estaba guardada: solo el cálculo la sobrescribe.
+- [x] Un `ageUnitItemId` recibido que no existe, está inactivo o pertenece a otro `catalogType` devuelve **404** `ageUnitNotFound`.
+- [x] Si falta el item `YEARS`, `MONTHS` o `DAYS` del `catalogType` `ageUnit`, la operación devuelve **404** `ageUnitCatalogMissing`, con un código de `AppError` distinto del anterior.
+- [x] Un `eventDate` anterior al `birthDate` devuelve **409** `invalidAgeRange` y no inserta ninguna fila. El `CHECK ("age" >= 0)` de Postgres nunca llega a dispararse.
+- [x] `esaviCase.reportDate` no aparece en ninguna rama del cálculo.
 
 **Coherencia de gravedad**
 
-- [ ] Sin ningún `caused*` en `true` y sin `isSeriousEvent` en el body → **400**.
-- [ ] Sin ningún `caused*` en `true` y con `isSeriousEvent: true` → **400**.
-- [ ] Sin ningún `caused*` en `true` y con `isSeriousEvent: false` → **201**, y los `caused*` ausentes quedan en `null`.
-- [ ] Con `causedDeath: true` e `isSeriousEvent: false` en el body → **201** con `isSeriousEvent: true` en la respuesta: el servicio lo deriva.
-- [ ] Con `causedDeath: true` y sin `isSeriousEvent` en el body → **201** con `isSeriousEvent: true`.
-- [ ] `causedOtherCondition: true` sin `otherSeriousConditionDescription` → **400**.
-- [ ] Un `PUT` con `causedDeath: false` sobre una clasificación cuyo único criterio era ése devuelve **400**: la matriz se evalúa sobre el estado resultante, no sobre el body.
-- [ ] Los booleanos no informados llegan como `null` en todas las respuestas, nunca como `false`.
+- [x] Sin ningún `caused*` en `true` y sin `isSeriousEvent` en el body → **400**.
+- [x] Sin ningún `caused*` en `true` y con `isSeriousEvent: true` → **400**.
+- [x] Sin ningún `caused*` en `true` y con `isSeriousEvent: false` → **201**, y los `caused*` ausentes quedan en `null`.
+- [x] Con `causedDeath: true` e `isSeriousEvent: false` en el body → **201** con `isSeriousEvent: true` en la respuesta: el servicio lo deriva.
+- [x] Con `causedDeath: true` y sin `isSeriousEvent` en el body → **201** con `isSeriousEvent: true`.
+- [x] `causedOtherCondition: true` sin `otherSeriousConditionDescription` → **400**.
+- [x] Un `PUT` con `causedDeath: false` sobre una clasificación cuyo único criterio era ése devuelve **400**: la matriz se evalúa sobre el estado resultante, no sobre el body.
+- [x] Los booleanos no informados llegan como `null` en todas las respuestas, nunca como `false`.
 
 **Uno a uno**
 
-- [ ] `POST` sobre un caso que ya tiene clasificación **activa** devuelve **409** `caseAlreadyClassified`, con el `caseId` interpolado en el mensaje.
-- [ ] `POST` sobre un caso cuya clasificación está **inactiva** devuelve también **409**: el hueco no se libera con el borrado lógico.
-- [ ] Purgar la clasificación con `005C` libera el `caseId`, y un `POST` posterior sobre ese caso devuelve **201**.
-- [ ] Enviar `caseId` en el body de `PUT /:id` deja el caso original intacto y no devuelve error.
-- [ ] Ningún `INSERT` llega a Postgres con el `caseId` ocupado: la suite no produce ningún error `23505`.
+- [x] `POST` sobre un caso que ya tiene clasificación **activa** devuelve **409** `caseAlreadyClassified`, con el `caseId` interpolado en el mensaje.
+- [x] `POST` sobre un caso cuya clasificación está **inactiva** devuelve también **409**: el hueco no se libera con el borrado lógico.
+- [x] Purgar la clasificación con `005C` libera el `caseId`, y un `POST` posterior sobre ese caso devuelve **201**.
+- [x] Enviar `caseId` en el body de `PUT /:id` deja el caso original intacto y no devuelve error.
+- [x] Ningún `INSERT` llega a Postgres con el `caseId` ocupado: la suite no produce ningún error `23505`.
 
 **Acceso por caso (`006`)**
 
-- [ ] `GET /case/:caseId` devuelve el objeto directamente, **no** `{ count, rows }`.
-- [ ] Un caso inexistente devuelve **404** `CLASSIF_006_CASE_NOT_FOUND`; un caso sin clasificación devuelve **404** `CLASSIF_006_NOT_FOUND`. Los dos códigos son distintos.
-- [ ] Un caso cuya clasificación está inactiva devuelve 404 para USER y ADMIN, y 200 para SUPERADMIN.
-- [ ] `GET /case/no-es-uuid` devuelve **400**.
+- [x] `GET /case/:caseId` devuelve el objeto directamente, **no** `{ count, rows }`.
+- [x] Un caso inexistente devuelve **404** `CLASSIF_006_CASE_NOT_FOUND`; un caso sin clasificación devuelve **404** `CLASSIF_006_NOT_FOUND`. Los dos códigos son distintos.
+- [x] Un caso cuya clasificación está inactiva devuelve 404 para USER y ADMIN, y 200 para SUPERADMIN.
+- [x] `GET /case/no-es-uuid` devuelve **400**.
 
 **Listados y filtros**
 
-- [ ] `GET /` no devuelve clasificaciones inactivas; `GET /admin` sí.
-- [ ] Un USER recibe 403 en `GET /admin`.
-- [ ] `?isSeriousEvent=true` no devuelve las que lo tienen en `null`.
-- [ ] `?caseId=` de un UUID inexistente devuelve **200** con `{ count: 0, rows: [] }`, nunca 404.
-- [ ] Los tres filtros combinados se aplican con `AND`.
-- [ ] El orden por defecto es `createdAt DESC`.
-- [ ] Las filas del listado traen los nueve booleanos y `otherSeriousConditionDescription`, y **no** traen `notes` ni `appDetails`.
-- [ ] `sysDetails` no aparece en ninguna respuesta de ninguna operación.
-- [ ] `case.eventDate` viene en la respuesta de las seis operaciones que devuelven clasificación.
+- [x] `GET /` no devuelve clasificaciones inactivas; `GET /admin` sí.
+- [x] Un USER recibe 403 en `GET /admin`.
+- [x] `?isSeriousEvent=true` no devuelve las que lo tienen en `null`.
+- [x] `?caseId=` de un UUID inexistente devuelve **200** con `{ count: 0, rows: [] }`, nunca 404.
+- [x] Los tres filtros combinados se aplican con `AND`.
+- [x] El orden por defecto es `createdAt DESC`.
+- [x] Las filas del listado traen los nueve booleanos y `otherSeriousConditionDescription`, y **no** traen `notes` ni `appDetails`.
+- [x] `sysDetails` no aparece en ninguna respuesta de ninguna operación.
+- [x] `case.eventDate` viene en la respuesta de las seis operaciones que devuelven clasificación.
 
 **Ciclo de vida y auditoría**
 
-- [ ] `GET /:id` de una clasificación inactiva: 404 para USER y ADMIN, 200 para SUPERADMIN.
-- [ ] `DELETE /:id` deja `isActive: false` y `deletedAt` con fecha; `PATCH /activate/:id` lo revierte y deja `deletedAt` en `null`.
-- [ ] Desactivar dos veces devuelve 409 `CLASSIF_005A_ALREADY_INACTIVE`.
-- [ ] `DELETE`, `PATCH /activate` y `DELETE /purge` responden `{ ok, message }` sin `data`.
-- [ ] `PATCH /activate/:id` sobre una clasificación cuyo caso está inactivo devuelve **200**.
-- [ ] Cada create, update y activación añade una entrada a `appDetails` sin borrar las anteriores.
-- [ ] `appDetails.method` guarda solo el código, sin `_ACTIVATION` ni `_DEACTIVATION` detrás.
-- [ ] `PUT /:id` actualiza `updatedAt`: ningún trigger lo hace por la aplicación.
+- [x] `GET /:id` de una clasificación inactiva: 404 para USER y ADMIN, 200 para SUPERADMIN.
+- [x] `DELETE /:id` deja `isActive: false` y `deletedAt` con fecha; `PATCH /activate/:id` lo revierte y deja `deletedAt` en `null`.
+- [x] Desactivar dos veces devuelve 409 `CLASSIF_005A_ALREADY_INACTIVE`.
+- [x] `DELETE`, `PATCH /activate` y `DELETE /purge` responden `{ ok, message }` sin `data`.
+- [x] `PATCH /activate/:id` sobre una clasificación cuyo caso está inactivo devuelve **200**.
+- [x] Cada create, update y activación añade una entrada a `appDetails` sin borrar las anteriores.
+- [x] `appDetails.method` guarda solo el código, sin `_ACTIVATION` ni `_DEACTIVATION` detrás.
+- [x] `PUT /:id` actualiza `updatedAt`: ningún trigger lo hace por la aplicación.
 
 **Cascada desde `esaviCase`**
 
-- [ ] `DELETE /api/esavi-cases/:id` deja la clasificación activa del caso con `isActive: false` y `deletedAt` sellado, en la misma transacción.
-- [ ] `PATCH /api/esavi-cases/activate/:id` **no** la reactiva.
-- [ ] Una clasificación desactivada a mano antes de la cascada conserva su `deletedAt` original y no recibe entrada nueva en `appDetails`.
-- [ ] Desactivar un caso ya inactivo devuelve 409 y **nada** cambia de estado.
-- [ ] Desactivar un caso sin clasificación responde 200 sin error.
-- [ ] El `appDetails` de la clasificación arrastrada registra `method: 'ESAVI-CASE-005A'`, no `'ESAVI-CLASSIF-005A'`.
-- [ ] Los notificadores siguen cayendo por la cascada exactamente como antes: la suite del F07 no pierde ningún caso.
+- [x] `DELETE /api/esavi-cases/:id` deja la clasificación activa del caso con `isActive: false` y `deletedAt` sellado, en la misma transacción.
+- [x] `PATCH /api/esavi-cases/activate/:id` **no** la reactiva.
+- [x] Una clasificación desactivada a mano antes de la cascada conserva su `deletedAt` original y no recibe entrada nueva en `appDetails`.
+- [x] Desactivar un caso ya inactivo devuelve 409 y **nada** cambia de estado.
+- [x] Desactivar un caso sin clasificación responde 200 sin error.
+- [x] El `appDetails` de la clasificación arrastrada registra `method: 'ESAVI-CASE-005A'`, no `'ESAVI-CLASSIF-005A'`.
+- [x] Los notificadores siguen cayendo por la cascada exactamente como antes: la suite del F07 no pierde ningún caso.
 
 **Borrado físico (`005C`)**
 
-- [ ] `DELETE /purge/:id` sobre una clasificación activa devuelve **409** `CLASSIF_005C_STILL_ACTIVE` y la fila sigue existiendo.
-- [ ] Sobre una desactivada devuelve **200** sin `data`, y `Classification.findByPk(id, { paranoid: false })` devuelve `null`.
-- [ ] Repetir la purga devuelve **404** `CLASSIF_005C_NOT_FOUND`.
-- [ ] Un ADMIN recibe **403**.
-- [ ] Purgar **no** altera el caso: el `esaviCase` sigue existiendo con los mismos datos.
-- [ ] El log recoge una línea `ESAVI-CLASSIF-005C` en nivel `warn` con el volcado de la fila antes del `destroy`.
+- [x] `DELETE /purge/:id` sobre una clasificación activa devuelve **409** `CLASSIF_005C_STILL_ACTIVE` y la fila sigue existiendo.
+- [x] Sobre una desactivada devuelve **200** sin `data`, y `Classification.findByPk(id, { paranoid: false })` devuelve `null`.
+- [x] Repetir la purga devuelve **404** `CLASSIF_005C_NOT_FOUND`.
+- [x] Un ADMIN recibe **403**.
+- [x] Purgar **no** altera el caso: el `esaviCase` sigue existiendo con los mismos datos.
+- [x] El log recoge una línea `ESAVI-CLASSIF-005C` en nivel `warn` con el volcado de la fila antes del `destroy`.
 
 **Cierre**
 
-- [ ] Las diecinueve claves de §3.6 existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
-- [ ] `ROUTE_RULES` pasa de 90 a 99 y `npm test -- roles` pasa.
-- [ ] `tests/unit/age.helper.test.ts` cubre los siete bordes del paso 3 y pasa.
-- [ ] `npm run check` sale en 0.
+- [x] Las veinticuatro claves de las diecinueve filas de §3.6 existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
+- [x] `ROUTE_RULES` pasa de 90 a 99 y `npm test -- roles` pasa.
+- [x] `tests/unit/age.helper.test.ts` cubre los siete bordes del paso 3 y pasa.
+- [x] `npm run check` sale en 0.
 
 ---
 
@@ -500,6 +503,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - **No, todavía:** recalcular las clasificaciones guardadas cuando cambien `patient.birthDate` o `esaviCase.eventDate`. Obliga a modificar dos servicios cerrados y a decidir qué pasa con las inactivas. Va en su propio spec.
 - **Sí:** mantener `age` y `ageUnitItemId` en `CreateClassificationInput` aunque casi siempre se ignoren. Son la vía de respaldo, y quitarlos dejaría sin forma de informar la edad cuando falta una fecha — que en este esquema es posible, porque las dos columnas son nulables.
 - **Sí:** juntos o ninguno por la vía de respaldo. Un número sin unidad es menos útil que ningún número: obliga a adivinar, y quien adivine elegirá años.
+- **Sí:** en el `004`, conservar la edad de respaldo cuando el body no la menciona y las fechas siguen sin permitir el cálculo. La regla queda enunciada así: **el cálculo es lo único que sobrescribe la edad**. Borrarla con un `PUT` vacío sería destruir en silencio un dato que alguien capturó a mano por la única vía que el sistema le ofrecía. Decidido durante la implementación, contra la lectura literal de la primera redacción de la regla 6.
 
 **Sobre el catálogo `ageUnit`**
 
@@ -563,7 +567,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - **Sí:** abreviatura `CLASSIF`, y **`FINCLASS` reservada** para `finalClassification`. Registrar aquí solo la primera y dejar constancia de la segunda evita que el spec de `finalClassification` descubra tarde que el nombre obvio ya no está.
 - **Sí:** exponer `005C`. `classification` no figura en el bucle `preventPhysicalDelete`, así que le corresponde por la regla del [SPEC F08](./08-physical-delete.md), que es objetiva. Las razones de fondo están allí.
 - **No:** cifrar ningún campo. La tabla no contiene datos identificativos: una edad sin fecha de nacimiento no identifica a nadie, y el paciente ya está cifrado en su tabla. Cifrar `age` además impediría el `CHECK` de la columna y cualquier filtro futuro.
-- **No:** tocar `esaviapp.sql` por ninguna vía — ni índice único parcial, ni `CHECK` de coherencia, ni `IX_classification_case`, ni `preventPhysicalDelete`, ni el trigger `TRG_*_setUpdatedAt` que el esquema hace `DROP` y nunca crea.
+- **No:** tocar `esaviapp.sql` por ninguna vía — ni índice único parcial, ni `CHECK` de coherencia, ni `IX_classification_case`, ni `preventPhysicalDelete`, ni el trigger `TRG_*_setUpdatedAt` que el esquema hace `DROP` y nunca crea. **Con una excepción**, decidida durante la implementación: los nueve booleanos pasan de `boolean NOT NULL DEFAULT false` a `boolean` nulable. La decisión de fondo —conservar `null` como estado distinto de `false`— ya estaba tomada arriba; lo que se descubrió tarde es que el DDL no la permitía. Entre renunciar al tri-estado y cambiar nueve líneas de una tabla que este spec estrena, se cambia el DDL.
 
 ---
 
@@ -611,7 +615,7 @@ La asimetría es la misma que fijó el F07 y está razonada en §6. La consecuen
 - Recalcular la edad de las clasificaciones ya guardadas cuando cambien `patient.birthDate` o `esaviCase.eventDate`. Hasta que exista ese spec, la vía es un `PUT` sobre la clasificación.
 - Sembrar el `catalogType` de código `ageUnit` y sus tres items. Es precondición, no alcance.
 - Validar `firstConsultationDate` contra `eventDate`.
-- Cualquier modificación de `esaviapp.sql`: índice único parcial, `CHECK` de coherencia, `IX_classification_case`, `preventPhysicalDelete` o el trigger `TRG_*_setUpdatedAt`.
+- Cualquier modificación de `esaviapp.sql` salvo dejar nulables los nueve booleanos de `classification`, sin la cual el tri-estado no existe: ni índice único parcial, ni `CHECK` de coherencia, ni `IX_classification_case`, ni `preventPhysicalDelete`, ni el trigger `TRG_*_setUpdatedAt`.
 - Cifrado de ningún campo de esta tabla.
 - Filtros u ordenaciones por rangos de edad o de fechas, y cualquier endpoint de estadística, conteo por criterio de gravedad o exportación.
 - Crear la clasificación automáticamente al dar de alta un `esaviCase`.

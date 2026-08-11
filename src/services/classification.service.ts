@@ -174,12 +174,16 @@ const assertAgeUnitIsValid = async (ageUnitItemId: string, op: string, lang: str
 // because a 400 would punish resending whole the record just read with a GET, which is the
 // normal use of a form. esaviCase.reportDate is never used as a stand-in for eventDate: it is
 // when the case was reported, not when it happened, and it would yield a plausible false age
+// Returns null when there is no source for the age at all — neither the two dates nor the body.
+// That is not the same as an age of null: on create there is nothing stored so both columns go
+// null, but on update the stored value stays where it is. The calculation is the only thing that
+// overwrites what the client informed by hand
 const resolveAgeForCase = async (
     caseId: string,
     data: Partial<CreateClassificationInput>,
     op: string,
     lang: string
-): Promise<{ age: number | null, ageUnitItemId: string | null }> => {
+): Promise<{ age: number | null, ageUnitItemId: string | null } | null> => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId },
         attributes: ['caseId', 'eventDate'],
@@ -211,7 +215,7 @@ const resolveAgeForCase = async (
         await assertAgeUnitIsValid(data.ageUnitItemId, op, lang);
         return { age: data.age, ageUnitItemId: data.ageUnitItemId };
     }
-    return { age: null, ageUnitItemId: null };
+    return null;
 }
 
 // Create Classification Service
@@ -220,7 +224,9 @@ const createClassificationService = async (data: CreateClassificationInput, auth
     await assertCaseIsValid(data.caseId, '001', lang);
     await assertCaseIsNotClassified(data.caseId, '001', lang);
 
-    const { age, ageUnitItemId } = await resolveAgeForCase(data.caseId, data, '001', lang);
+    // Nothing is stored yet, so with no calculation and no body both columns start out null
+    const { age, ageUnitItemId } = await resolveAgeForCase(data.caseId, data, '001', lang)
+        ?? { age: null, ageUnitItemId: null };
 
     // Fourth row of the coherence matrix: an event with a severity criterion behind it is
     // serious by definition, so the flag is derived however it arrived — true, false or absent.
@@ -376,7 +382,7 @@ const updateClassificationService = async (
     // Recalculated always, even when the PUT touches nothing related. It is the manual way of
     // correcting an age that went stale after its two source dates changed, until the
     // propagation spec exists, and it keeps a single path for the rule
-    const { age, ageUnitItemId } = await resolveAgeForCase(classification.caseId, data, '004', lang);
+    const resolvedAge = await resolveAgeForCase(classification.caseId, data, '004', lang);
 
     // The matrix is evaluated over the resulting state and not over the body: otherwise a PUT
     // sending causedDeath false on a classification whose only criterion was that one would
@@ -393,9 +399,11 @@ const updateClassificationService = async (
         );
     }
 
+    // With no calculation possible and nothing in the body, the stored age is left alone: what
+    // the client informed by hand is only overwritten by a real calculation, never erased in silence
     const objectToUpdate: Record<string, unknown> = {
-        age,
-        ageUnitItemId,
+        age: resolvedAge ? resolvedAge.age : undefined,
+        ageUnitItemId: resolvedAge ? resolvedAge.ageUnitItemId : undefined,
         firstConsultationDate: data.firstConsultationDate !== undefined
             ? ( data.firstConsultationDate ?? null ) : undefined,
         otherSeriousConditionDescription: data.otherSeriousConditionDescription !== undefined

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { EsaviCase, HealthFacility, Notifier, Patient } from '../../src/models';
+import { Classification, EsaviCase, HealthFacility, Notifier, Patient } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -620,6 +620,126 @@ describe('esaviCase contract', () => {
 
             expect(detail.body.data).not.toHaveProperty('notifiers');
             expect(list.body.data.rows[0]).not.toHaveProperty('notifiers');
+        });
+
+    });
+
+    /**
+     * SPEC F09 adds the classification to the same cascade, at the same point and
+     * inside the same transaction. It proves the mechanism SPEC F07 built was
+     * extensible and not a one-off for notifier. The asymmetry is unchanged: 005B
+     * reactivates nothing. The patients of this suite carry no birth date, so the
+     * age falls back to the body and the ageUnit catalog is not needed here.
+     */
+    describe('005A — the cascade over classification', () => {
+
+        const createClassification = async ( caseId: string ): Promise<string> => {
+            const response = await request(app)
+                .post('/api/classifications')
+                .set(authHeader('USER'))
+                .send({ caseId, isSeriousEvent: false });
+            return response.body.data.classificationId;
+        };
+
+        it('drags the active classification of the case, sealing deletedAt', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const classificationId = await createClassification(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const classification = await Classification.findByPk(classificationId);
+            expect(classification?.getDataValue('isActive')).toBe(false);
+            expect(classification?.getDataValue('deletedAt')).not.toBeNull();
+            // The method is the code of the operation that deactivated it, not 005A of classification
+            const appDetails = classification?.getDataValue('appDetails') as { method: string }[];
+            expect(appDetails.map(entry => entry.method)).toEqual([
+                'ESAVI-CLASSIF-001', 'ESAVI-CASE-005A'
+            ]);
+        });
+
+        it('brings the classification back on no account when the case is reactivated', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const classificationId = await createClassification(caseId);
+            await deleteCase(caseId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const classification = await Classification.findByPk(classificationId);
+            expect(classification?.getDataValue('isActive')).toBe(false);
+            expect(classification?.getDataValue('deletedAt')).not.toBeNull();
+        });
+
+        it('leaves a classification retired beforehand with its own deletedAt and no new entry', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const classificationId = await createClassification(caseId);
+            await request(app).delete(`/api/classifications/${ classificationId }`).set(authHeader('ADMIN'));
+
+            const before = await Classification.findByPk(classificationId);
+            const ownDeletedAt = before?.getDataValue('deletedAt') as Date;
+            const entriesBefore = ( before?.getDataValue('appDetails') as unknown[] ).length;
+
+            // A second apart, so a deletedAt rewritten by the cascade would show
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            await deleteCase(caseId);
+
+            const after = await Classification.findByPk(classificationId);
+            expect(( after?.getDataValue('deletedAt') as Date ).getTime()).toBe(ownDeletedAt.getTime());
+            expect(after?.getDataValue('appDetails') as unknown[]).toHaveLength(entriesBefore);
+        });
+
+        it('answers 200 for a case with no classification at all', async () => {
+            const created = await createCase();
+
+            expect(( await deleteCase(created.body.data.caseId) ).status).toBe(200);
+        });
+
+        it('changes no classification when the case was already inactive', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const classificationId = await createClassification(caseId);
+            await deleteCase(caseId);
+            await request(app).patch(`/api/classifications/activate/${ classificationId }`).set(authHeader('SUPERADMIN'));
+
+            const response = await deleteCase(caseId);
+
+            // The generic service threw the 409 before the cascade could run
+            expect(response.status).toBe(409);
+            const classification = await Classification.findByPk(classificationId);
+            expect(classification?.getDataValue('isActive')).toBe(true);
+            expect(classification?.getDataValue('deletedAt')).toBeNull();
+        });
+
+        it('drags classification and notifiers in the same operation', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const classificationId = await createClassification(caseId);
+            const notifier = await request(app)
+                .post('/api/notifiers')
+                .set(authHeader('USER'))
+                .send({ caseId, firstName: 'Ambos', lastName: 'Cascada' });
+
+            await deleteCase(caseId);
+
+            const classification = await Classification.findByPk(classificationId);
+            const stored = await Notifier.findByPk(notifier.body.data.notifierId);
+            expect(classification?.getDataValue('isActive')).toBe(false);
+            expect(stored?.getDataValue('isActive')).toBe(false);
+        });
+
+        it('does not expose the classification in any response of esavi-cases', async () => {
+            const created = await createCase();
+            await createClassification(created.body.data.caseId);
+
+            const detail = await getCase(created.body.data.caseId);
+            const list = await listCases();
+
+            expect(detail.body.data).not.toHaveProperty('classification');
+            expect(list.body.data.rows[0]).not.toHaveProperty('classification');
         });
 
     });

@@ -668,6 +668,21 @@ describe('classification contract', () => {
             expect(response.body.data.ageUnit.code).toBe('MONTHS');
         });
 
+        it('keeps the age informed by hand when there is no way to compute it', async () => {
+            const caseId = await createCaseFixture({ birthDate: null });
+            const created = await createClassification({ caseId, age: 40, ageUnitItemId: yearsItemId });
+            const id = created.body.data.classificationId;
+
+            // An empty update must not erase what the client informed: only a real calculation
+            // overwrites it, and here there is no birth date to compute from
+            const untouched = await updateClassification(id, {});
+            const corrected = await updateClassification(id, { age: 41, ageUnitItemId: yearsItemId });
+
+            expect(untouched.body.data.age).toBe(40);
+            expect(untouched.body.data.ageUnit.code).toBe('YEARS');
+            expect(corrected.body.data.age).toBe(41);
+        });
+
         it('evaluates the matrix over the resulting state, not over the body', async () => {
             const { id } = await classifyNewCase({ causedDeath: true });
 
