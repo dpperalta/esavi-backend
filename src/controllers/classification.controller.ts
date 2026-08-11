@@ -1,0 +1,231 @@
+import { Request, Response, NextFunction } from 'express';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, ClassificationListFilters } from '../types';
+import {
+    createClassificationService,
+    getAllClassificationsService,
+    getClassificationByCaseIdService,
+    getClassificationByIdService,
+    getClassificationsService,
+    purgeClassificationService,
+    setClassificationActivationService,
+    updateClassificationService
+} from '../services/classification.service';
+
+// The three query filters of 002A and 002B. Only what actually arrives travels to the service,
+// so an absent filter never turns into an `undefined` in the where clause. isSeriousEvent comes
+// off the query string, where everything is text: the validator already restricted it to a
+// boolean, so comparing against 'true' is enough to read it
+const listFilters = (req: Request): ClassificationListFilters => ({
+    caseId: req.query.caseId as string | undefined,
+    isSeriousEvent: req.query.isSeriousEvent !== undefined
+        ? String(req.query.isSeriousEvent) === 'true' : undefined,
+    ageUnitItemId: req.query.ageUnitItemId as string | undefined
+});
+
+// Create Classification Controller
+// Code: ESAVI-CLASSIF-001
+const createClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await createClassificationService(req.body, req.user, req.lang);
+        return res.status(201).json({
+            ok: true,
+            message: getMessage('classification.createdSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-001: Error creating Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.createdFailed', req.lang), 500, 'CLASSIF_001_CREATION_FAILED', error));
+    }
+}
+
+// Get Classifications Controller
+// Code: ESAVI-CLASSIF-002A
+const getClassifications = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getClassificationsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-002A: Error fetching Classifications: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.getFailedPlural', req.lang), 500, 'CLASSIF_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Classifications Controller - For Admin
+// Code: ESAVI-CLASSIF-002B
+const getAllClassifications = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllClassificationsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-002B: Error fetching Classifications: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.getFailedPlural', req.lang), 500, 'CLASSIF_002B_FETCH_FAILED', error));
+    }
+}
+
+// Get Classification By ID Controller
+// Code: ESAVI-CLASSIF-003
+const getClassificationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getClassificationByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-003: Error fetching Classification by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.getFailed', req.lang), 500, 'CLASSIF_003_FETCH_FAILED', error));
+    }
+}
+
+// Get Classification By Case ID Controller
+// Code: ESAVI-CLASSIF-006
+const getClassificationByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getClassificationByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-006: Error fetching Classification by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.getFailed', req.lang), 500, 'CLASSIF_006_FETCH_FAILED', error));
+    }
+}
+
+// Update Classification Controller
+// Code: ESAVI-CLASSIF-004
+const updateClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateClassificationService(id.toString().trim(), req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-004: Error updating Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.updatedFailed', req.lang), 500, 'CLASSIF_004_UPDATE_FAILED', error));
+    }
+}
+
+// Delete Classification Controller - Soft delete
+// Code: ESAVI-CLASSIF-005A
+const deleteClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setClassificationActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-005A: Error deleting Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.deletedFailed', req.lang), 500, 'CLASSIF_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Classification Controller - For SuperAdmin
+// Code: ESAVI-CLASSIF-005B
+const activateClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setClassificationActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-005B: Error activating Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.activatedFailed', req.lang), 500, 'CLASSIF_005B_ACTIVATION_FAILED', error));
+    }
+}
+
+// Purge Classification Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-CLASSIF-005C
+const purgeClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeClassificationService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-005C: Error purging Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.purgeFailed', req.lang), 500, 'CLASSIF_005C_PURGE_FAILED', error));
+    }
+}
+
+export {
+    createClassification,
+    getClassifications,
+    getAllClassifications,
+    getClassificationById,
+    getClassificationByCaseId,
+    updateClassification,
+    deleteClassification,
+    activateClassification,
+    purgeClassification
+}

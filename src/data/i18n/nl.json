@@ -315,5 +315,31 @@
         "stillActive": "De melder met ID {{id}} is nog actief. Deactiveer deze voordat u deze permanent verwijdert.",
         "purgeSuccess": "Melder permanent verwijderd",
         "purgeFailed": "Fout bij het permanent verwijderen van de melder. Probeer het later opnieuw."
+    },
+    "classification": {
+        "notFound": "Classificatie niet gevonden. Controleer de ID van de classificatie en probeer het opnieuw.",
+        "idRequired": "De ID van de classificatie is verplicht",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "caseAlreadyClassified": "Het ESAVI-geval met ID {{caseId}} heeft al een classificatie, actief of inactief",
+        "ageUnitNotFound": "De opgegeven leeftijdseenheid bestaat niet, is inactief of hoort niet bij de leeftijdseenhedencatalogus",
+        "ageUnitCatalogMissing": "De leeftijdseenhedencatalogus bevat het item met code {{code}} niet. Laad de catalogus voordat u classificeert.",
+        "invalidAgeRange": "De datum van de gebeurtenis ligt vóór de geboortedatum van de patiënt. De leeftijd kan niet worden berekend.",
+        "createdSuccess": "Classificatie succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de classificatie mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Classificatie succesvol opgehaald",
+        "getFailed": "Ophalen van de classificatie mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Classificaties succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de classificaties mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Classificatie succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de classificatie mislukt. Probeer het later opnieuw.",
+        "alreadyInactive": "De classificatie met ID {{id}} is al inactief",
+        "alreadyActive": "De classificatie met ID {{id}} is al actief",
+        "deletedSuccess": "Classificatie succesvol verwijderd",
+        "deletedFailed": "Verwijderen van de classificatie mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Classificatie succesvol geactiveerd",
+        "activatedFailed": "Activeren van de classificatie mislukt. Probeer het later opnieuw.",
+        "stillActive": "De classificatie met ID {{id}} is nog actief. Deactiveer deze voordat u deze permanent verwijdert.",
+        "purgeSuccess": "Classificatie permanent verwijderd",
+        "purgeFailed": "Fout bij het permanent verwijderen van de classificatie. Probeer het later opnieuw."
     }
 }

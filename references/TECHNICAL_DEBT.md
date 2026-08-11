@@ -60,12 +60,14 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-038](#deuda-038) | 🟠 | ✅ El idioma resuelto no llega desde el controlador al servicio |
 | [DEUDA-039](#deuda-039) | 🔴 | ✅ `geoPolygon` no coincide con la columna `geopolygon` del SQL |
 | [DEUDA-040](#deuda-040) | 🟠 | El validador de update anuncia `isActive` y el servicio lo ignora |
+| [DEUDA-041](#deuda-041) | 🟠 | Seis servicios de update escriben aunque no cambie ningún dato |
 
 ## Mapa de resolución
 
 La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030, el
-SPEC 08 cubre 037 y 038, y el SPEC 09 cubre 039. Las entradas 031–036 y 040
-todavía no tienen spec.
+SPEC 08 cubre 037 y 038, y el SPEC 09 cubre 039. Las entradas 031–036, 040 y
+041 todavía no tienen spec; de la 041, el SPEC F09 corrigió por adelantado la
+única entidad que él mismo estrenaba.
 
 **Saldadas a 2026-08-03**: las 30 entradas 001–030, por los siete specs de la
 serie, más 037 y 038 por el SPEC 08. Los ocho specs están en estado
@@ -88,7 +90,7 @@ producción, en vez de exigir SUPERADMIN), **013** (unicidad **sin** filtrar por
 | [07 — Linter y suite mínima](./specs/07-tooling-and-tests.md) | 030 |
 | [08 — Idioma efectivo](./specs/08-language-propagation.md) | 037, 038 |
 | [09 — CRUD de healthFacility](./specs/09-healthfacility-crud.md) | 039 |
-| sin spec | 031, 032, 033, 034, 035, 036, 040 |
+| sin spec | 031, 032, 033, 034, 035, 036, 040, 041 |
 
 Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08. El 05 renumera
 líneas que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los
@@ -771,3 +773,42 @@ Sin error y sin señal. El cliente tiene motivos para creer que desactivó el re
 La plantilla de `updateEntityValidator` de la sección 14.2 de [CONVENTIONS.md](./CONVENTIONS.md) **no incluye `isActive`**, y con razón: el estado se cambia por `005A` y `005B`, que sellan `deletedAt` y pasan por `setEntityActiveStatusService`. Aplicarlo desde el update abriría un segundo camino sin esas garantías.
 
 **Aceptación**: las dos líneas desaparecen, o los servicios de update aplican el campo — pero entonces `deletedAt` y las reglas de `005A`/`005B` tienen que respetarse también por esa vía. La primera opción es la que siguió el SPEC 09.
+
+---
+
+<a id="deuda-041"></a>
+## DEUDA-041 🟠 Seis servicios de update escriben aunque no cambie ningún dato
+
+**Archivos**: `src/services/appRole.service.ts:115`, `src/services/appUserGeoLocation.service.ts:220`, `src/services/esaviCase.service.ts:286`, `src/services/notifier.service.ts:242`, `src/services/patient.service.ts:219`, `src/services/user.service.ts:230`
+
+Detectada el 2026-08-11 al cerrar el [SPEC F09](./functional/specs/09-classification-crud.md), a partir de un `PUT` que no cambiaba nada y aun así dejaba rastro.
+
+La regla de **update diferencial** de la sección 11 de [CONVENTIONS.md](./CONVENTIONS.md) exige tres cosas: no tocar lo que no viaja en el body, no tocar lo que viaja igual a lo guardado, y no escribir nada —ni `UPDATE`, ni `updatedAt`, ni entrada en `appDetails`— cuando no cambió ningún campo. Seis servicios ya la cumplen —`catalogItem`, `catalogType`, `geoLevelType`, `geoLocation`, `healthFacility` y `classification`, este último corregido en el propio SPEC F09, que fue donde se detectó—; seis no.
+
+Dos grados de desviación:
+
+| Servicio | Compara con lo guardado | Omite la escritura si no hay cambios |
+|---|---|---|
+| `appRole` | sí | **no** |
+| `appUserGeoLocation` | no | no |
+| ~~`classification`~~ | ✅ sí | ✅ sí — corregida por el SPEC F09 |
+| `esaviCase` | no | no |
+| `notifier` | no | no |
+| `patient` | no | no |
+| `user` | no | no |
+
+Los cinco últimos solo comprueban **presencia** de la clave en el body, no diferencia de valor: reenviar entera la ficha recién leída con un `GET` reescribe todas las columnas con su propio valor y añade una entrada de auditoría. `appRole` sí compara campo a campo, pero escribe igualmente, con un comentario que declara la intención contraria a la norma:
+
+```ts
+// The audit entry is written even when no field changed: an update that touched nothing is
+// still an update someone attempted, and appDetails is the only record of who tried
+```
+
+El efecto no es un dato corrupto, es un `appDetails` inservible: cada vez que alguien abre y cierra un formulario queda una entrada que no registra ningún cambio, y las modificaciones reales dejan de distinguirse del ruido. En las entidades con PII se suma un segundo efecto — cada reescritura vuelve a cifrar el mismo texto plano — y en las que recalculan un derivado, un tercero: `updatedAt` avanza sin que nada haya avanzado.
+
+**Cuidado con dos casos que no son simple comparación de igualdad**:
+
+- Los campos cifrados (`patient`, `notifier`, `user`) se comparan **descifrando el guardado**, nunca ciphertext contra ciphertext.
+- Los valores **derivados** cuentan como diferencia aunque el cliente no los haya enviado: la edad recalculada de `classification` o el `caseCode` de `esaviCase`.
+
+**Aceptación**: los seis servicios siguen el patrón de `updateCatalogItemService` (`src/services/catalogItem.service.ts:152-183`); un `PUT` idéntico al estado guardado responde 200, no añade entrada a `appDetails` y no mueve `updatedAt`; las suites de contrato que hoy afirman lo contrario se corrigen en el mismo spec — al menos `esaviCase` y `notifier` tienen un caso que espera una entrada nueva tras un `PUT` sin cambios, y `classification` ya enseña la forma correcta.

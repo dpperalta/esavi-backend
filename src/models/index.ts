@@ -12,6 +12,7 @@ import { AppUserGeoLocation } from './appUserGeoLocation.model';
 import { Patient } from './patient.model';
 import { EsaviCase } from './esaviCase.model';
 import { Notifier } from './notifier.model';
+import { Classification } from './classification.model';
 
 export const initModels = (): void => {
     initAssociations();
@@ -30,5 +31,6 @@ export {
     AppUserGeoLocation,
     Patient,
     EsaviCase,
-    Notifier
+    Notifier,
+    Classification
 };

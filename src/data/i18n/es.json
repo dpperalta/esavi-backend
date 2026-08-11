@@ -315,5 +315,31 @@
         "stillActive": "El notificador con ID {{id}} sigue activo. Desactívelo antes de eliminarlo permanentemente.",
         "purgeSuccess": "Notificador eliminado permanentemente",
         "purgeFailed": "Error al eliminar permanentemente el notificador. Por favor, inténtelo de nuevo más tarde."
+    },
+    "classification": {
+        "notFound": "Clasificación no encontrada. Por favor, verifique el ID de la clasificación e inténtelo de nuevo.",
+        "idRequired": "El ID de la clasificación es obligatorio",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "caseAlreadyClassified": "El caso ESAVI con ID {{caseId}} ya tiene una clasificación registrada, activa o inactiva",
+        "ageUnitNotFound": "La unidad de edad indicada no existe, está inactiva o no pertenece al catálogo de unidades de edad",
+        "ageUnitCatalogMissing": "El catálogo de unidades de edad no contiene el elemento con código {{code}}. Cargue el catálogo antes de clasificar.",
+        "invalidAgeRange": "La fecha del evento es anterior a la fecha de nacimiento del paciente. No es posible calcular la edad.",
+        "createdSuccess": "Clasificación creada exitosamente",
+        "createdFailed": "Error al crear la clasificación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Clasificación obtenida exitosamente",
+        "getFailed": "Error al obtener la clasificación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Clasificaciones obtenidas exitosamente",
+        "getFailedPlural": "Error al obtener las clasificaciones. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Clasificación actualizada exitosamente",
+        "updatedFailed": "Error al actualizar la clasificación. Por favor, inténtelo de nuevo más tarde.",
+        "alreadyInactive": "La clasificación con ID {{id}} ya está inactiva",
+        "alreadyActive": "La clasificación con ID {{id}} ya está activa",
+        "deletedSuccess": "Clasificación eliminada exitosamente",
+        "deletedFailed": "Error al eliminar la clasificación. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Clasificación activada exitosamente",
+        "activatedFailed": "Error al activar la clasificación. Por favor, inténtelo de nuevo más tarde.",
+        "stillActive": "La clasificación con ID {{id}} sigue activa. Desactívela antes de eliminarla permanentemente.",
+        "purgeSuccess": "Clasificación eliminada permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente la clasificación. Por favor, inténtelo de nuevo más tarde."
     }
 }

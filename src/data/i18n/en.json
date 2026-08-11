@@ -315,5 +315,31 @@
         "stillActive": "The notifier with ID {{id}} is still active. Deactivate it before deleting it permanently.",
         "purgeSuccess": "Notifier permanently deleted",
         "purgeFailed": "Error permanently deleting the notifier. Please try again later."
+    },
+    "classification": {
+        "notFound": "Classification not found. Please check the classification ID and try again.",
+        "idRequired": "The classification ID is required",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "caseAlreadyClassified": "The ESAVI case with ID {{caseId}} already has a classification, whether active or inactive",
+        "ageUnitNotFound": "The given age unit does not exist, is inactive or does not belong to the age unit catalog",
+        "ageUnitCatalogMissing": "The age unit catalog does not contain the item with code {{code}}. Load the catalog before classifying.",
+        "invalidAgeRange": "The event date is earlier than the patient birth date. The age cannot be calculated.",
+        "createdSuccess": "Classification created successfully",
+        "createdFailed": "Failed to create the classification. Please try again later.",
+        "getSuccess": "Classification fetched successfully",
+        "getFailed": "Failed to fetch the classification. Please try again later.",
+        "getSuccessPlural": "Classifications fetched successfully",
+        "getFailedPlural": "Failed to fetch the classifications. Please try again later.",
+        "updatedSuccess": "Classification updated successfully",
+        "updatedFailed": "Failed to update the classification. Please try again later.",
+        "alreadyInactive": "The classification with ID {{id}} is already inactive",
+        "alreadyActive": "The classification with ID {{id}} is already active",
+        "deletedSuccess": "Classification deleted successfully",
+        "deletedFailed": "Failed to delete the classification. Please try again later.",
+        "activatedSuccess": "Classification activated successfully",
+        "activatedFailed": "Failed to activate the classification. Please try again later.",
+        "stillActive": "The classification with ID {{id}} is still active. Deactivate it before deleting it permanently.",
+        "purgeSuccess": "Classification permanently deleted",
+        "purgeFailed": "Error permanently deleting the classification. Please try again later."
     }
 }
