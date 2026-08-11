@@ -6,7 +6,8 @@ import {
     getAllClassificationsService,
     getClassificationByCaseIdService,
     getClassificationByIdService,
-    getClassificationsService
+    getClassificationsService,
+    updateClassificationService
 } from '../services/classification.service';
 
 // The three query filters of 002A and 002B. Only what actually arrives travels to the service,
@@ -134,10 +135,32 @@ const getClassificationByCaseId = async (req: Request, res: Response, next: Next
     }
 }
 
+// Update Classification Controller
+// Code: ESAVI-CLASSIF-004
+const updateClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateClassificationService(id.toString().trim(), req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('classification.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CLASSIF-004: Error updating Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('classification.updatedFailed', req.lang), 500, 'CLASSIF_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createClassification,
     getClassifications,
     getAllClassifications,
     getClassificationById,
-    getClassificationByCaseId
+    getClassificationByCaseId,
+    updateClassification
 }

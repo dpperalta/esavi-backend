@@ -6,13 +6,15 @@ import {
     getAllClassifications,
     getClassificationByCaseId,
     getClassificationById,
-    getClassifications
+    getClassifications,
+    updateClassification
 } from '../controllers/classification.controller';
 import {
     classificationCaseIdValidator,
     classificationIdValidator,
     classificationListValidator,
-    createClassificationValidator
+    createClassificationValidator,
+    updateClassificationValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -43,5 +45,10 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...classifi
 // Code: ESAVI-CLASSIF-003
 // Declared after the literal paths so Express does not capture 'admin' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...classificationIdValidator, validateFields, getClassificationById);
+
+// Update Classification
+// Code: ESAVI-CLASSIF-004
+// USER for the same reason as 001: correcting the classification is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(USER), ...classificationIdValidator, ...updateClassificationValidator, validateFields, updateClassification);
 
 export default router;

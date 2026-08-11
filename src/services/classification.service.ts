@@ -1,6 +1,15 @@
 import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, Classification, EsaviCase, Patient } from '../models';
-import { AppError, getMessage, hasAnySeriousCriterion, resolveAgeAtEvent } from '../helpers';
+import {
+    AppError,
+    findSeverityViolation,
+    getMessage,
+    hasAnySeriousCriterion,
+    resolveAgeAtEvent,
+    SERIOUS_CRITERION_FIELDS,
+    SEVERITY_VIOLATION_MESSAGES,
+    SeverityState
+} from '../helpers';
 import { AppDetails, AuthUser, ClassificationListFilters, CreateClassificationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -327,10 +336,111 @@ const getClassificationByCaseIdService = async (caseId: string, lang: string, ca
     return toClassificationResponse(classification);
 }
 
+// The nine booleans and the description of the resulting state: what is stored merged with what
+// arrives. A key absent from the body keeps its stored value; a key that arrives null erases it,
+// because null is a state of its own and not the lack of an answer
+const mergeSeverityState = (classification: Classification, data: Partial<CreateClassificationInput>): SeverityState => {
+    const merged: Record<string, unknown> = {};
+    const fields = [
+        'isSeriousEvent',
+        ...SERIOUS_CRITERION_FIELDS,
+        'otherSeriousConditionDescription'
+    ] as const;
+    for( const field of fields ) {
+        merged[field] = data[field] !== undefined
+            ? ( data[field] ?? null )
+            : classification.getDataValue(field);
+    }
+    return merged as SeverityState;
+}
+
+// Update Classification Service
+// Code: ESAVI-CLASSIF-004
+// caseId is ignored whether or not it arrives in the body: a classification is not moved between
+// cases. The UNIQUE of the destination would block it anyway if that case already had one, and
+// the origin would be left unclassified without anything recording it
+const updateClassificationService = async (
+    id: string,
+    data: Partial<CreateClassificationInput>,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const classification = await Classification.findByPk(id);
+    if( !classification ) {
+        throw new AppError(getMessage('classification.notFound', lang), 404, 'CLASSIF_004_NOT_FOUND');
+    }
+
+    // Recalculated always, even when the PUT touches nothing related. It is the manual way of
+    // correcting an age that went stale after its two source dates changed, until the
+    // propagation spec exists, and it keeps a single path for the rule
+    const { age, ageUnitItemId } = await resolveAgeForCase(classification.caseId, data, '004', lang);
+
+    // The matrix is evaluated over the resulting state and not over the body: otherwise a PUT
+    // sending causedDeath false on a classification whose only criterion was that one would
+    // leave isSeriousEvent true with nothing behind it. The validator cannot do this — it does
+    // not see the row — so the same pure predicate is applied here instead
+    const resultingState = mergeSeverityState(classification, data);
+    const violation = findSeverityViolation(resultingState);
+    if( violation ) {
+        throw new AppError(
+            getMessage('common.validationError', lang),
+            400,
+            'CLASSIF_004_SEVERITY_INCOHERENT',
+            SEVERITY_VIOLATION_MESSAGES[violation]
+        );
+    }
+
+    const objectToUpdate: Record<string, unknown> = {
+        age,
+        ageUnitItemId,
+        firstConsultationDate: data.firstConsultationDate !== undefined
+            ? ( data.firstConsultationDate ?? null ) : undefined,
+        otherSeriousConditionDescription: data.otherSeriousConditionDescription !== undefined
+            ? ( data.otherSeriousConditionDescription ? data.otherSeriousConditionDescription.trim() : null ) : undefined,
+        notes: data.notes !== undefined ? ( data.notes ? data.notes.trim() : null ) : undefined
+    };
+    for( const field of SERIOUS_CRITERION_FIELDS ) {
+        objectToUpdate[field] = data[field] !== undefined ? ( data[field] ?? null ) : undefined;
+    }
+    for( const key of Object.keys(objectToUpdate) ) {
+        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    }
+
+    // Fourth row of the matrix, applied over the resulting state as well: with a criterion
+    // behind it the event is serious however the flag arrived
+    objectToUpdate.isSeriousEvent = hasAnySeriousCriterion(resultingState)
+        ? true
+        : ( resultingState.isSeriousEvent ?? null );
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the
+    // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The entry is written even when nothing changed: the attempt is part of the audit trail
+    const currentAppDetails = Array.isArray(classification.appDetails) ? classification.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CLASSIF-004',
+        detail: 'Classification updated by service'
+    };
+    await classification.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updatedClassification = await findClassificationWithRelations(id, true);
+    return updatedClassification ? toClassificationResponse(updatedClassification) : null;
+}
+
 export {
     createClassificationService,
     getClassificationsService,
     getAllClassificationsService,
     getClassificationByIdService,
-    getClassificationByCaseIdService
+    getClassificationByCaseIdService,
+    updateClassificationService
 }
