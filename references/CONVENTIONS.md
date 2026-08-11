@@ -569,7 +569,7 @@ El genérico hace cuatro cosas, en este orden:
 1. `findOne` por la PK con `paranoid: false`, dentro de la transacción → 404 con `notFoundCode` si no existe.
 2. Comprueba `isActive`. Si sigue en `true` → 409 con `stillActiveCode`. Solo se purga lo que ya fue retirado con `005A`.
 3. `esaviLog` en nivel **`warn`** con el código de operación, el `userId`, la PK y el volcado de la fila completa.
-4. `destroy({ transaction })`.
+4. `destroy({ force: true, transaction })`. El `force` no es opcional: sin él, un modelo con `paranoid` activo volvería a hacer un borrado lógico sobre una fila que ya lo estaba.
 
 **No toca `appDetails`.** Es la única operación de escritura del repositorio que no añade entrada de auditoría, y no es un olvido: la fila desaparece en la misma transacción, así que cualquier cosa escrita en ella se destruye con ella.
 

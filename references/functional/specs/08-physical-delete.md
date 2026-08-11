@@ -1,6 +1,6 @@
 # SPEC F08 — Borrado físico `005C`, restringido a SUPERADMIN
 
-> **Estado:** Borrador
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios)
 > **Fecha:** 2026-08-10
 > **Objetivo:** Dar una vía legítima, autorizada y auditada de borrado físico a las 27 tablas que el esquema no protege, mediante una operación `005C` reservada a SUPERADMIN.
@@ -175,37 +175,37 @@ Los pasos 2 a 5 se pueden committear juntos: el servicio genérico sin ningún c
 
 **La norma**
 
-- [ ] `CONVENTIONS.md` §6 lista `005C` en la tabla de numeración con `DELETE /purge/:id` y status 200.
-- [ ] Las acciones estándar de `AppError` incluyen `PURGE_FAILED` y `STILL_ACTIVE`.
-- [ ] La lista de las 27 tablas habilitadas es exactamente el complemento de las 18 de `esaviapp.sql:1354-1360`.
-- [ ] §9 declara `005C` en SUPERADMIN.
-- [ ] §10 incluye el 409 por fila todavía activa y `purge` entre las respuestas sin `data`.
-- [ ] §11 ya no afirma que un `DELETE` nunca borra físicamente.
-- [ ] §15 dice explícitamente que la ausencia de `appDetails.method` en `005C` no cuenta como incumplimiento del código en cinco lugares.
+- [x] `CONVENTIONS.md` §6 lista `005C` en la tabla de numeración con `DELETE /purge/:id` y status 200.
+- [x] Las acciones estándar de `AppError` incluyen `PURGE_FAILED` y `STILL_ACTIVE`.
+- [x] La lista de las 27 tablas habilitadas es exactamente el complemento de las 18 de `esaviapp.sql:1354-1360`.
+- [x] §9 declara `005C` en SUPERADMIN.
+- [x] §10 incluye el 409 por fila todavía activa y `purge` entre las respuestas sin `data`.
+- [x] §11 ya no afirma que un `DELETE` nunca borra físicamente.
+- [x] §15 dice explícitamente que la ausencia de `appDetails.method` en `005C` no cuenta como incumplimiento del código en cinco lugares.
 
 **El servicio genérico**
 
-- [ ] `purgeEntityService` no importa ningún modelo concreto.
-- [ ] El `where` que recibe filtra solo por la PK.
-- [ ] Busca con `paranoid: false`: una fila ya soft-deleted se encuentra.
-- [ ] No escribe en `appDetails` en ningún camino.
-- [ ] El `esaviLog` va **antes** del `destroy` y en nivel `warn`.
+- [x] `purgeEntityService` no importa ningún modelo concreto.
+- [x] El `where` que recibe filtra solo por la PK.
+- [x] Busca con `paranoid: false`: una fila ya soft-deleted se encuentra.
+- [x] No escribe en `appDetails` en ningún camino.
+- [x] El `esaviLog` va **antes** del `destroy` y en nivel `warn`.
 
 **`ESAVI-USERGEO-005C`**
 
-- [ ] `DELETE /api/user-geo-locations/purge/:id` sobre una fila activa devuelve **409** `USERGEO_005C_STILL_ACTIVE`, y la fila sigue existiendo.
-- [ ] Sobre una fila cerrada devuelve **200** con `{ ok, message }` y sin `data`.
-- [ ] Tras la purga, `AppUserGeoLocation.findByPk(id, { paranoid: false })` devuelve `null`.
-- [ ] Repetir la purga devuelve **404** `USERGEO_005C_NOT_FOUND`.
-- [ ] Un ADMIN recibe **403**.
-- [ ] `GET /api/user-geo-locations/purge/<uuid>` no responde 400 por validación de UUID: la literal se declara antes de `/:id`.
-- [ ] El log recoge una línea `ESAVI-USERGEO-005C` en nivel `warn` con el `userId` y el volcado de la fila.
+- [x] `DELETE /api/user-geo-locations/purge/:id` sobre una fila activa devuelve **409** `USERGEO_005C_STILL_ACTIVE`, y la fila sigue existiendo.
+- [x] Sobre una fila cerrada devuelve **200** con `{ ok, message }` y sin `data`.
+- [x] Tras la purga, `AppUserGeoLocation.findByPk(id, { paranoid: false })` devuelve `null`.
+- [x] Repetir la purga devuelve **404** `USERGEO_005C_NOT_FOUND`.
+- [x] Un ADMIN recibe **403**.
+- [x] `GET /api/user-geo-locations/purge/<uuid>` no responde 400 por validación de UUID: la literal se declara antes de `/:id`.
+- [x] El log recoge una línea `ESAVI-USERGEO-005C` en nivel `warn` con el `userId` y el volcado de la fila.
 
 **Cierre**
 
-- [ ] `purgeSuccess`, `purgeFailed` y `stillActive` existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
-- [ ] `ROUTE_RULES` tiene una entrada más y `npm test -- roles` pasa.
-- [ ] `npm run check` sale en 0.
+- [x] `purgeSuccess`, `purgeFailed` y `stillActive` existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
+- [x] `ROUTE_RULES` tiene una entrada más y `npm test -- roles` pasa.
+- [x] `npm run check` sale en 0.
 
 ---
 
