@@ -139,7 +139,22 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-004' },
     { method: 'delete', path: `/api/notifiers/${ UUID }`,                minRole: 'ADMIN',      code: 'ESAVI-NOTIFIER-005A' },
     { method: 'patch',  path: `/api/notifiers/activate/${ UUID }`,       minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005B' },
-    { method: 'delete', path: `/api/notifiers/purge/${ UUID }`,          minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005C' }
+    { method: 'delete', path: `/api/notifiers/purge/${ UUID }`,          minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005C' },
+
+    // classification — 001 and 004 sit at USER for the same reason as notifier (SPEC F09 §3.4):
+    // classifying is captured in the same operational flow as the case. 006 reads the
+    // classification of a case by its caseId, the real query of the domain, and is the only
+    // non-canonical operation of the entity. 005C exists because classification is outside the
+    // preventPhysicalDelete loop of esaviapp.sql:1354-1360
+    { method: 'post',   path: '/api/classifications',                    minRole: 'USER',       code: 'ESAVI-CLASSIF-001' },
+    { method: 'get',    path: '/api/classifications',                    minRole: 'USER',       code: 'ESAVI-CLASSIF-002A' },
+    { method: 'get',    path: '/api/classifications/admin',              minRole: 'ADMIN',      code: 'ESAVI-CLASSIF-002B' },
+    { method: 'get',    path: `/api/classifications/case/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-CLASSIF-006' },
+    { method: 'get',    path: `/api/classifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-CLASSIF-003' },
+    { method: 'put',    path: `/api/classifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-CLASSIF-004' },
+    { method: 'delete', path: `/api/classifications/${ UUID }`,          minRole: 'ADMIN',      code: 'ESAVI-CLASSIF-005A' },
+    { method: 'patch',  path: `/api/classifications/activate/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-CLASSIF-005B' },
+    { method: 'delete', path: `/api/classifications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-CLASSIF-005C' }
 ];
 
 /**
@@ -195,7 +210,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(90);
+            expect(ROUTE_RULES).toHaveLength(99);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
