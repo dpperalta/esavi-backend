@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { EsaviCase, HealthFacility, Patient } from '../../src/models';
+import { EsaviCase, HealthFacility, Notifier, Patient } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -515,6 +515,111 @@ describe('esaviCase contract', () => {
         it('answers 404 for an unknown id on both operations', async () => {
             expect(( await deleteCase(unknownUuid) ).status).toBe(404);
             expect(( await activateCase(unknownUuid) ).status).toBe(404);
+        });
+
+    });
+
+    /**
+     * The cascade SPEC F07 added to 005A. It is the only place where deactivating
+     * a case writes outside its own row, and it only goes downwards: 005B brings
+     * nothing back, on purpose, because reactivating in cascade would resurrect
+     * notifiers somebody retired before touching the case.
+     */
+    describe('005A — the cascade over notifier', () => {
+
+        const createNotifier = async ( caseId: string, firstName: string ): Promise<string> => {
+            const response = await request(app)
+                .post('/api/notifiers')
+                .set(authHeader('USER'))
+                .send({ caseId, firstName, lastName: 'Cascada' });
+            return response.body.data.notifierId;
+        };
+
+        it('drags every active notifier of the case, sealing deletedAt', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const first = await createNotifier(caseId, 'Uno');
+            const second = await createNotifier(caseId, 'Dos');
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            for( const notifierId of [first, second] ) {
+                const notifier = await Notifier.findByPk(notifierId);
+                expect(notifier?.getDataValue('isActive')).toBe(false);
+                expect(notifier?.getDataValue('deletedAt')).not.toBeNull();
+                // The method is the code of the operation that deactivated it, not 005A of notifier
+                const appDetails = notifier?.getDataValue('appDetails') as { method: string }[];
+                expect(appDetails.map(entry => entry.method)).toEqual([
+                    'ESAVI-NOTIFIER-001', 'ESAVI-CASE-005A'
+                ]);
+            }
+        });
+
+        it('brings no notifier back when the case is reactivated', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notifierId = await createNotifier(caseId, 'Vuelta');
+            await deleteCase(caseId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const notifier = await Notifier.findByPk(notifierId);
+            expect(notifier?.getDataValue('isActive')).toBe(false);
+            expect(notifier?.getDataValue('deletedAt')).not.toBeNull();
+        });
+
+        it('leaves a notifier retired beforehand with its own deletedAt and no new entry', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notifierId = await createNotifier(caseId, 'Previo');
+            await request(app).delete(`/api/notifiers/${ notifierId }`).set(authHeader('ADMIN'));
+
+            const before = await Notifier.findByPk(notifierId);
+            const ownDeletedAt = before?.getDataValue('deletedAt') as Date;
+            const entriesBefore = ( before?.getDataValue('appDetails') as unknown[] ).length;
+
+            // A second apart, so a deletedAt rewritten by the cascade would show
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            await deleteCase(caseId);
+
+            const after = await Notifier.findByPk(notifierId);
+            expect(( after?.getDataValue('deletedAt') as Date ).getTime()).toBe(ownDeletedAt.getTime());
+            expect(after?.getDataValue('appDetails') as unknown[]).toHaveLength(entriesBefore);
+        });
+
+        it('answers 200 for a case with no notifiers at all', async () => {
+            const created = await createCase();
+
+            expect(( await deleteCase(created.body.data.caseId) ).status).toBe(200);
+        });
+
+        it('changes no notifier when the case was already inactive', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notifierId = await createNotifier(caseId, 'Intacto');
+            await deleteCase(caseId);
+            await request(app).patch(`/api/notifiers/activate/${ notifierId }`).set(authHeader('SUPERADMIN'));
+
+            const response = await deleteCase(caseId);
+
+            // The generic service threw the 409 before the cascade could run
+            expect(response.status).toBe(409);
+            const notifier = await Notifier.findByPk(notifierId);
+            expect(notifier?.getDataValue('isActive')).toBe(true);
+            expect(notifier?.getDataValue('deletedAt')).toBeNull();
+        });
+
+        it('does not expose notifiers in any response of esavi-cases', async () => {
+            const created = await createCase();
+            await createNotifier(created.body.data.caseId, 'Oculto');
+
+            const detail = await getCase(created.body.data.caseId);
+            const list = await listCases();
+
+            expect(detail.body.data).not.toHaveProperty('notifiers');
+            expect(list.body.data.rows[0]).not.toHaveProperty('notifiers');
         });
 
     });

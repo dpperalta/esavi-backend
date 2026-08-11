@@ -291,5 +291,29 @@
         "deletedFailed": "Error al eliminar el caso ESAVI. Por favor, inténtelo de nuevo más tarde.",
         "activatedSuccess": "Caso ESAVI activado exitosamente",
         "activatedFailed": "Error al activar el caso ESAVI. Por favor, inténtelo de nuevo más tarde."
+    },
+    "notifier": {
+        "notFound": "Notificador no encontrado. Por favor, verifique el ID del notificador e inténtelo de nuevo.",
+        "idRequired": "El ID del notificador es obligatorio",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "professionNotFound": "La profesión indicada no existe, está inactiva o no pertenece al catálogo de profesiones",
+        "geoLocationNotFound": "La geolocalización indicada no existe o está inactiva",
+        "createdSuccess": "Notificador creado exitosamente",
+        "createdFailed": "Error al crear el notificador. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Notificador obtenido exitosamente",
+        "getFailed": "Error al obtener el notificador. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Notificadores obtenidos exitosamente",
+        "getFailedPlural": "Error al obtener los notificadores. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Notificador actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el notificador. Por favor, inténtelo de nuevo más tarde.",
+        "alreadyInactive": "El notificador con ID {{id}} ya está inactivo",
+        "alreadyActive": "El notificador con ID {{id}} ya está activo",
+        "deletedSuccess": "Notificador eliminado exitosamente",
+        "deletedFailed": "Error al eliminar el notificador. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Notificador activado exitosamente",
+        "activatedFailed": "Error al activar el notificador. Por favor, inténtelo de nuevo más tarde.",
+        "stillActive": "El notificador con ID {{id}} sigue activo. Desactívelo antes de eliminarlo permanentemente.",
+        "purgeSuccess": "Notificador eliminado permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente el notificador. Por favor, inténtelo de nuevo más tarde."
     }
 }

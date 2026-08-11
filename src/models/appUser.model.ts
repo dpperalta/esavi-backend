@@ -55,16 +55,20 @@ AppUser.init(
             type: DataTypes.STRING(200),
             allowNull: true,
         },
+        // TEXT and not STRING(n): the column stores the esaviCrypt ciphertext, which is about
+        // twice the length of the plain text plus block padding. A fixed width here would cap
+        // what the user may write at a number nobody could derive. The real limit is in the
+        // validator, over the plain text
         displayName: {
-            type: DataTypes.STRING(250),
+            type: DataTypes.TEXT,
             allowNull: false,
         },
         firstName: {
-            type: DataTypes.STRING(150),
+            type: DataTypes.TEXT,
             allowNull: true,
         },
         lastName: {
-            type: DataTypes.STRING(150),
+            type: DataTypes.TEXT,
             allowNull: true,
         },
         phone: {

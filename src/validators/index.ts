@@ -10,3 +10,4 @@ export * from './appUserGeoLocation.validator';
 export * from './appUserRole.validator';
 export * from './patient.validator';
 export * from './esaviCase.validator';
+export * from './notifier.validator';

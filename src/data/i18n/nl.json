@@ -291,5 +291,29 @@
         "deletedFailed": "Verwijderen van het ESAVI-geval mislukt. Probeer het later opnieuw.",
         "activatedSuccess": "ESAVI-geval succesvol geactiveerd",
         "activatedFailed": "Activeren van het ESAVI-geval mislukt. Probeer het later opnieuw."
+    },
+    "notifier": {
+        "notFound": "Melder niet gevonden. Controleer de ID van de melder en probeer het opnieuw.",
+        "idRequired": "De ID van de melder is verplicht",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "professionNotFound": "Het opgegeven beroep bestaat niet, is inactief of hoort niet bij de beroepencatalogus",
+        "geoLocationNotFound": "De opgegeven geolocatie bestaat niet of is inactief",
+        "createdSuccess": "Melder succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de melder mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Melder succesvol opgehaald",
+        "getFailed": "Ophalen van de melder mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Melders succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de melders mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Melder succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de melder mislukt. Probeer het later opnieuw.",
+        "alreadyInactive": "De melder met ID {{id}} is al inactief",
+        "alreadyActive": "De melder met ID {{id}} is al actief",
+        "deletedSuccess": "Melder succesvol verwijderd",
+        "deletedFailed": "Verwijderen van de melder mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Melder succesvol geactiveerd",
+        "activatedFailed": "Activeren van de melder mislukt. Probeer het later opnieuw.",
+        "stillActive": "De melder met ID {{id}} is nog actief. Deactiveer deze voordat u deze permanent verwijdert.",
+        "purgeSuccess": "Melder permanent verwijderd",
+        "purgeFailed": "Fout bij het permanent verwijderen van de melder. Probeer het later opnieuw."
     }
 }

@@ -1,24 +1,24 @@
 import { DataTypes, Model, InferAttributes, InferCreationAttributes, CreationOptional, ForeignKey, NonAttribute } from 'sequelize';
 import { sequelize } from '../database/connection';
+import { EsaviCase } from './esaviCase.model';
 import { GeoLocation } from './geoLocation.model';
 import { CatalogItem } from './catalogItem.model';
 import { AppDetails } from '../types';
 
-export class Patient extends Model<InferAttributes<Patient>, InferCreationAttributes<Patient>> {
-    declare patientId: CreationOptional<string>;
-    declare sexItemId?: ForeignKey<CatalogItem['catalogItemId']> | null;
-    declare residenceGeoLocationId?: ForeignKey<GeoLocation['geoLocationId']> | null;
+export class Notifier extends Model<InferAttributes<Notifier>, InferCreationAttributes<Notifier>> {
+    declare notifierId: CreationOptional<string>;
+    declare caseId: ForeignKey<EsaviCase['caseId']>;
+    declare geoLocationId?: ForeignKey<GeoLocation['geoLocationId']> | null;
+    declare professionItemId?: ForeignKey<CatalogItem['catalogItemId']> | null;
 
-    declare firstName?: CreationOptional<string | null>;
-    declare middleName?: CreationOptional<string | null>;
+    // firstName, lastName, address and email hold the esaviCrypt ciphertext, never the plain text
+    declare firstName: string;
     declare lastName?: CreationOptional<string | null>;
-    declare secondLastName?: CreationOptional<string | null>;
-    declare birthDate?: CreationOptional<string | null>;
-    declare documentNumber?: CreationOptional<string | null>;
-    declare passportNumber?: CreationOptional<string | null>;
-    declare email?: CreationOptional<string | null>;
+    declare room?: CreationOptional<string | null>;
+    declare address?: CreationOptional<string | null>;
     declare phoneNumber?: CreationOptional<string | null>;
-    declare healthSystemCode?: CreationOptional<string | null>;
+    declare email?: CreationOptional<string | null>;
+    declare details?: CreationOptional<string | null>;
 
     declare isActive?: CreationOptional<boolean>;
     declare readonly createdAt?: CreationOptional<Date>;
@@ -28,69 +28,64 @@ export class Patient extends Model<InferAttributes<Patient>, InferCreationAttrib
     declare sysDetails?: CreationOptional<object | null>;
     declare appDetails?: CreationOptional<AppDetails[] | null>;
 
-    declare sex?: NonAttribute<CatalogItem>;
-    declare residence?: NonAttribute<GeoLocation>;
+    declare case?: NonAttribute<EsaviCase>;
+    declare profession?: NonAttribute<CatalogItem>;
+    declare geoLocation?: NonAttribute<GeoLocation>;
 }
 
-Patient.init({
-    patientId: {
+Notifier.init({
+    notifierId: {
         type: DataTypes.UUID,
         primaryKey: true,
         allowNull: false,
         defaultValue: sequelize.literal('gen_random_uuid()')
     },
-    sexItemId: {
+    caseId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+    },
+    geoLocationId: {
         type: DataTypes.UUID,
         allowNull: true,
     },
-    residenceGeoLocationId: {
+    professionItemId: {
         type: DataTypes.UUID,
         allowNull: true,
     },
-    // TEXT and not STRING(n) on the six encrypted columns: they store the esaviCrypt ciphertext,
+    // TEXT and not STRING(n) on the four encrypted columns: they store the esaviCrypt ciphertext,
     // which is about twice the length of the plain text plus block padding. A fixed width here
     // would cap what the user may write at a number nobody could derive. The real limit is in
     // the validator, over the plain text
     firstName: {
         type: DataTypes.TEXT,
-        allowNull: true,
+        allowNull: false,
     },
-    middleName: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-    },
+    // Nullable in the model because the DDL allows it; the create validator still demands it.
+    // The model mirrors the table, the rule lives in the validator
     lastName: {
         type: DataTypes.TEXT,
         allowNull: true,
     },
-    secondLastName: {
+    room: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+    },
+    address: {
         type: DataTypes.TEXT,
-        allowNull: true,
-    },
-    // DATEONLY and not DATE: the column is `date`, and DATE would carry a time zone
-    // and shift the birth date by one day depending on the server offset
-    birthDate: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
-    },
-    documentNumber: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-    },
-    passportNumber: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-    },
-    email: {
-        type: DataTypes.CITEXT,
         allowNull: true,
     },
     phoneNumber: {
         type: DataTypes.STRING(50),
         allowNull: true,
     },
-    healthSystemCode: {
-        type: DataTypes.STRING(100),
+    // TEXT and not CITEXT: the column stores the ciphertext, so the case insensitivity of
+    // Postgres would apply to the encrypted value. The service lowercases before encrypting
+    email: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    details: {
+        type: DataTypes.TEXT,
         allowNull: true,
     },
     isActive: {
@@ -121,8 +116,8 @@ Patient.init({
     }
 }, {
     sequelize,
-    tableName: 'patient',
-    modelName: 'Patient',
+    tableName: 'notifier',
+    modelName: 'Notifier',
     timestamps: false,
     freezeTableName: true,
 });
