@@ -6,6 +6,7 @@ import { sequelize } from '../../src/database/connection';
 import { jwtGenerate } from '../../src/helpers/jwt.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader, getTestUser } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -162,7 +163,7 @@ describe('appRole contract', () => {
             expect(appDetails[1].method).toBe('ESAVI-APPROLE-004');
         });
 
-        it('a no-op update still responds 200 and appends an audit entry', async () => {
+        it('a no-op update responds 200 without appending an audit entry', async () => {
             const response = await request(app)
                 .put(`/api/roles/${ roleId }`)
                 .set(authHeader('ADMIN'))
@@ -170,7 +171,9 @@ describe('appRole contract', () => {
 
             expect(response.status).toBe(200);
             expect(response.body.data.name).toBe(`RENAMED_${ suffix }`);
-            expect(response.body.data.appDetails).toHaveLength(3);
+            // An update that touched nothing is not a change: appDetails counts changes, not
+            // attempts, and stays on the two entries the create and the real update left
+            expect(response.body.data.appDetails).toHaveLength(2);
         });
 
         // ESAVI-APPROLE-005A
@@ -572,6 +575,22 @@ describe('appRole contract', () => {
             // An existing SUPERADMIN keeps authorizing exactly as before the fix
             expect((await request(app).get('/api/roles/admin').set(authHeader('SUPERADMIN'))).status).toBe(200);
             expect((await request(app).get('/api/roles/admin').set(authHeader('USER'))).status).toBe(403);
+        });
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const roleId = await createRoleFixture('DIFF', 20);
+
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/roles',
+                id: roleId,
+                model: AppRole,
+                // The update validator rejects the three with a 400
+                strip: ['roleId', 'isActive', 'isSystemRole']
+            });
         });
 
     });

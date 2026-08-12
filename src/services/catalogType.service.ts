@@ -1,7 +1,7 @@
 import { Op } from 'sequelize';
 import { CatalogType } from '../models/catalogType.model';
 import { CatalogItem } from '../models/catalogItem.model';
-import { AppError, getMessage, toCamelCase, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toCamelCase, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateCatalogTypeInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
@@ -87,16 +87,16 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
         }
     }
     const currentAppDetails = Array.isArray(catalogType.appDetails) ? catalogType.appDetails : [];
-    let objectToUpdate = {
-        code: data.code && toCamelCase(data.code.trim()) !== catalogType.code ? toCamelCase(data.code.trim()) : undefined,
-        name: data.name && toTitleCase(data.name.trim()) !== catalogType.name ? toTitleCase(data.name.trim()) : undefined,
-        description: data.description && data.description.trim() !== catalogType.description ? data.description.trim() : undefined,
-        sortOrder: data.sortOrder && data.sortOrder !== catalogType.sortOrder ? data.sortOrder : undefined,
-    };
-    if (objectToUpdate.code === undefined) delete objectToUpdate.code;
-    if (objectToUpdate.name === undefined) delete objectToUpdate.name;
-    if (objectToUpdate.description === undefined) delete objectToUpdate.description;
-    if (objectToUpdate.sortOrder === undefined) delete objectToUpdate.sortOrder;
+    // Differential update: only what really changed reaches the UPDATE. `stored` is the whole
+    // row, which is the precondition of the helper
+    const stored = catalogType.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        code: data.code ? toCamelCase(data.code.trim()) : undefined,
+        name: data.name ? toTitleCase(data.name.trim()) : undefined,
+        description: data.description ? data.description.trim() : undefined,
+        sortOrder: data.sortOrder ? data.sortOrder : undefined
+    });
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry
     if( Object.keys(objectToUpdate).length > 0 ) {
         const newEntry: AppDetails = {
             createdAt: new Date(),
@@ -106,6 +106,7 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
         };
         updatedCatalogType = await catalogType.update({
             ...objectToUpdate,
+            updatedAt: new Date(),
             appDetails: [
                 ...currentAppDetails,
                 newEntry

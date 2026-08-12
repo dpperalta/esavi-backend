@@ -4,6 +4,7 @@ import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -933,6 +934,33 @@ describe('classification contract', () => {
             expect(after).not.toBeNull();
             expect(after!.getDataValue('caseCode')).toBe(before!.getDataValue('caseCode'));
             expect(after!.getDataValue('isActive')).toBe(true);
+        });
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const caseId = await createCaseFixture();
+            const created = await createClassification({
+                caseId,
+                firstConsultationDate: '2024-05-06',
+                causedDeath: false,
+                notes: 'Sin novedad'
+            });
+            expect(created.status).toBe(201);
+
+            // The recomputed age is part of the comparison: it travels always, and here it
+            // resolves to the same value already stored, so it is not a difference either
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/classifications',
+                id: created.body.data.classificationId,
+                model: Classification,
+                // The response carries `age` and the resolved `ageUnit` object, but the
+                // validator demands `age` and `ageUnitItemId` together, so resending the
+                // response verbatim is a 400. The asymmetry belongs to SPEC F09, not here
+                strip: ['age']
+            });
         });
 
     });

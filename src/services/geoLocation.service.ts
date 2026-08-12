@@ -1,5 +1,5 @@
 import { Op } from 'sequelize';
-import { getMessage, AppError, esaviLog } from '../helpers';
+import { getMessage, AppError, buildDifferentialUpdate, esaviLog } from '../helpers';
 import { AppDetails, AuthUser, CreateGeoLocationInput } from '../types';
 import { GeoLevelType, GeoLocation } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -213,30 +213,26 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
         }
     }
     const currentAppDetails = Array.isArray(geoLocation.appDetails) ? geoLocation.appDetails : [];
-    let objectToUpdate = {
-        geoLevelTypeId: geoLevelTypeId && geoLevelTypeId !== geoLocation.geoLevelTypeId ? geoLevelTypeId : undefined,
-        parentGeoLocationId: parentGeoLocationId && parentGeoLocationId !== geoLocation.parentGeoLocationId ? parentGeoLocationId : undefined,
-        name: name && name.trim() !== geoLocation.name ? name.trim() : undefined,
-        officialName: officialName && officialName.trim() !== geoLocation.officialName ? officialName.trim() : undefined,
-        shortName: shortName && shortName.trim() !== geoLocation.shortName ? shortName.trim() : undefined,
-        isoCode: isoCode && isoCode.trim() !== geoLocation.isoCode ? isoCode.trim() : undefined,
-        externalCode: externalCode && externalCode.trim() !== geoLocation.externalCode ? externalCode.trim() : undefined,
-        latitude: latitude && latitude !== geoLocation.latitude ? latitude : undefined,
-        longitude: longitude && longitude !== geoLocation.longitude ? longitude : undefined,
-        geoPolygon: geoPolygon && JSON.stringify(geoPolygon) !== JSON.stringify(geoLocation.geoPolygon) ? geoPolygon : undefined,
-        sortOrder: sortOrder && sortOrder !== geoLocation.sortOrder ? sortOrder : undefined,
-    };
-    if (objectToUpdate.geoLevelTypeId === undefined) delete objectToUpdate.geoLevelTypeId;
-    if (objectToUpdate.parentGeoLocationId === undefined) delete objectToUpdate.parentGeoLocationId;
-    if (objectToUpdate.name === undefined) delete objectToUpdate.name;
-    if (objectToUpdate.officialName === undefined) delete objectToUpdate.officialName;
-    if (objectToUpdate.shortName === undefined) delete objectToUpdate.shortName;
-    if (objectToUpdate.isoCode === undefined) delete objectToUpdate.isoCode;
-    if (objectToUpdate.externalCode === undefined) delete objectToUpdate.externalCode;
-    if (objectToUpdate.latitude === undefined) delete objectToUpdate.latitude;
-    if (objectToUpdate.longitude === undefined) delete objectToUpdate.longitude;
-    if (objectToUpdate.geoPolygon === undefined) delete objectToUpdate.geoPolygon;
-    if (objectToUpdate.sortOrder === undefined) delete objectToUpdate.sortOrder;
+    // Differential update: only what really changed reaches the UPDATE. `stored` is the whole
+    // row, which is the precondition of the helper. latitude and longitude are DECIMAL(10, 7)
+    // and `pg` hands them back as strings — '-0.2299000' against the -0.2299 that arrives in the
+    // body — so comparing them with !== was always true and every PUT rewrote the coordinates.
+    // The helper compares them numerically
+    const stored = geoLocation.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        geoLevelTypeId: geoLevelTypeId ? geoLevelTypeId : undefined,
+        parentGeoLocationId: parentGeoLocationId ? parentGeoLocationId : undefined,
+        name: name ? name.trim() : undefined,
+        officialName: officialName ? officialName.trim() : undefined,
+        shortName: shortName ? shortName.trim() : undefined,
+        isoCode: isoCode ? isoCode.trim() : undefined,
+        externalCode: externalCode ? externalCode.trim() : undefined,
+        latitude: latitude ? latitude : undefined,
+        longitude: longitude ? longitude : undefined,
+        geoPolygon: geoPolygon ? geoPolygon : undefined,
+        sortOrder: sortOrder ? sortOrder : undefined
+    });
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry
     if( Object.keys(objectToUpdate).length > 0 ) {
         const newEntry: AppDetails = {
             createdAt: new Date(),
@@ -246,6 +242,7 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
         };
         updatedGeoLocation = await geoLocation.update({
             ...objectToUpdate,
+            updatedAt: new Date(),
             appDetails: [
                 ...currentAppDetails,
                 newEntry

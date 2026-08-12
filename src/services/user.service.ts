@@ -3,7 +3,7 @@ import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole } from '../models';
 import { AppDetails, AuthUser, ChangePasswordInput, CreateUserInput, CreateUserServiceParams } from '../types';
-import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -35,17 +35,25 @@ const LIST_EXCLUDE = { exclude: ['passwordHash', 'sysDetails'] };
 // ORDER BY would sort by the ciphertext
 const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
 
+// The five encrypted columns, named once: the responses decrypt them and ESAVI-USER-004
+// compares them over plain text
+const PII_FIELDS = ['username', 'email', 'displayName', 'firstName', 'lastName'];
+
+const decryptPii = (plain: Record<string, unknown>) => {
+    for (const field of PII_FIELDS) {
+        const value = plain[field];
+        plain[field] = typeof value === 'string' ? esaviDecrypt(value) : null;
+    }
+    return plain;
+}
+
 // sysDetails is trigger metadata and passwordHash never leaves the service. The five
 // encrypted columns are returned in clear text
 const toUserResponse = (user: AppUser) => {
     const plain = user.toJSON() as Record<string, unknown>;
     delete plain.sysDetails;
     delete plain.passwordHash;
-    for (const field of ['username', 'email', 'displayName', 'firstName', 'lastName']) {
-        const value = plain[field];
-        plain[field] = typeof value === 'string' ? esaviDecrypt(value) : null;
-    }
-    return plain;
+    return decryptPii(plain);
 }
 
 // The audit history of every user multiplied by the page size makes the response unreadable.
@@ -261,27 +269,43 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
             throw new AppError(getMessage('user.usernameExists', lang, { username: normalizedUsername }), 409, 'USER_004_USERNAME_EXISTS');
         }
     }
-    const targetFirstName = firstName ? esaviCrypt(toTitleCase(firstName.trim())) : undefined;
-    const targetLastName = lastName ? esaviCrypt(toTitleCase(lastName.trim())) : undefined;
     const currentAppDetails = Array.isArray(user.appDetails) ? user.appDetails : [];
-    const objectToUpdate: Record<string, unknown> = {
-        username: targetUsername && targetUsername !== user.username ? targetUsername : undefined,
-        email: targetEmail && targetEmail !== user.email ? targetEmail : undefined,
-        firstName: targetFirstName && targetFirstName !== user.firstName ? targetFirstName : undefined,
-        lastName: targetLastName && targetLastName !== user.lastName ? targetLastName : undefined,
-        phone: phone && phone.trim() !== user.phone ? phone.trim() : undefined
-    };
-    for( const key of Object.keys(objectToUpdate) ) {
-        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    // Differential update: only what really changed reaches the UPDATE. Until now the five
+    // fields were compared as ciphertext and the UPDATE ran anyway, so every PUT re-encrypted
+    // and rewrote them with their own value. `stored` is the whole row, which is the
+    // precondition of the helper, with the five encrypted columns decrypted: comparing
+    // ciphertext only works because esaviCrypt has a fixed IV, and moving to a random one would
+    // break the comparison in silence — everything would count as a change — with no test
+    // telling it apart from a legitimate one. esaviCrypt is applied after the diff
+    const stored = decryptPii(user.get({ plain: true }) as Record<string, unknown>);
+    // displayName is never received: it is recomposed from the resulting first and last name,
+    // over the stored value of whichever did not arrive. Derived, so it travels always and the
+    // helper is the one that decides whether it changed
+    const nextFirstName = firstName ? toTitleCase(firstName.trim()) : stored.firstName as string;
+    const nextLastName = lastName ? toTitleCase(lastName.trim()) : stored.lastName as string;
+    const changes = buildDifferentialUpdate(stored, {
+        username: normalizedUsername ? normalizedUsername : undefined,
+        email: email ? normalizeEmail(email) : undefined,
+        firstName: firstName ? nextFirstName : undefined,
+        lastName: lastName ? nextLastName : undefined,
+        phone: phone ? phone.trim() : undefined,
+        displayName: nextFirstName && nextLastName ? `${ nextFirstName } ${ nextLastName }` : undefined
+    });
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
+    // stands, which is the state the client asked for
+    if( Object.keys(changes).length === 0 ) {
+        const unchanged = await findUserWithRelations(id, true);
+        return unchanged ? toUserResponse(unchanged) : null;
     }
-    // displayName is never received: it is recomposed from whichever of the two names changed,
-    // over the value already stored for the one that did not
-    if( objectToUpdate.firstName !== undefined || objectToUpdate.lastName !== undefined ) {
-        const nextFirstName = esaviDecrypt((objectToUpdate.firstName as string) ?? user.firstName as string);
-        const nextLastName = esaviDecrypt((objectToUpdate.lastName as string) ?? user.lastName as string);
-        objectToUpdate.displayName = esaviCrypt(`${nextFirstName} ${nextLastName}`);
+
+    const objectToUpdate: Record<string, unknown> = { ...changes };
+    for( const field of PII_FIELDS ) {
+        if( objectToUpdate[field] ) {
+            objectToUpdate[field] = esaviCrypt(objectToUpdate[field] as string);
+        }
     }
-    // The entry is written even when nothing changed: the attempt is part of the audit trail
+
     const newEntry: AppDetails = {
         createdAt: new Date(),
         user: userId || 'undefined',
@@ -290,6 +314,7 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
     };
     await user.update({
         ...objectToUpdate,
+        updatedAt: new Date(),
         appDetails: [
             ...currentAppDetails,
             newEntry

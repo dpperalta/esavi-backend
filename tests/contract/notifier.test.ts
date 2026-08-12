@@ -4,6 +4,7 @@ import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthF
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -451,15 +452,34 @@ describe('notifier contract', () => {
             expect(response.body.data.room).toBeNull();
         });
 
-        it('adds an appDetails entry preserving the previous ones, even with no changes', async () => {
+        it('preserves the previous appDetails entries and adds none when there are no changes', async () => {
             const created = await createNotifier();
 
             const response = await updateNotifier(created.body.data.notifierId, {});
 
             expect(response.status).toBe(200);
-            expect(response.body.data.appDetails).toHaveLength(2);
+            // An update that touched nothing is not a change: appDetails counts changes, not
+            // the times a form was opened and closed, so only the create entry is there
+            expect(response.body.data.appDetails).toHaveLength(1);
             expect(response.body.data.appDetails[0].method).toBe('ESAVI-NOTIFIER-001');
-            expect(response.body.data.appDetails[1].method).toBe('ESAVI-NOTIFIER-004');
+
+            // And a real change does append, without dropping what came before
+            const changed = await updateNotifier(created.body.data.notifierId, { room: '3C' });
+            expect(changed.body.data.appDetails).toHaveLength(2);
+            expect(changed.body.data.appDetails[1].method).toBe('ESAVI-NOTIFIER-004');
+        });
+
+        it('leaves the encrypted column byte for byte identical when the value is resent', async () => {
+            const created = await createNotifier({ email: 'mismo@correo.ec' });
+            const id = created.body.data.notifierId;
+            const before = await Notifier.findByPk(id);
+
+            const response = await updateNotifier(id, { email: 'mismo@correo.ec' });
+
+            expect(response.status).toBe(200);
+            const after = await Notifier.findByPk(id);
+            expect(after!.getDataValue('email')).toBe(before!.getDataValue('email'));
+            expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
         });
 
         it('answers 404 for a notifier, a profession or a geoLocation that is not valid', async () => {
@@ -610,6 +630,31 @@ describe('notifier contract', () => {
             const esaviCase = await EsaviCase.findByPk(purgeCaseId);
             expect(esaviCase).not.toBeNull();
             expect(esaviCase!.getDataValue('isActive')).toBe(true);
+        });
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const created = await createNotifier({
+                firstName: 'diferencial',
+                lastName: 'notificador',
+                email: 'diferencial@correo.ec',
+                address: 'av. diferencial 12',
+                room: '4B',
+                phoneNumber: '0991234567',
+                professionItemId,
+                geoLocationId,
+                details: 'Sin novedad'
+            });
+            expect(created.status).toBe(201);
+
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/notifiers',
+                id: created.body.data.notifierId,
+                model: Notifier
+            });
         });
 
     });

@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import { AppError, getMessage, toConstantCase, toTitleCase } from "../helpers";
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, toTitleCase } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
 import { AppDetails, AuthUser, CreateCatalogItemInput } from "../types";
@@ -150,22 +150,20 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
         }
     }
     const currentAppDetails = Array.isArray(catalogItem.appDetails) ? catalogItem.appDetails : [];
-    let objectToUpdate = {
-        catalogTypeId: targetCatalogTypeId !== catalogItem.catalogTypeId ? targetCatalogTypeId : undefined,
-        code: data.code && toConstantCase(data.code.trim()) !== catalogItem.code ? toConstantCase(data.code.trim()) : undefined,
-        name: data.name && toTitleCase(data.name.trim()) !== catalogItem.name ? toTitleCase(data.name.trim()) : undefined,
-        value: data.value && data.value.trim() !== catalogItem.value ? data.value.trim() : undefined,
-        description: data.description && data.description.trim() !== catalogItem.description ? data.description.trim() : undefined,
-        metadata: data.metadata && JSON.stringify(data.metadata) !== JSON.stringify(catalogItem.metadata) ? data.metadata : undefined,
-        sortOrder: data.sortOrder && data.sortOrder !== catalogItem.sortOrder ? data.sortOrder : undefined,
-    };
-    if (objectToUpdate.catalogTypeId === undefined) delete objectToUpdate.catalogTypeId;
-    if (objectToUpdate.code === undefined) delete objectToUpdate.code;
-    if (objectToUpdate.name === undefined) delete objectToUpdate.name;
-    if (objectToUpdate.value === undefined) delete objectToUpdate.value;
-    if (objectToUpdate.description === undefined) delete objectToUpdate.description;
-    if (objectToUpdate.metadata === undefined) delete objectToUpdate.metadata;
-    if (objectToUpdate.sortOrder === undefined) delete objectToUpdate.sortOrder;
+    // Differential update: only what really changed reaches the UPDATE. The comparison lives in
+    // buildDifferentialUpdate, whose stored side has to be the whole row — findByPk reads it
+    // without narrowed attributes, which is the precondition of the helper
+    const stored = catalogItem.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        catalogTypeId: targetCatalogTypeId,
+        code: data.code ? toConstantCase(data.code.trim()) : undefined,
+        name: data.name ? toTitleCase(data.name.trim()) : undefined,
+        value: data.value ? data.value.trim() : undefined,
+        description: data.description ? data.description.trim() : undefined,
+        metadata: data.metadata ? data.metadata : undefined,
+        sortOrder: data.sortOrder ? data.sortOrder : undefined
+    });
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry
     if( Object.keys(objectToUpdate).length > 0 ) {
         const newEntry: AppDetails = {
             createdAt: new Date(),
@@ -175,6 +173,7 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
         };
         updatedCatalogItem = await catalogItem.update({
             ...objectToUpdate,
+            updatedAt: new Date(),
             appDetails: [
                 ...currentAppDetails,
                 newEntry

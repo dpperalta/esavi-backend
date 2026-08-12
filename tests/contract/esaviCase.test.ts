@@ -4,6 +4,7 @@ import { Classification, EsaviCase, HealthFacility, Notifier, Patient } from '..
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -446,19 +447,26 @@ describe('esaviCase contract', () => {
             expect(unknownCase.body.code).toBe('CASE_004_NOT_FOUND');
         });
 
-        it('appends to appDetails without dropping the previous entries', async () => {
+        it('appends to appDetails only when something changed, without dropping the previous entries', async () => {
             const created = await createCase();
             expect(created.body.data.appDetails).toHaveLength(1);
 
+            // An empty body changes nothing, so it writes nothing: appDetails counts changes,
+            // not the times a form was opened and closed
             const empty = await updateCase(created.body.data.caseId, {});
             expect(empty.status).toBe(200);
-            expect(empty.body.data.appDetails).toHaveLength(2);
+            expect(empty.body.data.appDetails).toHaveLength(1);
             expect(empty.body.data.appDetails[0].method).toBe('ESAVI-CASE-001');
-            expect(empty.body.data.appDetails[1].method).toBe('ESAVI-CASE-004');
 
             const second = await updateCase(created.body.data.caseId, { countryIsoCode: ' ec ' });
-            expect(second.body.data.appDetails).toHaveLength(3);
+            expect(second.body.data.appDetails).toHaveLength(2);
+            expect(second.body.data.appDetails[1].method).toBe('ESAVI-CASE-004');
             expect(second.body.data.countryIsoCode).toBe('EC');
+
+            // And resending the value it already holds writes nothing either
+            const third = await updateCase(created.body.data.caseId, { countryIsoCode: 'EC' });
+            expect(third.status).toBe(200);
+            expect(third.body.data.appDetails).toHaveLength(2);
         });
 
     });
@@ -740,6 +748,25 @@ describe('esaviCase contract', () => {
 
             expect(detail.body.data).not.toHaveProperty('classification');
             expect(list.body.data.rows[0]).not.toHaveProperty('classification');
+        });
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const created = await createCase({
+                countryIsoCode: 'EC',
+                notificationOrganization: 'Ministerio de Salud',
+                details: 'Sin novedad'
+            });
+            expect(created.status).toBe(201);
+
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/esavi-cases',
+                id: created.body.data.caseId,
+                model: EsaviCase
+            });
         });
 
     });
