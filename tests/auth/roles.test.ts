@@ -154,7 +154,23 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/classifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-CLASSIF-004' },
     { method: 'delete', path: `/api/classifications/${ UUID }`,          minRole: 'ADMIN',      code: 'ESAVI-CLASSIF-005A' },
     { method: 'patch',  path: `/api/classifications/activate/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-CLASSIF-005B' },
-    { method: 'delete', path: `/api/classifications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-CLASSIF-005C' }
+    { method: 'delete', path: `/api/classifications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-CLASSIF-005C' },
+
+    // notification — 001 and 004 sit at USER for the same reason as notifier and classification
+    // (SPEC F10 §3.4): notifying is captured in the same operational flow as the case. 006 reads
+    // the notification of a case by its caseId, the real query of the domain, and is the only
+    // non-canonical operation of the entity. 005C exists because notification is outside the
+    // preventPhysicalDelete loop of esaviapp.sql:1363-1366. The abbreviation is NOTIFCN and not
+    // NOTIF, which would be a prefix of NOTIFIER and mix both entities in every grep
+    { method: 'post',   path: '/api/notifications',                      minRole: 'USER',       code: 'ESAVI-NOTIFCN-001' },
+    { method: 'get',    path: '/api/notifications',                      minRole: 'USER',       code: 'ESAVI-NOTIFCN-002A' },
+    { method: 'get',    path: '/api/notifications/admin',                minRole: 'ADMIN',      code: 'ESAVI-NOTIFCN-002B' },
+    { method: 'get',    path: `/api/notifications/case/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFCN-006' },
+    { method: 'get',    path: `/api/notifications/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFCN-003' },
+    { method: 'put',    path: `/api/notifications/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFCN-004' },
+    { method: 'delete', path: `/api/notifications/${ UUID }`,            minRole: 'ADMIN',      code: 'ESAVI-NOTIFCN-005A' },
+    { method: 'patch',  path: `/api/notifications/activate/${ UUID }`,   minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFCN-005B' },
+    { method: 'delete', path: `/api/notifications/purge/${ UUID }`,      minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFCN-005C' }
 ];
 
 /**
@@ -210,7 +226,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(99);
+            expect(ROUTE_RULES).toHaveLength(108);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
