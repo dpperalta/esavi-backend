@@ -8,6 +8,7 @@ import { initEsaviCaseAssociations } from './esaviCase.associations';
 import { initNotifierAssociations } from './notifier.associations';
 import { initClassificationAssociations } from './classification.associations';
 import { initNotificationAssociations } from './notification.associations';
+import { initSevereNotificationAssociations } from './severeNotification.associations';
 
 export const initAssociations = (): void => {
     initAuthAssociations();
@@ -20,4 +21,5 @@ export const initAssociations = (): void => {
     initNotifierAssociations();
     initClassificationAssociations();
     initNotificationAssociations();
+    initSevereNotificationAssociations();
 }
