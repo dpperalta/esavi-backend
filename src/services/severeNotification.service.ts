@@ -1,5 +1,5 @@
 import { EsaviCase, Notification, SevereNotification } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateSevereNotificationInput } from '../types';
 import { NotificationType } from '../constants/notification.constants';
 
@@ -47,6 +47,22 @@ const findSevereNotificationWithRelations = async (id: string, includeInactive: 
     return await SevereNotification.findOne({
         where: { notificationId: id },
         attributes: DETAIL_EXCLUDE,
+        include: [{
+            ...NOTIFICATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// The same read as above without narrowing the attributes of the detail, which is the
+// precondition of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads
+// back undefined for the columns it left out, and every comparison against undefined would count
+// as a change. It still carries the include, so the inherited visibility is checked in the same
+// query the update instance comes from
+const findSevereNotificationRow = async (id: string, includeInactive: boolean = false) => {
+    return await SevereNotification.findOne({
+        where: { notificationId: id },
         include: [{
             ...NOTIFICATION_INCLUDE,
             required: true,
@@ -229,8 +245,97 @@ const getSevereNotificationByCaseIdService = async (caseId: string, lang: string
     return toSevereNotificationResponse(severeNotification);
 }
 
+// Update Severe Notification Service
+// Code: ESAVI-SEVNOT-004
+// notificationId is ignored whether or not it arrives in the body. It is the primary key of the
+// row and the foreign key to its header at the same time: changing it is not updating this
+// detail, it is creating another one under a different notification
+const updateSevereNotificationService = async (
+    id: string,
+    data: Partial<CreateSevereNotificationInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const severeNotification = await findSevereNotificationRow(id, canViewInactive);
+    if( !severeNotification ) {
+        throw new AppError(getMessage('severeNotification.notFound', lang), 404, 'SEVNOT_004_NOT_FOUND');
+    }
+
+    // The pregnancy rule is evaluated over the resulting state and not over the body: otherwise a
+    // PUT moving hasPregnancyComplications from YES to NO without touching the description would
+    // leave the text orphaned under an answer that contradicts it. Moving out of YES therefore
+    // requires clearing the description in the same PUT, sending it null. The validator cannot do
+    // this — it does not see the row — so the same check is applied here instead
+    const resultingAnswer = data.hasPregnancyComplications !== undefined
+        ? ( data.hasPregnancyComplications ?? null )
+        : ( severeNotification.hasPregnancyComplications ?? null );
+    const resultingDescription = data.pregnancyComplicationsDescription !== undefined
+        ? normalizeText(data.pregnancyComplicationsDescription)
+        : ( severeNotification.pregnancyComplicationsDescription ?? null );
+
+    assertPregnancyRule(resultingAnswer, resultingDescription, '004', lang);
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending
+    // whole the record just read with a GET is the normal use of a form, and writing it back
+    // would fill appDetails with entries that record no change and hide the real ones among them.
+    // The seven fields are compared against undefined and never by truthiness: an `if( data.x )`
+    // would silently discard the empty string and, above all, would make it impossible to clear a
+    // field. Here that matters more than in other entities, because null and NO_ANSWER are
+    // different data and the PUT has to be able to go from one to the other in both directions
+    const stored = severeNotification.get({ plain: true }) as Record<string, unknown>;
+
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        hasPreviousEventHistory: data.hasPreviousEventHistory !== undefined
+            ? ( data.hasPreviousEventHistory ?? null ) : undefined,
+        hasAllergyToOtherVaccines: data.hasAllergyToOtherVaccines !== undefined
+            ? ( data.hasAllergyToOtherVaccines ?? null ) : undefined,
+        hasAllergyToMedications: data.hasAllergyToMedications !== undefined
+            ? ( data.hasAllergyToMedications ?? null ) : undefined,
+        hasAllergyToPreviousSameVaccine: data.hasAllergyToPreviousSameVaccine !== undefined
+            ? ( data.hasAllergyToPreviousSameVaccine ?? null ) : undefined,
+        hasPregnancyComplications: data.hasPregnancyComplications !== undefined
+            ? ( data.hasPregnancyComplications ?? null ) : undefined,
+        // The two free texts are normalized before comparing, or a body differing only in
+        // surrounding blanks would count as a change
+        pregnancyComplicationsDescription: data.pregnancyComplicationsDescription !== undefined
+            ? normalizeText(data.pregnancyComplicationsDescription) : undefined,
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    });
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_severeNotification_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        return toSevereNotificationResponse(severeNotification);
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the
+    // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(severeNotification.appDetails) ? severeNotification.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-SEVNOT-004',
+        detail: 'Severe notification detail updated by service'
+    };
+    await severeNotification.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findSevereNotificationWithRelations(id, true);
+    return updated ? toSevereNotificationResponse(updated) : null;
+}
+
 export {
     createSevereNotificationService,
     getSevereNotificationByIdService,
-    getSevereNotificationByCaseIdService
+    getSevereNotificationByCaseIdService,
+    updateSevereNotificationService
 }

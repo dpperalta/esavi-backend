@@ -4,12 +4,14 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createSevereNotification,
     getSevereNotificationByCaseId,
-    getSevereNotificationById
+    getSevereNotificationById,
+    updateSevereNotification
 } from '../controllers/severeNotification.controller';
 import {
     createSevereNotificationValidator,
     severeNotificationCaseIdValidator,
-    severeNotificationIdValidator
+    severeNotificationIdValidator,
+    updateSevereNotificationValidator
 } from '../validators';
 
 const { USER } = ROLES;
@@ -34,5 +36,10 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...severeNo
 // Declared after the literal paths so Express does not capture them as an :id.
 // The :id is the notificationId: this entity has no identifier of its own
 router.get('/:id', tokenValidation, validateUserRole(USER), ...severeNotificationIdValidator, validateFields, getSevereNotificationById);
+
+// Update Severe Notification
+// Code: ESAVI-SEVNOT-004
+// USER for the same reason as 001: correcting the detail is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(USER), ...severeNotificationIdValidator, ...updateSevereNotificationValidator, validateFields, updateSevereNotification);
 
 export default router;
