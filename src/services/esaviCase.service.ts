@@ -96,20 +96,23 @@ const findEsaviCaseWithRelations = async (id: string, includeInactive: boolean =
 // deletes — the triggers already forbid those. Nothing in the DDL stops a case from pointing at a
 // deactivated row, so the check is the service's alone. Shared by 001 and 004 so the two
 // conditions cannot drift apart; the operation code travels in so the AppError keeps it
-const assertPatientIsValid = async (patientId: string, op: string, lang: string) => {
+const assertPatientIsValid = async (patientId: string, op: string, lang: string, transaction?: Transaction) => {
     const patient = await Patient.findOne({
         where: { patientId, isActive: true },
-        attributes: ['patientId']
+        attributes: ['patientId'],
+        transaction
     });
     if( !patient ) {
         throw new AppError(getMessage('esaviCase.patientNotFound', lang), 404, `CASE_${ op }_PATIENT_NOT_FOUND`);
     }
 }
 
-const assertHealthFacilityIsValid = async (healthFacilityId: string, op: string, lang: string) => {
+// The transaction is optional because 001 writes without one and 004 opens its own
+const assertHealthFacilityIsValid = async (healthFacilityId: string, op: string, lang: string, transaction?: Transaction) => {
     const healthFacility = await HealthFacility.findOne({
         where: { healthFacilityId, isActive: true },
-        attributes: ['healthFacilityId', 'localCode']
+        attributes: ['healthFacilityId', 'localCode'],
+        transaction
     });
     if( !healthFacility ) {
         throw new AppError(getMessage('esaviCase.healthFacilityNotFound', lang), 404, `CASE_${ op }_FACILITY_NOT_FOUND`);
@@ -284,70 +287,77 @@ const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive
 // healthFacilityId or reportDate change: an identifier that changes stops identifying, and any
 // document already printed with the old value would be orphaned
 const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseInput>, authUser: AuthUser | undefined, lang: string) => {
-    const esaviCase = await EsaviCase.findByPk(id);
-    if( !esaviCase ) {
-        throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_004_NOT_FOUND');
+    const transaction = await sequelize.transaction();
+    try {
+        const esaviCase = await EsaviCase.findByPk(id, { transaction });
+        if( !esaviCase ) {
+            throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_004_NOT_FOUND');
+        }
+
+        if( data.patientId ) {
+            await assertPatientIsValid(data.patientId, '004', lang, transaction);
+        }
+        if( data.healthFacilityId ) {
+            await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang, transaction);
+        }
+
+        // Coherence is checked against the RESULTING state, not against the body: validating only what
+        // arrives would let through an eventDate incoherent with the reportDate already stored
+        const resultingReportDate = data.reportDate !== undefined
+            ? ( data.reportDate ? normalizeIsoDate(data.reportDate) : null )
+            : esaviCase.reportDate;
+        const resultingEventDate = data.eventDate !== undefined
+            ? ( data.eventDate ? normalizeIsoDate(data.eventDate) : null )
+            : esaviCase.eventDate ?? null;
+        if( resultingEventDate && resultingReportDate && resultingEventDate > resultingReportDate ) {
+            throw new AppError(getMessage('esaviCase.invalidDateRange', lang), 400, 'CASE_004_INVALID_DATE_RANGE');
+        }
+
+        // Differential update: only what really changed reaches the UPDATE. Until now the object was
+        // built out of which keys arrived, never comparing them with what was stored, so resending
+        // whole the record just read with a GET — the normal use of a form — rewrote every column
+        // with its own value. `stored` is the whole row, which is the precondition of the helper,
+        // and it compares the three DATEONLY columns by their calendar day
+        const stored = esaviCase.get({ plain: true }) as Record<string, unknown>;
+        const objectToUpdate = buildDifferentialUpdate(stored, {
+            patientId: data.patientId ?? undefined,
+            healthFacilityId: data.healthFacilityId ?? undefined,
+            reportDate: data.reportDate ? normalizeIsoDate(data.reportDate) : undefined,
+            eventDate: data.eventDate !== undefined ? ( data.eventDate ? normalizeIsoDate(data.eventDate) : null ) : undefined,
+            countryIsoCode: data.countryIsoCode !== undefined ? ( data.countryIsoCode ? normalizeCountryIsoCode(data.countryIsoCode) : null ) : undefined,
+            reportFillingDate: data.reportFillingDate !== undefined ? ( data.reportFillingDate ? normalizeIsoDate(data.reportFillingDate) : null ) : undefined,
+            notificationOrganization: data.notificationOrganization !== undefined ? ( data.notificationOrganization ? normalizeOrganization(data.notificationOrganization) : null ) : undefined,
+            details: data.details !== undefined ? ( data.details ? data.details.trim() : null ) : undefined
+        });
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
+        // stands, which is the state the client asked for
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            const currentAppDetails = Array.isArray(esaviCase.appDetails) ? esaviCase.appDetails : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-CASE-004',
+                detail: 'ESAVI Case updated by service'
+            };
+            await esaviCase.update({
+                ...objectToUpdate,
+                updatedAt: new Date(),
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
     }
 
-    if( data.patientId ) {
-        await assertPatientIsValid(data.patientId, '004', lang);
-    }
-    if( data.healthFacilityId ) {
-        await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang);
-    }
-
-    // Coherence is checked against the RESULTING state, not against the body: validating only what
-    // arrives would let through an eventDate incoherent with the reportDate already stored
-    const resultingReportDate = data.reportDate !== undefined
-        ? ( data.reportDate ? normalizeIsoDate(data.reportDate) : null )
-        : esaviCase.reportDate;
-    const resultingEventDate = data.eventDate !== undefined
-        ? ( data.eventDate ? normalizeIsoDate(data.eventDate) : null )
-        : esaviCase.eventDate ?? null;
-    if( resultingEventDate && resultingReportDate && resultingEventDate > resultingReportDate ) {
-        throw new AppError(getMessage('esaviCase.invalidDateRange', lang), 400, 'CASE_004_INVALID_DATE_RANGE');
-    }
-
-    // Differential update: only what really changed reaches the UPDATE. Until now the object was
-    // built out of which keys arrived, never comparing them with what was stored, so resending
-    // whole the record just read with a GET — the normal use of a form — rewrote every column
-    // with its own value. `stored` is the whole row, which is the precondition of the helper,
-    // and it compares the three DATEONLY columns by their calendar day
-    const stored = esaviCase.get({ plain: true }) as Record<string, unknown>;
-    const objectToUpdate = buildDifferentialUpdate(stored, {
-        patientId: data.patientId ?? undefined,
-        healthFacilityId: data.healthFacilityId ?? undefined,
-        reportDate: data.reportDate ? normalizeIsoDate(data.reportDate) : undefined,
-        eventDate: data.eventDate !== undefined ? ( data.eventDate ? normalizeIsoDate(data.eventDate) : null ) : undefined,
-        countryIsoCode: data.countryIsoCode !== undefined ? ( data.countryIsoCode ? normalizeCountryIsoCode(data.countryIsoCode) : null ) : undefined,
-        reportFillingDate: data.reportFillingDate !== undefined ? ( data.reportFillingDate ? normalizeIsoDate(data.reportFillingDate) : null ) : undefined,
-        notificationOrganization: data.notificationOrganization !== undefined ? ( data.notificationOrganization ? normalizeOrganization(data.notificationOrganization) : null ) : undefined,
-        details: data.details !== undefined ? ( data.details ? data.details.trim() : null ) : undefined
-    });
-
-    // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
-    // stands, which is the state the client asked for
-    if( Object.keys(objectToUpdate).length === 0 ) {
-        const unchanged = await findEsaviCaseWithRelations(id, true);
-        return unchanged ? toEsaviCaseResponse(unchanged) : null;
-    }
-
-    const currentAppDetails = Array.isArray(esaviCase.appDetails) ? esaviCase.appDetails : [];
-    const newEntry: AppDetails = {
-        createdAt: new Date(),
-        user: authUser?.userId || 'undefined',
-        method: 'ESAVI-CASE-004',
-        detail: 'ESAVI Case updated by service'
-    };
-    await esaviCase.update({
-        ...objectToUpdate,
-        updatedAt: new Date(),
-        appDetails: [
-            ...currentAppDetails,
-            newEntry
-        ]
-    });
-
+    // Read outside the transaction, once it is committed: the response is the same whether or not
+    // anything changed, so both paths converge here
     const updatedEsaviCase = await findEsaviCaseWithRelations(id, true);
     return updatedEsaviCase ? toEsaviCaseResponse(updatedEsaviCase) : null;
 }
