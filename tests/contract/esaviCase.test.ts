@@ -431,12 +431,8 @@ describe('esaviCase contract', () => {
             expect(movedReport.status).toBe(400);
         });
 
-        it('rejects an inactive patient, an unknown facility and an unknown case with 404', async () => {
+        it('rejects an unknown facility and an unknown case with 404', async () => {
             const created = await createCase();
-
-            const inactivePatient = await updateCase(created.body.data.caseId, { patientId: inactivePatientId });
-            expect(inactivePatient.status).toBe(404);
-            expect(inactivePatient.body.code).toBe('CASE_004_PATIENT_NOT_FOUND');
 
             const unknownFacility = await updateCase(created.body.data.caseId, { healthFacilityId: unknownUuid });
             expect(unknownFacility.status).toBe(404);
@@ -445,6 +441,28 @@ describe('esaviCase contract', () => {
             const unknownCase = await updateCase(unknownUuid, { details: 'x' });
             expect(unknownCase.status).toBe(404);
             expect(unknownCase.body.code).toBe('CASE_004_NOT_FOUND');
+        });
+
+        it('ignores patientId without an error, whatever it points at', async () => {
+            const created = await createCase();
+
+            // A valid patient other than its own: 200 and the case keeps the original one
+            const moved = await updateCase(created.body.data.caseId, { patientId: otherPatientId });
+            expect(moved.status).toBe(200);
+            expect(moved.body.data.patient.patientId).toBe(patientId);
+
+            // An inactive one and an unknown one no longer raise a 404: the field is not even read
+            const toInactive = await updateCase(created.body.data.caseId, { patientId: inactivePatientId });
+            expect(toInactive.status).toBe(200);
+            expect(toInactive.body.data.patient.patientId).toBe(patientId);
+
+            const toUnknown = await updateCase(created.body.data.caseId, { patientId: unknownUuid });
+            expect(toUnknown.status).toBe(200);
+            expect(toUnknown.body.data.patient.patientId).toBe(patientId);
+
+            // And an ignored field is not a change: nothing was written along the way
+            expect(toUnknown.body.data.appDetails).toHaveLength(1);
+            expect(toUnknown.body.data.appDetails[0].method).toBe('ESAVI-CASE-001');
         });
 
         it('appends to appDetails only when something changed, without dropping the previous entries', async () => {

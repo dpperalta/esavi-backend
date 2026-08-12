@@ -94,13 +94,16 @@ const findEsaviCaseWithRelations = async (id: string, includeInactive: boolean =
 
 // Both foreign keys are NOT NULL with ON DELETE RESTRICT, which only protects against physical
 // deletes — the triggers already forbid those. Nothing in the DDL stops a case from pointing at a
-// deactivated row, so the check is the service's alone. Shared by 001 and 004 so the two
-// conditions cannot drift apart; the operation code travels in so the AppError keeps it
-const assertPatientIsValid = async (patientId: string, op: string, lang: string, transaction?: Transaction) => {
+// deactivated row, so the check is the service's alone. The operation code travels in so the
+// AppError keeps it.
+//
+// The facility check is shared by 001 and 004, so its two conditions cannot drift apart. The
+// patient check is only reachable from 001: patientId is immutable in 004, which no longer reads
+// the field at all
+const assertPatientIsValid = async (patientId: string, op: string, lang: string) => {
     const patient = await Patient.findOne({
         where: { patientId, isActive: true },
-        attributes: ['patientId'],
-        transaction
+        attributes: ['patientId']
     });
     if( !patient ) {
         throw new AppError(getMessage('esaviCase.patientNotFound', lang), 404, `CASE_${ op }_PATIENT_NOT_FOUND`);
@@ -283,9 +286,17 @@ const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive
 
 // Update ESAVI Case Service
 // Code: ESAVI-CASE-004
-// caseCode is ignored whether or not it arrives in the body, and it is NOT regenerated when
-// healthFacilityId or reportDate change: an identifier that changes stops identifying, and any
-// document already printed with the old value would be orphaned
+// Two fields are ignored whether or not they arrive in the body, both without an error:
+//
+// caseCode, which is NOT regenerated either when healthFacilityId or reportDate change: an
+// identifier that changes stops identifying, and any document already printed with the old value
+// would be orphaned.
+//
+// patientId, because a case does not change patient — another one is created. Moving a case to a
+// different patient changes the birthDate its classification's age was derived from, and it
+// invalidates everything else hanging off the case, not just the age. Closing the path is cheaper
+// and safer than propagating it, so the patient check is no longer called from here: the field is
+// not even looked at, and an unknown patientId no longer raises a 404 either
 const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseInput>, authUser: AuthUser | undefined, lang: string) => {
     const transaction = await sequelize.transaction();
     try {
@@ -294,9 +305,6 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
             throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_004_NOT_FOUND');
         }
 
-        if( data.patientId ) {
-            await assertPatientIsValid(data.patientId, '004', lang, transaction);
-        }
         if( data.healthFacilityId ) {
             await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang, transaction);
         }
@@ -320,7 +328,6 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
         // and it compares the three DATEONLY columns by their calendar day
         const stored = esaviCase.get({ plain: true }) as Record<string, unknown>;
         const objectToUpdate = buildDifferentialUpdate(stored, {
-            patientId: data.patientId ?? undefined,
             healthFacilityId: data.healthFacilityId ?? undefined,
             reportDate: data.reportDate ? normalizeIsoDate(data.reportDate) : undefined,
             eventDate: data.eventDate !== undefined ? ( data.eventDate ? normalizeIsoDate(data.eventDate) : null ) : undefined,
