@@ -341,5 +341,31 @@
         "stillActive": "De classificatie met ID {{id}} is nog actief. Deactiveer deze voordat u deze permanent verwijdert.",
         "purgeSuccess": "Classificatie permanent verwijderd",
         "purgeFailed": "Fout bij het permanent verwijderen van de classificatie. Probeer het later opnieuw."
+    },
+    "notification": {
+        "notFound": "Melding niet gevonden. Controleer de ID van de melding en probeer het opnieuw.",
+        "idRequired": "De ID van de melding is verplicht",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "caseAlreadyNotified": "Het ESAVI-geval met ID {{caseId}} heeft al een melding, actief of inactief",
+        "outcomeNotFound": "De opgegeven afloop bestaat niet, is inactief of hoort niet bij de afloopcatalogus",
+        "deathFieldsRequired": "De afloop is overlijden: de overlijdensdatum en het autopsieverzoek zijn verplicht",
+        "deathFieldsNotAllowed": "De overlijdensdatum, het autopsieverzoek en de verbale autopsie zijn alleen toegestaan wanneer de afloop overlijden is",
+        "createdSuccess": "Melding succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de melding mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Melding succesvol opgehaald",
+        "getFailed": "Ophalen van de melding mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Meldingen succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de meldingen mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Melding succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de melding mislukt. Probeer het later opnieuw.",
+        "alreadyInactive": "De melding met ID {{id}} is al inactief",
+        "alreadyActive": "De melding met ID {{id}} is al actief",
+        "deletedSuccess": "Melding succesvol verwijderd",
+        "deletedFailed": "Verwijderen van de melding mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Melding succesvol geactiveerd",
+        "activatedFailed": "Activeren van de melding mislukt. Probeer het later opnieuw.",
+        "stillActive": "De melding met ID {{id}} is nog actief. Deactiveer deze voordat u deze permanent verwijdert.",
+        "purgeSuccess": "Melding permanent verwijderd",
+        "purgeFailed": "Fout bij het permanent verwijderen van de melding. Probeer het later opnieuw."
     }
 }

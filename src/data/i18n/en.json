@@ -341,5 +341,31 @@
         "stillActive": "The classification with ID {{id}} is still active. Deactivate it before deleting it permanently.",
         "purgeSuccess": "Classification permanently deleted",
         "purgeFailed": "Error permanently deleting the classification. Please try again later."
+    },
+    "notification": {
+        "notFound": "Notification not found. Please check the notification ID and try again.",
+        "idRequired": "The notification ID is required",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "caseAlreadyNotified": "The ESAVI case with ID {{caseId}} already has a notification, whether active or inactive",
+        "outcomeNotFound": "The given outcome does not exist, is inactive or does not belong to the outcome catalog",
+        "deathFieldsRequired": "The outcome is death: the death date and the autopsy request are required",
+        "deathFieldsNotAllowed": "The death date, the autopsy request and the verbal autopsy are only allowed when the outcome is death",
+        "createdSuccess": "Notification created successfully",
+        "createdFailed": "Failed to create the notification. Please try again later.",
+        "getSuccess": "Notification fetched successfully",
+        "getFailed": "Failed to fetch the notification. Please try again later.",
+        "getSuccessPlural": "Notifications fetched successfully",
+        "getFailedPlural": "Failed to fetch the notifications. Please try again later.",
+        "updatedSuccess": "Notification updated successfully",
+        "updatedFailed": "Failed to update the notification. Please try again later.",
+        "alreadyInactive": "The notification with ID {{id}} is already inactive",
+        "alreadyActive": "The notification with ID {{id}} is already active",
+        "deletedSuccess": "Notification deleted successfully",
+        "deletedFailed": "Failed to delete the notification. Please try again later.",
+        "activatedSuccess": "Notification activated successfully",
+        "activatedFailed": "Failed to activate the notification. Please try again later.",
+        "stillActive": "The notification with ID {{id}} is still active. Deactivate it before deleting it permanently.",
+        "purgeSuccess": "Notification permanently deleted",
+        "purgeFailed": "Error permanently deleting the notification. Please try again later."
     }
 }
