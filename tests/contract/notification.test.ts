@@ -1,5 +1,7 @@
+import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, HealthFacility, Notification, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, HealthFacility, Notification, Patient, SevereNotification } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -22,6 +24,10 @@ describe('notification contract', () => {
 
     const suffix = Date.now().toString(36).toUpperCase();
     const unknownUuid = '00000000-0000-4000-8000-000000000000';
+
+    // Where purgeEntityService writes the snapshot of what it destroys, and where SPEC F13 added
+    // the second dump for the row the Postgres cascade takes with it
+    const logFile = path.join(__dirname, '..', '..', 'src', 'logs', 'esaviLog.log');
 
     // Fixtures shared by the whole file. A notification needs a case, and the death rule needs
     // the outcome catalog: the item coded DEATH is what turns the three death fields from
@@ -886,6 +892,112 @@ describe('notification contract', () => {
             expect(after).not.toBeNull();
             expect(after!.getDataValue('caseCode')).toBe(before!.getDataValue('caseCode'));
             expect(after!.getDataValue('isActive')).toBe(true);
+        });
+
+    });
+
+    // SPEC F13 hung the first of the eight satellites from this entity, and with it three side
+    // effects on operations this suite already covered. The detail has no isActive of its own —
+    // its lifecycle is governed here — so what 005A and 005B move is its deletedAt, and 005C
+    // destroys it through the ON DELETE CASCADE of the DDL without this service deleting anything
+    describe('the severe detail hanging from the notification', () => {
+
+        // A SEVERE notification with its detail: the default type of the fixture is NON_SEVERE,
+        // which does not admit one
+        const notifyWithSevereDetail = async (): Promise<string> => {
+            const { id } = await notifyNewCase({ notificationType: 'SEVERE' });
+            await request(app).post('/api/severe-notifications').set(authHeader('USER'))
+                .send({ notificationId: id });
+            return id;
+        };
+
+        const readDetail = async ( id: string ) => {
+            const row = await SevereNotification.findByPk(id);
+            return {
+                deletedAt: row!.getDataValue('deletedAt') as Date | null,
+                appDetails: row!.getDataValue('appDetails') as { method: string }[]
+            };
+        };
+
+        it('005A seals the deletedAt of the detail and records who dragged it', async () => {
+            const id = await notifyWithSevereDetail();
+            expect(( await readDetail(id) ).deletedAt).toBeNull();
+
+            const response = await deleteNotification(id);
+
+            expect(response.status).toBe(200);
+            const detail = await readDetail(id);
+            expect(detail.deletedAt).not.toBeNull();
+            expect(detail.appDetails).toHaveLength(2);
+            expect(detail.appDetails[1].method).toBe('ESAVI-NOTIFCN-005A');
+        });
+
+        it('005B clears it again, which is what keeps the round trip a round trip', async () => {
+            const id = await notifyWithSevereDetail();
+            await deleteNotification(id);
+
+            const response = await activateNotification(id);
+
+            expect(response.status).toBe(200);
+            const detail = await readDetail(id);
+            expect(detail.deletedAt).toBeNull();
+            expect(detail.appDetails.map(entry => entry.method))
+                .toEqual(['ESAVI-SEVNOT-001', 'ESAVI-NOTIFCN-005A', 'ESAVI-NOTIFCN-005B']);
+        });
+
+        it('a detail already sealed keeps its original date and gets no new entry', async () => {
+            const id = await notifyWithSevereDetail();
+            await deleteNotification(id);
+            const sealed = await readDetail(id);
+
+            // Back to active, then sealed by hand so the second deactivation finds it that way
+            await activateNotification(id);
+            await SevereNotification.update({ deletedAt: sealed.deletedAt }, { where: { notificationId: id } });
+            const before = await readDetail(id);
+
+            await deleteNotification(id);
+
+            const after = await readDetail(id);
+            expect(after.deletedAt).toEqual(before.deletedAt);
+            expect(after.appDetails).toHaveLength(before.appDetails.length);
+        });
+
+        it('a notification with no detail drags nothing and does not fail', async () => {
+            const { id } = await notifyNewCase({ notificationType: 'SEVERE' });
+
+            expect(( await deleteNotification(id) ).status).toBe(200);
+            expect(( await activateNotification(id) ).status).toBe(200);
+            expect(await SevereNotification.findByPk(id)).toBeNull();
+        });
+
+        it('005C leaves two dumps in the log and the cascade destroys both rows', async () => {
+            const id = await notifyWithSevereDetail();
+            await deleteNotification(id);
+
+            const response = await purgeNotification(id);
+            expect(response.status).toBe(200);
+
+            const dumps = fs.readFileSync(logFile, 'utf8')
+                .split('\n')
+                .filter(line => line.includes(id) && line.includes('Snapshot:'));
+            expect(dumps).toHaveLength(2);
+            expect(dumps.filter(line => line.includes('severeNotification row dragged'))).toHaveLength(1);
+            expect(dumps.every(line => line.includes('[WARN]'))).toBe(true);
+
+            expect(await Notification.findByPk(id, { paranoid: false })).toBeNull();
+            expect(await SevereNotification.findByPk(id)).toBeNull();
+        });
+
+        it('005C on a notification without detail leaves a single dump, as it always did', async () => {
+            const { id } = await notifyNewCase({ notificationType: 'SEVERE' });
+            await deleteNotification(id);
+
+            await purgeNotification(id);
+
+            const dumps = fs.readFileSync(logFile, 'utf8')
+                .split('\n')
+                .filter(line => line.includes(id) && line.includes('Snapshot:'));
+            expect(dumps).toHaveLength(1);
         });
 
     });

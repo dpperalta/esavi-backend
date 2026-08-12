@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Notification, Notifier, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Notification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -834,6 +834,135 @@ describe('esaviCase contract', () => {
             const after = await Notification.findByPk(notificationId);
             expect(( after?.getDataValue('deletedAt') as Date ).getTime()).toBe(ownDeletedAt.getTime());
             expect(after?.getDataValue('appDetails') as unknown[]).toHaveLength(entriesBefore);
+        });
+
+    });
+
+    /**
+     * SPEC F13 adds the severe detail as the fourth satellite, and the only one
+     * reached in two hops: the chain case -> notification -> detail has to be walked
+     * explicitly, because the mass Notification.update above does not go through
+     * notification.service.ts and the cascade installed there never fires from here.
+     * The detail has no isActive column, so what moves is its deletedAt — and that
+     * seal is what makes it purgable later. Without it a detail under a deactivated
+     * case would be invisible but unsealed, and therefore never purgable.
+     */
+    describe('005A — the cascade over the severe detail', () => {
+
+        // A SEVERE notification with its detail, which is the only chain that reaches one
+        const createSevereChain = async ( caseId: string ): Promise<string> => {
+            const notified = await request(app)
+                .post('/api/notifications')
+                .set(authHeader('USER'))
+                .send({ caseId, notificationType: 'SEVERE', esaviDescription: 'Fiebre tras la dosis' });
+            const notificationId = notified.body.data.notificationId;
+            await request(app).post('/api/severe-notifications').set(authHeader('USER'))
+                .send({ notificationId });
+            return notificationId;
+        };
+
+        const readDetail = async ( id: string ) => {
+            const row = await SevereNotification.findByPk(id);
+            return {
+                deletedAt: row!.getDataValue('deletedAt') as Date | null,
+                appDetails: row!.getDataValue('appDetails') as { method: string }[]
+            };
+        };
+
+        it('seals the detail transitively, in the same transaction that deactivates the notification', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notificationId = await createSevereChain(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const detail = await readDetail(notificationId);
+            expect(detail.deletedAt).not.toBeNull();
+            // The method is the code of the operation that dragged it, never an ESAVI-SEVNOT one
+            expect(detail.appDetails.map(entry => entry.method)).toEqual([
+                'ESAVI-SEVNOT-001', 'ESAVI-CASE-005A'
+            ]);
+            expect(( await Notification.findByPk(notificationId) )?.getDataValue('isActive')).toBe(false);
+        });
+
+        it('does not undo it when the case is reactivated, because the notification does not come back either', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notificationId = await createSevereChain(caseId);
+            await deleteCase(caseId);
+            const sealed = await readDetail(notificationId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const after = await readDetail(notificationId);
+            expect(after.deletedAt).toEqual(sealed.deletedAt);
+            expect(after.appDetails).toHaveLength(sealed.appDetails.length);
+        });
+
+        it('leaves a detail sealed beforehand with its own deletedAt and no new entry', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notificationId = await createSevereChain(caseId);
+            // Sealed through its header, which is the other path of the drag
+            await request(app).delete(`/api/notifications/${ notificationId }`).set(authHeader('ADMIN'));
+
+            const before = await readDetail(notificationId);
+            expect(before.appDetails[1].method).toBe('ESAVI-NOTIFCN-005A');
+
+            // A second apart, so a deletedAt rewritten by the cascade would show
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            await deleteCase(caseId);
+
+            const after = await readDetail(notificationId);
+            expect(( after.deletedAt as Date ).getTime()).toBe(( before.deletedAt as Date ).getTime());
+            expect(after.appDetails).toHaveLength(before.appDetails.length);
+        });
+
+        it('does not fail on a case with no notification, nor on one whose notification has no detail', async () => {
+            const bare = await createCase();
+            expect(( await deleteCase(bare.body.data.caseId) ).status).toBe(200);
+
+            const withoutDetail = await createCase();
+            const caseId = withoutDetail.body.data.caseId;
+            const notified = await request(app)
+                .post('/api/notifications')
+                .set(authHeader('USER'))
+                .send({ caseId, notificationType: 'SEVERE', esaviDescription: 'Fiebre tras la dosis' });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+            expect(await SevereNotification.findByPk(notified.body.data.notificationId)).toBeNull();
+        });
+
+        it('leaves the detail untouched when the case was already inactive and 005A answers 409', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notificationId = await createSevereChain(caseId);
+            await deleteCase(caseId);
+            const before = await readDetail(notificationId);
+
+            // The generic service threw the 409 before the cascade could run again
+            const response = await deleteCase(caseId);
+            expect(response.status).toBe(409);
+
+            const after = await readDetail(notificationId);
+            expect(after.deletedAt).toEqual(before.deletedAt);
+            expect(after.appDetails).toHaveLength(before.appDetails.length);
+        });
+
+        it('makes the dragged detail purgable, which is the point of sealing it', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notificationId = await createSevereChain(caseId);
+            await deleteCase(caseId);
+
+            const purged = await request(app)
+                .delete(`/api/severe-notifications/purge/${ notificationId }`)
+                .set(authHeader('SUPERADMIN'));
+
+            expect(purged.status).toBe(200);
+            expect(await SevereNotification.findByPk(notificationId)).toBeNull();
         });
 
     });
