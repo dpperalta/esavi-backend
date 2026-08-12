@@ -5,6 +5,7 @@ import { AppError, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the outcomes. Without this check any active catalogItem of
 // the system would enter as an outcome and the death rule would never fire for the right one.
@@ -436,6 +437,36 @@ const setNotificationActivationService = async (
     }
 }
 
+// Purging Notification Service - For SuperAdmin
+// Code: ESAVI-NOTIFCN-005C
+// notification is outside the preventPhysicalDelete loop of esaviapp.sql:1363-1366, so the row
+// can really be destroyed. This is the only path that releases the caseId: once the row is gone
+// UQ_notification_case is free and the case admits a new notification. It does not touch the
+// case — the foreign key runs from the notification to the case and not the other way round.
+// WARNING for when the satellites arrive: the eight tables that hang from notificationId declare
+// ON DELETE CASCADE, so this operation will drag the whole detailed notification with it without
+// asking. Today there is nothing to drag; the spec that lands the first one must revisit this
+const purgeNotificationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: Notification,
+            where: { notificationId: id },
+            transaction,
+            operationCode: 'ESAVI-NOTIFCN-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('notification.notFound', lang),
+            notFoundCode: 'NOTIFCN_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('notification.stillActive', lang, { id }),
+            stillActiveCode: 'NOTIFCN_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationService,
     getNotificationsService,
@@ -443,5 +474,6 @@ export {
     getNotificationByIdService,
     getNotificationByCaseIdService,
     updateNotificationService,
-    setNotificationActivationService
+    setNotificationActivationService,
+    purgeNotificationService
 }

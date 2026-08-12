@@ -8,6 +8,7 @@ import {
     getNotificationByCaseIdService,
     getNotificationByIdService,
     getNotificationsService,
+    purgeNotificationService,
     setNotificationActivationService,
     updateNotificationService
 } from '../services/notification.service';
@@ -200,6 +201,26 @@ const activateNotification = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Purge Notification Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFCN-005C
+const purgeNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notification.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFCN-005C: Error purging Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notification.purgeFailed', req.lang), 500, 'NOTIFCN_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createNotification,
     getNotifications,
@@ -208,5 +229,6 @@ export {
     getNotificationByCaseId,
     updateNotification,
     deleteNotification,
-    activateNotification
+    activateNotification,
+    purgeNotification
 }

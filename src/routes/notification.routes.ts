@@ -9,6 +9,7 @@ import {
     getNotificationByCaseId,
     getNotificationById,
     getNotifications,
+    purgeNotification,
     updateNotification
 } from '../controllers/notification.controller';
 import {
@@ -40,6 +41,10 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...notificationLi
 // Activate Notification - For SuperAdmin
 // Code: ESAVI-NOTIFCN-005B
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationIdValidator, validateFields, activateNotification);
+
+// Purge Notification - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFCN-005C
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationIdValidator, validateFields, purgeNotification);
 
 // Get Notification by Case
 // Code: ESAVI-NOTIFCN-006
