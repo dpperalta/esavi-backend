@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, HealthFacility, Notifier, Patient } from '../models';
+import { Classification, EsaviCase, HealthFacility, Notification, Notifier, Patient } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -414,10 +414,33 @@ const cascadeDeactivateClassification = async (caseId: string, authUser: AuthUse
     );
 }
 
+// The notification of the case joins the same cascade, on the same terms and for the same reason
+// as the classification: UQ_notification_case makes it at most one row, but the update is still a
+// mass one filtered by caseId — it takes no decision per row, and a case with no notification
+// updates zero rows and does not fail. SPEC F10 adds this third satellite to the mechanism
+const cascadeDeactivateNotification = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CASE-005A',
+        detail: 'Notification deactivated by cascade from its ESAVI Case'
+    };
+    await Notification.update(
+        {
+            isActive: false,
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        { where: { caseId, isActive: true }, transaction }
+    );
+}
+
 // Setting ESAVI Case Active/Inactive Service
 // Code: ESAVI-CASE-005A / ESAVI-CASE-005B
-// 005A also deactivates every active notifier of the case and its active classification; 005B
-// reactivates none of them. The
+// 005A also deactivates every active notifier of the case, its active classification and its
+// active notification; 005B reactivates none of them. The
 // asymmetry is deliberate: reactivating in cascade would resurrect notifiers somebody retired
 // on purpose before touching the case, and that information cannot be recovered afterwards
 const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
@@ -448,6 +471,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
         if( !isActive ) {
             await cascadeDeactivateNotifiers(id, authUser, transaction);
             await cascadeDeactivateClassification(id, authUser, transaction);
+            await cascadeDeactivateNotification(id, authUser, transaction);
         }
 
         await transaction.commit();
