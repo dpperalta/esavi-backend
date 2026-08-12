@@ -8,6 +8,7 @@ import {
     getNotificationByCaseIdService,
     getNotificationByIdService,
     getNotificationsService,
+    setNotificationActivationService,
     updateNotificationService
 } from '../services/notification.service';
 
@@ -159,11 +160,53 @@ const updateNotification = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Delete Notification Controller - Soft delete
+// Code: ESAVI-NOTIFCN-005A
+const deleteNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notification.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFCN-005A: Error deleting Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notification.deletedFailed', req.lang), 500, 'NOTIFCN_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Notification Controller - For SuperAdmin
+// Code: ESAVI-NOTIFCN-005B
+const activateNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notification.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFCN-005B: Error activating Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notification.activatedFailed', req.lang), 500, 'NOTIFCN_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createNotification,
     getNotifications,
     getAllNotifications,
     getNotificationById,
     getNotificationByCaseId,
-    updateNotification
+    updateNotification,
+    deleteNotification,
+    activateNotification
 }

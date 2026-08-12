@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateNotification,
     createNotification,
+    deleteNotification,
     getAllNotifications,
     getNotificationByCaseId,
     getNotificationById,
@@ -17,7 +19,7 @@ import {
     updateNotificationValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -35,6 +37,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...notificationListVali
 // Code: ESAVI-NOTIFCN-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...notificationListValidator, validateFields, getAllNotifications);
 
+// Activate Notification - For SuperAdmin
+// Code: ESAVI-NOTIFCN-005B
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationIdValidator, validateFields, activateNotification);
+
 // Get Notification by Case
 // Code: ESAVI-NOTIFCN-006
 // The real query of the domain, and the only non-canonical operation of the entity. Declared
@@ -50,5 +56,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationIdVal
 // Code: ESAVI-NOTIFCN-004
 // USER for the same reason as 001: correcting the notification is part of the same clinical flow
 router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationIdValidator, ...updateNotificationValidator, validateFields, updateNotification);
+
+// Soft delete Notification
+// Code: ESAVI-NOTIFCN-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationIdValidator, validateFields, deleteNotification);
 
 export default router;

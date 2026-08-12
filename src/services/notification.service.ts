@@ -1,8 +1,10 @@
 import { WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 // Code of the catalogType that groups the outcomes. Without this check any active catalogItem of
 // the system would enter as an outcome and the death rule would never fire for the right one.
@@ -394,11 +396,52 @@ const updateNotificationService = async (
     return updatedNotification ? toNotificationResponse(updatedNotification) : null;
 }
 
+// Setting Notification Active/Inactive Service
+// Code: ESAVI-NOTIFCN-005A / ESAVI-NOTIFCN-005B
+// Reactivating does NOT require the case to be active, for the same reason as in notifier and
+// classification: the cascade only goes down, and whoever reactivates is SUPERADMIN. There can be
+// no conflict with UQ_notification_case either, because the caseId was never released — step 2 of
+// 001 prevents a second notification from waiting for the slot
+const setNotificationActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // The where filters by the primary key only: the generic service is the one that tells
+        // 'does not exist' (404) from 'already in that state' (409)
+        await setEntityActiveStatusService({
+            model: Notification,
+            where: { notificationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('notification.notFound', lang),
+            notFoundCode: `NOTIFCN_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`notification.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `NOTIFCN_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-NOTIFCN-${ op }`,
+                detail: `Notification ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationService,
     getNotificationsService,
     getAllNotificationsService,
     getNotificationByIdService,
     getNotificationByCaseIdService,
-    updateNotificationService
+    updateNotificationService,
+    setNotificationActivationService
 }
