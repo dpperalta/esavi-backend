@@ -297,10 +297,108 @@ const getNotificationByCaseIdService = async (caseId: string, lang: string, canV
     return toNotificationResponse(notification);
 }
 
+// The code of an outcome already stored in the row, read without the active and catalog filters
+// that resolveOutcomeCode applies. It is only needed to evaluate the death rule over the
+// resulting state when the PUT does not touch outcomeItemId: answering 404 there would block
+// correcting a notification whose outcome item was deactivated after the fact, which is not
+// something the client did wrong
+const readStoredOutcomeCode = async (outcomeItemId: string): Promise<string | null> => {
+    const outcomeItem = await CatalogItem.findByPk(outcomeItemId, { attributes: ['code'] });
+    return outcomeItem?.code ?? null;
+}
+
+// The three death fields and the outcome of the resulting state: what is stored merged with what
+// arrives. A key absent from the body keeps its stored value; a key that arrives null erases it,
+// which is how a PUT that moves the outcome away from DEATH clears them in the same request
+const mergeDeathState = (
+    notification: Notification,
+    data: Partial<CreateNotificationInput>
+): Partial<CreateNotificationInput> => {
+    const merged: Record<string, unknown> = {};
+    for( const field of DEATH_FIELDS ) {
+        merged[field] = data[field] !== undefined ? ( data[field] ?? null ) : notification.getDataValue(field);
+    }
+    return merged as Partial<CreateNotificationInput>;
+}
+
+// Update Notification Service
+// Code: ESAVI-NOTIFCN-004
+// caseId and notificationType are ignored whether or not they arrive in the body. A notification
+// is not moved between cases — the UNIQUE of the destination would block it anyway, and the
+// origin would be left unnotified without anything recording it — and the type governs which
+// satellite table the notification belongs to: changing it today, with none of the eight
+// implemented, would leave orphan rows behind when they arrive
+const updateNotificationService = async (
+    id: string,
+    data: Partial<CreateNotificationInput>,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const notification = await Notification.findByPk(id);
+    if( !notification ) {
+        throw new AppError(getMessage('notification.notFound', lang), 404, 'NOTIFCN_004_NOT_FOUND');
+    }
+
+    // The death rule is evaluated over the resulting state and not over the body: otherwise a PUT
+    // moving the outcome from DEATH to RECOVERED without touching deathDate would leave the date
+    // orphaned under an outcome that contradicts it. The validator cannot do this — it does not
+    // see the row — so the same check is applied here instead
+    const outcomeArrived = data.outcomeItemId !== undefined;
+    const resultingOutcomeItemId = outcomeArrived ? ( data.outcomeItemId ?? null ) : notification.outcomeItemId;
+
+    let outcomeCode: string | null = null;
+    if( resultingOutcomeItemId ) {
+        outcomeCode = outcomeArrived
+            ? await resolveOutcomeCode(resultingOutcomeItemId, '004', lang)
+            : await readStoredOutcomeCode(resultingOutcomeItemId);
+    }
+    assertDeathRule(mergeDeathState(notification, data), outcomeCode, '004', lang);
+
+    // A key absent from the body keeps its stored value. requestInvestigation never becomes null:
+    // the validator rejects it, and an absent key leaves the stored boolean where it is
+    const objectToUpdate: Record<string, unknown> = {};
+
+    if( data.esaviDescription !== undefined ) objectToUpdate.esaviDescription = data.esaviDescription.trim();
+    if( data.hasRelevantMedicalHistory !== undefined ) objectToUpdate.hasRelevantMedicalHistory = data.hasRelevantMedicalHistory ?? null;
+    if( data.takesMedication !== undefined ) objectToUpdate.takesMedication = data.takesMedication ?? null;
+    if( outcomeArrived ) objectToUpdate.outcomeItemId = resultingOutcomeItemId;
+    if( data.requestInvestigation !== undefined ) objectToUpdate.requestInvestigation = data.requestInvestigation;
+    // Written as a plain YYYY-MM-DD string, which is what a DATEONLY column reads back as
+    if( data.deathDate !== undefined ) objectToUpdate.deathDate = data.deathDate ? String(data.deathDate).slice(0, 10) : null;
+    if( data.autopsyRequested !== undefined ) objectToUpdate.autopsyRequested = data.autopsyRequested ?? null;
+    if( data.verbalAutopsyPerformed !== undefined ) objectToUpdate.verbalAutopsyPerformed = data.verbalAutopsyPerformed ?? null;
+    if( data.notes !== undefined ) objectToUpdate.notes = data.notes ? data.notes.trim() : null;
+    if( data.isActive !== undefined ) objectToUpdate.isActive = data.isActive;
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the
+    // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(notification.appDetails) ? notification.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-NOTIFCN-004',
+        detail: 'Notification updated by service'
+    };
+    await notification.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updatedNotification = await findNotificationWithRelations(id, true);
+    return updatedNotification ? toNotificationResponse(updatedNotification) : null;
+}
+
 export {
     createNotificationService,
     getNotificationsService,
     getAllNotificationsService,
     getNotificationByIdService,
-    getNotificationByCaseIdService
+    getNotificationByCaseIdService,
+    updateNotificationService
 }

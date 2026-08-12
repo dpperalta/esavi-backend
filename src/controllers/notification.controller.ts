@@ -7,7 +7,8 @@ import {
     getAllNotificationsService,
     getNotificationByCaseIdService,
     getNotificationByIdService,
-    getNotificationsService
+    getNotificationsService,
+    updateNotificationService
 } from '../services/notification.service';
 
 // The four query filters of 002A and 002B. Only what actually arrives travels to the service, so
@@ -137,10 +138,32 @@ const getNotificationByCaseId = async (req: Request, res: Response, next: NextFu
     }
 }
 
+// Update Notification Controller
+// Code: ESAVI-NOTIFCN-004
+const updateNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateNotificationService(id.toString().trim(), req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notification.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFCN-004: Error updating Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notification.updatedFailed', req.lang), 500, 'NOTIFCN_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createNotification,
     getNotifications,
     getAllNotifications,
     getNotificationById,
-    getNotificationByCaseId
+    getNotificationByCaseId,
+    updateNotification
 }

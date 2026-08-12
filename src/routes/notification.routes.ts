@@ -6,13 +6,15 @@ import {
     getAllNotifications,
     getNotificationByCaseId,
     getNotificationById,
-    getNotifications
+    getNotifications,
+    updateNotification
 } from '../controllers/notification.controller';
 import {
     createNotificationValidator,
     notificationCaseIdValidator,
     notificationIdValidator,
-    notificationListValidator
+    notificationListValidator,
+    updateNotificationValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -43,5 +45,10 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...notifica
 // Code: ESAVI-NOTIFCN-003
 // Declared after the literal paths so Express does not capture 'admin' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationIdValidator, validateFields, getNotificationById);
+
+// Update Notification
+// Code: ESAVI-NOTIFCN-004
+// USER for the same reason as 001: correcting the notification is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationIdValidator, ...updateNotificationValidator, validateFields, updateNotification);
 
 export default router;
