@@ -5,6 +5,7 @@ import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHe
 import { AppDetails, AuthUser, CreatePatientInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
 
 // Code of the catalogType that groups the valid sex values. Unlike healthFacility, there is
 // no TRG_patient_validateCatalogs trigger in esaviapp.sql: without this check any active
@@ -307,6 +308,21 @@ const updatePatientService = async (id: string, data: Partial<CreatePatientInput
                     newEntry
                 ]
             }, { transaction });
+
+            // classification.age is derived from this birthDate, so correcting it leaves the stored
+            // age of every classification of this patient contradicting its own origin unless they
+            // are recalculated here. The differential is the trigger: the key only survives it when
+            // the resulting value really differs from the stored one, so a PUT that just corrects
+            // the phone number does not walk the patient's cases at all.
+            //
+            // It runs AFTER the write and inside the same transaction, so the recalculation reads
+            // the new birthDate without it having to be passed in. If it throws — a 409 for a birth
+            // after the event of one of the cases, a 404 for a missing ageUnit item — the rollback
+            // undoes this write and every classification already recalculated in this loop, so the
+            // patient keeps its previous birthDate and no classification is left half updated
+            if( 'birthDate' in objectToUpdate ) {
+                await recalculateClassificationAgesService({ patientId: id }, 'ESAVI-PATIENT-004', authUser, lang, transaction);
+            }
         }
 
         await transaction.commit();
