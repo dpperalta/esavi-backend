@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -357,21 +357,37 @@ const updateNotificationService = async (
     }
     assertDeathRule(mergeDeathState(notification, data), outcomeCode, '004', lang);
 
-    // A key absent from the body keeps its stored value. requestInvestigation never becomes null:
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending
+    // whole the record just read with a GET is the normal use of a form, and writing it back
+    // would fill appDetails with entries that record no change and hide the real ones among them.
+    // A key absent from the body is undefined and is discarded; a key that arrives null is a
+    // value, which is what keeps the tri-state alive. requestInvestigation never becomes null:
     // the validator rejects it, and an absent key leaves the stored boolean where it is
-    const objectToUpdate: Record<string, unknown> = {};
+    const stored = notification.get({ plain: true }) as Record<string, unknown>;
 
-    if( data.esaviDescription !== undefined ) objectToUpdate.esaviDescription = data.esaviDescription.trim();
-    if( data.hasRelevantMedicalHistory !== undefined ) objectToUpdate.hasRelevantMedicalHistory = data.hasRelevantMedicalHistory ?? null;
-    if( data.takesMedication !== undefined ) objectToUpdate.takesMedication = data.takesMedication ?? null;
-    if( outcomeArrived ) objectToUpdate.outcomeItemId = resultingOutcomeItemId;
-    if( data.requestInvestigation !== undefined ) objectToUpdate.requestInvestigation = data.requestInvestigation;
-    // Written as a plain YYYY-MM-DD string, which is what a DATEONLY column reads back as
-    if( data.deathDate !== undefined ) objectToUpdate.deathDate = data.deathDate ? String(data.deathDate).slice(0, 10) : null;
-    if( data.autopsyRequested !== undefined ) objectToUpdate.autopsyRequested = data.autopsyRequested ?? null;
-    if( data.verbalAutopsyPerformed !== undefined ) objectToUpdate.verbalAutopsyPerformed = data.verbalAutopsyPerformed ?? null;
-    if( data.notes !== undefined ) objectToUpdate.notes = data.notes ? data.notes.trim() : null;
-    if( data.isActive !== undefined ) objectToUpdate.isActive = data.isActive;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        esaviDescription: data.esaviDescription !== undefined ? data.esaviDescription.trim() : undefined,
+        hasRelevantMedicalHistory: data.hasRelevantMedicalHistory !== undefined
+            ? ( data.hasRelevantMedicalHistory ?? null ) : undefined,
+        takesMedication: data.takesMedication !== undefined ? ( data.takesMedication ?? null ) : undefined,
+        outcomeItemId: outcomeArrived ? resultingOutcomeItemId : undefined,
+        requestInvestigation: data.requestInvestigation,
+        // Written as a plain YYYY-MM-DD string, which is what a DATEONLY column reads back as
+        deathDate: data.deathDate !== undefined
+            ? ( data.deathDate ? String(data.deathDate).slice(0, 10) : null ) : undefined,
+        autopsyRequested: data.autopsyRequested !== undefined ? ( data.autopsyRequested ?? null ) : undefined,
+        verbalAutopsyPerformed: data.verbalAutopsyPerformed !== undefined
+            ? ( data.verbalAutopsyPerformed ?? null ) : undefined,
+        notes: data.notes !== undefined ? ( data.notes ? data.notes.trim() : null ) : undefined,
+        isActive: data.isActive
+    });
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_notification_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findNotificationWithRelations(id, true);
+        return unchanged ? toNotificationResponse(unchanged) : null;
+    }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
     // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { Classification, EsaviCase, HealthFacility, Notifier, Patient } from '../../src/models';
+import { Classification, EsaviCase, HealthFacility, Notification, Notifier, Patient } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -748,6 +748,74 @@ describe('esaviCase contract', () => {
 
             expect(detail.body.data).not.toHaveProperty('classification');
             expect(list.body.data.rows[0]).not.toHaveProperty('classification');
+        });
+
+    });
+
+    /**
+     * SPEC F10 adds the notification as the third satellite of the same cascade,
+     * at the same point and inside the same transaction. The asymmetry is unchanged:
+     * 005B reactivates nothing.
+     */
+    describe('005A — the cascade over notification', () => {
+
+        const createNotification = async ( caseId: string ): Promise<string> => {
+            const response = await request(app)
+                .post('/api/notifications')
+                .set(authHeader('USER'))
+                .send({ caseId, notificationType: 'NON_SEVERE', esaviDescription: 'Fiebre tras la dosis' });
+            return response.body.data.notificationId;
+        };
+
+        it('drags the active notification of the case, sealing deletedAt', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notificationId = await createNotification(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const notification = await Notification.findByPk(notificationId);
+            expect(notification?.getDataValue('isActive')).toBe(false);
+            expect(notification?.getDataValue('deletedAt')).not.toBeNull();
+            // The method is the code of the operation that deactivated it, not 005A of notification
+            const appDetails = notification?.getDataValue('appDetails') as { method: string }[];
+            expect(appDetails.map(entry => entry.method)).toEqual([
+                'ESAVI-NOTIFCN-001', 'ESAVI-CASE-005A'
+            ]);
+        });
+
+        it('brings the notification back on no account when the case is reactivated', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notificationId = await createNotification(caseId);
+            await deleteCase(caseId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const notification = await Notification.findByPk(notificationId);
+            expect(notification?.getDataValue('isActive')).toBe(false);
+            expect(notification?.getDataValue('deletedAt')).not.toBeNull();
+        });
+
+        it('leaves a notification retired beforehand with its own deletedAt and no new entry', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const notificationId = await createNotification(caseId);
+            await request(app).delete(`/api/notifications/${ notificationId }`).set(authHeader('ADMIN'));
+
+            const before = await Notification.findByPk(notificationId);
+            const ownDeletedAt = before?.getDataValue('deletedAt') as Date;
+            const entriesBefore = ( before?.getDataValue('appDetails') as unknown[] ).length;
+
+            // A second apart, so a deletedAt rewritten by the cascade would show
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            await deleteCase(caseId);
+
+            const after = await Notification.findByPk(notificationId);
+            expect(( after?.getDataValue('deletedAt') as Date ).getTime()).toBe(ownDeletedAt.getTime());
+            expect(after?.getDataValue('appDetails') as unknown[]).toHaveLength(entriesBefore);
         });
 
     });

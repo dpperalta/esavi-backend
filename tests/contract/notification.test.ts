@@ -4,6 +4,7 @@ import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -630,15 +631,28 @@ describe('notification contract', () => {
             expect(response.body.data.requestInvestigation).toBe(true);
         });
 
-        it('records an audit entry and a new updatedAt even when the PUT changes nothing', async () => {
-            const { id } = await notifyNewCase();
+        it('writes nothing when the PUT carries no change', async () => {
+            const { id } = await notifyNewCase({ notes: 'Sin novedad' });
             const before = await getNotification(id);
 
-            const response = await updateNotification(id, {});
+            const empty = await updateNotification(id, {});
+            const identical = await updateNotification(id, { notes: 'Sin novedad', requestInvestigation: false });
 
-            expect(response.status).toBe(200);
+            expect(empty.status).toBe(200);
+            expect(identical.status).toBe(200);
+            expect(identical.body.data.appDetails).toHaveLength(1);
+            expect(identical.body.data.appDetails[0].method).toBe('ESAVI-NOTIFCN-001');
+            expect(identical.body.data.updatedAt).toBe(before.body.data.updatedAt);
+        });
+
+        it('writes only the field that actually changed', async () => {
+            const { id } = await notifyNewCase({ notes: 'First' });
+            const before = await getNotification(id);
+
+            const response = await updateNotification(id, { esaviDescription: 'Fever after the dose', notes: 'Second' });
+
+            expect(response.body.data.notes).toBe('Second');
             expect(response.body.data.appDetails).toHaveLength(2);
-            expect(response.body.data.appDetails[0].method).toBe('ESAVI-NOTIFCN-001');
             expect(response.body.data.updatedAt).not.toBe(before.body.data.updatedAt);
         });
 
@@ -872,6 +886,35 @@ describe('notification contract', () => {
             expect(after).not.toBeNull();
             expect(after!.getDataValue('caseCode')).toBe(before!.getDataValue('caseCode'));
             expect(after!.getDataValue('isActive')).toBe(true);
+        });
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const caseId = await createCaseFixture();
+            const created = await createNotification({
+                caseId,
+                notificationType: 'SEVERE',
+                hasRelevantMedicalHistory: 'YES',
+                takesMedication: 'NO_ANSWER',
+                outcomeItemId: deathItemId,
+                deathDate: '2024-05-05',
+                autopsyRequested: true,
+                requestInvestigation: true,
+                notes: 'Sin novedad'
+            });
+            expect(created.status).toBe(201);
+
+            // Nothing is stripped: the response carries the resolved `outcome` object instead of
+            // outcomeItemId, so resending it verbatim leaves the outcome untouched and the death
+            // rule reads the stored one
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/notifications',
+                id: created.body.data.notificationId,
+                model: Notification
+            });
         });
 
     });
