@@ -1,8 +1,14 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createSevereNotification } from '../controllers/severeNotification.controller';
-import { createSevereNotificationValidator } from '../validators';
+import {
+    createSevereNotification,
+    getSevereNotificationById
+} from '../controllers/severeNotification.controller';
+import {
+    createSevereNotificationValidator,
+    severeNotificationIdValidator
+} from '../validators';
 
 const { USER } = ROLES;
 
@@ -14,5 +20,11 @@ const router = Router();
 // F10 already fixed: the clinical detail is captured in the same operational flow as the
 // notification, and splitting it across two roles would break the form in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createSevereNotificationValidator, validateFields, createSevereNotification);
+
+// Get Severe Notification by ID
+// Code: ESAVI-SEVNOT-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the notificationId: this entity has no identifier of its own
+router.get('/:id', tokenValidation, validateUserRole(USER), ...severeNotificationIdValidator, validateFields, getSevereNotificationById);
 
 export default router;

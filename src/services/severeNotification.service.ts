@@ -178,6 +178,23 @@ const createSevereNotificationService = async (
     return created ? toSevereNotificationResponse(created) : null;
 }
 
+// Get Severe Notification By ID Service
+// Code: ESAVI-SEVNOT-003
+// Two filters, and the second one is the inherited visibility: the row must exist, and its
+// header must be active unless canViewInactive says otherwise — today SUPERADMIN. Both failures
+// answer the same 404 without distinguishing, because telling them apart would confirm to a USER
+// that a detail exists under a notification it is not allowed to see.
+// The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
+// header, which is what makes it possible to consult it before purging it
+const getSevereNotificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const severeNotification = await findSevereNotificationWithRelations(id, canViewInactive);
+    if( !severeNotification ) {
+        throw new AppError(getMessage('severeNotification.notFound', lang), 404, 'SEVNOT_003_NOT_FOUND');
+    }
+    return toSevereNotificationResponse(severeNotification);
+}
+
 export {
-    createSevereNotificationService
+    createSevereNotificationService,
+    getSevereNotificationByIdService
 }
