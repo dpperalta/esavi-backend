@@ -1,6 +1,6 @@
 # SPEC F10 — CRUD completo de notification
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F06 (`esaviCase` — dependencia dura: `caseId` es `NOT NULL`)**, SPEC F07 (mecanismo de cascada de `ESAVI-CASE-005A`, al que esta entidad se suma), SPEC F08 (operación `005C` de borrado físico)
 > **Fecha:** 2026-08-10
 > **Objetivo:** Dar de alta la entidad `notification` —solo la tabla raíz, sin ninguna de sus ocho satélites— con sus siete artefactos, sus siete operaciones canónicas más el acceso por caso y el borrado físico, introduciendo el primer uso de tipos ENUM de Postgres en el repositorio.

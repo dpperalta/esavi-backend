@@ -1,6 +1,6 @@
 # SPEC F11 — Propagación del recálculo de edad en `classification`
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F05 (`patient` — se modifica `ESAVI-PATIENT-004`)**, **SPEC F06 (`esaviCase` — se modifica `ESAVI-CASE-004`)**, **SPEC F09 (`classification` — dependencia dura: sin la entidad implementada no hay nada que recalcular)**, **[SPEC F12](./12-differential.md) (`buildDifferentialUpdate` — este spec usa la comparación del valor recalculado contra el guardado como disparador, y el F12 es quien la instala en los doce servicios; van en ese orden, no en paralelo)**
 > **Fecha:** 2026-08-11
 > **Objetivo:** Hacer que la edad guardada en `classification` deje de contradecir a su origen, recalculándola dentro de la misma transacción cuando `ESAVI-PATIENT-004` cambia `birthDate` o `ESAVI-CASE-004` cambia `eventDate`, y cerrando el tercer camino —`patientId` mutable— haciéndolo inmutable.

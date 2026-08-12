@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, GeoLevelType, GeoLocation, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Patient } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -584,6 +584,192 @@ describe('patient contract', () => {
                 id: created.body.data.patientId,
                 model: Patient
             });
+        });
+
+    });
+
+    // -----------------------------------------------------------------------
+    // SPEC F11 — correcting birthDate propagates into the age of the classifications
+    // that were derived from it. The trigger is the real change of value, not the
+    // presence of the key, and a failed recalculation rolls the whole PUT back
+    // -----------------------------------------------------------------------
+
+    describe('age recalculation — SPEC F11', () => {
+
+        let recalcCounter = 0;
+
+        // The ageUnit catalogType is a precondition of SPEC F09 and esaviapp.sql does not seed it
+        const seedAgeUnitCatalog = async (): Promise<void> => {
+            const ageUnitType = await CatalogType.findOne({ where: { code: 'ageUnit' } })
+                ?? await CatalogType.create({ code: 'ageUnit', name: 'Age Unit' });
+            const catalogTypeId = ageUnitType.getDataValue('catalogTypeId');
+            for( const code of ['YEARS', 'MONTHS', 'DAYS'] ) {
+                const item = await CatalogItem.findOne({ where: { catalogTypeId, code } });
+                if( !item ) {
+                    await CatalogItem.create({ catalogTypeId, code, name: code, value: code });
+                }
+            }
+        };
+
+        // A patient with one case per eventDate. Each case gets its own facility because
+        // localCode is UNIQUE, and the cases are minted through the model: what is under
+        // test is the patient PUT, not how the cases got there
+        const createPatientWithCases = async (
+            eventDates: string[],
+            birthDate: string = '2000-05-04'
+        ): Promise<{ patientId: string, caseIds: string[] }> => {
+            recalcCounter += 1;
+            const created = await createPatient({
+                firstName: 'edad',
+                lastName: 'recalculo',
+                documentNumber: `AGE-${ recalcCounter }-${ suffix }`,
+                birthDate
+            });
+            const patientId = created.body.data.patientId;
+
+            const caseIds: string[] = [];
+            for( const [ index, eventDate ] of eventDates.entries() ) {
+                const facility = await HealthFacility.create({
+                    localCode: `AGE${ recalcCounter }${ index }${ suffix }`,
+                    name: `Age ${ recalcCounter } ${ index } ${ suffix }`
+                });
+                const esaviCase = await EsaviCase.create({
+                    patientId,
+                    healthFacilityId: facility.getDataValue('healthFacilityId'),
+                    caseCode: `AGE-${ suffix }-${ recalcCounter }-${ index }`,
+                    reportDate: isoDate(0),
+                    eventDate
+                });
+                caseIds.push(esaviCase.getDataValue('caseId'));
+            }
+            return { patientId, caseIds };
+        };
+
+        const classify = ( caseId: string ) =>
+            request(app)
+                .post('/api/classifications')
+                .set(authHeader('USER'))
+                .send({ caseId, isSeriousEvent: false });
+
+        const readClassification = ( caseId: string ) =>
+            request(app)
+                .get(`/api/classifications/case/${ caseId }`)
+                .set(authHeader('USER'));
+
+        beforeAll(async () => {
+            await seedAgeUnitCatalog();
+        });
+
+        it('recalculates every active classification, each against the eventDate of its own case', async () => {
+            const { patientId, caseIds } = await createPatientWithCases(['2024-05-04', '2020-05-04']);
+            await classify(caseIds[0]);
+            await classify(caseIds[1]);
+
+            const corrected = await updatePatient(patientId, { birthDate: '2010-05-04' });
+            expect(corrected.status).toBe(200);
+
+            // Two cases with different eventDate get two different ages, not the same one twice
+            const first = await readClassification(caseIds[0]);
+            const second = await readClassification(caseIds[1]);
+            expect(first.body.data.age).toBe(14);
+            expect(second.body.data.age).toBe(10);
+            expect(first.body.data.ageUnit.code).toBe('YEARS');
+
+            // The audit names the operation that moved it, not ESAVI-CLASSIF-004, and the
+            // previous entries are still there
+            expect(first.body.data.appDetails).toHaveLength(2);
+            expect(first.body.data.appDetails[0].method).toBe('ESAVI-CLASSIF-001');
+            expect(first.body.data.appDetails[1].method).toBe('ESAVI-PATIENT-004');
+            expect(second.body.data.appDetails[1].method).toBe('ESAVI-PATIENT-004');
+        });
+
+        it('does not touch any classification when birthDate did not really change', async () => {
+            const { patientId, caseIds } = await createPatientWithCases(['2024-05-04']);
+            await classify(caseIds[0]);
+            const before = await readClassification(caseIds[0]);
+
+            // A PUT without birthDate walks nothing
+            const other = await updatePatient(patientId, { phoneNumber: '0991234567' });
+            expect(other.status).toBe(200);
+
+            // And a PUT with the same birthDate that was already stored does not either
+            const same = await updatePatient(patientId, { birthDate: '2000-05-04' });
+            expect(same.status).toBe(200);
+
+            const after = await readClassification(caseIds[0]);
+            expect(after.body.data.age).toBe(24);
+            expect(after.body.data.appDetails).toHaveLength(1);
+            expect(after.body.data.updatedAt).toBe(before.body.data.updatedAt);
+        });
+
+        it('leaves an inactive classification exactly as it was', async () => {
+            const { patientId, caseIds } = await createPatientWithCases(['2024-05-04']);
+            const classified = await classify(caseIds[0]);
+            const classificationId = classified.body.data.classificationId;
+            await request(app)
+                .delete(`/api/classifications/${ classificationId }`)
+                .set(authHeader('ADMIN'));
+
+            const before = await request(app)
+                .get(`/api/classifications/${ classificationId }`)
+                .set(authHeader('SUPERADMIN'));
+
+            const corrected = await updatePatient(patientId, { birthDate: '2010-05-04' });
+            expect(corrected.status).toBe(200);
+
+            const after = await request(app)
+                .get(`/api/classifications/${ classificationId }`)
+                .set(authHeader('SUPERADMIN'));
+            expect(after.body.data.age).toBe(24);
+            expect(after.body.data.ageUnit.catalogItemId).toBe(before.body.data.ageUnit.catalogItemId);
+            expect(after.body.data.updatedAt).toBe(before.body.data.updatedAt);
+            expect(after.body.data.appDetails).toHaveLength(2);
+            expect(after.body.data.appDetails[1].method).toBe('ESAVI-CLASSIF-005A');
+        });
+
+        it('rolls the whole PUT back when the birthDate would end up after the event of one case', async () => {
+            // The first case recalculates fine; the second one is the one that fails
+            const { patientId, caseIds } = await createPatientWithCases(['2024-05-04', '2005-05-04']);
+            await classify(caseIds[0]);
+            await classify(caseIds[1]);
+
+            const invalid = await updatePatient(patientId, { birthDate: '2015-05-04' });
+            expect(invalid.status).toBe(409);
+            expect(invalid.body.code).toBe('PATIENT_004_AGE_RECALC_INVALID_RANGE');
+
+            // Nothing was stored: not the patient
+            const stored = await getPatient(patientId);
+            expect(stored.body.data.birthDate).toBe('2000-05-04');
+
+            // ...and not the classification that had already been recalculated before the
+            // failing one, which is what the transaction is there for
+            const first = await readClassification(caseIds[0]);
+            const second = await readClassification(caseIds[1]);
+            expect(first.body.data.age).toBe(24);
+            expect(first.body.data.appDetails).toHaveLength(1);
+            expect(second.body.data.age).toBe(5);
+            expect(second.body.data.appDetails).toHaveLength(1);
+        });
+
+        it('keeps the stored age when birthDate is nulled, and recalculates when it comes back', async () => {
+            const { patientId, caseIds } = await createPatientWithCases(['2024-05-04']);
+            await classify(caseIds[0]);
+
+            const nulled = await updatePatient(patientId, { birthDate: null });
+            expect(nulled.status).toBe(200);
+            expect(nulled.body.data.birthDate).toBeNull();
+
+            // The age survives as the last known value: nulling it would destroy information
+            const kept = await readClassification(caseIds[0]);
+            expect(kept.body.data.age).toBe(24);
+            expect(kept.body.data.appDetails).toHaveLength(1);
+
+            const restored = await updatePatient(patientId, { birthDate: '2014-05-04' });
+            expect(restored.status).toBe(200);
+
+            const after = await readClassification(caseIds[0]);
+            expect(after.body.data.age).toBe(10);
+            expect(after.body.data.appDetails).toHaveLength(2);
         });
 
     });

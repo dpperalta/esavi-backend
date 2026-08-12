@@ -965,4 +965,68 @@ describe('classification contract', () => {
 
     });
 
+    // -----------------------------------------------------------------------
+    // SPEC F11 — the age propagated from ESAVI-CASE-004 and ESAVI-PATIENT-004 has to be
+    // the very same one the manual route of SPEC F09 produces. Two implementations of the
+    // calculation would diverge exactly at the borders where the number gets reviewed
+    // -----------------------------------------------------------------------
+
+    describe('age recalculation — SPEC F11', () => {
+
+        it('propagates the same age a PUT over the classification itself would compute', async () => {
+            // Two identical cases: same birthDate, same eventDate, same classification
+            const propagatedCaseId = await createCaseFixture({ birthDate: '2000-05-04', eventDate: '2024-05-04' });
+            const manualCaseId = await createCaseFixture({ birthDate: '2000-05-04', eventDate: '2024-05-04' });
+            const propagated = await createClassification({ caseId: propagatedCaseId });
+            const manual = await createClassification({ caseId: manualCaseId });
+            expect(propagated.body.data.age).toBe(24);
+
+            // A date deliberately near a border: the day before the birthday is one year less
+            const corrected = '2018-05-03';
+
+            // One case is corrected through its endpoint, which propagates
+            const movedByCase = await request(app)
+                .put(`/api/esavi-cases/${ propagatedCaseId }`)
+                .set(authHeader('USER'))
+                .send({ eventDate: corrected });
+            expect(movedByCase.status).toBe(200);
+
+            // The other one has its eventDate moved behind the API's back — which is the state
+            // of every classification stored before this spec — and is then fixed by hand with
+            // the route SPEC F09 left open: an empty PUT over the classification
+            await EsaviCase.update({ eventDate: corrected }, { where: { caseId: manualCaseId } });
+            const movedByHand = await updateClassification(manual.body.data.classificationId, {});
+            expect(movedByHand.status).toBe(200);
+
+            const afterPropagation = await getClassificationByCase(propagatedCaseId);
+            expect(afterPropagation.body.data.age).toBe(17);
+            expect(afterPropagation.body.data.age).toBe(movedByHand.body.data.age);
+            expect(afterPropagation.body.data.ageUnit.catalogItemId).toBe(movedByHand.body.data.ageUnit.catalogItemId);
+
+            // What does differ is who is recorded as having done it
+            expect(afterPropagation.body.data.appDetails[1].method).toBe('ESAVI-CASE-004');
+            expect(movedByHand.body.data.appDetails[1].method).toBe('ESAVI-CLASSIF-004');
+        });
+
+        it('propagates the unit too, not only the number', async () => {
+            const caseId = await createCaseFixture({ birthDate: '2024-01-01', eventDate: '2024-05-04' });
+            const created = await createClassification({ caseId });
+            expect(created.body.data.age).toBe(4);
+            expect(created.body.data.ageUnit.catalogItemId).toBe(monthsItemId);
+
+            // Four months become eleven days: the unit changes with the number
+            const moved = await request(app)
+                .put(`/api/esavi-cases/${ caseId }`)
+                .set(authHeader('USER'))
+                .send({ eventDate: '2024-01-12' });
+            expect(moved.status).toBe(200);
+
+            const after = await getClassificationByCase(caseId);
+            expect(after.body.data.age).toBe(11);
+            expect(after.body.data.ageUnit.catalogItemId).toBe(daysItemId);
+            expect(after.body.data.ageUnit.code).toBe('DAYS');
+        });
+
+    });
+
 });
