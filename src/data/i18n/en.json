@@ -367,5 +367,24 @@
         "stillActive": "The notification with ID {{id}} is still active. Deactivate it before deleting it permanently.",
         "purgeSuccess": "Notification permanently deleted",
         "purgeFailed": "Error permanently deleting the notification. Please try again later."
+    },
+    "severeNotification": {
+        "notFound": "Severe notification detail not found. Please check the notification ID and try again.",
+        "idRequired": "The notification ID is required",
+        "notificationNotFound": "The given notification does not exist or is inactive",
+        "notificationNotSevere": "The notification with ID {{notificationId}} is not of severe type, so it does not admit a severe notification detail",
+        "alreadyExists": "The notification with ID {{notificationId}} already has a severe notification detail",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "pregnancyDescriptionRequired": "There are pregnancy complications: the description of the complications is required",
+        "pregnancyDescriptionNotAllowed": "The description of the pregnancy complications is only allowed when pregnancy complications are declared",
+        "notDeleted": "The severe notification detail with ID {{id}} has not been withdrawn. Deactivate its notification before deleting it permanently.",
+        "createdSuccess": "Severe notification detail created successfully",
+        "createdFailed": "Failed to create the severe notification detail. Please try again later.",
+        "getSuccess": "Severe notification detail fetched successfully",
+        "getFailed": "Failed to fetch the severe notification detail. Please try again later.",
+        "updatedSuccess": "Severe notification detail updated successfully",
+        "updatedFailed": "Failed to update the severe notification detail. Please try again later.",
+        "purgeSuccess": "Severe notification detail permanently deleted",
+        "purgeFailed": "Error permanently deleting the severe notification detail. Please try again later."
     }
 }

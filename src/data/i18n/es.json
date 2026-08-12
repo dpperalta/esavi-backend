@@ -367,5 +367,24 @@
         "stillActive": "La notificación con ID {{id}} sigue activa. Desactívela antes de eliminarla permanentemente.",
         "purgeSuccess": "Notificación eliminada permanentemente",
         "purgeFailed": "Error al eliminar permanentemente la notificación. Por favor, inténtelo de nuevo más tarde."
+    },
+    "severeNotification": {
+        "notFound": "Detalle de notificación grave no encontrado. Por favor, verifique el ID de la notificación e inténtelo de nuevo.",
+        "idRequired": "El ID de la notificación es obligatorio",
+        "notificationNotFound": "La notificación indicada no existe o está inactiva",
+        "notificationNotSevere": "La notificación con ID {{notificationId}} no es de tipo grave, así que no admite un detalle de notificación grave",
+        "alreadyExists": "La notificación con ID {{notificationId}} ya tiene un detalle de notificación grave",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "pregnancyDescriptionRequired": "Hay complicaciones del embarazo: la descripción de las complicaciones es obligatoria",
+        "pregnancyDescriptionNotAllowed": "La descripción de las complicaciones del embarazo solo se admite cuando se declaran complicaciones del embarazo",
+        "notDeleted": "El detalle de notificación grave con ID {{id}} no ha sido retirado. Desactive su notificación antes de eliminarlo permanentemente.",
+        "createdSuccess": "Detalle de notificación grave creado exitosamente",
+        "createdFailed": "Error al crear el detalle de notificación grave. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Detalle de notificación grave obtenido exitosamente",
+        "getFailed": "Error al obtener el detalle de notificación grave. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Detalle de notificación grave actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el detalle de notificación grave. Por favor, inténtelo de nuevo más tarde.",
+        "purgeSuccess": "Detalle de notificación grave eliminado permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente el detalle de notificación grave. Por favor, inténtelo de nuevo más tarde."
     }
 }

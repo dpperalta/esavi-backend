@@ -367,5 +367,24 @@
         "stillActive": "De melding met ID {{id}} is nog actief. Deactiveer deze voordat u deze permanent verwijdert.",
         "purgeSuccess": "Melding permanent verwijderd",
         "purgeFailed": "Fout bij het permanent verwijderen van de melding. Probeer het later opnieuw."
+    },
+    "severeNotification": {
+        "notFound": "Detail van ernstige melding niet gevonden. Controleer de ID van de melding en probeer het opnieuw.",
+        "idRequired": "De ID van de melding is verplicht",
+        "notificationNotFound": "De opgegeven melding bestaat niet of is inactief",
+        "notificationNotSevere": "De melding met ID {{notificationId}} is niet van het ernstige type en staat dus geen detail van een ernstige melding toe",
+        "alreadyExists": "De melding met ID {{notificationId}} heeft al een detail van een ernstige melding",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "pregnancyDescriptionRequired": "Er zijn zwangerschapscomplicaties: de beschrijving van de complicaties is verplicht",
+        "pregnancyDescriptionNotAllowed": "De beschrijving van de zwangerschapscomplicaties is alleen toegestaan wanneer zwangerschapscomplicaties worden gemeld",
+        "notDeleted": "Het detail van de ernstige melding met ID {{id}} is niet ingetrokken. Deactiveer de bijbehorende melding voordat u het permanent verwijdert.",
+        "createdSuccess": "Detail van ernstige melding succesvol aangemaakt",
+        "createdFailed": "Aanmaken van het detail van de ernstige melding mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Detail van ernstige melding succesvol opgehaald",
+        "getFailed": "Ophalen van het detail van de ernstige melding mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Detail van ernstige melding succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van het detail van de ernstige melding mislukt. Probeer het later opnieuw.",
+        "purgeSuccess": "Detail van ernstige melding permanent verwijderd",
+        "purgeFailed": "Fout bij het permanent verwijderen van het detail van de ernstige melding. Probeer het later opnieuw."
     }
 }
