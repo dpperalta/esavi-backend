@@ -1,6 +1,8 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, Notification } from '../models';
 import { AppError, getMessage } from '../helpers';
-import { AppDetails, AuthUser, CreateNotificationInput } from '../types';
+import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Code of the catalogType that groups the outcomes. Without this check any active catalogItem of
 // the system would enter as an outcome and the death rule would never fire for the right one.
@@ -31,6 +33,26 @@ const OUTCOME_INCLUDE = {
 // sysDetails is trigger metadata and never leaves the service. The two raw foreign keys go with
 // it: the response carries the resolved case and outcome objects instead
 const DETAIL_EXCLUDE = { exclude: ['sysDetails', 'caseId', 'outcomeItemId'] };
+
+// The reduced shape of the listings drops notes and appDetails, plus the three timestamps.
+// esaviDescription does travel: it is the field that says what each notification is about, and a
+// list without it forces opening every record to find out. notes stays out because it is free
+// text with no length limit and dumping it on every row makes the response size unpredictable
+const LIST_ATTRIBUTES = [
+    'notificationId',
+    'notificationType',
+    'esaviDescription',
+    'hasRelevantMedicalHistory',
+    'takesMedication',
+    'requestInvestigation',
+    'deathDate',
+    'autopsyRequested',
+    'verbalAutopsyPerformed',
+    'isActive'
+];
+
+// Newest first, the same order as classification, notifier and esaviCase
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
 
 // The four tri-state fields are returned exactly as stored, null included: they are never
 // normalized to NO_ANSWER nor to false when building the response. A null means the form did not
@@ -185,6 +207,60 @@ const createNotificationService = async (data: CreateNotificationInput, authUser
     return createdNotification ? toNotificationResponse(createdNotification) : null;
 }
 
+// The four filters are accumulated with AND, and each one is optional and by equality. A filter
+// pointing at a row that does not exist yields an empty page, never a 404: searching for
+// something absent is an empty search, not a missing resource. requestInvestigation is compared
+// against undefined and not by truthiness, or filtering by false would silently drop the condition
+const buildListWhere = (filters: NotificationListFilters = {}): WhereOptions => {
+    const where: Record<string, unknown> = {};
+
+    if( filters.caseId ) where.caseId = filters.caseId;
+    if( filters.notificationType ) where.notificationType = filters.notificationType;
+    if( filters.requestInvestigation !== undefined ) where.requestInvestigation = filters.requestInvestigation;
+    if( filters.outcomeItemId ) where.outcomeItemId = filters.outcomeItemId;
+
+    return where as WhereOptions;
+}
+
+// Get Active Notifications Service
+// Code: ESAVI-NOTIFCN-002A
+// The where filters by the isActive of the notification, not by the one of its case: with the
+// cascade of ESAVI-CASE-005A the notification of a retired case is already inactive, so the
+// result is the same without conditioning the include with a required: true
+const getNotificationsService = async (
+    filters: NotificationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    return await Notification.findAndCountAll({
+        where: { ...buildListWhere(filters), isActive: true },
+        attributes: LIST_ATTRIBUTES,
+        include: [CASE_INCLUDE, OUTCOME_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
+// Get All Notifications Service - For Admin
+// Code: ESAVI-NOTIFCN-002B
+const getAllNotificationsService = async (
+    filters: NotificationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    return await Notification.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: LIST_ATTRIBUTES,
+        include: [CASE_INCLUDE, OUTCOME_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
 export {
-    createNotificationService
+    createNotificationService,
+    getNotificationsService,
+    getAllNotificationsService
 }

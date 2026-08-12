@@ -1,6 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { createNotificationService } from '../services/notification.service';
+import { NotificationListFilters } from '../types';
+import { NotificationType } from '../constants/notification.constants';
+import {
+    createNotificationService,
+    getAllNotificationsService,
+    getNotificationsService
+} from '../services/notification.service';
+
+// The four query filters of 002A and 002B. Only what actually arrives travels to the service, so
+// an absent filter never turns into an `undefined` in the where clause. requestInvestigation
+// comes off the query string, where everything is text: the validator already restricted it to a
+// boolean, so comparing against 'true' is enough to read it. notificationType is cast and not
+// re-checked: the validator already restricted it to the ENUM
+const listFilters = (req: Request): NotificationListFilters => ({
+    caseId: req.query.caseId as string | undefined,
+    notificationType: req.query.notificationType as NotificationType | undefined,
+    requestInvestigation: req.query.requestInvestigation !== undefined
+        ? String(req.query.requestInvestigation) === 'true' : undefined,
+    outcomeItemId: req.query.outcomeItemId as string | undefined
+});
 
 // Create Notification Controller
 // Code: ESAVI-NOTIFCN-001
@@ -22,6 +41,52 @@ const createNotification = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Get Notifications Controller
+// Code: ESAVI-NOTIFCN-002A
+const getNotifications = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getNotificationsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notification.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFCN-002A: Error fetching Notifications: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notification.getFailedPlural', req.lang), 500, 'NOTIFCN_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Notifications Controller - For Admin
+// Code: ESAVI-NOTIFCN-002B
+const getAllNotifications = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllNotificationsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notification.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFCN-002B: Error fetching Notifications: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notification.getFailedPlural', req.lang), 500, 'NOTIFCN_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createNotification
+    createNotification,
+    getNotifications,
+    getAllNotifications
 }
