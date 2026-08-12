@@ -194,7 +194,43 @@ const getSevereNotificationByIdService = async (id: string, lang: string, canVie
     return toSevereNotificationResponse(severeNotification);
 }
 
+// Get Severe Notification By Case ID Service
+// Code: ESAVI-SEVNOT-006
+// The real query of the domain: the client holds the caseId, not the notificationId. It returns
+// the record itself and not { count, rows } — the chain case -> notification -> detail is one to
+// one on both hops, and wrapping a single record in a collection would force unwrapping a
+// one-element array on every screen.
+// The three 404 are deliberately distinct, and the asymmetry with 003 is intentional: there the
+// client already holds the primary key of the detail, here it enters through a caseId and needs
+// to know which link of the chain broke
+const getSevereNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('severeNotification.caseNotFound', lang), 404, 'SEVNOT_006_CASE_NOT_FOUND');
+    }
+
+    const where = canViewInactive ? { caseId } : { caseId, isActive: true };
+    const notification = await Notification.findOne({ where, attributes: ['notificationId'] });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('severeNotification.notificationNotFound', lang),
+            404,
+            'SEVNOT_006_NOTIFICATION_NOT_FOUND'
+        );
+    }
+
+    const severeNotification = await findSevereNotificationWithRelations(notification.notificationId, canViewInactive);
+    if( !severeNotification ) {
+        throw new AppError(getMessage('severeNotification.notFound', lang), 404, 'SEVNOT_006_NOT_FOUND');
+    }
+    return toSevereNotificationResponse(severeNotification);
+}
+
 export {
     createSevereNotificationService,
-    getSevereNotificationByIdService
+    getSevereNotificationByIdService,
+    getSevereNotificationByCaseIdService
 }

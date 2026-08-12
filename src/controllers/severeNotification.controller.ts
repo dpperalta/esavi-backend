@@ -3,6 +3,7 @@ import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createSevereNotificationService,
+    getSevereNotificationByCaseIdService,
     getSevereNotificationByIdService
 } from '../services/severeNotification.service';
 
@@ -51,7 +52,33 @@ const getSevereNotificationById = async (req: Request, res: Response, next: Next
     }
 }
 
+// Get Severe Notification By Case ID Controller
+// Code: ESAVI-SEVNOT-006
+const getSevereNotificationByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getSevereNotificationByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('severeNotification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SEVNOT-006: Error fetching Severe Notification by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('severeNotification.getFailed', req.lang), 500, 'SEVNOT_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createSevereNotification,
-    getSevereNotificationById
+    getSevereNotificationById,
+    getSevereNotificationByCaseId
 }

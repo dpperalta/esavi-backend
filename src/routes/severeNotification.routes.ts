@@ -3,10 +3,12 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createSevereNotification,
+    getSevereNotificationByCaseId,
     getSevereNotificationById
 } from '../controllers/severeNotification.controller';
 import {
     createSevereNotificationValidator,
+    severeNotificationCaseIdValidator,
     severeNotificationIdValidator
 } from '../validators';
 
@@ -20,6 +22,12 @@ const router = Router();
 // F10 already fixed: the clinical detail is captured in the same operational flow as the
 // notification, and splitting it across two roles would break the form in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createSevereNotificationValidator, validateFields, createSevereNotification);
+
+// Get Severe Notification by Case
+// Code: ESAVI-SEVNOT-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared
+// before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...severeNotificationCaseIdValidator, validateFields, getSevereNotificationByCaseId);
 
 // Get Severe Notification by ID
 // Code: ESAVI-SEVNOT-003
