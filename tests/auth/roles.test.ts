@@ -170,7 +170,20 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/notifications/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFCN-004' },
     { method: 'delete', path: `/api/notifications/${ UUID }`,            minRole: 'ADMIN',      code: 'ESAVI-NOTIFCN-005A' },
     { method: 'patch',  path: `/api/notifications/activate/${ UUID }`,   minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFCN-005B' },
-    { method: 'delete', path: `/api/notifications/purge/${ UUID }`,      minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFCN-005C' }
+    { method: 'delete', path: `/api/notifications/purge/${ UUID }`,      minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFCN-005C' },
+
+    // severeNotification — five operations and not seven, and the first entity of the repository
+    // with none in ADMIN (SPEC F13 §3.4). The table has no isActive column, so the entity does not
+    // manage its own state — its header does — and there is no 005A or 005B to expose: retiring
+    // the detail is retiring the notification. There is no 002 either, in any variant: without
+    // isActive the two halves of the dual listing would return exactly the same rows. 001, 003,
+    // 004 and 006 stay in USER for the same reason as the notification itself, the clinical detail
+    // being captured in the same operational flow, and 005C stays in SUPERADMIN as §6 requires
+    { method: 'post',   path: '/api/severe-notifications',                    minRole: 'USER',       code: 'ESAVI-SEVNOT-001' },
+    { method: 'get',    path: `/api/severe-notifications/case/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-SEVNOT-006' },
+    { method: 'delete', path: `/api/severe-notifications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-SEVNOT-005C' },
+    { method: 'get',    path: `/api/severe-notifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-SEVNOT-003' },
+    { method: 'put',    path: `/api/severe-notifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-SEVNOT-004' }
 ];
 
 /**
@@ -226,7 +239,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(108);
+            expect(ROUTE_RULES).toHaveLength(113);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
