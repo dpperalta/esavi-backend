@@ -2,7 +2,8 @@ import { DataTypes, Model, InferAttributes, InferCreationAttributes, CreationOpt
 import { sequelize } from '../database/connection';
 import { EsaviCase } from './esaviCase.model';
 import { CatalogItem } from './catalogItem.model';
-import { NOTIFICATION_TYPES, ANSWER_OPTIONS, NotificationType, AnswerOption } from '../constants/notification.constants';
+import { NOTIFICATION_TYPES, NotificationType } from '../constants/notification.constants';
+import { ANSWER_OPTIONS, AnswerOption } from '../constants/enums.constants';
 import { AppDetails } from '../types';
 
 export class Notification extends Model<InferAttributes<Notification>, InferCreationAttributes<Notification>> {

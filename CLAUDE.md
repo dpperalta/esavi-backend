@@ -19,6 +19,8 @@ Las implementaciones se planifican antes de escribirse. Hay dos series de specs,
 
 Usa `/esavi-spec <tabla>` para redactar el spec de una entidad nueva; el skill vive en `.claude/skills/esavi-spec/`.
 
+**Todo spec que escriba sobre una fila existente declara su contrato de update diferencial.** La escritura la dispara el **cambio real del valor**, nunca la presencia de la clave en el body: sin diferencias no hay `UPDATE`, ni `updatedAt`, ni entrada en `appDetails`, ni evento en `sysDetails`. La norma es `references/CONVENTIONS.md` §11 y el helper obligatorio es `buildDifferentialUpdate`. En el spec eso son dos piezas concretas: la tabla de `candidates` campo por campo en §3.5 y el bloque de criterios de aceptación de §5, ambas descritas en `.claude/skills/esavi-spec/template.md`. Las escrituras que **no** son diferenciales —activaciones, traslados, asignaciones masivas— se declaran una a una con su razón.
+
 ## Idioma
 
 Responde **siempre en español** en este repositorio. Esto aplica a explicaciones, resúmenes, planes y mensajes de commit. El código, los nombres de identificadores y los comentarios en el código siguen la convención existente del repositorio (inglés).

@@ -152,6 +152,38 @@ Unicidad de `code` excluyendo el propio id con `{ [Op.ne]: id }` → 409
 
 Recuerda el criterio de status de §10: **409 para todo duplicado**, en create y en update por igual; 404 para "no existe" y para FK inexistente; 403 lo resuelve el middleware de rol, no el servicio.
 
+#### Contrato de update diferencial — obligatorio en toda operación que escribe sobre una fila existente
+
+**Ningún spec se da por terminado si su `004` —o cualquier otra operación que modifique una fila ya guardada— no declara esta tabla.** La norma es §11 de `references/CONVENTIONS.md`, y la fijó el [SPEC F12](../../../references/functional/specs/12-differential.md): un `PUT` no es «guarda lo que te mando», es «deja el registro en este estado». **Lo que decide si se escribe es que el valor cambie, no que la clave venga en el body.** Sin diferencias no hay `UPDATE`, ni `updatedAt`, ni entrada en `appDetails`, ni evento en `sysDetails`; se responde 200 con el registro tal como está.
+
+El spec no describe el algoritmo —vive en `buildDifferentialUpdate` (`src/helpers/differentialUpdate.helper.ts`) y es de uso obligatorio—. Lo que el spec sí tiene que declarar es **qué entra en `candidates` y en qué forma**, campo por campo:
+
+```markdown
+**`ESAVI-DIAGTERM-004` — actualizar.** Existencia → 404 `DIAGTERM_004_NOT_FOUND`.
+Unicidad de `code` excluyendo el propio id → 409 `DIAGTERM_004_CODE_EXISTS`, **antes** del diff.
+`stored` sale de `term.get({ plain: true })` — la fila completa, sin `attributes` acotados.
+Diff con `buildDifferentialUpdate`; si vuelve vacío se devuelve la fila sin escribir.
+
+| Campo | Cómo entra en `candidates` | Nota |
+|---|---|---|
+| `code` | `data.code ? toConstantCase(data.code.trim()) : undefined` | normalizado antes de comparar |
+| `name` | `data.name ? toTitleCase(data.name.trim()) : undefined` | |
+| `description` | `data.description !== undefined ? (data.description ?? null) : undefined` | anulable: `null` es un valor, `undefined` es «no vino» |
+| `email` | texto plano normalizado; `stored.email` llega con `esaviDecrypt` | cifrado: `esaviCrypt` se aplica **después** del diff |
+| `displayName` | **siempre**, recompuesto desde el resultado | derivado: no va bajo un `if` de presencia |
+```
+
+Cuatro puntos que el spec debe resolver explícitamente, porque son los que se olvidan:
+
+- **Anulables.** `data.x !== undefined ? (data.x ?? null) : undefined`, nunca `if( data.x )`: eso descarta en silencio `false`, `0` y la cadena vacía, y deja el campo sin forma de vaciarse.
+- **Cifrados.** Se comparan sobre texto plano — `stored` descifrado, `esaviCrypt` después del diff. Comparar ciphertext funciona solo mientras el IV sea fijo, y ese acoplamiento se rompe en silencio.
+- **Derivados.** Toda edad, `displayName` o `isSeriousEvent` recalculado entra en `candidates` **siempre**; es el helper quien decide si difiere. Un derivado cuenta como cambio aunque el cliente no haya mandado nada.
+- **Unicidad y FK van antes del diff y son independientes de él.** Una FK que apunta a una fila inactiva es 404 aunque coincida con la guardada; un `code` ocupado es 409 aunque el resto del body no cambie nada.
+
+**Si la operación no es un update diferencial, dilo y razónalo.** Las activaciones `005A`/`005B`, un traslado, una asignación masiva o una reactivación son **escrituras con intención propia**: registran un hecho aunque ningún campo de datos cambie, y por eso no pasan por el helper. Un spec que las incluya declara cuáles son y por qué quedan fuera. El silencio no vale: es indistinguible del olvido.
+
+**Efectos laterales sobre otras tablas: mismo criterio.** Si el spec propaga algo a otra entidad —un recálculo, una cascada—, el disparador es **la comparación del valor resultante contra el guardado**, no la presencia de la clave en el body, y la fila destino solo se escribe si su valor cambia de verdad. Es lo que hace el [SPEC F11](../../../references/functional/specs/11-age-recalculation.md) con la edad de `classification`, y lo que evita que un `PUT` que solo toca el teléfono recorra todos los casos del paciente.
+
 ### 3.6 Claves i18n nuevas
 
 Tabla de claves con su uso. Van en los **tres** archivos: `src/data/i18n/es.json`, `en.json` y `nl.json`.
@@ -215,6 +247,25 @@ Checklist booleano. Cada ítem se verifica con sí o no. Prefiere comandos ejecu
 - [ ] `grep -rn "ESAVI-DIAGTERM-002[^AB]" src/` no devuelve resultados.
 - [ ] Las claves nuevas existen en es, en y nl; `npm run i18n:check` sale en 0.
 - [ ] `npm run check` sale en 0.
+```
+
+**Bloque obligatorio de update diferencial.** Todo spec con una operación que escribe sobre una fila existente incluye estos cinco ítems, literalmente. No son opcionales ni se resumen en uno:
+
+```markdown
+- [ ] Un `PUT` que reenvía íntegra la respuesta de su `GET` responde **200** sin escribir nada:
+      `appDetails` no crece, `sysDetails.version` no avanza y `updatedAt` no se mueve.
+- [ ] Un `PUT` con body vacío `{}` se comporta igual que el anterior.
+- [ ] Un `PUT` que cambia **un solo** campo añade **una** entrada a `appDetails` y avanza `sysDetails.version` en 1.
+- [ ] El servicio usa `buildDifferentialUpdate`; `grep -n "delete objectToUpdate" src/services/<entidad>.service.ts` no devuelve resultados.
+- [ ] Un `PUT` con una FK inactiva responde **404**, y con un `code` ya ocupado **409**, aunque el resto del body no cambie nada.
+```
+
+El primero es el que de verdad discrimina, y por eso reenvía la respuesta del `GET` en vez de un body vacío: el body vacío no distingue «no comparo valores» de «no escribo». Un servicio que solo mira presencia de claves lo pasaría con solo cortar por `Object.keys(data).length === 0`.
+
+Si el spec tiene campos cifrados, añade además:
+
+```markdown
+- [ ] Un `PUT` que reenvía el `firstName` guardado deja la columna cifrada idéntica byte a byte.
 ```
 
 `npm run check` encadena `build`, `lint`, `i18n:check` y `test`. Es el criterio de cierre de todo spec.
@@ -290,6 +341,7 @@ La frase de cierre es literal y va en todos los specs del repositorio.
 
 ## Reglas globales del documento
 
+- **El update es diferencial, siempre.** Ningún spec propone escribir por presencia de clave en el body. Si el spec toca una fila existente, declara su tabla de `candidates` (§3.5) y lleva el bloque de cinco criterios de aceptación (§5). Si alguna de sus escrituras **no** es diferencial, lo dice y lo razona.
 - **Una idea por frase.** Si una frase tiene dos comas y un punto y coma, pártela.
 - **Nombres concretos.** Si dices "el servicio", di `src/services/diagnosticTerm.service.ts`. Si dices "una clave", da la cadena exacta.
 - **Sin TODOs.** Un TODO en un spec significa que la decisión no se tomó. Tómala, o déjala anotada como decisión pendiente con su razón.

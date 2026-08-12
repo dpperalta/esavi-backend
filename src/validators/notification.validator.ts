@@ -1,5 +1,6 @@
 import { body, param, query } from 'express-validator';
-import { NOTIFICATION_TYPES, ANSWER_OPTIONS } from '../constants/notification.constants';
+import { NOTIFICATION_TYPES } from '../constants/notification.constants';
+import { ANSWER_OPTIONS } from '../constants/enums.constants';
 
 // deathDate is a calendar date, so it is compared as a plain YYYY-MM-DD string: building a Date
 // would drag the server time zone into the comparison and could reject today or admit tomorrow

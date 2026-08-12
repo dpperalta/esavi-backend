@@ -33,7 +33,7 @@ Tus respuestas al usuario van **en español**. Los identificadores, nombres de a
 
 No preguntes nada hasta haber hecho esto:
 
-1. Lee `CLAUDE.md` de la raíz y estas secciones de `references/CONVENTIONS.md`: **§1** (los siete artefactos), **§6** (códigos `ESAVI-*` y tabla de abreviaturas), **§9** (matriz de roles), **§10** (contrato de respuesta), **§11** (capa de servicio). No las reconstruyas de cabeza: tienen tablas exactas.
+1. Lee `CLAUDE.md` de la raíz y estas secciones de `references/CONVENTIONS.md`: **§1** (los siete artefactos), **§6** (códigos `ESAVI-*` y tabla de abreviaturas), **§9** (matriz de roles), **§10** (contrato de respuesta), **§11** (capa de servicio, incluido el bloque **«Update diferencial — solo se escribe lo que cambió»**, que es norma vinculante y no una recomendación). No las reconstruyas de cabeza: tienen tablas exactas.
 2. Lista `references/functional/specs/` y determina el siguiente `NN`. Si el directorio no existe o está vacío, el spec que vas a escribir es el `01`. Los números de `references/specs/` no cuentan: son una serie aparte.
 3. Lee `references/specs/09-healthfacility-crud.md` completo. Es **el ejemplo canónico de spec CRUD** de este repositorio: copia su forma, su nivel de detalle y su tono.
 4. Si el argumento nombra una tabla, localiza su `CREATE TABLE` en `esaviapp.sql` y extrae textualmente: columnas, tipos, nulabilidad, claves foráneas, restricciones `UNIQUE`, `CHECK`, triggers e índices. Si la tabla no existe en el DDL, dilo y detente — el esquema no lo crea Sequelize, así que no hay entidad que especificar.
@@ -60,6 +60,7 @@ Categorías que siempre debes cubrir en un spec de entidad:
 - **Roles por operación.** Presenta la matriz canónica de §9 como propuesta —create ADMIN, list USER, getById USER, update ADMIN, delete ADMIN, activate SUPERADMIN— y pregunta solo por las desviaciones.
 - **Reglas de negocio.** Qué campo es único y contra qué valor normalizado se compara; qué FKs hay que validar antes de escribir y con qué filtro (p. ej. que el `catalogItem` pertenezca a un `catalogType` concreto); qué bloquea la desactivación (equivalente a `hasActiveChildren`); si hay auto-referencia, qué pasa con `selfParent` y `circularParent`.
 - **Normalización al escribir.** Qué campos llevan `toConstantCase` (códigos) y cuáles `toTitleCase` (nombres).
+- **Update diferencial.** No preguntes *si* el update es diferencial: lo es siempre, por §11 del canon. Lo que sí tienes que cerrar, campo por campo, es **cómo entra cada uno en `candidates`**: cuáles son anulables —y por tanto se comparan contra `undefined`, no por veracidad—, cuáles son derivados y entran siempre aunque el cliente no mande nada, y cuáles van cifrados y se comparan sobre texto plano. Pregunta también si alguna operación de la entidad **no** es un update diferencial —una activación, un traslado, una asignación masiva, cualquier escritura que registre un hecho aunque ningún dato cambie— para dejarlo declarado y razonado. Si el spec propaga algo a otra tabla, cierra que el disparador es el cambio real de valor, nunca la presencia de la clave en el body.
 - **Datos sensibles.** ¿Algún campo debe cifrarse con `esaviCrypt`, como el correo o el nombre en `appUser`? Es la decisión más cara de revertir: si se cifra, las búsquedas por ese campo deben ser por igualdad.
 - **Listado.** Paginación con `findAndCountAll`, filtros admitidos por query, orden por defecto.
 - **Alcance excluido.** Qué se menciona en la conversación pero se difiere explícitamente a otro spec.
@@ -104,6 +105,7 @@ La sección 3.4 (superficie HTTP) es la pieza más importante de un spec CRUD: s
 - Inventar nombres de columna o de tabla. Salen de `esaviapp.sql`, citados tal cual.
 - Saltarte la sección de decisiones: es la que más valor tiene dentro de tres meses.
 - Escribir funciones completas en el spec. El spec describe; el código viene después.
+- Dejar el `004` sin su tabla de `candidates`, o los criterios de aceptación sin el bloque de update diferencial. Es el olvido más frecuente y el más caro: seis de los doce servicios del repositorio nacieron escribiendo por presencia de clave, y costó un spec entero —el F12— corregirlos.
 
 ---
 
@@ -129,6 +131,7 @@ Cuando todas las secciones estén confirmadas:
 - **Nunca propongas implementar el spec tras guardarlo.** Tu trabajo termina cuando el archivo existe.
 - **Nunca inventes nombres de columna, tabla o constraint.** Salen de `esaviapp.sql`.
 - **Nunca reutilices una abreviatura `ESAVI-*` ya registrada**, ni cambies la numeración fija `001`–`005B`.
+- **Nunca cierres un spec cuyo update no sea diferencial.** Toda operación que escriba sobre una fila existente pasa por `buildDifferentialUpdate`, declara en §3.5 cómo entra cada campo en `candidates` y lleva en §5 el bloque de cinco criterios de la plantilla. Lo que dispara la escritura es que el dato **cambie**, no que la clave llegue en el body — y eso vale igual para lo que el spec propague a otras tablas. Las escrituras que no son diferenciales se declaran una por una, con su razón.
 - **Nunca asumas decisiones que el usuario no confirmó.** Si falta información, pregunta.
 - **Nunca generes el spec entero en una sola respuesta.** Sección a sección, con confirmación.
 - Si el usuario quiere saltarse la Fase 2, recuérdale que las preguntas de ahora ahorran horas después. Si insiste, respétalo y déjalo escrito en la sección de decisiones ("Definición rápida sin ronda de aclaraciones").

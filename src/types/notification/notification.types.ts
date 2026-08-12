@@ -1,4 +1,5 @@
-import { NotificationType, AnswerOption } from '../../constants/notification.constants';
+import { NotificationType } from '../../constants/notification.constants';
+import { AnswerOption } from '../../constants/enums.constants';
 
 // caseId and notificationType are required on create and immutable afterwards: the update
 // service ignores both even though Partial<CreateNotificationInput> lets them through.
