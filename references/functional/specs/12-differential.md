@@ -1,6 +1,6 @@
 # SPEC F12 — Update diferencial uniforme en los doce servicios
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 04 (contrato de conflicto y consistencia), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F01 (`appUserGeoLocation`), SPEC F03 (`appRole`), SPEC F04 (`appUser`), SPEC F05 (`patient`), SPEC F06 (`esaviCase`), SPEC F07 (`notifier`), SPEC F09 (`classification` — fija la forma correcta)
 > **Fecha:** 2026-08-11
 > **Objetivo:** Que ningún `PUT` que no cambia ningún dato deje rastro, extrayendo la comparación diferencial a un helper único que usen los doce servicios de update.

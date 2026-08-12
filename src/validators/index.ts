@@ -12,3 +12,4 @@ export * from './patient.validator';
 export * from './esaviCase.validator';
 export * from './notifier.validator';
 export * from './classification.validator';
+export * from './notification.validator';

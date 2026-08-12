@@ -13,6 +13,7 @@ import { Patient } from './patient.model';
 import { EsaviCase } from './esaviCase.model';
 import { Notifier } from './notifier.model';
 import { Classification } from './classification.model';
+import { Notification } from './notification.model';
 
 export const initModels = (): void => {
     initAssociations();
@@ -32,5 +33,6 @@ export {
     Patient,
     EsaviCase,
     Notifier,
-    Classification
+    Classification,
+    Notification
 };

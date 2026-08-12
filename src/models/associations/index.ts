@@ -7,6 +7,7 @@ import { initPatientAssociations } from './patient.associations';
 import { initEsaviCaseAssociations } from './esaviCase.associations';
 import { initNotifierAssociations } from './notifier.associations';
 import { initClassificationAssociations } from './classification.associations';
+import { initNotificationAssociations } from './notification.associations';
 
 export const initAssociations = (): void => {
     initAuthAssociations();
@@ -18,4 +19,5 @@ export const initAssociations = (): void => {
     initEsaviCaseAssociations();
     initNotifierAssociations();
     initClassificationAssociations();
+    initNotificationAssociations();
 }

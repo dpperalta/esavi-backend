@@ -341,5 +341,31 @@
         "stillActive": "La clasificación con ID {{id}} sigue activa. Desactívela antes de eliminarla permanentemente.",
         "purgeSuccess": "Clasificación eliminada permanentemente",
         "purgeFailed": "Error al eliminar permanentemente la clasificación. Por favor, inténtelo de nuevo más tarde."
+    },
+    "notification": {
+        "notFound": "Notificación no encontrada. Por favor, verifique el ID de la notificación e inténtelo de nuevo.",
+        "idRequired": "El ID de la notificación es obligatorio",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "caseAlreadyNotified": "El caso ESAVI con ID {{caseId}} ya tiene una notificación registrada, activa o inactiva",
+        "outcomeNotFound": "El desenlace indicado no existe, está inactivo o no pertenece al catálogo de desenlaces",
+        "deathFieldsRequired": "El desenlace es el fallecimiento: la fecha de defunción y la solicitud de autopsia son obligatorias",
+        "deathFieldsNotAllowed": "La fecha de defunción, la solicitud de autopsia y la autopsia verbal solo se admiten cuando el desenlace es el fallecimiento",
+        "createdSuccess": "Notificación creada exitosamente",
+        "createdFailed": "Error al crear la notificación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Notificación obtenida exitosamente",
+        "getFailed": "Error al obtener la notificación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Notificaciones obtenidas exitosamente",
+        "getFailedPlural": "Error al obtener las notificaciones. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Notificación actualizada exitosamente",
+        "updatedFailed": "Error al actualizar la notificación. Por favor, inténtelo de nuevo más tarde.",
+        "alreadyInactive": "La notificación con ID {{id}} ya está inactiva",
+        "alreadyActive": "La notificación con ID {{id}} ya está activa",
+        "deletedSuccess": "Notificación eliminada exitosamente",
+        "deletedFailed": "Error al eliminar la notificación. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Notificación activada exitosamente",
+        "activatedFailed": "Error al activar la notificación. Por favor, inténtelo de nuevo más tarde.",
+        "stillActive": "La notificación con ID {{id}} sigue activa. Desactívela antes de eliminarla permanentemente.",
+        "purgeSuccess": "Notificación eliminada permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente la notificación. Por favor, inténtelo de nuevo más tarde."
     }
 }
