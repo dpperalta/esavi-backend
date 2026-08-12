@@ -7,3 +7,4 @@ export * from './patient/index';
 export * from './esaviCase/index';
 export * from './notifier/index';
 export * from './classification/index';
+export * from './notification/index';
