@@ -1,6 +1,6 @@
-import { WhereOptions } from 'sequelize';
+import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Notification } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -413,6 +413,85 @@ const updateNotificationService = async (
     return updatedNotification ? toNotificationResponse(updatedNotification) : null;
 }
 
+// The severe detail joins the lifecycle of its header, in the same transaction the activation
+// already opens. SPEC F13 adds this satellite to the mechanism SPEC F07 left in place, with one
+// difference declared there: severeNotification has no isActive column — the schema decided the
+// satellites do not manage their own state — so what the cascade moves is its deletedAt.
+//
+// It is one row at most, because the primary key of the detail is the foreign key to this
+// header, so it is read and written as an instance instead of with a mass update: the history is
+// preserved by spreading the array, the same way the rest of this service does it.
+//
+// The method is the code of the operation that dragged it, never an ESAVI-SEVNOT-005*: that one
+// would suggest somebody retired this detail on its own, and there is no way to do that
+const cascadeSealSevereNotification = async (
+    notificationId: string,
+    authUser: AuthUser | undefined,
+    transaction: Transaction
+) => {
+    const severeNotification = await SevereNotification.findOne({ where: { notificationId }, transaction });
+
+    // A notification with no detail drags zero rows and does not fail. A detail that was already
+    // sealed keeps its original date and receives no new entry: the fact was already recorded
+    if( !severeNotification || severeNotification.deletedAt ) {
+        return;
+    }
+
+    const now = new Date();
+    const currentAppDetails = Array.isArray(severeNotification.appDetails) ? severeNotification.appDetails : [];
+    await severeNotification.update({
+        deletedAt: now,
+        updatedAt: now,
+        appDetails: [
+            ...currentAppDetails,
+            {
+                createdAt: now,
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-NOTIFCN-005A',
+                detail: 'Severe notification detail sealed by cascade from its Notification'
+            }
+        ]
+    }, { transaction });
+}
+
+// The other half, and the first upward cascade of the repository: it breaks the "downwards only"
+// criterion SPEC F07 fixed, and the exception travels with its own boundary. notifier and
+// classification are entities with a life of their own that somebody may have retired
+// separately, and respecting that decision when the parent comes back is correct. Here the
+// detail has no decision of its own to respect — there is no way to retire it without retiring
+// the header — so leaving it sealed would produce an active notification whose detail is marked
+// as deleted, a state no client knows how to represent.
+// That is also what keeps deactivate-then-reactivate a round trip: without this half the detail
+// would stay marked forever, and purgable by accident
+const cascadeClearSevereNotification = async (
+    notificationId: string,
+    authUser: AuthUser | undefined,
+    transaction: Transaction
+) => {
+    const severeNotification = await SevereNotification.findOne({ where: { notificationId }, transaction });
+
+    // Nothing sealed is nothing to clear, and an entry recording no change is noise
+    if( !severeNotification || !severeNotification.deletedAt ) {
+        return;
+    }
+
+    const now = new Date();
+    const currentAppDetails = Array.isArray(severeNotification.appDetails) ? severeNotification.appDetails : [];
+    await severeNotification.update({
+        deletedAt: null,
+        updatedAt: now,
+        appDetails: [
+            ...currentAppDetails,
+            {
+                createdAt: now,
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-NOTIFCN-005B',
+                detail: 'Severe notification detail cleared by cascade from its Notification'
+            }
+        ]
+    }, { transaction });
+}
+
 // Setting Notification Active/Inactive Service
 // Code: ESAVI-NOTIFCN-005A / ESAVI-NOTIFCN-005B
 // Reactivating does NOT require the case to be active, for the same reason as in notifier and
@@ -446,6 +525,15 @@ const setNotificationActivationService = async (
                 detail: `Notification ${ isActive ? 'activated' : 'deactivated' } by service`
             }
         });
+
+        // After the generic service, so a 404 or a 409 aborts before touching the detail: an
+        // activation that answers 'already in that state' must leave everything as it was
+        if( isActive ) {
+            await cascadeClearSevereNotification(id, authUser, transaction);
+        } else {
+            await cascadeSealSevereNotification(id, authUser, transaction);
+        }
+
         await transaction.commit();
     } catch (error) {
         await transaction.rollback();
