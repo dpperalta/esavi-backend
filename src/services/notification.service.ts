@@ -1,7 +1,7 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification, SevereNotification } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -541,18 +541,67 @@ const setNotificationActivationService = async (
     }
 }
 
+// What the ON DELETE CASCADE of FK_severeNotification_notification is about to destroy, written
+// down before it is gone. purgeEntityService leans on its dump being "the only trace left of an
+// irreversible operation", and that dump only covers the row deleted explicitly: what the
+// Postgres cascade takes with it would disappear without anything ever having written it.
+//
+// It is a trace, not a protection: the purge is not blocked, and the cascade still fires. The
+// alternative — answering 409 when the notification has a detail, and demanding it be purged
+// first — turns one operation into two and would have to be repeated for the seven remaining
+// satellites, nine calls in the right order to purge a single notification.
+//
+// It never blocks the purge: a failure writing the log must not abort an operation the caller
+// already authorized
+const dumpSevereNotificationBeforeCascade = async (
+    notificationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const severeNotification = await SevereNotification.findOne({
+            where: { notificationId },
+            transaction
+        });
+        if( !severeNotification ) {
+            return;
+        }
+        esaviLog(
+            `ESAVI-NOTIFCN-005C: severeNotification row dragged by ON DELETE CASCADE and purged by ` +
+            `${ userId }. Snapshot: ${ JSON.stringify(severeNotification.get({ plain: true })) }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged severeNotification: ${ error }`, 'error');
+    }
+}
+
 // Purging Notification Service - For SuperAdmin
 // Code: ESAVI-NOTIFCN-005C
 // notification is outside the preventPhysicalDelete loop of esaviapp.sql:1363-1366, so the row
 // can really be destroyed. This is the only path that releases the caseId: once the row is gone
 // UQ_notification_case is free and the case admits a new notification. It does not touch the
 // case — the foreign key runs from the notification to the case and not the other way round.
-// WARNING for when the satellites arrive: the eight tables that hang from notificationId declare
-// ON DELETE CASCADE, so this operation will drag the whole detailed notification with it without
-// asking. Today there is nothing to drag; the spec that lands the first one must revisit this
+// The eight tables that hang from notificationId declare ON DELETE CASCADE, so this operation
+// drags the whole detailed notification with it without asking. SPEC F13 landed the first of
+// them and did that review: the cascade is left to fire, with the log dump above as its only
+// mitigation. The seven remaining satellites join that dump as they are implemented
 const purgeNotificationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
     const transaction = await sequelize.transaction();
     try {
+        // Only when the row exists and is already inactive, which is exactly when the generic
+        // service will go ahead: dumping before its guards would leave the log claiming a purge
+        // that answered 404 or 409 and never happened
+        const notification = await Notification.findOne({
+            where: { notificationId: id },
+            attributes: ['notificationId', 'isActive'],
+            paranoid: false,
+            transaction
+        });
+        if( notification && notification.isActive === false ) {
+            await dumpSevereNotificationBeforeCascade(id, authUser?.userId || 'undefined', transaction);
+        }
+
         await purgeEntityService({
             model: Notification,
             where: { notificationId: id },
