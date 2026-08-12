@@ -1,4 +1,4 @@
-import { Op } from 'sequelize';
+import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, Patient } from '../models';
 import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, toTitleCase } from '../helpers';
@@ -88,8 +88,9 @@ const findPatientWithRelations = async (id: string, includeInactive: boolean = f
 }
 
 // sexItemId must exist, be active and belong to the 'sex' catalog. Shared by 001 and 004 so the
-// three conditions cannot drift apart; the operation code travels in so the AppError keeps it
-const assertSexItemIsValid = async (sexItemId: string, op: string, lang: string) => {
+// three conditions cannot drift apart; the operation code travels in so the AppError keeps it.
+// The transaction is optional because 001 writes without one and 004 opens its own
+const assertSexItemIsValid = async (sexItemId: string, op: string, lang: string, transaction?: Transaction) => {
     const sexItem = await CatalogItem.findOne({
         where: { catalogItemId: sexItemId, isActive: true },
         include: [{
@@ -97,17 +98,19 @@ const assertSexItemIsValid = async (sexItemId: string, op: string, lang: string)
             as: 'catalogType',
             where: { code: SEX_CATALOG_CODE },
             attributes: []
-        }]
+        }],
+        transaction
     });
     if( !sexItem ) {
         throw new AppError(getMessage('patient.sexNotFound', lang), 404, `PATIENT_${ op }_SEX_NOT_FOUND`);
     }
 }
 
-const assertResidenceIsValid = async (residenceGeoLocationId: string, op: string, lang: string) => {
+const assertResidenceIsValid = async (residenceGeoLocationId: string, op: string, lang: string, transaction?: Transaction) => {
     const geoLocation = await GeoLocation.findOne({
         where: { geoLocationId: residenceGeoLocationId, isActive: true },
-        attributes: ['geoLocationId']
+        attributes: ['geoLocationId'],
+        transaction
     });
     if( !geoLocation ) {
         throw new AppError(getMessage('patient.geoLocationNotFound', lang), 404, `PATIENT_${ op }_GEOLOC_NOT_FOUND`);
@@ -215,95 +218,105 @@ const getPatientByIdService = async (id: string, lang: string, canViewInactive: 
 // Update Patient Service
 // Code: ESAVI-PATIENT-004
 // healthSystemCode is ignored whether or not it arrives in the body: an identifier that changes
-// stops identifying, and any document already printed with the old value would be orphaned
+// stops identifying, and any document already printed with the old value would be orphaned.
+// The whole body runs inside a transaction — as setPatientActivationService already does — so a
+// failure after the patient row is written leaves nothing half applied
 const updatePatientService = async (id: string, data: Partial<CreatePatientInput>, authUser: AuthUser | undefined, lang: string) => {
-    const patient = await Patient.findByPk(id);
-    if( !patient ) {
-        throw new AppError(getMessage('patient.notFound', lang), 404, 'PATIENT_004_NOT_FOUND');
-    }
+    const transaction = await sequelize.transaction();
+    try {
+        const patient = await Patient.findByPk(id, { transaction });
+        if( !patient ) {
+            throw new AppError(getMessage('patient.notFound', lang), 404, 'PATIENT_004_NOT_FOUND');
+        }
 
-    // Same criterion as 001: uniqueness does not filter by isActive and excludes this record
-    const targetDocumentNumber = data.documentNumber ? esaviCrypt(normalizeDocument(data.documentNumber)) : undefined;
-    if( targetDocumentNumber && targetDocumentNumber !== patient.documentNumber ) {
-        const existingDocument = await Patient.findOne({
-            where: {
-                documentNumber: targetDocumentNumber,
-                patientId: { [Op.ne]: id }
-            },
-            attributes: ['patientId']
+        // Same criterion as 001: uniqueness does not filter by isActive and excludes this record
+        const targetDocumentNumber = data.documentNumber ? esaviCrypt(normalizeDocument(data.documentNumber)) : undefined;
+        if( targetDocumentNumber && targetDocumentNumber !== patient.documentNumber ) {
+            const existingDocument = await Patient.findOne({
+                where: {
+                    documentNumber: targetDocumentNumber,
+                    patientId: { [Op.ne]: id }
+                },
+                attributes: ['patientId'],
+                transaction
+            });
+            if( existingDocument ) {
+                throw new AppError(getMessage('patient.documentExists', lang), 409, 'PATIENT_004_DOCUMENT_EXISTS');
+            }
+        }
+
+        if( data.sexItemId ) {
+            await assertSexItemIsValid(data.sexItemId, '004', lang, transaction);
+        }
+        if( data.residenceGeoLocationId ) {
+            await assertResidenceIsValid(data.residenceGeoLocationId, '004', lang, transaction);
+        }
+
+        // Differential update: only what really changed reaches the UPDATE. Until now the object was
+        // built out of which keys arrived, never comparing them with what was stored, so resending
+        // whole the record just read with a GET — the normal use of a form — re-encrypted and
+        // rewrote the seven PII columns with their own value. `stored` is the whole row, which is
+        // the precondition of the helper, with the encrypted columns decrypted: the comparison is
+        // over plain text and never ciphertext against ciphertext, which only works because
+        // esaviCrypt has a fixed IV. Tying the update to that would make moving to a random IV break
+        // the comparison in silence — everything would count as a change — and no test would tell it
+        // apart from a legitimate one. esaviCrypt is applied afterwards, over what the diff returned
+        const stored = patient.get({ plain: true }) as Record<string, unknown>;
+        for( const field of PII_FIELDS ) {
+            const value = stored[field];
+            if( value ) {
+                stored[field] = esaviDecrypt(value as string);
+            }
+        }
+        const changes = buildDifferentialUpdate(stored, {
+            firstName: data.firstName ? normalizeName(data.firstName) : undefined,
+            lastName: data.lastName ? normalizeName(data.lastName) : undefined,
+            documentNumber: data.documentNumber ? normalizeDocument(data.documentNumber) : undefined,
+            middleName: data.middleName !== undefined ? ( data.middleName ? normalizeName(data.middleName) : null ) : undefined,
+            secondLastName: data.secondLastName !== undefined ? ( data.secondLastName ? normalizeName(data.secondLastName) : null ) : undefined,
+            passportNumber: data.passportNumber !== undefined ? ( data.passportNumber ? normalizeDocument(data.passportNumber) : null ) : undefined,
+            email: data.email !== undefined ? ( data.email ? normalizeEmail(data.email) : null ) : undefined,
+            birthDate: data.birthDate !== undefined ? ( data.birthDate ? normalizeBirthDate(data.birthDate) : null ) : undefined,
+            phoneNumber: data.phoneNumber !== undefined ? ( data.phoneNumber ? data.phoneNumber.trim() : null ) : undefined,
+            sexItemId: data.sexItemId !== undefined ? ( data.sexItemId || null ) : undefined,
+            residenceGeoLocationId: data.residenceGeoLocationId !== undefined ? ( data.residenceGeoLocationId || null ) : undefined
         });
-        if( existingDocument ) {
-            throw new AppError(getMessage('patient.documentExists', lang), 409, 'PATIENT_004_DOCUMENT_EXISTS');
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
+        // stands, which is the state the client asked for
+        if( Object.keys(changes).length > 0 ) {
+            const objectToUpdate: Record<string, unknown> = { ...changes };
+            for( const field of PII_FIELDS ) {
+                if( objectToUpdate[field] ) {
+                    objectToUpdate[field] = esaviCrypt(objectToUpdate[field] as string);
+                }
+            }
+
+            const currentAppDetails = Array.isArray(patient.appDetails) ? patient.appDetails : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-PATIENT-004',
+                detail: 'Patient updated by service'
+            };
+            await patient.update({
+                ...objectToUpdate,
+                updatedAt: new Date(),
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
         }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
     }
 
-    if( data.sexItemId ) {
-        await assertSexItemIsValid(data.sexItemId, '004', lang);
-    }
-    if( data.residenceGeoLocationId ) {
-        await assertResidenceIsValid(data.residenceGeoLocationId, '004', lang);
-    }
-
-    // Differential update: only what really changed reaches the UPDATE. Until now the object was
-    // built out of which keys arrived, never comparing them with what was stored, so resending
-    // whole the record just read with a GET — the normal use of a form — re-encrypted and
-    // rewrote the seven PII columns with their own value. `stored` is the whole row, which is
-    // the precondition of the helper, with the encrypted columns decrypted: the comparison is
-    // over plain text and never ciphertext against ciphertext, which only works because
-    // esaviCrypt has a fixed IV. Tying the update to that would make moving to a random IV break
-    // the comparison in silence — everything would count as a change — and no test would tell it
-    // apart from a legitimate one. esaviCrypt is applied afterwards, over what the diff returned
-    const stored = patient.get({ plain: true }) as Record<string, unknown>;
-    for( const field of PII_FIELDS ) {
-        const value = stored[field];
-        if( value ) {
-            stored[field] = esaviDecrypt(value as string);
-        }
-    }
-    const changes = buildDifferentialUpdate(stored, {
-        firstName: data.firstName ? normalizeName(data.firstName) : undefined,
-        lastName: data.lastName ? normalizeName(data.lastName) : undefined,
-        documentNumber: data.documentNumber ? normalizeDocument(data.documentNumber) : undefined,
-        middleName: data.middleName !== undefined ? ( data.middleName ? normalizeName(data.middleName) : null ) : undefined,
-        secondLastName: data.secondLastName !== undefined ? ( data.secondLastName ? normalizeName(data.secondLastName) : null ) : undefined,
-        passportNumber: data.passportNumber !== undefined ? ( data.passportNumber ? normalizeDocument(data.passportNumber) : null ) : undefined,
-        email: data.email !== undefined ? ( data.email ? normalizeEmail(data.email) : null ) : undefined,
-        birthDate: data.birthDate !== undefined ? ( data.birthDate ? normalizeBirthDate(data.birthDate) : null ) : undefined,
-        phoneNumber: data.phoneNumber !== undefined ? ( data.phoneNumber ? data.phoneNumber.trim() : null ) : undefined,
-        sexItemId: data.sexItemId !== undefined ? ( data.sexItemId || null ) : undefined,
-        residenceGeoLocationId: data.residenceGeoLocationId !== undefined ? ( data.residenceGeoLocationId || null ) : undefined
-    });
-
-    // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
-    // stands, which is the state the client asked for
-    if( Object.keys(changes).length === 0 ) {
-        const unchanged = await findPatientWithRelations(id, true);
-        return unchanged ? toPatientResponse(unchanged) : null;
-    }
-
-    const objectToUpdate: Record<string, unknown> = { ...changes };
-    for( const field of PII_FIELDS ) {
-        if( objectToUpdate[field] ) {
-            objectToUpdate[field] = esaviCrypt(objectToUpdate[field] as string);
-        }
-    }
-
-    const currentAppDetails = Array.isArray(patient.appDetails) ? patient.appDetails : [];
-    const newEntry: AppDetails = {
-        createdAt: new Date(),
-        user: authUser?.userId || 'undefined',
-        method: 'ESAVI-PATIENT-004',
-        detail: 'Patient updated by service'
-    };
-    await patient.update({
-        ...objectToUpdate,
-        updatedAt: new Date(),
-        appDetails: [
-            ...currentAppDetails,
-            newEntry
-        ]
-    });
-
+    // Read outside the transaction, once it is committed: the response is the same whether or not
+    // anything changed, so both paths converge here
     const updatedPatient = await findPatientWithRelations(id, true);
     return updatedPatient ? toPatientResponse(updatedPatient) : null;
 }
