@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { NotificationListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, NotificationListFilters } from '../types';
 import { NotificationType } from '../constants/notification.constants';
 import {
     createNotificationService,
     getAllNotificationsService,
+    getNotificationByIdService,
     getNotificationsService
 } from '../services/notification.service';
 
@@ -85,8 +86,34 @@ const getAllNotifications = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+// Get Notification By ID Controller
+// Code: ESAVI-NOTIFCN-003
+const getNotificationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getNotificationByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFCN-003: Error fetching Notification by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notification.getFailed', req.lang), 500, 'NOTIFCN_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotification,
     getNotifications,
-    getAllNotifications
+    getAllNotifications,
+    getNotificationById
 }

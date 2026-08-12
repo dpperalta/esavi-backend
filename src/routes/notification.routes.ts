@@ -4,9 +4,14 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotification,
     getAllNotifications,
+    getNotificationById,
     getNotifications
 } from '../controllers/notification.controller';
-import { createNotificationValidator, notificationListValidator } from '../validators';
+import {
+    createNotificationValidator,
+    notificationIdValidator,
+    notificationListValidator
+} from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -25,5 +30,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...notificationListVali
 // Get All Notifications - For Admin
 // Code: ESAVI-NOTIFCN-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...notificationListValidator, validateFields, getAllNotifications);
+
+// Get Notification by ID
+// Code: ESAVI-NOTIFCN-003
+// Declared after the literal paths so Express does not capture 'admin' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationIdValidator, validateFields, getNotificationById);
 
 export default router;

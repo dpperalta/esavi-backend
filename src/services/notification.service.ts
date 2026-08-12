@@ -259,8 +259,19 @@ const getAllNotificationsService = async (
     });
 }
 
+// Get Notification By ID Service
+// Code: ESAVI-NOTIFCN-003
+const getNotificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const notification = await findNotificationWithRelations(id, canViewInactive);
+    if( !notification ) {
+        throw new AppError(getMessage('notification.notFound', lang), 404, 'NOTIFCN_003_NOT_FOUND');
+    }
+    return toNotificationResponse(notification);
+}
+
 export {
     createNotificationService,
     getNotificationsService,
-    getAllNotificationsService
+    getAllNotificationsService,
+    getNotificationByIdService
 }
