@@ -1,7 +1,7 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { Classification, EsaviCase, HealthFacility, Notifier, Patient } from '../models';
-import { AppError, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -308,7 +308,13 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
         throw new AppError(getMessage('esaviCase.invalidDateRange', lang), 400, 'CASE_004_INVALID_DATE_RANGE');
     }
 
-    const objectToUpdate: Record<string, unknown> = {
+    // Differential update: only what really changed reaches the UPDATE. Until now the object was
+    // built out of which keys arrived, never comparing them with what was stored, so resending
+    // whole the record just read with a GET — the normal use of a form — rewrote every column
+    // with its own value. `stored` is the whole row, which is the precondition of the helper,
+    // and it compares the three DATEONLY columns by their calendar day
+    const stored = esaviCase.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
         patientId: data.patientId ?? undefined,
         healthFacilityId: data.healthFacilityId ?? undefined,
         reportDate: data.reportDate ? normalizeIsoDate(data.reportDate) : undefined,
@@ -317,12 +323,15 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
         reportFillingDate: data.reportFillingDate !== undefined ? ( data.reportFillingDate ? normalizeIsoDate(data.reportFillingDate) : null ) : undefined,
         notificationOrganization: data.notificationOrganization !== undefined ? ( data.notificationOrganization ? normalizeOrganization(data.notificationOrganization) : null ) : undefined,
         details: data.details !== undefined ? ( data.details ? data.details.trim() : null ) : undefined
-    };
-    for( const key of Object.keys(objectToUpdate) ) {
-        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    });
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
+    // stands, which is the state the client asked for
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findEsaviCaseWithRelations(id, true);
+        return unchanged ? toEsaviCaseResponse(unchanged) : null;
     }
 
-    // The entry is written even when nothing changed: the attempt is part of the audit trail
     const currentAppDetails = Array.isArray(esaviCase.appDetails) ? esaviCase.appDetails : [];
     const newEntry: AppDetails = {
         createdAt: new Date(),
@@ -332,6 +341,7 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
     };
     await esaviCase.update({
         ...objectToUpdate,
+        updatedAt: new Date(),
         appDetails: [
             ...currentAppDetails,
             newEntry

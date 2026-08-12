@@ -4,6 +4,7 @@ import { AppRole, AppUser, AppUserRole } from '../../src/models';
 import { jwtGenerate } from '../../src/helpers/jwt.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader, getTestUser } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -214,7 +215,7 @@ describe('appUser contract', () => {
             expect(appDetails[1].method).toBe('ESAVI-USER-004');
         });
 
-        it('a no-op update still responds 200 and appends an audit entry', async () => {
+        it('a no-op update responds 200 without appending an audit entry', async () => {
             const response = await request(app)
                 .put(`/api/users/${ userId }`)
                 .set(authHeader('ADMIN'))
@@ -222,6 +223,37 @@ describe('appUser contract', () => {
 
             expect(response.status).toBe(200);
             expect(response.body.data.firstName).toBe('Maria Fernanda');
+            // An update that touched nothing is not a change: appDetails stays on the create
+            // entry and the real update of the previous case
+            expect(response.body.data.appDetails).toHaveLength(2);
+        });
+
+        it('resending the stored firstName neither writes nor recomposes displayName', async () => {
+            const before = await AppUser.findByPk(userId);
+
+            const response = await request(app)
+                .put(`/api/users/${ userId }`)
+                .set(authHeader('ADMIN'))
+                .send({ firstName: 'Maria Fernanda' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.displayName).toBe('Maria Fernanda Perez');
+
+            const after = await AppUser.findByPk(userId);
+            expect(after!.getDataValue('displayName')).toBe(before!.getDataValue('displayName'));
+            expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
+            expect(response.body.data.appDetails).toHaveLength(2);
+        });
+
+        it('changing the lastName moves both the lastName and the displayName', async () => {
+            const response = await request(app)
+                .put(`/api/users/${ userId }`)
+                .set(authHeader('ADMIN'))
+                .send({ lastName: 'nuevo apellido' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.lastName).toBe('Nuevo Apellido');
+            expect(response.body.data.displayName).toBe('Maria Fernanda Nuevo Apellido');
             expect(response.body.data.appDetails).toHaveLength(3);
         });
 
@@ -596,6 +628,30 @@ describe('appUser contract', () => {
                 expect(response.status).toBe(400);
             }
         );
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const target = await createUserFixture('differential', {
+                username: `differential.${ suffix }`,
+                phone: '0991234567'
+            });
+
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/users',
+                id: target.userId,
+                model: AppUser,
+                // All seven are rejected by the update validator with a 400: displayName is
+                // derived, and the rest belong to operations of their own or to an external
+                // authentication this API does not support
+                strip: [
+                    'userId', 'displayName', 'isActive', 'requiresPasswordChange',
+                    'roleId', 'externalProvider', 'externalSubject'
+                ]
+            });
+        });
 
     });
 

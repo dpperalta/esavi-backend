@@ -4,6 +4,7 @@ import { sequelize } from '../../src/database/connection';
 import { AppUserGeoLocation, GeoLocation } from '../../src/models';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader, getTestUser } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 
 /**
  * Contract suite for the ten appUserGeoLocation operations of SPEC F01. It walks the
@@ -861,6 +862,25 @@ describe('appUserGeoLocation contract', () => {
             );
 
             expect(duplicates).toEqual([]);
+        });
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const differentialGeoId = await createGeoLocation('differential', 1);
+            const created = await assign(walkUserId, differentialGeoId, { validTo: '2035-01-01T00:00:00.000Z' });
+            expect(created.status).toBe(201);
+
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/user-geo-locations',
+                id: created.body.data.userGeoLocationId,
+                model: AppUserGeoLocation,
+                // Moving an assignment is ESAVI-USERGEO-006, so the update validator rejects
+                // both keys with a 400
+                strip: ['userId', 'geoLocationId']
+            });
         });
 
     });

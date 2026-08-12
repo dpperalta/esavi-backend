@@ -1,7 +1,7 @@
 import { Op, QueryTypes } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppUser, AppUserGeoLocation, GeoLocation } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, BulkAssignGeoLocationsInput, CreateAppUserGeoLocationInput, ReassignGeoLocationInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -225,8 +225,6 @@ const updateAppUserGeoLocationService = async (id: string, data: Partial<CreateA
     if (!assignment.isActive) {
         throw new AppError(getMessage('appUserGeoLocation.alreadyInactive', lang, { id }), 409, 'USERGEO_004_ALREADY_INACTIVE');
     }
-    // Validate if data is empty, if so return the assignment without updating
-    if (Object.keys(data).length === 0) return assignment;
     // The range is checked against the resulting row, not against the payload: sending only
     // validFrom must still be compared with the validTo already stored
     const targetValidFrom = data.validFrom ? new Date(data.validFrom) : assignment.validFrom;
@@ -237,20 +235,27 @@ const updateAppUserGeoLocationService = async (id: string, data: Partial<CreateA
         throw new AppError(getMessage('appUserGeoLocation.invalidDateRange', lang), 409, 'USERGEO_004_INVALID_DATE_RANGE');
     }
     const currentAppDetails = Array.isArray(assignment.appDetails) ? assignment.appDetails : [];
+    // Differential update: only what really changed reaches the UPDATE. `stored` is the whole
+    // row, which is the precondition of the helper, and it compares the two dates by their
+    // timestamp. validTo is nullable, so an explicit null travels as a value and is a real
+    // change, while an absent key travels as undefined and is discarded: the two are not
+    // interchangeable, which is why validTo is no longer decided by presence alone
+    const stored = assignment.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        validFrom: data.validFrom ? targetValidFrom : undefined,
+        validTo: data.validTo !== undefined ? targetValidTo : undefined
+    });
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. This also covers the empty
+    // body, which used to need a shortcut of its own
+    if (Object.keys(objectToUpdate).length === 0) {
+        return assignment;
+    }
     const newEntry: AppDetails = {
         createdAt: new Date(),
         user: authUser?.userId || 'undefined',
         method: 'ESAVI-USERGEO-004',
         detail: 'Assignment validity updated by service'
     };
-    const objectToUpdate: Record<string, unknown> = {
-        validFrom: targetValidFrom.getTime() !== new Date(assignment.validFrom).getTime() ? targetValidFrom : undefined,
-        // validTo is nullable, so an explicit null is a real change and cannot be
-        // collapsed with "absent" the way the other update services do it
-        validTo: data.validTo !== undefined ? targetValidTo : undefined
-    };
-    if (objectToUpdate.validFrom === undefined) delete objectToUpdate.validFrom;
-    if (objectToUpdate.validTo === undefined) delete objectToUpdate.validTo;
 
     await assignment.update({
         ...objectToUpdate,

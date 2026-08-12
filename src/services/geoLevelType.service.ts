@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import { AppError } from '../helpers/appError.helper';
+import { buildDifferentialUpdate } from '../helpers/differentialUpdate.helper';
 import { getMessage } from '../helpers/i18n.helper';
 import { GeoLevelType } from '../models/geoLevelType.model';
 import { AppDetails, AuthUser, CreateGeoLevelTypeInput } from '../types';
@@ -92,14 +93,15 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
     }
     
     const currentAppDetails = Array.isArray(geoLevelType.appDetails) ? geoLevelType.appDetails : [];
-    let objectToUpdate = {
-        code: data.code && data.code.trim().toLocaleUpperCase() !== geoLevelType.code ? data.code.trim().toLocaleUpperCase() : undefined,
-        name: data.name && data.name.trim() !== geoLevelType.name ? data.name.trim() : undefined,
-        sortOrder: data.sortOrder && data.sortOrder !== geoLevelType.sortOrder ? data.sortOrder : undefined,
-    };
-    if (objectToUpdate.code === undefined) delete objectToUpdate.code;
-    if (objectToUpdate.name === undefined) delete objectToUpdate.name;
-    if (objectToUpdate.sortOrder === undefined) delete objectToUpdate.sortOrder;
+    // Differential update: only what really changed reaches the UPDATE. `stored` is the whole
+    // row, which is the precondition of the helper
+    const stored = geoLevelType.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        code: data.code ? data.code.trim().toLocaleUpperCase() : undefined,
+        name: data.name ? data.name.trim() : undefined,
+        sortOrder: data.sortOrder ? data.sortOrder : undefined
+    });
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry
     if( Object.keys(objectToUpdate).length > 0 ) {
         const newEntry: AppDetails = {
             createdAt: new Date(),
@@ -109,6 +111,7 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
         };
         updatedGeoLevelType = await geoLevelType.update({
             ...objectToUpdate,
+            updatedAt: new Date(),
             appDetails: [
                 ...currentAppDetails,
                 newEntry

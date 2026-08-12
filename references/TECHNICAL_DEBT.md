@@ -60,14 +60,17 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-038](#deuda-038) | 🟠 | ✅ El idioma resuelto no llega desde el controlador al servicio |
 | [DEUDA-039](#deuda-039) | 🔴 | ✅ `geoPolygon` no coincide con la columna `geopolygon` del SQL |
 | [DEUDA-040](#deuda-040) | 🟠 | El validador de update anuncia `isActive` y el servicio lo ignora |
-| [DEUDA-041](#deuda-041) | 🟠 | Seis servicios de update escriben aunque no cambie ningún dato |
+| [DEUDA-041](#deuda-041) | 🟠 | ✅ Seis servicios de update escriben aunque no cambie ningún dato |
+| [DEUDA-042](#deuda-042) | 🟠 | Tres endpoints rechazan con 400 la respuesta de su propio `GET` |
+| [DEUDA-043](#deuda-043) | 🟡 | `sortOrder: 0` no se puede guardar en tres servicios |
 
 ## Mapa de resolución
 
 La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030, el
-SPEC 08 cubre 037 y 038, y el SPEC 09 cubre 039. Las entradas 031–036, 040 y
-041 todavía no tienen spec; de la 041, el SPEC F09 corrigió por adelantado la
-única entidad que él mismo estrenaba.
+SPEC 08 cubre 037 y 038, el SPEC 09 cubre 039 y el SPEC F12 cubre 041 — de esta
+última, el SPEC F09 había corregido por adelantado la única entidad que él mismo
+estrenaba. Las entradas 031–036, 040, 042 y 043 todavía no tienen spec; las dos
+últimas las detectó el propio SPEC F12 al implementarse.
 
 **Saldadas a 2026-08-03**: las 30 entradas 001–030, por los siete specs de la
 serie, más 037 y 038 por el SPEC 08. Los ocho specs están en estado
@@ -90,7 +93,8 @@ producción, en vez de exigir SUPERADMIN), **013** (unicidad **sin** filtrar por
 | [07 — Linter y suite mínima](./specs/07-tooling-and-tests.md) | 030 |
 | [08 — Idioma efectivo](./specs/08-language-propagation.md) | 037, 038 |
 | [09 — CRUD de healthFacility](./specs/09-healthfacility-crud.md) | 039 |
-| sin spec | 031, 032, 033, 034, 035, 036, 040, 041 |
+| [F12 — Update diferencial uniforme](./functional/specs/12-differential.md) | 041 |
+| sin spec | 031, 032, 033, 034, 035, 036, 040, 042, 043 |
 
 Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08. El 05 renumera
 líneas que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los
@@ -777,7 +781,7 @@ La plantilla de `updateEntityValidator` de la sección 14.2 de [CONVENTIONS.md](
 ---
 
 <a id="deuda-041"></a>
-## DEUDA-041 🟠 Seis servicios de update escriben aunque no cambie ningún dato
+## DEUDA-041 🟠 ✅ Seis servicios de update escriben aunque no cambie ningún dato
 
 **Archivos**: `src/services/appRole.service.ts:115`, `src/services/appUserGeoLocation.service.ts:220`, `src/services/esaviCase.service.ts:286`, `src/services/notifier.service.ts:242`, `src/services/patient.service.ts:219`, `src/services/user.service.ts:230`
 
@@ -812,3 +816,56 @@ El efecto no es un dato corrupto, es un `appDetails` inservible: cada vez que al
 - Los valores **derivados** cuentan como diferencia aunque el cliente no los haya enviado: la edad recalculada de `classification` o el `caseCode` de `esaviCase`.
 
 **Aceptación**: los seis servicios siguen el patrón de `updateCatalogItemService` (`src/services/catalogItem.service.ts:152-183`); un `PUT` idéntico al estado guardado responde 200, no añade entrada a `appDetails` y no mueve `updatedAt`; las suites de contrato que hoy afirman lo contrario se corrigen en el mismo spec — al menos `esaviCase` y `notifier` tienen un caso que espera una entrada nueva tras un `PUT` sin cambios, y `classification` ya enseña la forma correcta.
+
+**Saldada** por el [SPEC F12](./functional/specs/12-differential.md) el 2026-08-11, con **cuatro correcciones a este diagnóstico**:
+
+- **La tabla clasifica mal dos servicios.** `user` sí compara con lo guardado —los cinco campos, uno a uno— y escribe igual; su grado es el de `appRole`, no el de los que solo miran presencia. Y `appUserGeoLocation` compara `validFrom` por `getTime()`; lo que decidía por presencia era solo `validTo`.
+- **El alcance real llegó a `sysDetails`, no solo a `appDetails`.** `esaviapp.sql:1288` monta `TRG_<tabla>_setSysDetails` sobre todas las tablas, y en `UPDATE` la función incrementa `sysDetails.version` y añade un evento a `sysDetails.auditTrail`. Cada escritura vacía ensuciaba dos rastros y consumía una versión.
+- **Dos de los seis servicios que esta entrada daba por correctos también escribían siempre.** `latitude` y `longitude` son `DECIMAL(10, 7)` y `pg` los devuelve como cadena sin `setTypeParser`: `'-0.2299000' !== -0.2299` es siempre verdadero, así que `geoLocation` y `healthFacility` reescribían la fila en cada `PUT` que reenviara sus coordenadas. La fuga estaba en el tipo, no en la lógica del diff, y por eso la revisión que produjo esta entrada no la vio.
+- **`esaviCase.caseCode` no es un derivado en riesgo.** `esaviCase.service.ts` lo declara inmutable y el `004` no lo regenera.
+
+La corrección no repitió el patrón doce veces: se extrajo a `buildDifferentialUpdate` (`src/helpers/differentialUpdate.helper.ts`), que ahora es el patrón canónico de la sección 11 de [CONVENTIONS.md](./CONVENTIONS.md) y absorbe las seis reglas de comparación, incluida la de las cadenas numéricas que cerró la fuga `DECIMAL`.
+
+---
+
+<a id="deuda-042"></a>
+## DEUDA-042 🟠 Tres endpoints rechazan con 400 la respuesta de su propio `GET`
+
+**Archivos**: `src/validators/geoLocation.validator.ts`, `src/validators/healthFacility.validator.ts`, `src/validators/classification.validator.ts`
+
+Detectada el 2026-08-11 al escribir el caso de contrato del [SPEC F12](./functional/specs/12-differential.md), que reenvía con un `PUT` la respuesta íntegra de un `GET` — el uso normal de un formulario. Tres de los doce endpoints responden 400 a su propia respuesta, por tres asimetrías entre lo que devuelven y lo que aceptan:
+
+| Endpoint | Campo | Causa |
+|---|---|---|
+| `PUT /api/geo-locations/:id` | `parentGeoLocationId` | el validador es `optional()` pero no `{ nullable: true }`, y la respuesta trae `null` cuando no hay padre |
+| `PUT /api/health-facilities/:id` | `parentHealthFacilityId` | la misma |
+| `PUT /api/classifications/:id` | `age` | el validador exige `age` y `ageUnitItemId` juntos, pero la respuesta expone `age` y el objeto `ageUnit`, nunca `ageUnitItemId` |
+
+Se suma un cuarto caso menor, de otra causa: un `appUser` creado sin `username` devuelve `username: ''`, y reenviarlo choca con el `notEmpty` del validador. Habría que decidir si la columna es anulable antes de tocar nada.
+
+El daño es del consumidor: un cliente que implemente el formulario de la forma evidente —leer, editar un campo, devolver el objeto— recibe un 400 con un mensaje sobre un campo que él nunca escribió. Hoy lo esquiva quien ya conoce la asimetría.
+
+Es pariente de [DEUDA-040](#deuda-040) —el validador y el servicio de un mismo endpoint no dicen lo mismo—, pero al revés: allí el validador acepta de más, aquí rechaza de más.
+
+**Aceptación**: el `PUT` acepta la respuesta de su `GET` sin cambios en los cuatro casos. Los dos primeros son un `{ nullable: true }`; el tercero exige decidir si la respuesta expone `ageUnitItemId` o si el validador deja de exigir la pareja. El caso de contrato del SPEC F12 quita su `strip` correspondiente cuando cada uno se cierre.
+
+---
+
+<a id="deuda-043"></a>
+## DEUDA-043 🟡 `sortOrder: 0` no se puede guardar en tres servicios
+
+**Archivos**: `src/services/catalogItem.service.ts`, `src/services/catalogType.service.ts`, `src/services/geoLevelType.service.ts`
+
+Detectada el 2026-08-11 al migrar los tres servicios al helper en el [SPEC F12](./functional/specs/12-differential.md), que conservó la condición tal cual para que el paso fuera neutro.
+
+Los tres deciden por veracidad y no contra `undefined`:
+
+```ts
+sortOrder: data.sortOrder ? data.sortOrder : undefined
+```
+
+Un `sortOrder: 0` es falsy, así que se descarta como si no hubiera viajado. El validador lo acepta —`isInt()` sin mínimo—, el servicio lo ignora y la respuesta devuelve 200 con el valor anterior.
+
+Es la primera de las cuatro precisiones de la sección 11 de [CONVENTIONS.md](./CONVENTIONS.md) incumplida: un `0` es un valor legítimo, como lo son el `false` y la cadena vacía.
+
+**Aceptación**: los tres pasan a `data.sortOrder !== undefined ? data.sortOrder : undefined`; un `PUT` con `sortOrder: 0` sobre un registro con otro orden lo guarda y añade su entrada en `appDetails`.

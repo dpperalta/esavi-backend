@@ -502,21 +502,22 @@ Un `PUT` **no** es «guarda lo que te mando». Es «deja el registro en este est
 2. **Lo que viaja igual a lo que ya hay tampoco se toca.** La comparación se hace contra el valor **ya normalizado** (`toConstantCase`, `toTitleCase`, `.trim()`), porque `"  ana  "` y `"Ana"` son el mismo dato y guardarlos como distintos es un cambio inventado.
 3. **Si no cambió nada, no hay escritura.** Ni `UPDATE`, ni `updatedAt`, ni entrada en `appDetails`. Se responde 200 con el registro tal como está.
 
-La razón de la tercera es la auditoría. Un cliente que reenvía entera la ficha que acaba de leer con un `GET` —que es el uso normal de un formulario— generaría una entrada de auditoría por cada vez que alguien abre y cierra la pantalla. Un `appDetails` lleno de entradas que no registran ningún cambio no es trazabilidad: es ruido que esconde las modificaciones reales.
+La razón de la tercera es la auditoría, y alcanza a dos rastros. Un cliente que reenvía entera la ficha que acaba de leer con un `GET` —que es el uso normal de un formulario— generaría una entrada de auditoría por cada vez que alguien abre y cierra la pantalla. Un `appDetails` lleno de entradas que no registran ningún cambio no es trazabilidad: es ruido que esconde las modificaciones reales. Y cada `UPDATE` dispara además `TRG_<tabla>_setSysDetails`, que incrementa `sysDetails.version` y añade un evento a `sysDetails.auditTrail`: la única forma de no ensuciar los dos sitios es no ejecutar el `UPDATE`.
 
-El patrón canónico es el de `updateCatalogItemService` (`src/services/catalogItem.service.ts:152-183`):
+**El patrón canónico es `buildDifferentialUpdate` (`src/helpers/differentialUpdate.helper.ts`), y es de uso obligatorio en los servicios de update.** No se vuelve a escribir la comparación campo a campo: escrita a mano no la vigila nada —omitir un campo no rompe la compilación ni ningún test—, y así es como seis de los doce servicios llegaron a estar desviados sin que nadie lo notara (SPEC F12).
 
 ```ts
 const currentAppDetails = Array.isArray(entity.appDetails) ? entity.appDetails : [];
-const objectToUpdate = {
-    code: data.code && toConstantCase(data.code.trim()) !== entity.code ? toConstantCase(data.code.trim()) : undefined,
-    name: data.name && toTitleCase(data.name.trim()) !== entity.name ? toTitleCase(data.name.trim()) : undefined,
-    sortOrder: data.sortOrder !== undefined && data.sortOrder !== entity.sortOrder ? data.sortOrder : undefined
-};
-for( const key of Object.keys(objectToUpdate) ) {
-    if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
-}
-// Sin diferencias no hay escritura: ni UPDATE, ni updatedAt, ni entrada de auditoría
+// stored tiene que ser la fila completa: con `attributes` acotados, un campo ausente vale
+// undefined y toda comparación contra él da «cambió»
+const stored = entity.get({ plain: true }) as Record<string, unknown>;
+const objectToUpdate = buildDifferentialUpdate(stored, {
+    code: data.code ? toConstantCase(data.code.trim()) : undefined,
+    name: data.name ? toTitleCase(data.name.trim()) : undefined,
+    notes: data.notes !== undefined ? ( data.notes ? data.notes.trim() : null ) : undefined
+});
+// Sin diferencias no hay escritura: ni UPDATE, ni updatedAt, ni entrada de auditoría,
+// ni evento en sysDetails. Es la única línea de control que le queda al servicio
 if( Object.keys(objectToUpdate).length === 0 ) {
     return entity;
 }
@@ -527,12 +528,25 @@ return await entity.update({
 }, { returning: true });
 ```
 
+El helper recibe los valores **ya normalizados** y con `undefined` en las claves que no viajaron en el body; normalizar sigue siendo del servicio, porque el helper no sabe qué campo es un código y cuál un nombre. Devuelve solo las claves que difieren, aplicando estas reglas de comparación:
+
+| Tipo de valor | Criterio |
+|---|---|
+| Primitivos | `!==` estricto |
+| `null` en un lado y valor en el otro | es cambio |
+| `Date` en cualquiera de los dos lados | ambos coercionados con `new Date(v).getTime()` |
+| Objetos y arrays | `JSON.stringify` en los dos lados |
+| Cadena numérica frente a número, si ambos coercionan a un número finito | comparación numérica |
+| Fecha `DATEONLY` como cadena | `String(v).slice(0, 10)` en los dos lados |
+
+La quinta existe porque las columnas `DECIMAL` vuelven de `pg` como cadena —`latitude` se lee `'-0.2299000'` y llega `-0.2299`—, así que un `!==` entre ellas es siempre verdadero.
+
 Cuatro precisiones:
 
-- **Los campos anulables se comparan contra `undefined`, no por veracidad.** `data.x !== undefined ? (data.x ?? null) : undefined` distingue «no vino» de «vino en `null`». Un `if( data.x )` descarta en silencio el `false`, el `0` y la cadena vacía, que son valores legítimos.
-- **Los campos cifrados se comparan sobre el texto plano**, descifrando el guardado, no comparando ciphertext contra ciphertext.
-- **Los derivados cuentan como cambio.** Si el servicio recalcula un valor —una edad, un código— y el resultado difiere del guardado, eso es una diferencia aunque el cliente no haya enviado nada.
-- **La validación de FK va antes y es independiente** de si la FK cambió o no: una FK que llega apuntando a una fila inactiva es 404 aunque coincida con la guardada.
+- **Los campos anulables se comparan contra `undefined`, no por veracidad.** `data.x !== undefined ? (data.x ?? null) : undefined` distingue «no vino» de «vino en `null`». Un `if( data.x )` descarta en silencio el `false`, el `0` y la cadena vacía, que son valores legítimos. En `candidates`, `undefined` es «no vino» y `null` es un valor: no son intercambiables, y colapsar el segundo en el primero deja un campo anulable sin forma de vaciarse.
+- **Los campos cifrados se comparan sobre el texto plano**: el `stored` llega descifrado con `esaviDecrypt` y `esaviCrypt` se aplica **después**, sobre las claves que el helper devolvió. Comparar ciphertext funciona solo porque `esaviCrypt` usa un IV fijo, y atarse a eso hace que pasar a un IV aleatorio rompa la comparación en silencio.
+- **Los derivados cuentan como cambio.** Si el servicio recalcula un valor —una edad, un `displayName`— entra en `candidates` **siempre**, no bajo un `if` de presencia, y es el helper quien decide si difiere del guardado.
+- **La validación de FK y la unicidad van antes y son independientes** de si el campo cambió: una FK que llega apuntando a una fila inactiva es 404 aunque coincida con la guardada, y un `code` ocupado es 409 aunque el resto del body no cambie nada. La unicidad de un campo cifrado sí compara ciphertext, porque es una consulta a la base y no un diff.
 
 ### Auditoría — `appDetails`
 
@@ -730,7 +744,7 @@ El validador de update **no** repite el de id: se componen en la ruta.
 
 ```ts
 import { Op } from 'sequelize';
-import { AppError, getMessage, toConstantCase, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, toTitleCase } from '../helpers';
 import { Entity } from '../models';
 import { AuthUser, CreateEntityInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -809,18 +823,16 @@ const updateEntityService = async (id: string, data: Partial<CreateEntityInput>,
             throw new AppError(getMessage('entity.codeExists', lang, { code }), 409, 'ENTITY_004_CODE_EXISTS');
         }
     }
-    // Only what actually changed travels to the UPDATE, compared against the normalized value
-    const objectToUpdate: Record<string, unknown> = {
-        code: code && code !== entity.code ? code : undefined,
-        name: data.name && toTitleCase(data.name.trim()) !== entity.name ? toTitleCase(data.name.trim()) : undefined,
-        description: data.description !== undefined && ( data.description?.trim() ?? null ) !== entity.description
-            ? ( data.description?.trim() ?? null ) : undefined,
-        sortOrder: data.sortOrder !== undefined && data.sortOrder !== entity.sortOrder ? data.sortOrder : undefined
-    };
-    for( const key of Object.keys(objectToUpdate) ) {
-        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
-    }
-    // Nothing changed: no UPDATE, no updatedAt and no audit entry
+    // Only what actually changed travels to the UPDATE. The comparison lives in the helper, and
+    // its stored side has to be the whole row — findByPk without narrowed attributes
+    const stored = entity.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        code,
+        name: data.name ? toTitleCase(data.name.trim()) : undefined,
+        description: data.description !== undefined ? ( data.description?.trim() ?? null ) : undefined,
+        sortOrder: data.sortOrder
+    });
+    // Nothing changed: no UPDATE, no updatedAt, no audit entry and no sysDetails event
     if( Object.keys(objectToUpdate).length === 0 ) {
         return entity;
     }
@@ -1084,7 +1096,7 @@ La ruta base va en **kebab-case plural**: `/catalog-items`, `/geo-level-types`, 
 - [ ] Los status codes siguen la tabla: `409` para duplicados en create **y** update.
 - [ ] El `catch` del controlador sigue el idiom de tres pasos.
 - [ ] El servicio valida las FK, normaliza en escritura y extiende `appDetails` sin sobrescribirlo.
-- [ ] El update es **diferencial**: solo viajan al `UPDATE` los campos cuyo valor normalizado difiere del guardado, y sin diferencias no hay escritura ni entrada de auditoría.
+- [ ] El update es **diferencial y pasa por `buildDifferentialUpdate`**: solo viajan al `UPDATE` los campos cuyo valor normalizado difiere del guardado, y sin diferencias no hay escritura, ni entrada de auditoría, ni evento en `sysDetails`.
 - [ ] Hay transacción si se hace más de una escritura dependiente.
 - [ ] Las claves i18n existen en `es.json`, `en.json` **y** `nl.json`, y todas las referenciadas desde el código existen.
 - [ ] No queda código comentado.

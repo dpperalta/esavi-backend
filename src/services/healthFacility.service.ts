@@ -1,7 +1,7 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, HealthFacility } from '../models';
-import { AppError, getMessage, toConstantCase, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateHealthFacilityInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -251,32 +251,27 @@ const updateHealthFacilityService = async (id: string, data: Partial<CreateHealt
         }
     }
     const currentAppDetails = Array.isArray(healthFacility.appDetails) ? healthFacility.appDetails : [];
-    const objectToUpdate = {
-        geoLocationId: geoLocationId && geoLocationId !== healthFacility.geoLocationId ? geoLocationId : undefined,
-        facilityTypeItemId: facilityTypeItemId && facilityTypeItemId !== healthFacility.facilityTypeItemId ? facilityTypeItemId : undefined,
-        parentHealthFacilityId: parentHealthFacilityId && parentHealthFacilityId !== healthFacility.parentHealthFacilityId ? parentHealthFacilityId : undefined,
-        localCode: targetLocalCode && targetLocalCode !== healthFacility.localCode ? targetLocalCode : undefined,
-        name: name && toTitleCase(name.trim()) !== healthFacility.name ? toTitleCase(name.trim()) : undefined,
-        officialName: officialName && officialName.trim() !== healthFacility.officialName ? officialName.trim() : undefined,
-        shortName: shortName && shortName.trim() !== healthFacility.shortName ? shortName.trim() : undefined,
-        address: address && address.trim() !== healthFacility.address ? address.trim() : undefined,
-        latitude: latitude && latitude !== healthFacility.latitude ? latitude : undefined,
-        longitude: longitude && longitude !== healthFacility.longitude ? longitude : undefined,
-        phone: phone && phone.trim() !== healthFacility.phone ? phone.trim() : undefined,
-        email: email && email.trim() !== healthFacility.email ? email.trim() : undefined,
-    };
-    if (objectToUpdate.geoLocationId === undefined) delete objectToUpdate.geoLocationId;
-    if (objectToUpdate.facilityTypeItemId === undefined) delete objectToUpdate.facilityTypeItemId;
-    if (objectToUpdate.parentHealthFacilityId === undefined) delete objectToUpdate.parentHealthFacilityId;
-    if (objectToUpdate.localCode === undefined) delete objectToUpdate.localCode;
-    if (objectToUpdate.name === undefined) delete objectToUpdate.name;
-    if (objectToUpdate.officialName === undefined) delete objectToUpdate.officialName;
-    if (objectToUpdate.shortName === undefined) delete objectToUpdate.shortName;
-    if (objectToUpdate.address === undefined) delete objectToUpdate.address;
-    if (objectToUpdate.latitude === undefined) delete objectToUpdate.latitude;
-    if (objectToUpdate.longitude === undefined) delete objectToUpdate.longitude;
-    if (objectToUpdate.phone === undefined) delete objectToUpdate.phone;
-    if (objectToUpdate.email === undefined) delete objectToUpdate.email;
+    // Differential update: only what really changed reaches the UPDATE. `stored` is the whole
+    // row, which is the precondition of the helper. latitude and longitude are DECIMAL(10, 7)
+    // and `pg` hands them back as strings — '-0.2299000' against the -0.2299 that arrives in the
+    // body — so comparing them with !== was always true and every PUT rewrote the coordinates.
+    // The helper compares them numerically
+    const stored = healthFacility.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        geoLocationId: geoLocationId ? geoLocationId : undefined,
+        facilityTypeItemId: facilityTypeItemId ? facilityTypeItemId : undefined,
+        parentHealthFacilityId: parentHealthFacilityId ? parentHealthFacilityId : undefined,
+        localCode: targetLocalCode ? targetLocalCode : undefined,
+        name: name ? toTitleCase(name.trim()) : undefined,
+        officialName: officialName ? officialName.trim() : undefined,
+        shortName: shortName ? shortName.trim() : undefined,
+        address: address ? address.trim() : undefined,
+        latitude: latitude ? latitude : undefined,
+        longitude: longitude ? longitude : undefined,
+        phone: phone ? phone.trim() : undefined,
+        email: email ? email.trim() : undefined
+    });
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry
     if (Object.keys(objectToUpdate).length > 0) {
         const newEntry: AppDetails = {
             createdAt: new Date(),
@@ -286,6 +281,7 @@ const updateHealthFacilityService = async (id: string, data: Partial<CreateHealt
         };
         updatedHealthFacility = await healthFacility.update({
             ...objectToUpdate,
+            updatedAt: new Date(),
             appDetails: [
                 ...currentAppDetails,
                 newEntry

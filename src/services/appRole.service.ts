@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { AppError, getMessage, isSuperAdmin, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, isSuperAdmin, toConstantCase } from '../helpers';
 import { AppRole, AppUserRole } from '../models';
 import { AppDetails, AuthUser, CreateAppRoleInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -143,24 +143,27 @@ const updateAppRoleService = async (id: string, data: Partial<CreateAppRoleInput
         }
     }
     const currentAppDetails = Array.isArray(appRole.appDetails) ? appRole.appDetails : [];
-    const objectToUpdate = {
-        code: code && code !== appRole.code ? code : undefined,
-        name: name && name !== appRole.name ? name : undefined,
-        description: data.description && data.description.trim() !== appRole.description ? data.description.trim() : undefined,
-        level: data.level !== undefined && data.level !== appRole.level ? data.level : undefined
-    };
-    if( objectToUpdate.code === undefined ) delete objectToUpdate.code;
-    if( objectToUpdate.name === undefined ) delete objectToUpdate.name;
-    if( objectToUpdate.description === undefined ) delete objectToUpdate.description;
-    if( objectToUpdate.level === undefined ) delete objectToUpdate.level;
+    // Differential update: only what really changed reaches the UPDATE. `stored` is the whole
+    // row, which is the precondition of the helper
+    const stored = appRole.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        code,
+        name,
+        description: data.description ? data.description.trim() : undefined,
+        level: data.level
+    });
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. An attempt that touched
+    // nothing is not a change, and appDetails counts changes, not visits — morgan already has
+    // the request in access.log
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        return toAppRoleResponse(appRole);
+    }
     const newEntry: AppDetails = {
         createdAt: new Date(),
         user: authUser?.userId || 'undefined',
         method: 'ESAVI-APPROLE-004',
         detail: 'App role updated by service'
     };
-    // The audit entry is written even when no field changed: an update that touched nothing is
-    // still an update someone attempted, and appDetails is the only record of who tried
     const updatedAppRole = await appRole.update({
         ...objectToUpdate,
         updatedAt: new Date(),

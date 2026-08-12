@@ -1,8 +1,9 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType } from '../../src/models';
+import { CatalogItem, CatalogType, HealthFacility } from '../../src/models';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 
 /**
  * Contract suite for the seven healthFacility operations of SPEC 09. Unlike
@@ -515,6 +516,65 @@ describe('healthFacility contract', () => {
 
             expect(publicRows).not.toContain(inactiveId);
             expect(adminRows).toContain(inactiveId);
+        });
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const created = await createFacility({
+                name: `differential facility ${ suffix }`,
+                localCode: `differential ${ suffix }`,
+                facilityTypeItemId,
+                address: 'Av. Diferencial 12',
+                phone: '022345678',
+                email: 'diferencial@salud.ec',
+                // DECIMAL(10, 7): `pg` reads them back as strings, so the GET response resends
+                // '-0.2299000' against the -0.2299 that was stored
+                latitude: -0.2299,
+                longitude: -78.52495
+            });
+            expect(created.status).toBe(201);
+
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/health-facilities',
+                id: created.body.data.healthFacilityId,
+                model: HealthFacility,
+                // parentHealthFacilityId is optional() but not nullable in the validator, so
+                // resending the null the response carries is a 400. It is a validator gap of
+                // SPEC 09, adjacent to DEUDA-040 and not part of this spec
+                strip: ['parentHealthFacilityId']
+            });
+        });
+
+        // The case above resends the response, where latitude is already the string `pg` gave
+        // back, so a string-to-string comparison survives it. The leak only shows when the
+        // client sends the number it sent on create, which is what a JSON form does
+        it('a PUT resending the same latitude as a number writes nothing', async () => {
+            const created = await createFacility({
+                name: `decimal facility ${ suffix }`,
+                localCode: `decimal ${ suffix }`,
+                facilityTypeItemId,
+                latitude: -0.2299,
+                longitude: -78.52495
+            });
+            expect(created.status).toBe(201);
+
+            const id = created.body.data.healthFacilityId;
+            const before = await HealthFacility.findByPk(id);
+
+            const response = await request(app)
+                .put(`/api/health-facilities/${ id }`)
+                .set(authHeader('ADMIN'))
+                .send({ latitude: -0.2299, longitude: -78.52495 });
+
+            expect(response.status).toBe(200);
+
+            const after = await HealthFacility.findByPk(id);
+            expect(( after!.getDataValue('appDetails') as unknown[] ).length)
+                .toBe(( before!.getDataValue('appDetails') as unknown[] ).length);
+            expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
         });
 
     });

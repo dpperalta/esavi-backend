@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, Notifier } from '../models';
-import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateNotifierInput, NotifierListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -252,21 +252,41 @@ const updateNotifierService = async (id: string, data: Partial<CreateNotifierInp
         await assertGeoLocationIsValid(data.geoLocationId, '004', lang);
     }
 
-    // Normalize first, encrypt second, same as in 001. Only the fields that actually arrive are
-    // touched: an absent one keeps its stored ciphertext and is never re-encrypted
-    const objectToUpdate: Record<string, unknown> = {
+    // Differential update: only what really changed reaches the UPDATE. Until now the object was
+    // built out of which keys arrived, never comparing them with what was stored, so resending
+    // whole the record just read with a GET — the normal use of a form — re-encrypted and
+    // rewrote the four PII columns with their own value. `stored` is the whole row, which is the
+    // precondition of the helper, with those four decrypted by the same decryptPii the responses
+    // use: the comparison is over plain text and never ciphertext against ciphertext, which only
+    // works because esaviCrypt has a fixed IV. Tying the update to that would make moving to a
+    // random IV break the comparison in silence — everything would count as a change — and no
+    // test would tell it apart from a legitimate one. Normalize first, encrypt second, same as
+    // in 001, but the encryption now happens after the diff and only over what it returned
+    const stored = decryptPii(notifier.get({ plain: true }) as Record<string, unknown>);
+    const changes = buildDifferentialUpdate(stored, {
         professionItemId: data.professionItemId !== undefined ? ( data.professionItemId ?? null ) : undefined,
         geoLocationId: data.geoLocationId !== undefined ? ( data.geoLocationId ?? null ) : undefined,
-        firstName: data.firstName ? esaviCrypt(normalizeName(data.firstName)) : undefined,
-        lastName: data.lastName ? esaviCrypt(normalizeName(data.lastName)) : undefined,
-        address: data.address !== undefined ? ( data.address ? esaviCrypt(normalizeName(data.address)) : null ) : undefined,
-        email: data.email !== undefined ? ( data.email ? esaviCrypt(normalizeEmail(data.email)) : null ) : undefined,
+        firstName: data.firstName ? normalizeName(data.firstName) : undefined,
+        lastName: data.lastName ? normalizeName(data.lastName) : undefined,
+        address: data.address !== undefined ? ( data.address ? normalizeName(data.address) : null ) : undefined,
+        email: data.email !== undefined ? ( data.email ? normalizeEmail(data.email) : null ) : undefined,
         room: data.room !== undefined ? ( data.room ? data.room.trim() : null ) : undefined,
         phoneNumber: data.phoneNumber !== undefined ? ( data.phoneNumber ? data.phoneNumber.trim() : null ) : undefined,
         details: data.details !== undefined ? ( data.details ? data.details.trim() : null ) : undefined
-    };
-    for( const key of Object.keys(objectToUpdate) ) {
-        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    });
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
+    // stands, which is the state the client asked for
+    if( Object.keys(changes).length === 0 ) {
+        const unchanged = await findNotifierWithRelations(id, true);
+        return unchanged ? toNotifierResponse(unchanged) : null;
+    }
+
+    const objectToUpdate: Record<string, unknown> = { ...changes };
+    for( const field of PII_FIELDS ) {
+        if( objectToUpdate[field] ) {
+            objectToUpdate[field] = esaviCrypt(objectToUpdate[field] as string);
+        }
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns. The
@@ -275,7 +295,6 @@ const updateNotifierService = async (id: string, data: Partial<CreateNotifierInp
     // carrying sysDetails and overwrites this value with current_timestamp
     objectToUpdate.updatedAt = new Date();
 
-    // The entry is written even when nothing changed: the attempt is part of the audit trail
     const currentAppDetails = Array.isArray(notifier.appDetails) ? notifier.appDetails : [];
     const newEntry: AppDetails = {
         createdAt: new Date(),

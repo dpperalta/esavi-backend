@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, Classification, EsaviCase, Patient } from '../models';
 import {
     AppError,
+    buildDifferentialUpdate,
     findSeverityViolation,
     getMessage,
     hasAnySeriousCriterion,
@@ -403,46 +404,36 @@ const updateClassificationService = async (
     // record just read with a GET is the normal use of a form, and writing it back would fill
     // appDetails with entries that record no change and hide the real ones among them
     const stored = classification.get({ plain: true }) as Record<string, unknown>;
-    const objectToUpdate: Record<string, unknown> = {};
-    const setIfChanged = (field: string, value: unknown) => {
-        if( value !== stored[field] ) objectToUpdate[field] = value;
-    };
 
-    // With no calculation possible and nothing in the body, the stored age is left alone: what
-    // the client informed by hand is only overwritten by a real calculation, never erased in
-    // silence. A recomputed value counts as a change even though the client sent nothing
-    if( resolvedAge ) {
-        setIfChanged('age', resolvedAge.age);
-        setIfChanged('ageUnitItemId', resolvedAge.ageUnitItemId);
-    }
-    // Compared as a plain YYYY-MM-DD string, which is what a DATEONLY column reads back as
-    if( data.firstConsultationDate !== undefined ) {
-        setIfChanged(
-            'firstConsultationDate',
-            data.firstConsultationDate ? String(data.firstConsultationDate).slice(0, 10) : null
-        );
-    }
-    if( data.otherSeriousConditionDescription !== undefined ) {
-        setIfChanged(
-            'otherSeriousConditionDescription',
-            data.otherSeriousConditionDescription ? data.otherSeriousConditionDescription.trim() : null
-        );
-    }
-    if( data.notes !== undefined ) {
-        setIfChanged('notes', data.notes ? data.notes.trim() : null);
-    }
     // Compared against undefined and not by truthiness: a criterion arriving false is a value,
     // and so is one arriving null, which is what keeps the tri-state alive
+    const criterionCandidates: Record<string, unknown> = {};
     for( const field of SERIOUS_CRITERION_FIELDS ) {
-        if( data[field] !== undefined ) {
-            setIfChanged(field, data[field] ?? null);
-        }
+        criterionCandidates[field] = data[field] !== undefined ? ( data[field] ?? null ) : undefined;
     }
-    // Fourth row of the matrix, applied over the resulting state as well: with a criterion
-    // behind it the event is serious however the flag arrived. Derived, so it is always compared
-    setIfChanged('isSeriousEvent', hasAnySeriousCriterion(resultingState)
-        ? true
-        : ( resultingState.isSeriousEvent ?? null ));
+
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        // With no calculation possible and nothing in the body, the stored age is left alone:
+        // what the client informed by hand is only overwritten by a real calculation, never
+        // erased in silence. A recomputed value counts as a change even though the client sent
+        // nothing, which is why the derived pair does not hang on the presence of a key
+        age: resolvedAge ? resolvedAge.age : undefined,
+        ageUnitItemId: resolvedAge ? resolvedAge.ageUnitItemId : undefined,
+        // Written as a plain YYYY-MM-DD string, which is what a DATEONLY column reads back as
+        firstConsultationDate: data.firstConsultationDate !== undefined
+            ? ( data.firstConsultationDate ? String(data.firstConsultationDate).slice(0, 10) : null )
+            : undefined,
+        otherSeriousConditionDescription: data.otherSeriousConditionDescription !== undefined
+            ? ( data.otherSeriousConditionDescription ? data.otherSeriousConditionDescription.trim() : null )
+            : undefined,
+        notes: data.notes !== undefined ? ( data.notes ? data.notes.trim() : null ) : undefined,
+        ...criterionCandidates,
+        // Fourth row of the matrix, applied over the resulting state as well: with a criterion
+        // behind it the event is serious however the flag arrived. Derived, so it always travels
+        isSeriousEvent: hasAnySeriousCriterion(resultingState)
+            ? true
+            : ( resultingState.isSeriousEvent ?? null )
+    });
 
     // Nothing changed: no UPDATE, no updatedAt and no audit entry
     if( Object.keys(objectToUpdate).length === 0 ) {

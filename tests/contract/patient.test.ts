@@ -4,6 +4,7 @@ import { CatalogItem, CatalogType, GeoLevelType, GeoLocation, Patient } from '..
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -207,12 +208,26 @@ describe('patient contract', () => {
             expect(response.body.data.healthSystemCode).toBe(healthSystemCode);
         });
 
-        it('004 keeps the audit history instead of overwriting it', async () => {
+        it('004 keeps the audit history and adds nothing when nothing changed', async () => {
             const response = await updatePatient(patientId, {});
             const methods = response.body.data.appDetails.map(( entry: { method: string } ) => entry.method);
 
             expect(methods[0]).toBe('ESAVI-PATIENT-001');
-            expect(methods.filter(( method: string ) => method === 'ESAVI-PATIENT-004')).toHaveLength(2);
+            // The empty body changes nothing, so it writes nothing: the only 004 is the real
+            // update of the previous case, and the create entry is still there
+            expect(methods.filter(( method: string ) => method === 'ESAVI-PATIENT-004')).toHaveLength(1);
+        });
+
+        it('004 leaves the encrypted column byte for byte identical when the value is resent', async () => {
+            const before = await Patient.findByPk(patientId);
+            const storedFirstName = before!.getDataValue('firstName');
+
+            const response = await updatePatient(patientId, { firstName: 'Juan Pablo' });
+            expect(response.status).toBe(200);
+
+            const after = await Patient.findByPk(patientId);
+            expect(after!.getDataValue('firstName')).toBe(storedFirstName);
+            expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
         });
 
         it('002A lists the patient in the reduced shape', async () => {
@@ -293,9 +308,10 @@ describe('patient contract', () => {
             const response = await getPatient(patientId);
             const methods = response.body.data.appDetails.map(( entry: { method: string } ) => entry.method);
 
+            // One 004 and not two: of the three updates this suite runs, only the first one
+            // carried a real change — the empty body and the resent firstName wrote nothing
             expect(methods).toEqual([
                 'ESAVI-PATIENT-001',
-                'ESAVI-PATIENT-004',
                 'ESAVI-PATIENT-004',
                 'ESAVI-PATIENT-005A',
                 'ESAVI-PATIENT-005B'
@@ -544,6 +560,30 @@ describe('patient contract', () => {
 
             expect(response.body.data.rows).toHaveLength(2);
             expect(response.body.data.count).toBeGreaterThan(2);
+        });
+
+    });
+
+    describe('differential update — SPEC F12', () => {
+
+        it('a PUT resending the whole GET response writes nothing', async () => {
+            const created = await createPatient({
+                firstName: 'diferencial',
+                lastName: 'paciente',
+                documentNumber: `DIFF-004-${ suffix }`,
+                email: 'diferencial@correo.ec',
+                birthDate: '1990-05-04',
+                phoneNumber: '0991234567',
+                sexItemId,
+                residenceGeoLocationId: geoLocationId
+            });
+            expect(created.status).toBe(201);
+
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/patients',
+                id: created.body.data.patientId,
+                model: Patient
+            });
         });
 
     });

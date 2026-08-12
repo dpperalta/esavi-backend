@@ -1,7 +1,7 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, Patient } from '../models';
-import { AppError, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreatePatientInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -244,24 +244,50 @@ const updatePatientService = async (id: string, data: Partial<CreatePatientInput
         await assertResidenceIsValid(data.residenceGeoLocationId, '004', lang);
     }
 
-    const objectToUpdate: Record<string, unknown> = {
-        firstName: data.firstName ? esaviCrypt(normalizeName(data.firstName)) : undefined,
-        lastName: data.lastName ? esaviCrypt(normalizeName(data.lastName)) : undefined,
-        documentNumber: targetDocumentNumber,
-        middleName: data.middleName !== undefined ? ( data.middleName ? esaviCrypt(normalizeName(data.middleName)) : null ) : undefined,
-        secondLastName: data.secondLastName !== undefined ? ( data.secondLastName ? esaviCrypt(normalizeName(data.secondLastName)) : null ) : undefined,
-        passportNumber: data.passportNumber !== undefined ? ( data.passportNumber ? esaviCrypt(normalizeDocument(data.passportNumber)) : null ) : undefined,
-        email: data.email !== undefined ? ( data.email ? esaviCrypt(normalizeEmail(data.email)) : null ) : undefined,
+    // Differential update: only what really changed reaches the UPDATE. Until now the object was
+    // built out of which keys arrived, never comparing them with what was stored, so resending
+    // whole the record just read with a GET — the normal use of a form — re-encrypted and
+    // rewrote the seven PII columns with their own value. `stored` is the whole row, which is
+    // the precondition of the helper, with the encrypted columns decrypted: the comparison is
+    // over plain text and never ciphertext against ciphertext, which only works because
+    // esaviCrypt has a fixed IV. Tying the update to that would make moving to a random IV break
+    // the comparison in silence — everything would count as a change — and no test would tell it
+    // apart from a legitimate one. esaviCrypt is applied afterwards, over what the diff returned
+    const stored = patient.get({ plain: true }) as Record<string, unknown>;
+    for( const field of PII_FIELDS ) {
+        const value = stored[field];
+        if( value ) {
+            stored[field] = esaviDecrypt(value as string);
+        }
+    }
+    const changes = buildDifferentialUpdate(stored, {
+        firstName: data.firstName ? normalizeName(data.firstName) : undefined,
+        lastName: data.lastName ? normalizeName(data.lastName) : undefined,
+        documentNumber: data.documentNumber ? normalizeDocument(data.documentNumber) : undefined,
+        middleName: data.middleName !== undefined ? ( data.middleName ? normalizeName(data.middleName) : null ) : undefined,
+        secondLastName: data.secondLastName !== undefined ? ( data.secondLastName ? normalizeName(data.secondLastName) : null ) : undefined,
+        passportNumber: data.passportNumber !== undefined ? ( data.passportNumber ? normalizeDocument(data.passportNumber) : null ) : undefined,
+        email: data.email !== undefined ? ( data.email ? normalizeEmail(data.email) : null ) : undefined,
         birthDate: data.birthDate !== undefined ? ( data.birthDate ? normalizeBirthDate(data.birthDate) : null ) : undefined,
         phoneNumber: data.phoneNumber !== undefined ? ( data.phoneNumber ? data.phoneNumber.trim() : null ) : undefined,
         sexItemId: data.sexItemId !== undefined ? ( data.sexItemId || null ) : undefined,
         residenceGeoLocationId: data.residenceGeoLocationId !== undefined ? ( data.residenceGeoLocationId || null ) : undefined
-    };
-    for( const key of Object.keys(objectToUpdate) ) {
-        if( objectToUpdate[key] === undefined ) delete objectToUpdate[key];
+    });
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
+    // stands, which is the state the client asked for
+    if( Object.keys(changes).length === 0 ) {
+        const unchanged = await findPatientWithRelations(id, true);
+        return unchanged ? toPatientResponse(unchanged) : null;
     }
 
-    // The entry is written even when nothing changed: the attempt is part of the audit trail
+    const objectToUpdate: Record<string, unknown> = { ...changes };
+    for( const field of PII_FIELDS ) {
+        if( objectToUpdate[field] ) {
+            objectToUpdate[field] = esaviCrypt(objectToUpdate[field] as string);
+        }
+    }
+
     const currentAppDetails = Array.isArray(patient.appDetails) ? patient.appDetails : [];
     const newEntry: AppDetails = {
         createdAt: new Date(),
@@ -271,6 +297,7 @@ const updatePatientService = async (id: string, data: Partial<CreatePatientInput
     };
     await patient.update({
         ...objectToUpdate,
+        updatedAt: new Date(),
         appDetails: [
             ...currentAppDetails,
             newEntry
