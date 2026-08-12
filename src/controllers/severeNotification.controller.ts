@@ -5,6 +5,7 @@ import {
     createSevereNotificationService,
     getSevereNotificationByCaseIdService,
     getSevereNotificationByIdService,
+    purgeSevereNotificationService,
     updateSevereNotificationService
 } from '../services/severeNotification.service';
 
@@ -105,9 +106,31 @@ const updateSevereNotification = async (req: Request, res: Response, next: NextF
     }
 }
 
+// Purge Severe Notification Controller - For SuperAdmin
+// Code: ESAVI-SEVNOT-005C
+// Answers { ok, message } without data: the row no longer exists, so there is nothing to return
+const purgeSevereNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeSevereNotificationService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('severeNotification.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SEVNOT-005C: Error purging Severe Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('severeNotification.purgeFailed', req.lang), 500, 'SEVNOT_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createSevereNotification,
     getSevereNotificationById,
     getSevereNotificationByCaseId,
-    updateSevereNotification
+    updateSevereNotification,
+    purgeSevereNotification
 }

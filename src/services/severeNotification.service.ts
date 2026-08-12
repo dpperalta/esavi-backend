@@ -1,5 +1,7 @@
+import { sequelize } from '../database/connection';
 import { EsaviCase, Notification, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateSevereNotificationInput } from '../types';
 import { NotificationType } from '../constants/notification.constants';
 
@@ -333,9 +335,61 @@ const updateSevereNotificationService = async (
     return updated ? toSevereNotificationResponse(updated) : null;
 }
 
+// Purging Severe Notification Service - For SuperAdmin
+// Code: ESAVI-SEVNOT-005C
+// severeNotification is outside the preventPhysicalDelete loop of esaviapp.sql:1354-1360, so the
+// row can really be destroyed.
+// The guard by deletedAt lives here and not in purgeEntityService, whose isActive check is inert
+// on this table: `undefined !== true`, so every row would be purgable immediately and the safety
+// net that CONVENTIONS.md §6 calls for would be gone. Generalizing the common service to take an
+// optional predicate would touch a file four entities already depend on, to solve a case only one
+// has today — when the second satellite needs the same, that is the moment to generalize it
+const purgeSevereNotificationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const severeNotification = await SevereNotification.findByPk(id, {
+            attributes: ['notificationId', 'deletedAt'],
+            transaction
+        });
+        if( !severeNotification ) {
+            throw new AppError(getMessage('severeNotification.notFound', lang), 404, 'SEVNOT_005C_NOT_FOUND');
+        }
+
+        // The translation of "physical deletion only reaches what somebody retired before, in a
+        // deliberate and reversible way" to the only seal this table has. Retiring the detail is
+        // retiring its header, so this is what proves the two deliberate steps happened
+        if( severeNotification.deletedAt === null || severeNotification.deletedAt === undefined ) {
+            throw new AppError(
+                getMessage('severeNotification.notDeleted', lang, { id }),
+                409,
+                'SEVNOT_005C_NOT_DELETED'
+            );
+        }
+
+        await purgeEntityService({
+            model: SevereNotification,
+            where: { notificationId: id },
+            transaction,
+            operationCode: 'ESAVI-SEVNOT-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('severeNotification.notFound', lang),
+            notFoundCode: 'SEVNOT_005C_NOT_FOUND',
+            // Unreachable on this table: the generic guard compares isActive, a column
+            // severeNotification does not have. The real guard is the one above
+            stillActiveMessage: getMessage('severeNotification.notDeleted', lang, { id }),
+            stillActiveCode: 'SEVNOT_005C_NOT_DELETED'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createSevereNotificationService,
     getSevereNotificationByIdService,
     getSevereNotificationByCaseIdService,
-    updateSevereNotificationService
+    updateSevereNotificationService,
+    purgeSevereNotificationService
 }

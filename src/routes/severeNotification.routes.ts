@@ -5,6 +5,7 @@ import {
     createSevereNotification,
     getSevereNotificationByCaseId,
     getSevereNotificationById,
+    purgeSevereNotification,
     updateSevereNotification
 } from '../controllers/severeNotification.controller';
 import {
@@ -14,7 +15,7 @@ import {
     updateSevereNotificationValidator
 } from '../validators';
 
-const { USER } = ROLES;
+const { SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -24,6 +25,12 @@ const router = Router();
 // F10 already fixed: the clinical detail is captured in the same operational flow as the
 // notification, and splitting it across two roles would break the form in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createSevereNotificationValidator, validateFields, createSevereNotification);
+
+// Purge Severe Notification - Physical delete, for SuperAdmin
+// Code: ESAVI-SEVNOT-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not
+// have an activity flag and does not manage its own state — its header does
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...severeNotificationIdValidator, validateFields, purgeSevereNotification);
 
 // Get Severe Notification by Case
 // Code: ESAVI-SEVNOT-006
