@@ -5,6 +5,7 @@ import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, format
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -355,6 +356,19 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
                     newEntry
                 ]
             }, { transaction });
+
+            // classification.age is derived from this eventDate, so correcting it leaves the stored
+            // age contradicting its own origin unless it is recalculated here. The differential is
+            // the trigger: the key only survives it when the resulting value really differs from the
+            // stored one, so a PUT that just touches `details` costs no extra query.
+            //
+            // It runs AFTER the write and inside the same transaction, so the recalculation reads
+            // the new eventDate without it having to be passed in. If it throws — a 409 for an event
+            // before the patient's birth, a 404 for a missing ageUnit item — the rollback undoes this
+            // write too, and the case keeps its previous eventDate
+            if( 'eventDate' in objectToUpdate ) {
+                await recalculateClassificationAgesService({ caseId: id }, 'ESAVI-CASE-004', authUser, lang, transaction);
+            }
         }
 
         await transaction.commit();
