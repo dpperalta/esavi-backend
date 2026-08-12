@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotification,
     getAllNotifications,
+    getNotificationByCaseId,
     getNotificationById,
     getNotifications
 } from '../controllers/notification.controller';
 import {
     createNotificationValidator,
+    notificationCaseIdValidator,
     notificationIdValidator,
     notificationListValidator
 } from '../validators';
@@ -30,6 +32,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...notificationListVali
 // Get All Notifications - For Admin
 // Code: ESAVI-NOTIFCN-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...notificationListValidator, validateFields, getAllNotifications);
+
+// Get Notification by Case
+// Code: ESAVI-NOTIFCN-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared
+// before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...notificationCaseIdValidator, validateFields, getNotificationByCaseId);
 
 // Get Notification by ID
 // Code: ESAVI-NOTIFCN-003

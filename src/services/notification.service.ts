@@ -75,6 +75,17 @@ const findNotificationWithRelations = async (id: string, includeInactive: boolea
     });
 }
 
+// The same read as above, entered through the foreign key instead of the primary one. It needs
+// no LIMIT beyond findOne because UQ_notification_case guarantees there is at most one row
+const findNotificationByCaseId = async (caseId: string, includeInactive: boolean = false) => {
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    return await Notification.findOne({
+        where,
+        attributes: DETAIL_EXCLUDE,
+        include: [CASE_INCLUDE, OUTCOME_INCLUDE]
+    });
+}
+
 // The case must exist and be active: FK_notification_case declares ON DELETE CASCADE, but
 // TRG_esaviCase_preventPhysicalDelete forbids every physical delete of esaviCase, so that
 // cascade never fires and nothing in the DDL stops a notification from pointing at a retired
@@ -269,9 +280,27 @@ const getNotificationByIdService = async (id: string, lang: string, canViewInact
     return toNotificationResponse(notification);
 }
 
+// Get Notification By Case ID Service
+// Code: ESAVI-NOTIFCN-006
+// The real query of the domain: the client holds the caseId, not the notificationId. It returns
+// the record itself and not { count, rows } — the relation is one to one, and wrapping a single
+// record in a collection would force unwrapping a one-element array on every screen.
+// The two 404 are deliberately distinct: a case that does not exist is a broken link, a case
+// without notification is a pending task, and the client acts differently on each
+const getNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+    await assertCaseIsValid(caseId, '006', lang);
+
+    const notification = await findNotificationByCaseId(caseId, canViewInactive);
+    if( !notification ) {
+        throw new AppError(getMessage('notification.notFound', lang), 404, 'NOTIFCN_006_NOT_FOUND');
+    }
+    return toNotificationResponse(notification);
+}
+
 export {
     createNotificationService,
     getNotificationsService,
     getAllNotificationsService,
-    getNotificationByIdService
+    getNotificationByIdService,
+    getNotificationByCaseIdService
 }

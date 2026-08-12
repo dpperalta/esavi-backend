@@ -5,6 +5,7 @@ import { NotificationType } from '../constants/notification.constants';
 import {
     createNotificationService,
     getAllNotificationsService,
+    getNotificationByCaseIdService,
     getNotificationByIdService,
     getNotificationsService
 } from '../services/notification.service';
@@ -111,9 +112,35 @@ const getNotificationById = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+// Get Notification By Case ID Controller
+// Code: ESAVI-NOTIFCN-006
+const getNotificationByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getNotificationByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFCN-006: Error fetching Notification by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notification.getFailed', req.lang), 500, 'NOTIFCN_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotification,
     getNotifications,
     getAllNotifications,
-    getNotificationById
+    getNotificationById,
+    getNotificationByCaseId
 }
