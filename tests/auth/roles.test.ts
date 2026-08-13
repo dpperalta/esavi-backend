@@ -194,7 +194,20 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/non-severe-notifications/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-NSEVNOT-006' },
     { method: 'delete', path: `/api/non-severe-notifications/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-NSEVNOT-005C' },
     { method: 'get',    path: `/api/non-severe-notifications/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NSEVNOT-003' },
-    { method: 'put',    path: `/api/non-severe-notifications/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NSEVNOT-004' }
+    { method: 'put',    path: `/api/non-severe-notifications/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NSEVNOT-004' },
+
+    // diagnosticTerm — the seven canonical operations, with the canonical role matrix and no
+    // deviation (SPEC F15 §3.4). No 005C: the table sits inside the preventPhysicalDelete loop of
+    // esaviapp.sql:1356-1370, so physical deletion is not declared. ESAVI-DIAGTERM-006 has no row
+    // here on purpose — it is the implicit resolution service, invoked by other domains inside
+    // their own transaction, and it has no HTTP route to authorize
+    { method: 'post',   path: '/api/diagnostic-terms',                        minRole: 'ADMIN',      code: 'ESAVI-DIAGTERM-001' },
+    { method: 'get',    path: '/api/diagnostic-terms',                        minRole: 'USER',       code: 'ESAVI-DIAGTERM-002A' },
+    { method: 'get',    path: '/api/diagnostic-terms/admin',                  minRole: 'ADMIN',      code: 'ESAVI-DIAGTERM-002B' },
+    { method: 'get',    path: `/api/diagnostic-terms/${ UUID }`,              minRole: 'USER',       code: 'ESAVI-DIAGTERM-003' },
+    { method: 'put',    path: `/api/diagnostic-terms/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-DIAGTERM-004' },
+    { method: 'delete', path: `/api/diagnostic-terms/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-DIAGTERM-005A' },
+    { method: 'patch',  path: `/api/diagnostic-terms/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-005B' }
 ];
 
 /**
@@ -250,7 +263,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(118);
+            expect(ROUTE_RULES).toHaveLength(125);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
