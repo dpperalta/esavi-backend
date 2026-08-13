@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { createNonSevereNotificationService } from '../services/nonSevereNotification.service';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
+import {
+    createNonSevereNotificationService,
+    getNonSevereNotificationByIdService
+} from '../services/nonSevereNotification.service';
 
 // Create Non Severe Notification Controller
 // Code: ESAVI-NSEVNOT-001
@@ -22,6 +26,32 @@ const createNonSevereNotification = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Get Non Severe Notification By ID Controller
+// Code: ESAVI-NSEVNOT-003
+const getNonSevereNotificationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getNonSevereNotificationByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('nonSevereNotification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NSEVNOT-003: Error fetching Non Severe Notification by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('nonSevereNotification.getFailed', req.lang), 500, 'NSEVNOT_003_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createNonSevereNotification
+    createNonSevereNotification,
+    getNonSevereNotificationById
 };
