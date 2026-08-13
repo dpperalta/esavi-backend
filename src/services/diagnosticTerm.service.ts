@@ -1,7 +1,9 @@
 import { Op, WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { DiagnosticTerm } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { AppDetails, AuthUser, CreateDiagnosticTermInput, DiagnosticTermListFilters } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Shared by both listings. search is the first Op.iLike of the repository and stays deliberately
@@ -177,10 +179,46 @@ const updateDiagnosticTermService = async (id: string, data: Partial<CreateDiagn
     return updatedDiagnosticTerm;
 }
 
+// ESAVI-DIAGTERM-005A / ESAVI-DIAGTERM-005B - Set Diagnostic Term Activation Service
+// Not a differential update: these are writes with an intention of their own. They record a state
+// fact, so they go through setEntityActiveStatusService and never through buildDifferentialUpdate.
+// The where filters by the primary key alone: no incoming foreign key is checked, because this is
+// a logical delete — the ON DELETE RESTRICT constraints of the three child tables never fire, and
+// an inactive term keeps being referenced by design. Deactivating means "stop offering it in the
+// autocomplete", not "stop existing"
+const setDiagnosticTermActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const diagnosticTerm = await setEntityActiveStatusService({
+            model: DiagnosticTerm,
+            where: { diagnosticTermId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('diagnosticTerm.notFound', lang),
+            notFoundCode: `DIAGTERM_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`diagnosticTerm.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `DIAGTERM_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-DIAGTERM-${ op }`,
+                detail: `DiagnosticTerm ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return diagnosticTerm;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createDiagnosticTermService,
     getActiveDiagnosticTermsService,
     getAllDiagnosticTermsService,
     getDiagnosticTermByIdService,
-    updateDiagnosticTermService
+    updateDiagnosticTermService,
+    setDiagnosticTermActivationService
 }

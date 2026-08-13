@@ -7,7 +7,8 @@ import {
     getActiveDiagnosticTermsService,
     getAllDiagnosticTermsService,
     getDiagnosticTermByIdService,
-    updateDiagnosticTermService
+    updateDiagnosticTermService,
+    setDiagnosticTermActivationService
 } from '../services/diagnosticTerm.service';
 
 // Unwraps the query filters shared by both listings. reviewStatus is read here but ignored by the
@@ -130,10 +131,52 @@ const updateDiagnosticTerm = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Delete Diagnostic Term Controller - Soft delete
+// Code: ESAVI-DIAGTERM-005A
+const deleteDiagnosticTerm = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setDiagnosticTermActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diagnosticTerm.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DIAGTERM-005A: Error deleting Diagnostic Term: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diagnosticTerm.deletedFailed', req.lang), 500, 'DIAGTERM_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Diagnostic Term Controller - For SuperAdmin
+// Code: ESAVI-DIAGTERM-005B
+const activateDiagnosticTerm = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setDiagnosticTermActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diagnosticTerm.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DIAGTERM-005B: Error activating Diagnostic Term: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diagnosticTerm.activatedFailed', req.lang), 500, 'DIAGTERM_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createDiagnosticTerm,
     getDiagnosticTerms,
     getAllDiagnosticTerms,
     getDiagnosticTermById,
-    updateDiagnosticTerm
+    updateDiagnosticTerm,
+    deleteDiagnosticTerm,
+    activateDiagnosticTerm
 }
