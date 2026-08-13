@@ -19,6 +19,11 @@ const buildDiagnosticTermWhere = (filters: DiagnosticTermListFilters): WhereOpti
     if (filters.termGroup) {
         where.termGroup = filters.termGroup.trim();
     }
+    // First JSONB key filter of the repository. It only ever arrives from the admin listing: the
+    // public controller does not read reviewStatus from the query, so the key never gets here
+    if (filters.reviewStatus) {
+        where['metadata.reviewStatus'] = filters.reviewStatus.trim();
+    }
     return where;
 }
 
@@ -77,7 +82,19 @@ const getActiveDiagnosticTermsService = async (filters: DiagnosticTermListFilter
     return diagnosticTerms;
 }
 
+// ESAVI-DIAGTERM-002B - Get All Diagnostic Terms Service (including inactive) - For Admin
+const getAllDiagnosticTermsService = async (filters: DiagnosticTermListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const diagnosticTerms = await DiagnosticTerm.findAndCountAll({
+        where: buildDiagnosticTermWhere(filters),
+        order: [['name', 'ASC']],
+        limit,
+        offset
+    });
+    return diagnosticTerms;
+}
+
 export {
     createDiagnosticTermService,
-    getActiveDiagnosticTermsService
+    getActiveDiagnosticTermsService,
+    getAllDiagnosticTermsService
 }
