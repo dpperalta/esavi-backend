@@ -6,7 +6,8 @@ import {
     createDiagnosticTermService,
     getActiveDiagnosticTermsService,
     getAllDiagnosticTermsService,
-    getDiagnosticTermByIdService
+    getDiagnosticTermByIdService,
+    updateDiagnosticTermService
 } from '../services/diagnosticTerm.service';
 
 // Unwraps the query filters shared by both listings. reviewStatus is read here but ignored by the
@@ -108,9 +109,31 @@ const getDiagnosticTermById = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Update Diagnostic Term Controller
+// Code: ESAVI-DIAGTERM-004
+const updateDiagnosticTerm = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateDiagnosticTermService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diagnosticTerm.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DIAGTERM-004: Error updating Diagnostic Term: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diagnosticTerm.updatedFailed', req.lang), 500, 'DIAGTERM_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createDiagnosticTerm,
     getDiagnosticTerms,
     getAllDiagnosticTerms,
-    getDiagnosticTermById
+    getDiagnosticTermById,
+    updateDiagnosticTerm
 }

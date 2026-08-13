@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createDiagnosticTerm, getAllDiagnosticTerms, getDiagnosticTermById, getDiagnosticTerms } from '../controllers/diagnosticTerm.controller';
-import { createDiagnosticTermValidator, diagnosticTermIdValidator, diagnosticTermListValidator } from '../validators';
+import { createDiagnosticTerm, getAllDiagnosticTerms, getDiagnosticTermById, getDiagnosticTerms, updateDiagnosticTerm } from '../controllers/diagnosticTerm.controller';
+import { createDiagnosticTermValidator, diagnosticTermIdValidator, diagnosticTermListValidator, updateDiagnosticTermValidator } from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -25,5 +25,9 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...diagnosticTerm
 // Code: ESAVI-DIAGTERM-003
 // Declared after the literal paths so Express does not capture 'admin' or 'activate' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...diagnosticTermIdValidator, validateFields, getDiagnosticTermById);
+
+// Update Diagnostic Term
+// Code: ESAVI-DIAGTERM-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...diagnosticTermIdValidator, ...updateDiagnosticTermValidator, validateFields, updateDiagnosticTerm);
 
 export default router;

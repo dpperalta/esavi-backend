@@ -41,3 +41,18 @@ export const createDiagnosticTermValidator = [
         .isLength({ max: 250 }).withMessage('Term Group must be at most 250 characters long'),
     body('isActive').optional().isBoolean().withMessage('Is Active must be a boolean')
 ];
+
+// source is deliberately absent: it is immutable and the service ignores it in silence, so
+// declaring a rule for it would turn a field nobody meant to change into a 400. termGroup admits
+// null on purpose — that is how the column is emptied, and it is a different intent from omitting
+// the key. reviewStatus arrives flat and the service merges it over the stored metadata
+export const updateDiagnosticTermValidator = [
+    body('code').optional().trim().notEmpty().withMessage('Code cannot be empty')
+        .isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
+    body('name').optional().trim().notEmpty().withMessage('Name cannot be empty')
+        .isLength({ max: 500 }).withMessage('Name must be at most 500 characters long'),
+    body('termGroup').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('Term Group must be at most 250 characters long'),
+    body('reviewStatus').optional().trim().notEmpty().withMessage('Review Status cannot be empty')
+        .isLength({ max: 50 }).withMessage('Review Status must be at most 50 characters long')
+];

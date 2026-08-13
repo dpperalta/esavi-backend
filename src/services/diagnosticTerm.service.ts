@@ -1,6 +1,6 @@
 import { Op, WhereOptions } from 'sequelize';
 import { DiagnosticTerm } from '../models';
-import { AppError, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { AppDetails, AuthUser, CreateDiagnosticTermInput, DiagnosticTermListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -112,9 +112,75 @@ const getDiagnosticTermByIdService = async (id: string, lang: string, includeIna
     return diagnosticTerm;
 }
 
+// ESAVI-DIAGTERM-004 - Update Diagnostic Term Service
+const updateDiagnosticTermService = async (id: string, data: Partial<CreateDiagnosticTermInput>, authUser: AuthUser | undefined, lang: string) => {
+    const { userId } = authUser || {};
+    const { code, name, termGroup, reviewStatus } = data;
+    const diagnosticTerm = await DiagnosticTerm.findByPk(id);
+    let updatedDiagnosticTerm = diagnosticTerm;
+    if (!diagnosticTerm) {
+        throw new AppError(getMessage('diagnosticTerm.notFound', lang), 404, 'DIAGTERM_004_NOT_FOUND');
+    }
+    // Uniqueness runs before the diff and independently of it: an occupied code is a 409 even when
+    // the rest of the body changes nothing. The source of the pair is always the stored one, never
+    // the body, because source is immutable. Excluding the own id is what lets a client resend its
+    // own code without colliding with itself
+    const targetCode = code ? toConstantCase(code.trim()) : undefined;
+    if (targetCode) {
+        const existingTerm = await DiagnosticTerm.findOne({
+            where: {
+                source: diagnosticTerm.source,
+                code: targetCode,
+                diagnosticTermId: { [Op.ne]: id }
+            },
+            attributes: ['diagnosticTermId']
+        });
+        if (existingTerm) {
+            throw new AppError(getMessage('diagnosticTerm.codeExists', lang, { code: targetCode, source: diagnosticTerm.source }), 409, 'DIAGTERM_004_CODE_EXISTS');
+        }
+    }
+    const currentAppDetails = Array.isArray(diagnosticTerm.appDetails) ? diagnosticTerm.appDetails : [];
+    const storedMetadata = (diagnosticTerm.metadata ?? {}) as Record<string, unknown>;
+    // `stored` is the whole row, which is the precondition of the helper: a narrowed `attributes`
+    // would read back undefined for the columns it left out and every comparison would count as a
+    // change. source and isActive are not candidates — the first is immutable, the second is
+    // governed by 005A and 005B
+    const stored = diagnosticTerm.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        code: targetCode,
+        // Only trimmed, never toTitleCase, for the same reason as the create
+        name: name ? name.trim() : undefined,
+        // Nullable: null is a value that empties the column, undefined means the key did not travel
+        termGroup: termGroup !== undefined ? (termGroup?.trim() ?? null) : undefined,
+        // Derived from a flat field: reviewStatus is merged over the stored metadata so autoCreated
+        // and createdFrom survive. Resending the same value produces an identical object and the
+        // helper, which compares objects with JSON.stringify, detects no change
+        metadata: reviewStatus !== undefined ? { ...storedMetadata, reviewStatus } : undefined
+    });
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry
+    if (Object.keys(objectToUpdate).length > 0) {
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: userId || 'undefined',
+            method: 'ESAVI-DIAGTERM-004',
+            detail: 'Diagnostic term updated by service'
+        };
+        updatedDiagnosticTerm = await diagnosticTerm.update({
+            ...objectToUpdate,
+            updatedAt: new Date(),
+            appDetails: [
+                ...currentAppDetails,
+                newEntry
+            ]
+        }, { returning: true });
+    }
+    return updatedDiagnosticTerm;
+}
+
 export {
     createDiagnosticTermService,
     getActiveDiagnosticTermsService,
     getAllDiagnosticTermsService,
-    getDiagnosticTermByIdService
+    getDiagnosticTermByIdService,
+    updateDiagnosticTermService
 }
