@@ -7,5 +7,6 @@ export * from './crypto.helper';
 export * from './differentialUpdate.helper';
 export * from './identifier.helper';
 export * from './permissions.helper';
+export * from './rowSeal.helper';
 export * from './severity.helper';
 export * from './stringHandling.helper';
