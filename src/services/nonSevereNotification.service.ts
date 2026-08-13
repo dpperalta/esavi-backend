@@ -321,7 +321,43 @@ const getNonSevereNotificationByIdService = async (id: string, lang: string, can
     return toNonSevereNotificationResponse(nonSevereNotification);
 }
 
+// Get Non Severe Notification By Case ID Service
+// Code: ESAVI-NSEVNOT-006
+// The real query of the domain: the client holds the caseId, not the notificationId. It returns
+// the record itself and not { count, rows } — the chain case -> notification -> detail is one to
+// one on both hops, and wrapping a single record in a collection would force unwrapping a
+// one-element array on every screen.
+// The three 404 are deliberately distinct, and the asymmetry with 003 is intentional: there the
+// client already holds the primary key of the detail, here it enters through a caseId and needs
+// to know which link of the chain broke. A case whose notification is SEVERE falls in the third
+const getNonSevereNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('nonSevereNotification.caseNotFound', lang), 404, 'NSEVNOT_006_CASE_NOT_FOUND');
+    }
+
+    const where = canViewInactive ? { caseId } : { caseId, isActive: true };
+    const notification = await Notification.findOne({ where, attributes: ['notificationId'] });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('nonSevereNotification.notificationNotFound', lang),
+            404,
+            'NSEVNOT_006_NOTIFICATION_NOT_FOUND'
+        );
+    }
+
+    const nonSevereNotification = await findNonSevereNotificationWithRelations(notification.notificationId, canViewInactive);
+    if( !nonSevereNotification ) {
+        throw new AppError(getMessage('nonSevereNotification.notFound', lang), 404, 'NSEVNOT_006_NOT_FOUND');
+    }
+    return toNonSevereNotificationResponse(nonSevereNotification);
+}
+
 export {
     createNonSevereNotificationService,
-    getNonSevereNotificationByIdService
+    getNonSevereNotificationByIdService,
+    getNonSevereNotificationByCaseIdService
 };

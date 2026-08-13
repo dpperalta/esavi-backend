@@ -3,6 +3,7 @@ import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createNonSevereNotificationService,
+    getNonSevereNotificationByCaseIdService,
     getNonSevereNotificationByIdService
 } from '../services/nonSevereNotification.service';
 
@@ -51,7 +52,33 @@ const getNonSevereNotificationById = async (req: Request, res: Response, next: N
     }
 }
 
+// Get Non Severe Notification By Case ID Controller
+// Code: ESAVI-NSEVNOT-006
+const getNonSevereNotificationByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getNonSevereNotificationByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('nonSevereNotification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NSEVNOT-006: Error fetching Non Severe Notification by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('nonSevereNotification.getFailed', req.lang), 500, 'NSEVNOT_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNonSevereNotification,
+    getNonSevereNotificationByCaseId,
     getNonSevereNotificationById
 };

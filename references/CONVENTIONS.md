@@ -166,6 +166,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | classification | `006` | obtener la clasificación de un caso — la relación es uno a uno y se entra por el `caseId` |
 | notification | `006` | obtener la notificación de un caso — la relación es uno a uno y se entra por el `caseId` |
 | severeNotification | `006` | obtener el detalle grave de un caso — la cadena `caso → notificación → detalle` es uno a uno en los dos saltos |
+| nonSevereNotification | `006` | obtener el detalle no grave de un caso — la cadena `caso → notificación → detalle` es uno a uno en los dos saltos |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
