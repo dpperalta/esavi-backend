@@ -4,7 +4,8 @@ import { AuthUser } from '../types';
 import {
     createNonSevereNotificationService,
     getNonSevereNotificationByCaseIdService,
-    getNonSevereNotificationByIdService
+    getNonSevereNotificationByIdService,
+    updateNonSevereNotificationService
 } from '../services/nonSevereNotification.service';
 
 // Create Non Severe Notification Controller
@@ -77,8 +78,36 @@ const getNonSevereNotificationByCaseId = async (req: Request, res: Response, nex
     }
 }
 
+// Update Non Severe Notification Controller
+// Code: ESAVI-NSEVNOT-004
+const updateNonSevereNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateNonSevereNotificationService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('nonSevereNotification.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NSEVNOT-004: Error updating Non Severe Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('nonSevereNotification.updatedFailed', req.lang), 500, 'NSEVNOT_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createNonSevereNotification,
     getNonSevereNotificationByCaseId,
-    getNonSevereNotificationById
+    getNonSevereNotificationById,
+    updateNonSevereNotification
 };

@@ -1,5 +1,5 @@
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Notification, NonSevereNotification } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNonSevereNotificationInput } from '../types';
 import { NotificationType } from '../constants/notification.constants';
 
@@ -97,6 +97,23 @@ const findNonSevereNotificationWithRelations = async (id: string, includeInactiv
             VACCINATION_SITE_INCLUDE,
             VACCINATION_GEO_LOCATION_INCLUDE
         ]
+    });
+}
+
+// The same read as above without narrowing the attributes of the detail, which is the
+// precondition of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads
+// back undefined for the columns it left out, and every comparison against undefined would count
+// as a change. It still carries the header include, so the inherited visibility is checked in the
+// same query the update instance comes from. The three vaccination includes are left out on
+// purpose: the update compares raw foreign keys, not resolved objects
+const findNonSevereNotificationRow = async (id: string, includeInactive: boolean = false) => {
+    return await NonSevereNotification.findOne({
+        where: { notificationId: id },
+        include: [{
+            ...NOTIFICATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
     });
 }
 
@@ -356,8 +373,142 @@ const getNonSevereNotificationByCaseIdService = async (caseId: string, lang: str
     return toNonSevereNotificationResponse(nonSevereNotification);
 }
 
+// Update Non Severe Notification Service
+// Code: ESAVI-NSEVNOT-004
+// notificationId is ignored whether or not it arrives in the body. It is the primary key of the
+// row and the foreign key to its header at the same time: changing it is not updating this
+// detail, it is creating another one under a different notification
+const updateNonSevereNotificationService = async (
+    id: string,
+    data: Partial<CreateNonSevereNotificationInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const nonSevereNotification = await findNonSevereNotificationRow(id, canViewInactive);
+    if( !nonSevereNotification ) {
+        throw new AppError(getMessage('nonSevereNotification.notFound', lang), 404, 'NSEVNOT_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending
+    // whole the record just read with a GET is the normal use of a form, and writing it back
+    // would fill appDetails with entries that record no change and hide the real ones among them.
+    // The twelve fields are compared against undefined and never by truthiness: an `if( data.x )`
+    // would silently discard the empty string and, above all, would make it impossible to clear a
+    // field. Here that matters twice over, because null and NO_ANSWER are different data and
+    // dissociating a health facility by sending its key null is a legitimate edit
+    const stored = nonSevereNotification.get({ plain: true }) as Record<string, unknown>;
+
+    const candidates: Record<string, unknown> = {
+        vaccinationHealthFacilityId: data.vaccinationHealthFacilityId !== undefined
+            ? ( data.vaccinationHealthFacilityId ?? null ) : undefined,
+        vaccinationSiteItemId: data.vaccinationSiteItemId !== undefined
+            ? ( data.vaccinationSiteItemId ?? null ) : undefined,
+        vaccinationGeoLocationId: data.vaccinationGeoLocationId !== undefined
+            ? ( data.vaccinationGeoLocationId ?? null ) : undefined,
+        // The three free texts are normalized before comparing, or a body differing only in
+        // surrounding blanks would count as a change
+        vaccinationCenterAddress: data.vaccinationCenterAddress !== undefined
+            ? normalizeText(data.vaccinationCenterAddress) : undefined,
+        verifiedPhysicalDocument: data.verifiedPhysicalDocument !== undefined
+            ? ( data.verifiedPhysicalDocument ?? null ) : undefined,
+        verifiedElectronicRecord: data.verifiedElectronicRecord !== undefined
+            ? ( data.verifiedElectronicRecord ?? null ) : undefined,
+        verifiedVerbalReport: data.verifiedVerbalReport !== undefined
+            ? ( data.verifiedVerbalReport ?? null ) : undefined,
+        verifiedClinicalRecord: data.verifiedClinicalRecord !== undefined
+            ? ( data.verifiedClinicalRecord ?? null ) : undefined,
+        verifiedUnknown: data.verifiedUnknown !== undefined
+            ? ( data.verifiedUnknown ?? null ) : undefined,
+        verifiedOtherSource: data.verifiedOtherSource !== undefined
+            ? ( data.verifiedOtherSource ?? null ) : undefined,
+        otherSourceDescription: data.otherSourceDescription !== undefined
+            ? normalizeText(data.otherSourceDescription) : undefined,
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    // A foreign key is resolved only when its value really changes, and this is a declared
+    // deviation from the canonical order — the canon validates foreign keys before the diff.
+    // A PUT resending the GET whole must not fail because a health facility was deactivated
+    // afterwards: the row is a historical record of where the vaccination happened, not a live
+    // pointer. The assumed consequence: a PUT pointing at an inactive key answers 404 only if it
+    // is changing it; resending it unchanged answers 200 without touching anything.
+    // A null is never resolved either — dissociating is always legal
+    const changesTo = (field: string): string | null => {
+        const candidate = candidates[field];
+        if( candidate === undefined || candidate === null ) return null;
+        if( candidate === stored[field] ) return null;
+        return candidate as string;
+    }
+
+    const newHealthFacilityId = changesTo('vaccinationHealthFacilityId');
+    if( newHealthFacilityId ) {
+        await assertVaccinationHealthFacilityIsValid(newHealthFacilityId, '004', lang);
+    }
+    const newSiteItemId = changesTo('vaccinationSiteItemId');
+    if( newSiteItemId ) {
+        await assertVaccinationSiteIsValid(newSiteItemId, '004', lang);
+    }
+    const newGeoLocationId = changesTo('vaccinationGeoLocationId');
+    if( newGeoLocationId ) {
+        await assertVaccinationGeoLocationIsValid(newGeoLocationId, '004', lang);
+    }
+
+    // The other source rule is evaluated over the resulting state and not over the body:
+    // otherwise a PUT moving verifiedOtherSource from YES to NO without touching the description
+    // would leave the text orphaned under an answer that contradicts it. Moving out of YES
+    // therefore requires clearing the description in the same PUT, sending it null. The validator
+    // cannot do this — it does not see the row — so the same check is applied here instead
+    const resultingAnswer = candidates.verifiedOtherSource !== undefined
+        ? candidates.verifiedOtherSource
+        : ( nonSevereNotification.verifiedOtherSource ?? null );
+    const resultingDescription = candidates.otherSourceDescription !== undefined
+        ? candidates.otherSourceDescription
+        : ( nonSevereNotification.otherSourceDescription ?? null );
+
+    assertOtherSourceRule(
+        resultingAnswer as string | null,
+        resultingDescription as string | null,
+        '004',
+        lang
+    );
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_nonSevereNotification_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findNonSevereNotificationWithRelations(id, true);
+        return unchanged ? toNonSevereNotificationResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the
+    // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(nonSevereNotification.appDetails) ? nonSevereNotification.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-NSEVNOT-004',
+        detail: 'Non severe notification detail updated by service'
+    };
+    await nonSevereNotification.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findNonSevereNotificationWithRelations(id, true);
+    return updated ? toNonSevereNotificationResponse(updated) : null;
+}
+
 export {
     createNonSevereNotificationService,
     getNonSevereNotificationByIdService,
-    getNonSevereNotificationByCaseIdService
+    getNonSevereNotificationByCaseIdService,
+    updateNonSevereNotificationService
 };
