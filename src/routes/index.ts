@@ -17,6 +17,7 @@ import notifierRoutes from './notifier.routes';
 import classificationRoutes from './classification.routes';
 import notificationRoutes from './notification.routes';
 import severeNotificationRoutes from './severeNotification.routes';
+import nonSevereNotificationRoutes from './nonSevereNotification.routes';
 
 const router = Router();
 
@@ -44,5 +45,6 @@ router.use('/notifiers', notifierRoutes);
 router.use('/classifications', classificationRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/severe-notifications', severeNotificationRoutes);
+router.use('/non-severe-notifications', nonSevereNotificationRoutes);
 
 export default router;

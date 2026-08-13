@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, HealthFacility, Notification, Notifier, Patient, SevereNotification } from '../models';
+import { Classification, EsaviCase, HealthFacility, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -513,6 +513,48 @@ const cascadeSealSevereNotifications = async (caseId: string, authUser: AuthUser
     );
 }
 
+// The non severe branch of the same two-hop chain, sibling of the one above and written beside
+// it rather than merged with it. SPEC F14 adds the fifth satellite reached from here, with the
+// same mechanism and the same criterion for `method`.
+//
+// A notification holds at most one of the two branches, because notificationType is unique per
+// row: this update always matches the rows the severe one did not. That is not an error and
+// deserves no log
+const cascadeSealNonSevereNotifications = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const notifications = await Notification.findAll({
+        where: { caseId },
+        attributes: ['notificationId'],
+        transaction
+    });
+    if( notifications.length === 0 ) {
+        return;
+    }
+
+    const now = new Date();
+    // The method is the code of the operation that dragged it, not ESAVI-NSEVNOT-005*: the audit
+    // says who did it, not which row it landed on
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CASE-005A',
+        detail: 'Non severe notification detail sealed by cascade from its ESAVI Case'
+    };
+    await NonSevereNotification.update(
+        {
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        {
+            where: {
+                notificationId: notifications.map(notification => notification.notificationId),
+                deletedAt: null
+            },
+            transaction
+        }
+    );
+}
+
 // Setting ESAVI Case Active/Inactive Service
 // Code: ESAVI-CASE-005A / ESAVI-CASE-005B
 // 005A also deactivates every active notifier of the case, its active classification and its
@@ -549,6 +591,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
             await cascadeDeactivateClassification(id, authUser, transaction);
             await cascadeDeactivateNotification(id, authUser, transaction);
             await cascadeSealSevereNotifications(id, authUser, transaction);
+            await cascadeSealNonSevereNotifications(id, authUser, transaction);
         }
 
         await transaction.commit();

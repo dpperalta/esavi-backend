@@ -183,7 +183,18 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/severe-notifications/case/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-SEVNOT-006' },
     { method: 'delete', path: `/api/severe-notifications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-SEVNOT-005C' },
     { method: 'get',    path: `/api/severe-notifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-SEVNOT-003' },
-    { method: 'put',    path: `/api/severe-notifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-SEVNOT-004' }
+    { method: 'put',    path: `/api/severe-notifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-SEVNOT-004' },
+
+    // nonSevereNotification — the same five operations and the same absences, for the same reason
+    // (SPEC F14 §3.4). It is the second entity of the repository without an isActive column and
+    // the second with none in ADMIN: the only canonical operation that would land there, 005A,
+    // does not exist here either. The roles are identical to those of its severe sibling because
+    // the detail is captured in the same operational flow as the notification
+    { method: 'post',   path: '/api/non-severe-notifications',                 minRole: 'USER',       code: 'ESAVI-NSEVNOT-001' },
+    { method: 'get',    path: `/api/non-severe-notifications/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-NSEVNOT-006' },
+    { method: 'delete', path: `/api/non-severe-notifications/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-NSEVNOT-005C' },
+    { method: 'get',    path: `/api/non-severe-notifications/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NSEVNOT-003' },
+    { method: 'put',    path: `/api/non-severe-notifications/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NSEVNOT-004' }
 ];
 
 /**
@@ -239,7 +250,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(113);
+            expect(ROUTE_RULES).toHaveLength(118);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

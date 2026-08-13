@@ -386,5 +386,27 @@
         "updatedFailed": "Bijwerken van het detail van de ernstige melding mislukt. Probeer het later opnieuw.",
         "purgeSuccess": "Detail van ernstige melding permanent verwijderd",
         "purgeFailed": "Fout bij het permanent verwijderen van het detail van de ernstige melding. Probeer het later opnieuw."
+    },
+    "nonSevereNotification": {
+        "notFound": "Detail van niet-ernstige melding niet gevonden. Controleer de ID van de melding en probeer het opnieuw.",
+        "idRequired": "De ID van de melding is verplicht",
+        "notificationNotFound": "De opgegeven melding bestaat niet of is inactief",
+        "notificationNotNonSevere": "De melding met ID {{notificationId}} is niet van het niet-ernstige type en staat dus geen detail van een niet-ernstige melding toe",
+        "alreadyExists": "De melding met ID {{notificationId}} heeft al een detail van een niet-ernstige melding",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "healthFacilityNotFound": "De opgegeven zorginstelling van vaccinatie bestaat niet of is inactief",
+        "vaccinationSiteNotFound": "De opgegeven vaccinatielocatie bestaat niet, is inactief of behoort niet tot de catalogus van vaccinatielocaties",
+        "geoLocationNotFound": "De opgegeven geografische vaccinatielocatie bestaat niet, is inactief of behoort niet tot het meest specifieke geografische niveau",
+        "otherSourceDescriptionRequired": "Er is een andere verificatiebron opgegeven: de beschrijving van de andere bron is verplicht",
+        "otherSourceDescriptionNotAllowed": "De beschrijving van de andere bron is alleen toegestaan wanneer een andere verificatiebron wordt opgegeven",
+        "notDeleted": "Het detail van de niet-ernstige melding met ID {{id}} is niet ingetrokken. Deactiveer de bijbehorende melding voordat u het permanent verwijdert.",
+        "createdSuccess": "Detail van niet-ernstige melding succesvol aangemaakt",
+        "createdFailed": "Aanmaken van het detail van de niet-ernstige melding mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Detail van niet-ernstige melding succesvol opgehaald",
+        "getFailed": "Ophalen van het detail van de niet-ernstige melding mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Detail van niet-ernstige melding succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van het detail van de niet-ernstige melding mislukt. Probeer het later opnieuw.",
+        "purgeSuccess": "Detail van niet-ernstige melding permanent verwijderd",
+        "purgeFailed": "Fout bij het permanent verwijderen van het detail van de niet-ernstige melding. Probeer het later opnieuw."
     }
 }

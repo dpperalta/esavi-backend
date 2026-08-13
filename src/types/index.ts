@@ -9,3 +9,4 @@ export * from './notifier/index';
 export * from './classification/index';
 export * from './notification/index';
 export * from './severeNotification/index';
+export * from './nonSevereNotification/index';

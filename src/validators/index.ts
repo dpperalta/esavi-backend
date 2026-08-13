@@ -14,3 +14,4 @@ export * from './notifier.validator';
 export * from './classification.validator';
 export * from './notification.validator';
 export * from './severeNotification.validator';
+export * from './nonSevereNotification.validator';

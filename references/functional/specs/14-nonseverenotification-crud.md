@@ -1,6 +1,6 @@
 # SPEC F14 — CRUD de `nonSevereNotification`
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC 09 (`healthFacility` — una de las tres FK apunta ahí), **SPEC F13 (`severeNotification` — dependencia dura de implementación: aporta `src/constants/enums.constants.ts` y las dos funciones de arrastre sobre las que este spec se cuelga; no se implementa hasta que aquél esté `Implementado`)**, **SPEC F10 (`notification` — dependencia dura de modelo: la PK de esta tabla *es* su FK)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa, y gobierna cuándo se revalidan las tres FK)
 > **Fecha:** 2026-08-12
 > **Objetivo:** Dar de alta `nonSevereNotification`, el detalle de una notificación no grave —dónde se vacunó y cómo se verificó el evento—, como la **segunda** entidad sin columna `isActive` y la primera de las satélites que arrastra claves foráneas propias.
@@ -18,7 +18,7 @@ Hoy la tabla existe en `esaviapp.sql:760-783` y no tiene nada en `src/`: ni mode
 - **La PK *es* la FK.** `notificationId` es `uuid PRIMARY KEY` sin `DEFAULT gen_random_uuid()` (`esaviapp.sql:761`) y destino de `FK_nonSevereNotification_notification` (`:779`). Sin `UNIQUE` adicional: la propia PK impone el uno a uno.
 - **No tiene `isActive`.** Es la segunda del repositorio, y la que confirma que no fue un descuido: el F13 ya citó esta tabla como su prueba de que el esquema decidió que las satélites no gestionan su estado. De ahí salen, igual que allí, **cinco operaciones y no siete**.
 - **El `ON DELETE CASCADE` dispara de verdad**, porque `notification` no figura en el bucle `preventPhysicalDelete` (`esaviapp.sql:1354-1360`).
-- **Consume `answerOption`** (`esaviapp.sql:26`) en seis columnas. **Pero ya no hay mudanza que hacer:** el paso 1 del F13 movió `ANSWER_OPTIONS` a `src/constants/enums.constants.ts`, y ésta es la primera entidad que lo consume sin tocarlo. Ése es exactamente el efecto que aquella mudanza buscaba.
+- **No consume `answerOption`.** Es el único de los cuatro rasgos que no comparte con su hermana: sus seis fuentes de verificación son `boolean` anulables en el DDL (`esaviapp.sql:766-771`), no el ENUM de cinco valores. Siguen siendo tri-estado —`null` es «el formulario no lo recogió» y `false` es un «no» deliberado—, así que todo lo que este spec razona sobre el tri-estado se mantiene; lo que cambia es el tipo. `ANSWER_OPTIONS` sigue viva en `src/constants/enums.constants.ts` para `notification`, `severeNotification` y las seis tablas del esquema que la esperan, y este spec no la toca.
 
 **Lo que es nuevo, y es la razón de que este spec no sea un calco.** Tres cosas la separan de su hermana:
 
@@ -47,7 +47,7 @@ Hoy la tabla existe en `esaviapp.sql:760-783` y no tiene nada en `src/`: ni mode
   - `vaccinationGeoLocationId` → existente, activa y con `level` igual al **máximo global** que devuelva `GeoLocation.max('level')` → 404.
 - **Revalidación de FK gobernada por el cambio, no por la presencia** (SPEC F12): en el `004`, una FK que llega con el mismo valor guardado no se consulta ni se comprueba. Una fila conserva la FK que se registró aunque el destino se haya desactivado después.
 - **Visibilidad heredada de la cabecera.** Toda lectura incluye `notification` y comprueba su `isActive`: si la notificación está inactiva, el detalle responde **404** para USER y ADMIN, y **200** para SUPERADMIN vía `canViewInactive`.
-- **Regla de coherencia de la fuente «otra»**, evaluada en el servicio sobre el **estado resultante** en el `004`, no sobre el body: con `verifiedOtherSource: 'YES'` la descripción es obligatoria → 400; con cualquier otro valor o con `null`, enviar descripción es → 400.
+- **Regla de coherencia de la fuente «otra»**, evaluada en el servicio sobre el **estado resultante** en el `004`, no sobre el body: con `verifiedOtherSource: true` la descripción es obligatoria → 400; con cualquier otro valor o con `null`, enviar descripción es → 400.
 - **Arrastre desde la cabecera, por los dos caminos que la desactivan** —`ESAVI-NOTIFCN-005A` y `ESAVI-CASE-005A`—, y **limpieza desde `ESAVI-NOTIFCN-005B`**, con la misma mecánica, el mismo criterio de `method` y la misma excepción de cascada de subida que el F13 razonó. Implica volver a tocar `src/services/notification.service.ts` y `src/services/esaviCase.service.ts`, esta vez **junto a** la función hermana que aquél dejó escrita.
 - **Guarda propia de `005C`:** la fila debe tener `deletedAt` sellado → si no, **409** `NSEVNOT_005C_NOT_DELETED`.
 - **Extracción de esa guarda a un helper compartido** con `severeNotification`, sin tocar `purgeEntityService`. Es la respuesta a la condición que el F13 §6 dejó escrita —«si la segunda satélite necesita lo mismo, ése es el momento de generalizarlo»— y está razonada en §6.
@@ -93,22 +93,22 @@ Hoy la tabla existe en `esaviapp.sql:760-783` y no tiene nada en `src/`: ni mode
 | `vaccinationSiteItemId` | `uuid` | sí | `FK_nonSevereNotification_site` → `catalogItem`, `ON DELETE RESTRICT`. Acotado al catálogo `vaccinationSite` |
 | `vaccinationCenterAddress` | `varchar(250)` | sí | texto libre. **Único campo con longitud máxima declarada** |
 | `vaccinationGeoLocationId` | `uuid` | sí | `FK_nonSevereNotification_geo` → `geoLocation`, `ON DELETE RESTRICT`. Acotado al nivel más profundo |
-| `verifiedPhysicalDocument` | `"answerOption"` | sí | ENUM de 5 valores; tri-estado con `null` |
-| `verifiedElectronicRecord` | `"answerOption"` | sí | ídem |
-| `verifiedVerbalReport` | `"answerOption"` | sí | ídem |
-| `verifiedClinicalRecord` | `"answerOption"` | sí | ídem |
-| `verifiedUnknown` | `"answerOption"` | sí | ídem |
-| `verifiedOtherSource` | `"answerOption"` | sí | ídem. Gobierna la regla de coherencia |
-| `otherSourceDescription` | `text` | sí | solo con `verifiedOtherSource: 'YES'` |
+| `verifiedPhysicalDocument` | `boolean` | sí | tri-estado con `null` |
+| `verifiedElectronicRecord` | `boolean` | sí | ídem |
+| `verifiedVerbalReport` | `boolean` | sí | ídem |
+| `verifiedClinicalRecord` | `boolean` | sí | ídem |
+| `verifiedUnknown` | `boolean` | sí | ídem |
+| `verifiedOtherSource` | `boolean` | sí | ídem. Gobierna la regla de coherencia |
+| `otherSourceDescription` | `text` | sí | solo con `verifiedOtherSource: true` |
 | `notes` | `text` | sí | texto libre |
 
 **Doce columnas de datos, todas anulables.** Ninguna es obligatoria: la única no nula de la tabla es la PK.
 
 **Restricciones.** Cuatro claves foráneas y nada más: **ninguna `UNIQUE`** —la PK ya lo es— y **ningún `CHECK`**. Las tres FK de vacunación son `ON DELETE RESTRICT`, así que una fila de esta tabla **impide borrar físicamente** el establecimiento, el item de catálogo o la ubicación a los que apunta. Ningún índice declarado más allá del de la clave primaria.
 
-**Las seis fuentes de verificación no son excluyentes.** Nada en el DDL impide que `verifiedPhysicalDocument` y `verifiedUnknown` valgan `'YES'` a la vez, y este spec tampoco lo impide: son seis preguntas independientes de un formulario, no una selección única.
+**Las seis fuentes de verificación no son excluyentes.** Nada en el DDL impide que `verifiedPhysicalDocument` y `verifiedUnknown` valgan `true` a la vez, y este spec tampoco lo impide: son seis preguntas independientes de un formulario, no una selección única.
 
-**El ENUM.** `answerOption` — `esaviapp.sql:26` — `('YES', 'NO', 'UNKNOWN', 'NOT_APPLICABLE', 'NO_ANSWER')`. Ya vive en `src/constants/enums.constants.ts` desde el paso 1 del F13; aquí **solo se consume**.
+**El tri-estado sobre `boolean`.** Las seis columnas son `boolean` **anulables**, y esa nulabilidad es la que sostiene los tres estados: `true` y `false` son respuestas dadas, `null` es la ausencia de respuesta. Declararlas `NOT NULL DEFAULT false` respondería «no» a una pregunta que nadie llegó a hacer, y por eso no se hace. Esta entidad **no** consume `answerOption`.
 
 **Las columnas transversales, y la que falta.** Están `createdAt`, `updatedAt`, `deletedAt`, `sysDetails` y `appDetails`. **Falta `isActive`**, igual que en `severeNotification` y por la misma decisión del esquema.
 
@@ -122,7 +122,7 @@ Archivo: `src/models/nonSevereNotification.model.ts`. Clase `NonSevereNotificati
 
 **La PK se declara sin `defaultValue`**, por la misma razón que en el F13: `gen_random_uuid()` convertiría un alta sin `notificationId` en un error de integridad en lugar de un 400 legible.
 
-Los seis campos de verificación van `DataTypes.ENUM(...ANSWER_OPTIONS)`, alimentados por la constante compartida y nunca por literales. `vaccinationCenterAddress` va `DataTypes.STRING(250)` —**con la longitud explícita**, para que un texto de 300 caracteres falle en Sequelize y no en Postgres—, `otherSourceDescription` y `notes` van `DataTypes.TEXT`, y las tres FK `DataTypes.UUID`. Todos `allowNull: true`.
+Los seis campos de verificación van `DataTypes.BOOLEAN` con `allowNull: true`. `vaccinationCenterAddress` va `DataTypes.STRING(250)` —**con la longitud explícita**, para que un texto de 300 caracteres falle en Sequelize y no en Postgres—, `otherSourceDescription` y `notes` van `DataTypes.TEXT`, y las tres FK `DataTypes.UUID`. Todos `allowNull: true`.
 
 **No se declara ningún atributo `isActive`.**
 
@@ -138,7 +138,7 @@ Las dos primeras comparten columna en los dos lados, porque la PK del destino y 
 
 ### 3.3 Tipos y constantes
 
-**Ninguna constante compartida nueva.** `ANSWER_OPTIONS` y `AnswerOption` se importan de `src/constants/enums.constants.ts`, que el F13 creó.
+**Ninguna constante compartida nueva, y ninguna importada tampoco.** Los seis campos son `boolean`, así que esta entidad no toca `src/constants/enums.constants.ts` ni en el modelo ni en el validador ni en los tipos.
 
 **Una constante de módulo, privada del servicio**, siguiendo el patrón de `OUTCOME_CATALOG_CODE` en `notification.service.ts:13`:
 
@@ -159,12 +159,12 @@ export interface CreateNonSevereNotificationInput {
     vaccinationSiteItemId?: string | null;
     vaccinationCenterAddress?: string | null;
     vaccinationGeoLocationId?: string | null;
-    verifiedPhysicalDocument?: AnswerOption | null;
-    verifiedElectronicRecord?: AnswerOption | null;
-    verifiedVerbalReport?: AnswerOption | null;
-    verifiedClinicalRecord?: AnswerOption | null;
-    verifiedUnknown?: AnswerOption | null;
-    verifiedOtherSource?: AnswerOption | null;
+    verifiedPhysicalDocument?: boolean | null;
+    verifiedElectronicRecord?: boolean | null;
+    verifiedVerbalReport?: boolean | null;
+    verifiedClinicalRecord?: boolean | null;
+    verifiedUnknown?: boolean | null;
+    verifiedOtherSource?: boolean | null;
     otherSourceDescription?: string | null;
     notes?: string | null;
 }
@@ -208,10 +208,10 @@ El máximo se calcula **sobre ubicaciones activas** y **en cada operación que l
 
 Es la única dependencia entre campos de la tabla, y vive en el **servicio**: en el `004` hay que evaluarla contra lo que ya está guardado, y el validador solo ve el body.
 
-1. Si `verifiedOtherSource` resulta **`'YES'`**, `otherSourceDescription` es **obligatoria** y no puede quedar vacía tras `.trim()` → si falta, **400** `NSEVNOT_<op>_OTHER_SOURCE_DESCRIPTION_REQUIRED`.
-2. Si resulta cualquier otro valor —`'NO'`, `'UNKNOWN'`, `'NOT_APPLICABLE'`, `'NO_ANSWER'`— o `null`, enviar descripción es **400** `NSEVNOT_<op>_OTHER_SOURCE_DESCRIPTION_NOT_ALLOWED`.
+1. Si `verifiedOtherSource` resulta **`true`**, `otherSourceDescription` es **obligatoria** y no puede quedar vacía tras `.trim()` → si falta, **400** `NSEVNOT_<op>_OTHER_SOURCE_DESCRIPTION_REQUIRED`.
+2. Si resulta `false` o `null`, enviar descripción es **400** `NSEVNOT_<op>_OTHER_SOURCE_DESCRIPTION_NOT_ALLOWED`.
 
-En el `004` los dos pasos se evalúan sobre el **estado resultante** —lo guardado fusionado con lo que llega—, no solo sobre el body: mover `verifiedOtherSource` de `'YES'` a `'NO'` sin tocar la descripción dejaría el texto huérfano, así que exige limpiarla en el mismo `PUT` enviándola en `null`. Es la regla del embarazo del F13 con otros campos, y la del fallecimiento del F10 antes que ella. **400 y no 409**, por lo mismo: el problema es la combinación de campos del body aunque el chequeo viva en el servicio.
+En el `004` los dos pasos se evalúan sobre el **estado resultante** —lo guardado fusionado con lo que llega—, no solo sobre el body: mover `verifiedOtherSource` de `true` a `false` sin tocar la descripción dejaría el texto huérfano, así que exige limpiarla en el mismo `PUT` enviándola en `null`. Es la regla del embarazo del F13 con otros campos, y la del fallecimiento del F10 antes que ella. **400 y no 409**, por lo mismo: el problema es la combinación de campos del body aunque el chequeo viva en el servicio.
 
 #### Por operación
 
@@ -274,7 +274,7 @@ Devuelve **el objeto**, no `{ count, rows }`: la cadena `caso → notificación 
 | `notes` | ídem | anulable, normalizado antes de comparar |
 | `notificationId` | **no entra** | inmutable, se ignora sin error |
 
-Los doce se comparan contra `undefined` y **nunca por veracidad**: un `if( data.x )` descartaría la cadena vacía e impediría anular una FK o un tri-estado. Aquí importa doblemente, porque `null` y `'NO_ANSWER'` son datos distintos y **desasociar un establecimiento es una edición legítima**. **Ningún campo cifrado y ningún derivado.**
+Los doce se comparan contra `undefined` y **nunca por veracidad**: un `if( data.x )` descartaría la cadena vacía e impediría anular una FK o un tri-estado. Aquí importa doblemente, porque `null` y `false` son datos distintos y **desasociar un establecimiento es una edición legítima**. **Ningún campo cifrado y ningún derivado.**
 
 **La resolución de FK va gobernada por el diff, y es una desviación declarada del orden habitual.** El canon pide validar FK y unicidad **antes** del diff; aquí se hace **después de construir `candidates` y solo para las claves cuyo valor cambia**:
 
@@ -310,7 +310,7 @@ La comprobación se extrae al helper compartido `assertRowIsSealed(row, code, la
 
 **Las tres FK `ON DELETE RESTRICT` no estorban aquí**: apuntan hacia fuera, así que purgar este detalle no las viola. Lo que sí impiden es purgar un `healthFacility`, un `catalogItem` o un `geoLocation` referenciado — comportamiento del esquema que este spec no cambia y que las entidades afectadas verán como un error de base, no como un 409 propio.
 
-**Validaciones de forma** (las emite `validateFields` con 400): `notificationId` obligatorio y `.isUUID()` en create; las tres FK con `.isUUID()` cuando lleguen con valor; los seis campos de verificación con `.isIn(ANSWER_OPTIONS)`; `vaccinationCenterAddress` como cadena de **250 caracteres máximo**; `otherSourceDescription` y `notes` como cadena. `param('id')` y `param('caseId')` con `.isUUID()`.
+**Validaciones de forma** (las emite `validateFields` con 400): `notificationId` obligatorio y `.isUUID()` en create; las tres FK con `.isUUID()` cuando lleguen con valor; los seis campos de verificación con `.isBoolean()`; `vaccinationCenterAddress` como cadena de **250 caracteres máximo**; `otherSourceDescription` y `notes` como cadena. `param('id')` y `param('caseId')` con `.isUUID()`.
 
 ### 3.6 Claves i18n nuevas
 
@@ -386,20 +386,20 @@ Los fixtures de las suites necesitan además una notificación con `notification
 
 Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 
-1. **Modelo, asociaciones y tipos.** `src/models/nonSevereNotification.model.ts` con la PK `notificationId` **sin `defaultValue`**, los seis `DataTypes.ENUM(...ANSWER_OPTIONS)` importados de `enums.constants.ts`, `vaccinationCenterAddress` como `STRING(250)`, los dos `TEXT`, las tres `UUID` y **ningún atributo `isActive`**; `src/models/associations/nonSevereNotification.associations.ts` con las cinco asociaciones de §3.2 y **sin ningún inverso** desde `healthFacility`, `catalogItem` ni `geoLocation`, registrado en `initModels()`; `src/types/nonSevereNotification/nonSevereNotification.types.ts` con `CreateNonSevereNotificationInput` y su `index.ts`. Alta en `src/models/index.ts` y `src/types/index.ts`.
+1. **Modelo, asociaciones y tipos.** `src/models/nonSevereNotification.model.ts` con la PK `notificationId` **sin `defaultValue`**, los seis `DataTypes.BOOLEAN` anulables, `vaccinationCenterAddress` como `STRING(250)`, los dos `TEXT`, las tres `UUID` y **ningún atributo `isActive`**; `src/models/associations/nonSevereNotification.associations.ts` con las cinco asociaciones de §3.2 y **sin ningún inverso** desde `healthFacility`, `catalogItem` ni `geoLocation`, registrado en `initModels()`; `src/types/nonSevereNotification/nonSevereNotification.types.ts` con `CreateNonSevereNotificationInput` y su `index.ts`. Alta en `src/models/index.ts` y `src/types/index.ts`.
    *Verificación:* `npm run build` en 0; un `NonSevereNotification.findOne({ include: ['notification', 'vaccinationHealthFacility', 'vaccinationSite', 'vaccinationGeoLocation'] })` desde un script suelto devuelve sin error de asociación; un `create` con `verifiedUnknown: 'MAYBE'` falla en Sequelize **antes** de llegar a Postgres; `grep -rn "'NOT_APPLICABLE'" src/` sigue devolviendo **una sola** definición; `npm test` sigue en verde, porque el `hasOne` nuevo no entra en ninguna respuesta de `notification`.
 
 2. **Claves i18n.** Las veinte de §3.6 en `es.json`, `en.json` y `nl.json`, **sin** `getSuccessPlural`, `getFailedPlural`, `alreadyActive` ni `alreadyInactive`.
    *Verificación:* `npm run i18n:check` en 0 y `npm test -- messages` pasa.
 
-3. **Validadores.** `src/validators/nonSevereNotification.validator.ts` con cuatro arrays: `nonSevereNotificationIdValidator`, `nonSevereNotificationCaseIdValidator`, `createNonSevereNotificationValidator` y `updateNonSevereNotificationValidator`. Los dos de cuerpo con `.isIn(ANSWER_OPTIONS)` en los seis campos de verificación, `.isUUID()` en las tres FK y el límite de 250 en `vaccinationCenterAddress`. **Ningún validador de listado.** Alta en `src/validators/index.ts`.
+3. **Validadores.** `src/validators/nonSevereNotification.validator.ts` con cuatro arrays: `nonSevereNotificationIdValidator`, `nonSevereNotificationCaseIdValidator`, `createNonSevereNotificationValidator` y `updateNonSevereNotificationValidator`. Los dos de cuerpo con `.isBoolean()` en los seis campos de verificación, `.isUUID()` en las tres FK y el límite de 250 en `vaccinationCenterAddress`. **Ningún validador de listado.** Alta en `src/validators/index.ts`.
    *Verificación:* `npm run build` en 0; los validadores existen aunque aún no haya rutas que los usen.
 
 4. **Extraer la guarda de purga a un helper compartido.** `assertRowIsSealed(row, code, lang)` en `src/helpers/`, registrado en el barrel, que lanza 409 cuando `deletedAt` es `null`. **Repuntar `src/services/severeNotification.service.ts` para que lo use**, retirando su copia. Sin ningún cambio de comportamiento y sin tocar `purgeEntityService`. Va antes de que exista el segundo consumidor, para que la refactorización se verifique contra una suite ya en verde.
    *Verificación:* `npm run build` en 0; `npm test -- severeNotification` pasa **sin tocar ni un caso**, incluido el de purgar sin arrastre previo que devuelve 409; `src/services/common/entityPurge.service.ts` no tiene ni una línea modificada.
 
 5. **`ESAVI-NSEVNOT-001` — crear.** `createNonSevereNotificationService` con los siete pasos de §3.5 en ese orden, incluidas las tres resoluciones de FK y `VACCINATION_SITE_CATALOG_CODE` como constante de módulo. Controlador y ruta `POST /` con `validateUserRole(USER)`.
-   *Verificación:* un alta mínima —solo `notificationId`— devuelve 201 con los seis tri-estado y las tres FK en `null`, y `deletedAt` en `null`; repetirla devuelve **409** `NSEVNOT_001_ALREADY_EXISTS`; sobre una notificación `SEVERE` devuelve **409** `NSEVNOT_001_NOTIFICATION_NOT_NON_SEVERE`; sobre una notificación inactiva o inexistente, **404**; un `vaccinationHealthFacilityId` inactivo devuelve **404**; un `vaccinationSiteItemId` de otro `catalogType` devuelve **404**; un `vaccinationGeoLocationId` de un nivel que no es el máximo devuelve **404**, y el del nivel máximo devuelve **201**; `verifiedOtherSource: 'YES'` sin descripción devuelve **400**, y `'NO'` con descripción también; la suite no produce ningún error `23505`.
+   *Verificación:* un alta mínima —solo `notificationId`— devuelve 201 con los seis tri-estado y las tres FK en `null`, y `deletedAt` en `null`; repetirla devuelve **409** `NSEVNOT_001_ALREADY_EXISTS`; sobre una notificación `SEVERE` devuelve **409** `NSEVNOT_001_NOTIFICATION_NOT_NON_SEVERE`; sobre una notificación inactiva o inexistente, **404**; un `vaccinationHealthFacilityId` inactivo devuelve **404**; un `vaccinationSiteItemId` de otro `catalogType` devuelve **404**; un `vaccinationGeoLocationId` de un nivel que no es el máximo devuelve **404**, y el del nivel máximo devuelve **201**; `verifiedOtherSource: true` sin descripción devuelve **400**, y `false` con descripción también; la suite no produce ningún error `23505`.
 
 6. **`ESAVI-NSEVNOT-003` — obtener por ID.** `getNonSevereNotificationByIdService(id, lang, includeInactive)` con los cuatro includes y la forma completa de §3.7, los tres UUID crudos excluidos vía `DETAIL_EXCLUDE`; controlador que pasa `canViewInactive(req.user)`; ruta `GET /:id` declarada **después** de las literales.
    *Verificación:* un ID inexistente devuelve 404; un detalle cuya notificación está inactiva devuelve 404 para USER y ADMIN, y 200 para SUPERADMIN, con el mismo código en los dos 404; un detalle con `deletedAt` sellado y cabecera activa devuelve **200**; **un detalle cuyo establecimiento se desactivó después sigue devolviendo el objeto `vaccinationHealthFacility` completo**, no `null`; las FK no informadas llegan como `null` explícito; `vaccinationHealthFacilityId` **no** aparece como campo suelto; `sysDetails` no aparece en ningún nivel.
@@ -408,7 +408,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
    *Verificación:* un caso con la cadena completa devuelve 200 con la ficha, no envuelta en un array; los tres 404 —`CASE_NOT_FOUND`, `NOTIFICATION_NOT_FOUND`, `NOT_FOUND`— son distintos entre sí; un caso cuya notificación es `SEVERE` cae en el tercero; `GET /case/no-es-uuid` devuelve 400.
 
 8. **`ESAVI-NSEVNOT-004` — actualizar.** `updateNonSevereNotificationService` con los nueve pasos de §3.5: visibilidad heredada, `notificationId` ignorado, `.trim()`, `candidates` con los doce campos de la tabla, **resolución de FK solo para las que cambian**, regla de la fuente «otra» sobre el estado resultante, `buildDifferentialUpdate`, corte por diff vacío, `updatedAt` a mano y `[...currentAppDetails, newEntry]`. Ruta `PUT /:id` en USER.
-   *Verificación:* enviar `notificationId` distinto no lo modifica y devuelve 200; **reenviar el mismo `vaccinationHealthFacilityId` de un establecimiento que se desactivó entretanto devuelve 200 y no consulta la base**, mientras que cambiarlo a otro inactivo devuelve **404**; desasociar una FK enviándola en `null` devuelve 200 y la escribe; mover `verifiedOtherSource` de `'YES'` a `'NO'` sin limpiar la descripción devuelve **400**, y enviándola en `null` devuelve **200**; `verifiedUnknown: null` sobre una fila que valía `'NO_ANSWER'` **sí** escribe, y al revés también; un `PUT` que reenvía íntegra la respuesta del `GET` devuelve 200 y **no** añade entrada a `appDetails` ni avanza `sysDetails.version`; un `PUT` con body vacío se comporta igual; un `PUT` que cambia un solo campo añade **una** entrada y avanza la versión en 1.
+   *Verificación:* enviar `notificationId` distinto no lo modifica y devuelve 200; **reenviar el mismo `vaccinationHealthFacilityId` de un establecimiento que se desactivó entretanto devuelve 200 y no consulta la base**, mientras que cambiarlo a otro inactivo devuelve **404**; desasociar una FK enviándola en `null` devuelve 200 y la escribe; mover `verifiedOtherSource` de `true` a `false` sin limpiar la descripción devuelve **400**, y enviándola en `null` devuelve **200**; `verifiedUnknown: null` sobre una fila que valía `false` **sí** escribe, y al revés también; un `PUT` que reenvía íntegra la respuesta del `GET` devuelve 200 y **no** añade entrada a `appDetails` ni avanza `sysDetails.version`; un `PUT` con body vacío se comporta igual; un `PUT` que cambia un solo campo añade **una** entrada y avanza la versión en 1.
 
 9. **`ESAVI-NSEVNOT-005C` — purgar.** `purgeNonSevereNotificationService` con `assertRowIsSealed` del paso 4 antes de delegar en `purgeEntityService`, con transacción. Controlador y ruta `DELETE /purge/:id` en SUPERADMIN, declarada junto a las literales.
    *Verificación:* purgar un detalle con `deletedAt` en `null` devuelve **409** `NSEVNOT_005C_NOT_DELETED` y la fila sigue ahí; arrastrarlo desactivando su notificación y purgarlo entonces devuelve 200 sin `data`, y `findByPk` devuelve `null`; repetir devuelve 404; un ADMIN recibe 403; el log recoge el volcado en `warn`; **la notificación, el establecimiento, el item de catálogo y la ubicación a los que apuntaba siguen existiendo e intactos**.
@@ -428,7 +428,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 14. **Cubrir las cinco rutas en `tests/auth/roles.test.ts`.** Cinco filas nuevas en `ROUTE_RULES` con su `minRole` y su código, y subir el total esperado de **113 a 118**.
     *Verificación:* `npm test -- roles` pasa.
 
-15. **Suite de contrato `tests/contract/nonSevereNotification.test.ts`.** Recorrido completo: crear → obtener por ID → obtener por caso → actualizar → arrastrar desactivando la notificación → purgar. Más los caminos de error: notificación inexistente (404), inactiva (404), `SEVERE` (409), detalle duplicado (409), `answerOption` fuera del ENUM (400), dirección de más de 250 caracteres (400), fuente «otra» sin descripción (400), descripción sin fuente «otra» (400), las tres FK inválidas (404 cada una con su código), purga sin arrastre previo (409). Y las cuatro reglas propias: `notificationId` inmutable, la regla de la fuente «otra» sobre el estado resultante, el caso homogéneo de update diferencial, y **el caso histórico** — reenviar una FK cuyo destino se desactivó devuelve 200, cambiarla a un destino inactivo devuelve 404.
+15. **Suite de contrato `tests/contract/nonSevereNotification.test.ts`.** Recorrido completo: crear → obtener por ID → obtener por caso → actualizar → arrastrar desactivando la notificación → purgar. Más los caminos de error: notificación inexistente (404), inactiva (404), `SEVERE` (409), detalle duplicado (409), una fuente de verificación que no es boolean (400), dirección de más de 250 caracteres (400), fuente «otra» sin descripción (400), descripción sin fuente «otra» (400), las tres FK inválidas (404 cada una con su código), purga sin arrastre previo (409). Y las cuatro reglas propias: `notificationId` inmutable, la regla de la fuente «otra» sobre el estado resultante, el caso homogéneo de update diferencial, y **el caso histórico** — reenviar una FK cuyo destino se desactivó devuelve 200, cambiarla a un destino inactivo devuelve 404.
     *Verificación:* `npm test -- nonSevereNotification` en verde.
 
 16. **Ampliar `tests/contract/notification.test.ts` y `tests/contract/esaviCase.test.ts`.** En la primera: el arrastre de `005A` y la limpieza de `005B` sobre la rama no grave, el detalle ya sellado que no se re-sella, el doble volcado de `005C`, y que una notificación `SEVERE` no toca la rama no grave. En la segunda: el arrastre transitivo desde `ESAVI-CASE-005A` y que `005B` no lo deshace. Ninguna de las dos suites pierde casos, incluidos los que el F13 añadió.
@@ -461,9 +461,10 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] `grep -rn "setEntityActiveStatusService" src/services/nonSevereNotification.service.ts` no devuelve resultados.
 - [ ] `src/services/common/entityActivation.service.ts` y `src/services/common/entityPurge.service.ts` no tienen ni una línea modificada.
 
-**El ENUM compartido**
+**Los seis boolean**
 
-- [ ] `grep -rn "'NOT_APPLICABLE'" src/` sigue devolviendo **una sola** definición, la de `enums.constants.ts`: ni el modelo ni el validador repiten los literales.
+- [ ] `grep -rn "ANSWER_OPTIONS" src/models/nonSevereNotification.model.ts src/validators/nonSevereNotification.validator.ts src/types/nonSevereNotification/` no devuelve resultados: esta entidad no consume el ENUM compartido.
+- [ ] `grep -rn "'NOT_APPLICABLE'" src/` sigue devolviendo **una sola** definición, la de `enums.constants.ts`, intacta para las entidades que sí la usan.
 - [ ] `POST` con `verifiedUnknown: 'MAYBE'` devuelve **400** con el envoltorio de `validateFields`, nunca 500.
 
 **Alta y uno a uno**
@@ -494,12 +495,12 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 
 **Regla de la fuente «otra»**
 
-- [ ] `verifiedOtherSource: 'YES'` sin descripción → **400** `otherSourceDescriptionRequired`.
-- [ ] `verifiedOtherSource: 'YES'` con descripción en blanco tras `.trim()` → **400**.
+- [ ] `verifiedOtherSource: true` sin descripción → **400** `otherSourceDescriptionRequired`.
+- [ ] `verifiedOtherSource: true` con descripción en blanco tras `.trim()` → **400**.
 - [ ] Cualquier otro valor, o `null`, con descripción en el body → **400** `otherSourceDescriptionNotAllowed`.
-- [ ] Un `PUT` que mueve `verifiedOtherSource` de `'YES'` a `'NO'` **sin** limpiar la descripción → **400**; el mismo `PUT` enviándola en `null` → **200**.
-- [ ] Un `PUT` que solo toca `notes` sobre una fila con `'YES'` y descripción guardada → **200**.
-- [ ] Las seis fuentes son independientes: `verifiedPhysicalDocument: 'YES'` y `verifiedUnknown: 'YES'` a la vez → **201**, sin error.
+- [ ] Un `PUT` que mueve `verifiedOtherSource` de `true` a `false` **sin** limpiar la descripción → **400**; el mismo `PUT` enviándola en `null` → **200**.
+- [ ] Un `PUT` que solo toca `notes` sobre una fila con `true` y descripción guardada → **200**.
+- [ ] Las seis fuentes son independientes: `verifiedPhysicalDocument: true` y `verifiedUnknown: true` a la vez → **201**, sin error.
 - [ ] Un alta con las seis en `null` → **201**.
 
 **Update diferencial**
@@ -509,12 +510,12 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] Un `PUT` que cambia **un solo** campo añade **una** entrada a `appDetails` y avanza `sysDetails.version` en 1.
 - [ ] El servicio usa `buildDifferentialUpdate`; `grep -n "delete objectToUpdate" src/services/nonSevereNotification.service.ts` no devuelve resultados.
 - [ ] Un `PUT` con una FK inactiva responde **404** *cuando la está cambiando*, y **200** cuando la reenvía igual — la desviación declarada en §3.5 y §6. El segundo supuesto del criterio canónico, el `code` ya ocupado, **no aplica**: no hay ningún campo `code` ni ninguna `UNIQUE` en esta tabla.
-- [ ] `verifiedUnknown: null` sobre una fila que valía `'NO_ANSWER'` **sí** escribe, y el camino inverso también.
+- [ ] `verifiedUnknown: null` sobre una fila que valía `false` **sí** escribe, y el camino inverso también.
 
 **Tri-estado**
 
-- [ ] Los seis campos no informados llegan como `null` en todas las respuestas, nunca como `NO_ANSWER`.
-- [ ] `'NO_ANSWER'` se guarda y se devuelve como `'NO_ANSWER'`, distinguible de `null`.
+- [ ] Los seis campos no informados llegan como `null` en todas las respuestas, nunca como `false`.
+- [ ] `false` se guarda y se devuelve como `false`, distinguible de `null`.
 
 **Visibilidad heredada**
 
@@ -606,7 +607,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 
 - **Sí:** regla estricta de la fuente «otra» en las dos direcciones, evaluada sobre el **estado resultante** en el `004`. Es la tercera vez que el repositorio resuelve el mismo problema —fallecimiento en el F10, embarazo en el F13, fuente «otra» aquí— y las tres lo resuelven igual. Ésa es la señal de que la cuarta se escribirá sola.
 - **Sí:** **400** para las dos violaciones, por lo mismo que en los otros dos: §10 reserva el 409 para duplicados y conflictos de estado de la fila.
-- **No:** tolerar la descripción cuando la respuesta no es `'YES'`. Guardaría un texto que contradice al campo que lo gobierna.
+- **No:** tolerar la descripción cuando la respuesta no es `true`. Guardaría un texto que contradice al campo que lo gobierna.
 - **Sí:** **409** para el `notificationType` que no es `NON_SEVERE`. **No:** 400. No es un body corregible: una notificación `SEVERE` no puede tener detalle no grave nunca.
 - **No:** exigir al menos una fuente de verificación informada. **No:** hacer excluyentes las seis. Son seis preguntas independientes de un formulario, y nada en el DDL sugiere lo contrario.
 

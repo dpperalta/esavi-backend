@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, HealthFacility, Notification, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, HealthFacility, Notification, NonSevereNotification, Patient, SevereNotification } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -998,6 +998,114 @@ describe('notification contract', () => {
                 .split('\n')
                 .filter(line => line.includes(id) && line.includes('Snapshot:'));
             expect(dumps).toHaveLength(1);
+        });
+
+    });
+
+    // SPEC F14 hung the second satellite from this entity, with the same three side effects and
+    // the same mechanism. What this block has to prove beyond the one above is that the two
+    // branches stay separate: a notification carries at most one of them, because notificationType
+    // is unique per row, so the cascade that does not apply must find zero rows silently and the
+    // 005C dump must stay at two entries and never reach three
+    describe('the non severe detail hanging from the notification', () => {
+
+        // The default type of the fixture is NON_SEVERE, which is the one that admits this detail
+        const notifyWithNonSevereDetail = async (): Promise<string> => {
+            const { id } = await notifyNewCase({ notificationType: 'NON_SEVERE' });
+            await request(app).post('/api/non-severe-notifications').set(authHeader('USER'))
+                .send({ notificationId: id });
+            return id;
+        };
+
+        const readDetail = async ( id: string ) => {
+            const row = await NonSevereNotification.findByPk(id);
+            return {
+                deletedAt: row!.getDataValue('deletedAt') as Date | null,
+                appDetails: row!.getDataValue('appDetails') as { method: string }[]
+            };
+        };
+
+        it('005A seals the deletedAt of the detail and records who dragged it', async () => {
+            const id = await notifyWithNonSevereDetail();
+            expect(( await readDetail(id) ).deletedAt).toBeNull();
+
+            const response = await deleteNotification(id);
+
+            expect(response.status).toBe(200);
+            const detail = await readDetail(id);
+            expect(detail.deletedAt).not.toBeNull();
+            expect(detail.appDetails).toHaveLength(2);
+            expect(detail.appDetails[1].method).toBe('ESAVI-NOTIFCN-005A');
+        });
+
+        it('005B clears it again, which is what keeps the round trip a round trip', async () => {
+            const id = await notifyWithNonSevereDetail();
+            await deleteNotification(id);
+
+            const response = await activateNotification(id);
+
+            expect(response.status).toBe(200);
+            const detail = await readDetail(id);
+            expect(detail.deletedAt).toBeNull();
+            expect(detail.appDetails.map(entry => entry.method))
+                .toEqual(['ESAVI-NSEVNOT-001', 'ESAVI-NOTIFCN-005A', 'ESAVI-NOTIFCN-005B']);
+        });
+
+        it('a detail already sealed keeps its original date and gets no new entry', async () => {
+            const id = await notifyWithNonSevereDetail();
+            await deleteNotification(id);
+            const sealed = await readDetail(id);
+
+            // Back to active, then sealed by hand so the second deactivation finds it that way
+            await activateNotification(id);
+            await NonSevereNotification.update({ deletedAt: sealed.deletedAt }, { where: { notificationId: id } });
+            const before = await readDetail(id);
+
+            await deleteNotification(id);
+
+            const after = await readDetail(id);
+            expect(after.deletedAt).toEqual(before.deletedAt);
+            expect(after.appDetails).toHaveLength(before.appDetails.length);
+        });
+
+        it('a NON_SEVERE notification with no detail drags nothing and does not fail', async () => {
+            const { id } = await notifyNewCase({ notificationType: 'NON_SEVERE' });
+
+            expect(( await deleteNotification(id) ).status).toBe(200);
+            expect(( await activateNotification(id) ).status).toBe(200);
+            expect(await NonSevereNotification.findByPk(id)).toBeNull();
+        });
+
+        it('a SEVERE notification does not touch the non severe branch at all', async () => {
+            const { id } = await notifyNewCase({ notificationType: 'SEVERE' });
+            await request(app).post('/api/severe-notifications').set(authHeader('USER'))
+                .send({ notificationId: id });
+
+            // The branch that does not apply finds zero rows, which is not an error
+            expect(( await deleteNotification(id) ).status).toBe(200);
+            expect(( await activateNotification(id) ).status).toBe(200);
+            expect(await NonSevereNotification.findByPk(id)).toBeNull();
+            expect(await SevereNotification.findByPk(id)).not.toBeNull();
+        });
+
+        it('005C leaves two dumps and not three, and the cascade destroys both rows', async () => {
+            const id = await notifyWithNonSevereDetail();
+            await deleteNotification(id);
+
+            const response = await purgeNotification(id);
+            expect(response.status).toBe(200);
+
+            const dumps = fs.readFileSync(logFile, 'utf8')
+                .split('\n')
+                .filter(line => line.includes(id) && line.includes('Snapshot:'));
+            expect(dumps).toHaveLength(2);
+            expect(dumps.filter(line => line.includes('nonSevereNotification row dragged'))).toHaveLength(1);
+            // The other branch left nothing behind: the two are mutually exclusive
+            expect(dumps.filter(line => line.includes(' severeNotification row dragged'))).toHaveLength(0);
+            expect(dumps.every(line => line.includes('[WARN]'))).toBe(true);
+
+            expect(await Notification.findByPk(id, { paranoid: false })).toBeNull();
+            expect(await NonSevereNotification.findByPk(id)).toBeNull();
         });
 
     });

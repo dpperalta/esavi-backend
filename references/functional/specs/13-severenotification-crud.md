@@ -1,6 +1,6 @@
 # SPEC F13 — CRUD de `severeNotification`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F10 (`notification` — dependencia dura: la PK de esta tabla *es* su FK, y su ciclo de vida lo gobierna aquella entidad)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa)
 > **Fecha:** 2026-08-12
 > **Objetivo:** Dar de alta `severeNotification`, el detalle clínico de una notificación grave, como la primera entidad del repositorio **sin columna `isActive`**: su ciclo de vida no es suyo, lo gobierna íntegramente su cabecera.
