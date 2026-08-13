@@ -425,6 +425,11 @@
         "notFound": "Término diagnóstico no encontrado. Por favor, verifique el ID del término diagnóstico e inténtelo de nuevo.",
         "codeExists": "Ya existe un término diagnóstico con el código {{code}} en la fuente {{source}}",
         "alreadyActive": "El término diagnóstico con ID {{id}} ya está activo",
-        "alreadyInactive": "El término diagnóstico con ID {{id}} ya está inactivo"
+        "alreadyInactive": "El término diagnóstico con ID {{id}} ya está inactivo",
+        "importedSuccess": "Importación de términos diagnósticos completada exitosamente",
+        "importedFailed": "Error al importar los términos diagnósticos. Por favor, inténtelo de nuevo más tarde.",
+        "fileRequired": "Debe adjuntar el fichero a importar en el campo file",
+        "fileInvalid": "El fichero no contiene ninguna línea válida. Por favor, verifique el formato e inténtelo de nuevo.",
+        "fileTooLarge": "El fichero supera el tamaño máximo permitido de 20 MB"
     }
 }

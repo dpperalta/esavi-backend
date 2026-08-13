@@ -1,6 +1,6 @@
 # SPEC F15 — CRUD de `diagnosticTerm` y resolución implícita de términos
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa), SPEC F13 (aporta `src/constants/enums.constants.ts`, donde se registra el segundo ENUM compartido del esquema)
 > **Fecha:** 2026-08-13
 > **Objetivo:** Dar de alta `diagnosticTerm` con sus siete operaciones canónicas y un servicio común de resolución que permite a otros dominios referenciar un término existente o crearlo al vuelo cuando no existe.
