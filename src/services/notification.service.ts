@@ -647,6 +647,33 @@ const dumpSevereNotificationBeforeCascade = async (
     }
 }
 
+// The same dump for the non severe branch, added beside its sibling. The two branches are
+// mutually exclusive by notificationType, so a notification with a detail leaves exactly two
+// entries in the log — the one of the notification itself, written by purgeEntityService, and the
+// one of its single detail — and never three
+const dumpNonSevereNotificationBeforeCascade = async (
+    notificationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const nonSevereNotification = await NonSevereNotification.findOne({
+            where: { notificationId },
+            transaction
+        });
+        if( !nonSevereNotification ) {
+            return;
+        }
+        esaviLog(
+            `ESAVI-NOTIFCN-005C: nonSevereNotification row dragged by ON DELETE CASCADE and purged by ` +
+            `${ userId }. Snapshot: ${ JSON.stringify(nonSevereNotification.get({ plain: true })) }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged nonSevereNotification: ${ error }`, 'error');
+    }
+}
+
 // Purging Notification Service - For SuperAdmin
 // Code: ESAVI-NOTIFCN-005C
 // notification is outside the preventPhysicalDelete loop of esaviapp.sql:1363-1366, so the row
@@ -655,8 +682,9 @@ const dumpSevereNotificationBeforeCascade = async (
 // case — the foreign key runs from the notification to the case and not the other way round.
 // The eight tables that hang from notificationId declare ON DELETE CASCADE, so this operation
 // drags the whole detailed notification with it without asking. SPEC F13 landed the first of
-// them and did that review: the cascade is left to fire, with the log dump above as its only
-// mitigation. The seven remaining satellites join that dump as they are implemented
+// them and did that review: the cascade is left to fire, with the log dumps above as its only
+// mitigation. SPEC F14 landed the second one, and the six remaining satellites join those dumps
+// as they are implemented
 const purgeNotificationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
     const transaction = await sequelize.transaction();
     try {
@@ -671,6 +699,7 @@ const purgeNotificationService = async (id: string, authUser: AuthUser | undefin
         });
         if( notification && notification.isActive === false ) {
             await dumpSevereNotificationBeforeCascade(id, authUser?.userId || 'undefined', transaction);
+            await dumpNonSevereNotificationBeforeCascade(id, authUser?.userId || 'undefined', transaction);
         }
 
         await purgeEntityService({
