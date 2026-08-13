@@ -59,8 +59,8 @@ const DETAIL_EXCLUDE = {
 };
 
 // The six tri-state fields are returned exactly as stored, null included: they are never
-// normalized to NO_ANSWER nor to false when building the response. A null means the form did not
-// collect the answer, and NO_ANSWER means the notifier deliberately gave none.
+// normalized to false when building the response. A null means the form did not collect the
+// answer, and false means the notifier deliberately answered no.
 // There is no isActive to return — the table does not have that column. deletedAt is the only
 // status mark the row carries, and notification.isActive is the real source
 const toNonSevereNotificationResponse = (nonSevereNotification: NonSevereNotification) => {
@@ -236,17 +236,19 @@ const assertVaccinationGeoLocationIsValid = async (geoLocationId: string, op: st
 // update it is evaluated over the resulting state — what is stored merged with what arrives —
 // and the validator only sees the body. It still answers 400: the problem is the combination of
 // fields in the body, which is malformed input however it is checked.
-// Sending a description when the answer is not YES is rejected instead of ignored: a description
-// of another source under a "there was none" is a contradiction nobody would detect afterwards
+// Sending a description when the answer is not true is rejected instead of ignored: a description
+// of another source under a "there was none" is a contradiction nobody would detect afterwards.
+// The comparison is strict against true, so false and null behave alike here — neither of them
+// declares another source, whatever the difference between them means elsewhere
 const assertOtherSourceRule = (
-    verifiedOtherSource: string | null | undefined,
+    verifiedOtherSource: boolean | null | undefined,
     otherSourceDescription: string | null | undefined,
     op: string,
     lang: string
 ) => {
     const description = normalizeText(otherSourceDescription);
 
-    if( verifiedOtherSource === 'YES' ) {
+    if( verifiedOtherSource === true ) {
         if( !description ) {
             throw new AppError(
                 getMessage('nonSevereNotification.otherSourceDescriptionRequired', lang),
@@ -298,8 +300,8 @@ const createNonSevereNotificationService = async (
         detail: 'Non severe notification detail created by service'
     };
 
-    // The six tri-state fields keep their null: what does not arrive is stored null, never
-    // NO_ANSWER and never false. deletedAt is born null and there is no isActive to set — the
+    // The six tri-state fields keep their null: what does not arrive is stored null and never
+    // false. deletedAt is born null and there is no isActive to set — the
     // header had to be active to get here, so a detail cannot be created already dragged
     await NonSevereNotification.create({
         notificationId: data.notificationId,
@@ -397,7 +399,7 @@ const updateNonSevereNotificationService = async (
     // would fill appDetails with entries that record no change and hide the real ones among them.
     // The twelve fields are compared against undefined and never by truthiness: an `if( data.x )`
     // would silently discard the empty string and, above all, would make it impossible to clear a
-    // field. Here that matters twice over, because null and NO_ANSWER are different data and
+    // field. Here that matters twice over, because null and false are different data and
     // dissociating a health facility by sending its key null is a legitimate edit
     const stored = nonSevereNotification.get({ plain: true }) as Record<string, unknown>;
 
@@ -457,8 +459,8 @@ const updateNonSevereNotificationService = async (
     }
 
     // The other source rule is evaluated over the resulting state and not over the body:
-    // otherwise a PUT moving verifiedOtherSource from YES to NO without touching the description
-    // would leave the text orphaned under an answer that contradicts it. Moving out of YES
+    // otherwise a PUT moving verifiedOtherSource from true to false without touching the
+    // description would leave the text orphaned under an answer that contradicts it. Moving off true
     // therefore requires clearing the description in the same PUT, sending it null. The validator
     // cannot do this — it does not see the row — so the same check is applied here instead
     const resultingAnswer = candidates.verifiedOtherSource !== undefined
@@ -469,7 +471,7 @@ const updateNonSevereNotificationService = async (
         : ( nonSevereNotification.otherSourceDescription ?? null );
 
     assertOtherSourceRule(
-        resultingAnswer as string | null,
+        resultingAnswer as boolean | null,
         resultingDescription as string | null,
         '004',
         lang

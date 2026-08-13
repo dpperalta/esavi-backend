@@ -1,7 +1,4 @@
 import { body, param } from 'express-validator';
-import { ANSWER_OPTIONS } from '../constants/enums.constants';
-
-const ANSWER_OPTION_VALUES = [...ANSWER_OPTIONS];
 
 // :id is the notificationId. This entity has no identifier of its own — the primary key of the
 // row is the foreign key to its header — so the param is named :id only for uniformity with the
@@ -22,9 +19,10 @@ export const nonSevereNotificationCaseIdValidator = [
 // No list validator: this entity has no 002, 002A or 002B. Without an activity flag the two
 // variants of the dual listing would return exactly the same rows.
 //
-// The ENUM values come from the shared constants file, never from literals written here: the
-// model reads the same array, so the two cannot drift apart. Checking them here is mandatory and
-// not defensive — an unknown value would reach Postgres as a 22P02 and surface as a 500.
+// The six verification sources are plain booleans and not answerOption, unlike the five fields of
+// severeNotification: the DDL declares them boolean (esaviapp.sql:766-771). They stay optional and
+// nullable, which is what keeps them tri-state — null is "the form did not collect it" and false
+// is a deliberate no, and a client must be able to send either one.
 //
 // The three foreign keys are only checked for shape here. Whether they exist, are active and
 // belong to what they must belong to is resolved against the database in the service, which is
@@ -33,7 +31,7 @@ export const nonSevereNotificationCaseIdValidator = [
 // The other source rule is not checked here either: on update it is evaluated over the resulting
 // state, the stored row merged with the body, which the validator does not see. It lives in the
 // service and answers 400 too. That is also why the description is not required to be non-empty
-// here — a blank description under YES is the service's OTHER_SOURCE_DESCRIPTION_REQUIRED, not a
+// here — a blank description under true is the service's OTHER_SOURCE_DESCRIPTION_REQUIRED, not a
 // shape error
 export const createNonSevereNotificationValidator = [
     // Required and client-supplied: the column has no DEFAULT gen_random_uuid()
@@ -51,17 +49,17 @@ export const createNonSevereNotificationValidator = [
     body('vaccinationGeoLocationId').optional({ nullable: true })
         .isUUID().withMessage('Vaccination Geo Location ID must be a valid UUID').trim(),
     body('verifiedPhysicalDocument').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Physical Document must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Physical Document must be a boolean'),
     body('verifiedElectronicRecord').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Electronic Record must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Electronic Record must be a boolean'),
     body('verifiedVerbalReport').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Verbal Report must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Verbal Report must be a boolean'),
     body('verifiedClinicalRecord').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Clinical Record must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Clinical Record must be a boolean'),
     body('verifiedUnknown').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Unknown must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Unknown must be a boolean'),
     body('verifiedOtherSource').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Other Source must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Other Source must be a boolean'),
     body('otherSourceDescription').optional({ nullable: true }).isString()
         .withMessage('Other Source Description must be a string'),
     body('notes').optional({ nullable: true }).isString()
@@ -81,17 +79,17 @@ export const updateNonSevereNotificationValidator = [
     body('vaccinationGeoLocationId').optional({ nullable: true })
         .isUUID().withMessage('Vaccination Geo Location ID must be a valid UUID').trim(),
     body('verifiedPhysicalDocument').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Physical Document must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Physical Document must be a boolean'),
     body('verifiedElectronicRecord').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Electronic Record must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Electronic Record must be a boolean'),
     body('verifiedVerbalReport').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Verbal Report must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Verbal Report must be a boolean'),
     body('verifiedClinicalRecord').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Clinical Record must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Clinical Record must be a boolean'),
     body('verifiedUnknown').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Unknown must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Unknown must be a boolean'),
     body('verifiedOtherSource').optional({ nullable: true })
-        .isIn(ANSWER_OPTION_VALUES).withMessage(`Verified Other Source must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
+        .isBoolean().withMessage('Verified Other Source must be a boolean'),
     body('otherSourceDescription').optional({ nullable: true }).isString()
         .withMessage('Other Source Description must be a string'),
     body('notes').optional({ nullable: true }).isString()

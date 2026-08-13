@@ -4,7 +4,6 @@ import { Notification } from './notification.model';
 import { HealthFacility } from './healthFacility.model';
 import { CatalogItem } from './catalogItem.model';
 import { GeoLocation } from './geoLocation.model';
-import { ANSWER_OPTIONS, AnswerOption } from '../constants/enums.constants';
 import { AppDetails } from '../types';
 
 export class NonSevereNotification extends Model<InferAttributes<NonSevereNotification>, InferCreationAttributes<NonSevereNotification>> {
@@ -21,17 +20,19 @@ export class NonSevereNotification extends Model<InferAttributes<NonSevereNotifi
     declare vaccinationCenterAddress?: CreationOptional<string | null>;
     declare vaccinationGeoLocationId?: CreationOptional<ForeignKey<GeoLocation['geoLocationId']> | null>;
 
-    // Six independent verification sources, tri-state every one of them: null means "the form did
-    // not collect it", which is not NO_ANSWER — that one is a deliberate answer from the notifier.
-    // Nothing makes them exclusive: physical document and unknown can both be YES
-    declare verifiedPhysicalDocument?: CreationOptional<AnswerOption | null>;
-    declare verifiedElectronicRecord?: CreationOptional<AnswerOption | null>;
-    declare verifiedVerbalReport?: CreationOptional<AnswerOption | null>;
-    declare verifiedClinicalRecord?: CreationOptional<AnswerOption | null>;
-    declare verifiedUnknown?: CreationOptional<AnswerOption | null>;
+    // Six independent verification sources, nullable booleans and therefore still tri-state: null
+    // means "the form did not collect it", which is not false — that one is a deliberate "no"
+    // from the notifier. Nothing makes them exclusive: physical document and unknown can both be
+    // true. Unlike the five answerOption fields of severeNotification, these are plain yes/no
+    // questions and the DDL declares them boolean (esaviapp.sql:766-771)
+    declare verifiedPhysicalDocument?: CreationOptional<boolean | null>;
+    declare verifiedElectronicRecord?: CreationOptional<boolean | null>;
+    declare verifiedVerbalReport?: CreationOptional<boolean | null>;
+    declare verifiedClinicalRecord?: CreationOptional<boolean | null>;
+    declare verifiedUnknown?: CreationOptional<boolean | null>;
 
-    // Governs the other source coherence rule: the description below is only admitted under YES
-    declare verifiedOtherSource?: CreationOptional<AnswerOption | null>;
+    // Governs the other source coherence rule: the description below is only admitted under true
+    declare verifiedOtherSource?: CreationOptional<boolean | null>;
     declare otherSourceDescription?: CreationOptional<string | null>;
 
     declare notes?: CreationOptional<string | null>;
@@ -80,30 +81,30 @@ NonSevereNotification.init({
         type: DataTypes.UUID,
         allowNull: true,
     },
-    // The six ENUM columns take their values from the shared constants file, never from literals
-    // written here: model and validator must not be able to drift apart
+    // The six boolean columns stay nullable, which is what keeps the third state alive: a column
+    // declared NOT NULL DEFAULT false would answer "no" to a question nobody was ever asked
     verifiedPhysicalDocument: {
-        type: DataTypes.ENUM(...ANSWER_OPTIONS),
+        type: DataTypes.BOOLEAN,
         allowNull: true,
     },
     verifiedElectronicRecord: {
-        type: DataTypes.ENUM(...ANSWER_OPTIONS),
+        type: DataTypes.BOOLEAN,
         allowNull: true,
     },
     verifiedVerbalReport: {
-        type: DataTypes.ENUM(...ANSWER_OPTIONS),
+        type: DataTypes.BOOLEAN,
         allowNull: true,
     },
     verifiedClinicalRecord: {
-        type: DataTypes.ENUM(...ANSWER_OPTIONS),
+        type: DataTypes.BOOLEAN,
         allowNull: true,
     },
     verifiedUnknown: {
-        type: DataTypes.ENUM(...ANSWER_OPTIONS),
+        type: DataTypes.BOOLEAN,
         allowNull: true,
     },
     verifiedOtherSource: {
-        type: DataTypes.ENUM(...ANSWER_OPTIONS),
+        type: DataTypes.BOOLEAN,
         allowNull: true,
     },
     otherSourceDescription: {

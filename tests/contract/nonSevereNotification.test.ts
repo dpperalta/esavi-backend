@@ -27,8 +27,8 @@ import type { TestRole } from '../setup/auth';
  *
  * Plus the other source rule, evaluated over the resulting state on update and not
  * over the body, the geographic level restricted to the deepest seeded one, and the
- * tri-state of the six answerOption fields, where null is a value of its own and never
- * becomes NO_ANSWER.
+ * tri-state of the six boolean fields, where null is a value of its own — the form did
+ * not collect the answer — and never becomes false.
  */
 describe('nonSevereNotification contract', () => {
 
@@ -273,22 +273,22 @@ describe('nonSevereNotification contract', () => {
             const { notificationId } = await notifyNewCase();
             const response = await createDetail({
                 notificationId,
-                verifiedPhysicalDocument: 'YES',
-                verifiedUnknown: 'YES'
+                verifiedPhysicalDocument: true,
+                verifiedUnknown: true
             });
             expect(response.status).toBe(201);
-            expect(response.body.data.verifiedPhysicalDocument).toBe('YES');
-            expect(response.body.data.verifiedUnknown).toBe('YES');
+            expect(response.body.data.verifiedPhysicalDocument).toBe(true);
+            expect(response.body.data.verifiedUnknown).toBe(true);
         });
 
-        it('answers 400 for a value outside the answerOption ENUM, never 500', async () => {
+        it('answers 400 for a verification source that is not a boolean, never 500', async () => {
             const { notificationId } = await notifyNewCase();
             const response = await createDetail({ notificationId, verifiedUnknown: 'MAYBE' });
 
             expect(response.status).toBe(400);
             expect(response.body.ok).toBe(false);
             // The envelope of validateFields, never the 22P02 Postgres would raise
-            expect(response.body.errors).toContain('Verified Unknown must be one of');
+            expect(response.body.errors).toContain('Verified Unknown must be a boolean');
         });
 
         it('answers 400 for an address longer than 250 characters, never a Postgres error', async () => {
@@ -410,20 +410,20 @@ describe('nonSevereNotification contract', () => {
 
         it('requires the description under YES, including a blank one', async () => {
             const { notificationId } = await notifyNewCase();
-            const missing = await createDetail({ notificationId, verifiedOtherSource: 'YES' });
+            const missing = await createDetail({ notificationId, verifiedOtherSource: true });
             expect(missing.status).toBe(400);
             expect(missing.body.code).toBe('NSEVNOT_001_OTHER_SOURCE_DESCRIPTION_REQUIRED');
 
-            const blank = await createDetail({ notificationId, verifiedOtherSource: 'YES', otherSourceDescription: '   ' });
+            const blank = await createDetail({ notificationId, verifiedOtherSource: true, otherSourceDescription: '   ' });
             expect(blank.status).toBe(400);
             expect(blank.body.code).toBe('NSEVNOT_001_OTHER_SOURCE_DESCRIPTION_REQUIRED');
         });
 
         it('forbids the description under any other answer and under null', async () => {
             const { notificationId } = await notifyNewCase();
-            const underNo = await createDetail({ notificationId, verifiedOtherSource: 'NO', otherSourceDescription: 'a source' });
-            expect(underNo.status).toBe(400);
-            expect(underNo.body.code).toBe('NSEVNOT_001_OTHER_SOURCE_DESCRIPTION_NOT_ALLOWED');
+            const underFalse = await createDetail({ notificationId, verifiedOtherSource: false, otherSourceDescription: 'a source' });
+            expect(underFalse.status).toBe(400);
+            expect(underFalse.body.code).toBe('NSEVNOT_001_OTHER_SOURCE_DESCRIPTION_NOT_ALLOWED');
 
             const underNull = await createDetail({ notificationId, otherSourceDescription: 'a source' });
             expect(underNull.status).toBe(400);
@@ -434,7 +434,7 @@ describe('nonSevereNotification contract', () => {
             const { notificationId } = await notifyNewCase();
             const response = await createDetail({
                 notificationId,
-                verifiedOtherSource: 'YES',
+                verifiedOtherSource: true,
                 otherSourceDescription: '  a source  '
             });
             expect(response.status).toBe(201);
@@ -447,21 +447,21 @@ describe('nonSevereNotification contract', () => {
         });
 
         it('evaluates the rule over the resulting state on update', async () => {
-            const id = await newDetail({ verifiedOtherSource: 'YES', otherSourceDescription: 'a source' });
+            const id = await newDetail({ verifiedOtherSource: true, otherSourceDescription: 'a source' });
 
-            // Moving out of YES without clearing the description leaves the text orphaned
-            const orphan = await updateDetail(id, { verifiedOtherSource: 'NO' });
+            // Moving off true without clearing the description leaves the text orphaned
+            const orphan = await updateDetail(id, { verifiedOtherSource: false });
             expect(orphan.status).toBe(400);
             expect(orphan.body.code).toBe('NSEVNOT_004_OTHER_SOURCE_DESCRIPTION_NOT_ALLOWED');
 
             // Clearing it in the same PUT is what the rule asks for
-            const cleared = await updateDetail(id, { verifiedOtherSource: 'NO', otherSourceDescription: null });
+            const cleared = await updateDetail(id, { verifiedOtherSource: false, otherSourceDescription: null });
             expect(cleared.status).toBe(200);
             expect(cleared.body.data.otherSourceDescription).toBeNull();
         });
 
-        it('lets a PUT touching only notes through over a row holding YES', async () => {
-            const id = await newDetail({ verifiedOtherSource: 'YES', otherSourceDescription: 'a source' });
+        it('lets a PUT touching only notes through over a row holding true', async () => {
+            const id = await newDetail({ verifiedOtherSource: true, otherSourceDescription: 'a source' });
             const response = await updateDetail(id, { notes: 'just a note' });
 
             expect(response.status).toBe(200);
@@ -630,15 +630,15 @@ describe('nonSevereNotification contract', () => {
             expect(( await NonSevereNotification.findByPk(id) )?.getDataValue('vaccinationHealthFacilityId')).toBeNull();
         });
 
-        it('writes a tri-state moving between null and NO_ANSWER in both directions', async () => {
-            const id = await newDetail({ verifiedUnknown: 'NO_ANSWER' });
+        it('writes a tri-state moving between null and false in both directions', async () => {
+            const id = await newDetail({ verifiedUnknown: false });
 
             const toNull = await updateDetail(id, { verifiedUnknown: null });
             expect(toNull.body.data.verifiedUnknown).toBeNull();
             expect(await auditMethods(id)).toHaveLength(2);
 
-            const back = await updateDetail(id, { verifiedUnknown: 'NO_ANSWER' });
-            expect(back.body.data.verifiedUnknown).toBe('NO_ANSWER');
+            const back = await updateDetail(id, { verifiedUnknown: false });
+            expect(back.body.data.verifiedUnknown).toBe(false);
             expect(await auditMethods(id)).toHaveLength(3);
         });
 
@@ -710,7 +710,7 @@ describe('nonSevereNotification contract', () => {
                 vaccinationSiteItemId: siteItemId,
                 vaccinationGeoLocationId: deepGeoLocationId,
                 vaccinationCenterAddress: 'Main street 1',
-                verifiedPhysicalDocument: 'YES',
+                verifiedPhysicalDocument: true,
                 notes: 'a note'
             });
             await expectPutOfGetResponseWritesNothing({
