@@ -18,10 +18,11 @@ Resumen de dónde vive cada dato, para no releer 40 KB de convenciones en cada s
 | Matriz de roles y `ROLE_LEVELS` | §9 |
 | Contrato de respuesta y tabla de status | §10 |
 | Reglas de la capa de servicio (unicidad, FK, `appDetails`, paginación) | §11 |
+| **Update diferencial y `buildDifferentialUpdate`** | §11, bloque «Update diferencial»; origen en `references/functional/specs/12-differential.md` |
 | Reglas de definición de modelos | §12 |
 | Estructura de claves i18n | §13 |
 | Plantillas copy-paste de los 6 artefactos | §14 |
-| Checklist antes de cerrar un PR (18 ítems) | §15 |
+| Checklist antes de cerrar un PR | §15 |
 | Desviaciones ya catalogadas (no son precedente) | `references/TECHNICAL_DEBT.md` |
 | Ejemplo canónico de spec CRUD | `references/specs/09-healthfacility-crud.md` |
 | Specs técnicos (`SPEC 01`–`09`) | `references/specs/` |
@@ -134,6 +135,7 @@ El spread `...` es obligatorio; toda ruta con `:id` lleva su `entityIdValidator`
 
 Helpers y servicios reutilizables que un spec debe citar en vez de reinventar:
 
+- `buildDifferentialUpdate` — `src/helpers/differentialUpdate.helper.ts`, **obligatorio en todo `004`**. Ver §8 de esta ficha.
 - `setEntityActiveStatusService` — `src/services/common/entityActivation.service.ts`, para `005A`/`005B`.
 - `canViewInactive`, `isAdmin` — `src/helpers/permissions.helper.ts`.
 - `toConstantCase`, `toTitleCase` — `src/helpers/stringHandling.helper.ts`.
@@ -163,3 +165,36 @@ Helpers y servicios reutilizables que un spec debe citar en vez de reinventar:
 - Los specs viven en dos sitios con **numeraciones independientes**: los técnicos `01`–`09` en `references/specs/` y los funcionales `F01` en adelante en `references/functional/specs/`. Existen a la vez un `SPEC 01` y un `SPEC F01`: cita siempre el prefijo.
 - Los skills `spec` y `spec-impl` asumen la ruta `specs/` en la raíz, que no existe. Al indicar el siguiente paso al usuario, menciona siempre la ruta completa del archivo.
 - `/api/seed/admin` está sin autenticar (su middleware está comentado en `src/routes/seed.route.ts`). No es precedente para ninguna entidad nueva.
+
+---
+
+## 8. Update diferencial — ficha rápida
+
+Norma: `CONVENTIONS.md` §11, bloque «Update diferencial». Origen: `references/functional/specs/12-differential.md` (SPEC F12, `Implementado`).
+
+**La regla en una frase:** se escribe cuando el **valor cambia**, no cuando la clave llega en el body. Sin diferencias no hay `UPDATE`, ni `updatedAt`, ni entrada en `appDetails`, ni evento en `sysDetails`; se responde 200 con la fila como está.
+
+Forma canónica del `004`:
+
+```ts
+const stored = entity.get({ plain: true }) as Record<string, unknown>;   // fila completa, sin `attributes`
+const objectToUpdate = buildDifferentialUpdate(stored, { /* candidates ya normalizados */ });
+if( Object.keys(objectToUpdate).length === 0 ) { return entity; }
+```
+
+Cómo entra cada tipo de campo en `candidates`:
+
+| Tipo de campo | Forma |
+|---|---|
+| Código | `data.code ? toConstantCase(data.code.trim()) : undefined` |
+| Nombre | `data.name ? toTitleCase(data.name.trim()) : undefined` |
+| Anulable | `data.x !== undefined ? (data.x ?? null) : undefined` — `null` es un valor, `undefined` es «no vino» |
+| Cifrado | texto plano; `stored` descifrado con `esaviDecrypt`; `esaviCrypt` **después** del diff |
+| Derivado | **siempre**, sin `if` de presencia: lo decide el helper |
+| Inmutable | no entra: se ignora en silencio, sin 400 |
+
+Reglas de comparación que ya absorbe el helper —no las repita ningún servicio—: `!==` en primitivos, `getTime()` en fechas, `JSON.stringify` en objetos, comparación numérica entre cadena numérica y número (las columnas `DECIMAL` vuelven de `pg` como cadena), y `slice(0, 10)` en `DATEONLY`.
+
+**Antes del diff y con independencia de él:** validación de FK (404) y unicidad (409). La unicidad de un campo cifrado sí compara ciphertext: es una consulta a la base, no un diff.
+
+**No pasan por el helper**, y el spec debe decirlo cuando aparezcan: las activaciones `005A`/`005B` y `setEntityActiveStatusService`, los `001`, y las escrituras con intención propia —traslados, asignaciones masivas, reactivaciones— que registran un hecho aunque ningún dato cambie.

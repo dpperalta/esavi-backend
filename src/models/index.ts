@@ -14,6 +14,7 @@ import { EsaviCase } from './esaviCase.model';
 import { Notifier } from './notifier.model';
 import { Classification } from './classification.model';
 import { Notification } from './notification.model';
+import { SevereNotification } from './severeNotification.model';
 
 export const initModels = (): void => {
     initAssociations();
@@ -34,5 +35,6 @@ export {
     EsaviCase,
     Notifier,
     Classification,
-    Notification
+    Notification,
+    SevereNotification
 };

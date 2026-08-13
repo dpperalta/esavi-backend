@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, HealthFacility, Notification, Notifier, Patient } from '../models';
+import { Classification, EsaviCase, HealthFacility, Notification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -468,6 +468,51 @@ const cascadeDeactivateNotification = async (caseId: string, authUser: AuthUser 
     );
 }
 
+// The severe detail of that notification joins the cascade too, and it is the only satellite
+// reached in two hops. The chain case -> notification -> detail has to be walked explicitly:
+// the mass Notification.update above does not go through notification.service.ts, so the
+// cascade SPEC F13 installed there never fires from here. Without this, a detail under a
+// deactivated case would end up invisible but unsealed, and therefore never purgable — two ways
+// of reaching the same state with different results.
+//
+// severeNotification has no isActive column, so what moves is its deletedAt, and rows already
+// sealed are left alone by the where: they keep their original date and receive no new entry.
+// SPEC F13 adds this fourth satellite to the mechanism SPEC F07 left in place
+const cascadeSealSevereNotifications = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const notifications = await Notification.findAll({
+        where: { caseId },
+        attributes: ['notificationId'],
+        transaction
+    });
+    if( notifications.length === 0 ) {
+        return;
+    }
+
+    const now = new Date();
+    // The method is the code of the operation that dragged it, not ESAVI-SEVNOT-005*: the audit
+    // says who did it, not which row it landed on
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CASE-005A',
+        detail: 'Severe notification detail sealed by cascade from its ESAVI Case'
+    };
+    await SevereNotification.update(
+        {
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        {
+            where: {
+                notificationId: notifications.map(notification => notification.notificationId),
+                deletedAt: null
+            },
+            transaction
+        }
+    );
+}
+
 // Setting ESAVI Case Active/Inactive Service
 // Code: ESAVI-CASE-005A / ESAVI-CASE-005B
 // 005A also deactivates every active notifier of the case, its active classification and its
@@ -503,6 +548,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
             await cascadeDeactivateNotifiers(id, authUser, transaction);
             await cascadeDeactivateClassification(id, authUser, transaction);
             await cascadeDeactivateNotification(id, authUser, transaction);
+            await cascadeSealSevereNotifications(id, authUser, transaction);
         }
 
         await transaction.commit();
