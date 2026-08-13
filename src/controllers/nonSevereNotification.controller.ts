@@ -5,6 +5,7 @@ import {
     createNonSevereNotificationService,
     getNonSevereNotificationByCaseIdService,
     getNonSevereNotificationByIdService,
+    purgeNonSevereNotificationService,
     updateNonSevereNotificationService
 } from '../services/nonSevereNotification.service';
 
@@ -105,9 +106,31 @@ const updateNonSevereNotification = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Purge Non Severe Notification Controller - For SuperAdmin
+// Code: ESAVI-NSEVNOT-005C
+// Answers { ok, message } without data: the row no longer exists, so there is nothing to return
+const purgeNonSevereNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeNonSevereNotificationService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('nonSevereNotification.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NSEVNOT-005C: Error purging Non Severe Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('nonSevereNotification.purgeFailed', req.lang), 500, 'NSEVNOT_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createNonSevereNotification,
     getNonSevereNotificationByCaseId,
     getNonSevereNotificationById,
-    updateNonSevereNotification
+    updateNonSevereNotification,
+    purgeNonSevereNotification
 };

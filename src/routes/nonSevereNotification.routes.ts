@@ -5,6 +5,7 @@ import {
     createNonSevereNotification,
     getNonSevereNotificationByCaseId,
     getNonSevereNotificationById,
+    purgeNonSevereNotification,
     updateNonSevereNotification
 } from '../controllers/nonSevereNotification.controller';
 import {
@@ -14,7 +15,7 @@ import {
     updateNonSevereNotificationValidator
 } from '../validators';
 
-const { USER } = ROLES;
+const { SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -24,6 +25,12 @@ const router = Router();
 // and F13 already fixed: the detail is captured in the same operational flow as the notification,
 // and splitting it across two roles would break the form in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createNonSevereNotificationValidator, validateFields, createNonSevereNotification);
+
+// Purge Non Severe Notification - Physical delete, for SuperAdmin
+// Code: ESAVI-NSEVNOT-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not
+// have an activity flag and does not manage its own state — its header does
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...nonSevereNotificationIdValidator, validateFields, purgeNonSevereNotification);
 
 // Get Non Severe Notification by Case
 // Code: ESAVI-NSEVNOT-006

@@ -1,5 +1,7 @@
+import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Notification, NonSevereNotification } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage } from '../helpers';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateNonSevereNotificationInput } from '../types';
 import { NotificationType } from '../constants/notification.constants';
 
@@ -506,9 +508,54 @@ const updateNonSevereNotificationService = async (
     return updated ? toNonSevereNotificationResponse(updated) : null;
 }
 
+// Purging Non Severe Notification Service - For SuperAdmin
+// Code: ESAVI-NSEVNOT-005C
+// nonSevereNotification is outside the preventPhysicalDelete loop of esaviapp.sql:1354-1360, so
+// the row can really be destroyed.
+// The guard by deletedAt is assertRowIsSealed, shared with severeNotification: it lives in a
+// helper and not in purgeEntityService, whose isActive check is inert on this table —
+// `undefined !== true`, so every row would be purgable immediately and the safety net that
+// CONVENTIONS.md §6 calls for would be gone.
+// The three ON DELETE RESTRICT keys do not get in the way here: they point outwards, so purging
+// this detail violates none of them. What they do forbid is purging the health facility, the
+// catalog item or the location this row points at
+const purgeNonSevereNotificationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const nonSevereNotification = await NonSevereNotification.findByPk(id, {
+            attributes: ['notificationId', 'deletedAt'],
+            transaction
+        });
+        if( !nonSevereNotification ) {
+            throw new AppError(getMessage('nonSevereNotification.notFound', lang), 404, 'NSEVNOT_005C_NOT_FOUND');
+        }
+
+        assertRowIsSealed(nonSevereNotification, 'NSEVNOT_005C_NOT_DELETED', lang);
+
+        await purgeEntityService({
+            model: NonSevereNotification,
+            where: { notificationId: id },
+            transaction,
+            operationCode: 'ESAVI-NSEVNOT-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('nonSevereNotification.notFound', lang),
+            notFoundCode: 'NSEVNOT_005C_NOT_FOUND',
+            // Unreachable on this table: the generic guard compares isActive, a column
+            // nonSevereNotification does not have. The real guard is the one above
+            stillActiveMessage: getMessage('nonSevereNotification.notDeleted', lang, { id }),
+            stillActiveCode: 'NSEVNOT_005C_NOT_DELETED'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNonSevereNotificationService,
     getNonSevereNotificationByIdService,
     getNonSevereNotificationByCaseIdService,
-    updateNonSevereNotificationService
+    updateNonSevereNotificationService,
+    purgeNonSevereNotificationService
 };
