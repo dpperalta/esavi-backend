@@ -18,6 +18,7 @@ import classificationRoutes from './classification.routes';
 import notificationRoutes from './notification.routes';
 import severeNotificationRoutes from './severeNotification.routes';
 import nonSevereNotificationRoutes from './nonSevereNotification.routes';
+import diagnosticTermRoutes from './diagnosticTerm.routes';
 
 const router = Router();
 
@@ -46,5 +47,6 @@ router.use('/classifications', classificationRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/severe-notifications', severeNotificationRoutes);
 router.use('/non-severe-notifications', nonSevereNotificationRoutes);
+router.use('/diagnostic-terms', diagnosticTermRoutes);
 
 export default router;

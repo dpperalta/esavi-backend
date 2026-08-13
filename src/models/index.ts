@@ -16,6 +16,7 @@ import { Classification } from './classification.model';
 import { Notification } from './notification.model';
 import { SevereNotification } from './severeNotification.model';
 import { NonSevereNotification } from './nonSevereNotification.model';
+import { DiagnosticTerm } from './diagnosticTerm.model';
 
 export const initModels = (): void => {
     initAssociations();
@@ -38,5 +39,6 @@ export {
     Classification,
     Notification,
     SevereNotification,
-    NonSevereNotification
+    NonSevereNotification,
+    DiagnosticTerm
 };
