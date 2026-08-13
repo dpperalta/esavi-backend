@@ -1,6 +1,6 @@
 # SPEC F14 — CRUD de `nonSevereNotification`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC 09 (`healthFacility` — una de las tres FK apunta ahí), **SPEC F13 (`severeNotification` — dependencia dura de implementación: aporta `src/constants/enums.constants.ts` y las dos funciones de arrastre sobre las que este spec se cuelga; no se implementa hasta que aquél esté `Implementado`)**, **SPEC F10 (`notification` — dependencia dura de modelo: la PK de esta tabla *es* su FK)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa, y gobierna cuándo se revalidan las tres FK)
 > **Fecha:** 2026-08-12
 > **Objetivo:** Dar de alta `nonSevereNotification`, el detalle de una notificación no grave —dónde se vacunó y cómo se verificó el evento—, como la **segunda** entidad sin columna `isActive` y la primera de las satélites que arrastra claves foráneas propias.

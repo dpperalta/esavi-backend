@@ -167,6 +167,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | notification | `006` | obtener la notificación de un caso — la relación es uno a uno y se entra por el `caseId` |
 | severeNotification | `006` | obtener el detalle grave de un caso — la cadena `caso → notificación → detalle` es uno a uno en los dos saltos |
 | nonSevereNotification | `006` | obtener el detalle no grave de un caso — la cadena `caso → notificación → detalle` es uno a uno en los dos saltos |
+| diagnosticTerm | `006` | resolver término — busca por el par `(LOCAL, code)` y crea la fila si no existe. **Sin ruta HTTP:** es un servicio interno que otros dominios invocan dentro de su propia transacción |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
@@ -273,6 +274,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | catalogItem | `CATITEM` |
 | catalogType | `CATTYPE` |
 | classification | `CLASSIF` |
+| diagnosticTerm | `DIAGTERM` |
 | esaviCase | `CASE` |
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
