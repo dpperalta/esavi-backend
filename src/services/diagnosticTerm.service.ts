@@ -1,6 +1,26 @@
+import { Op, WhereOptions } from 'sequelize';
 import { DiagnosticTerm } from '../models';
 import { AppError, getMessage, toConstantCase } from '../helpers';
-import { AppDetails, AuthUser, CreateDiagnosticTermInput } from '../types';
+import { AppDetails, AuthUser, CreateDiagnosticTermInput, DiagnosticTermListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// Shared by both listings. search is the first Op.iLike of the repository and stays deliberately
+// confined to name and to these two services: the real use case of the catalog is the autocomplete
+// of the notification form, and a term is looked up by how it reads, not by its code. source and
+// termGroup are exact equality — partial search over them is out of this spec's scope
+const buildDiagnosticTermWhere = (filters: DiagnosticTermListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if (filters.search) {
+        where.name = { [Op.iLike]: `%${filters.search.trim()}%` };
+    }
+    if (filters.source) {
+        where.source = filters.source;
+    }
+    if (filters.termGroup) {
+        where.termGroup = filters.termGroup.trim();
+    }
+    return where;
+}
 
 // ESAVI-DIAGTERM-001 - Create Diagnostic Term Service
 const createDiagnosticTermService = async (data: CreateDiagnosticTermInput, authUser: AuthUser | undefined, lang: string) => {
@@ -43,6 +63,21 @@ const createDiagnosticTermService = async (data: CreateDiagnosticTermInput, auth
     return newDiagnosticTerm;
 }
 
+// ESAVI-DIAGTERM-002A - Get Active Diagnostic Terms Service
+const getActiveDiagnosticTermsService = async (filters: DiagnosticTermListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const diagnosticTerms = await DiagnosticTerm.findAndCountAll({
+        where: {
+            ...buildDiagnosticTermWhere(filters),
+            isActive: true
+        },
+        order: [['name', 'ASC']],
+        limit,
+        offset
+    });
+    return diagnosticTerms;
+}
+
 export {
-    createDiagnosticTermService
+    createDiagnosticTermService,
+    getActiveDiagnosticTermsService
 }
