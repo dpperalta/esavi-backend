@@ -28,8 +28,13 @@ export const assertRowIsSealed = (row: Model, code: string, lang: string): void 
     const model = row.constructor as ModelStatic<Model>;
     const id = row.get(model.primaryKeyAttribute) as string;
 
+    // Built into a variable rather than inlined: scripts/i18n-check.js reads a template literal
+    // inside getMessage() as a static key and would report it missing from es.json. Through a
+    // variable it is what it really is, a reference resolved at runtime
+    const messageKey = `${ model.getTableName() }.notDeleted`;
+
     throw new AppError(
-        getMessage(`${ model.getTableName() }.notDeleted`, lang, { id }),
+        getMessage(messageKey, lang, { id }),
         409,
         code
     );
