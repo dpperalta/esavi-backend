@@ -386,5 +386,27 @@
         "updatedFailed": "Error al actualizar el detalle de notificación grave. Por favor, inténtelo de nuevo más tarde.",
         "purgeSuccess": "Detalle de notificación grave eliminado permanentemente",
         "purgeFailed": "Error al eliminar permanentemente el detalle de notificación grave. Por favor, inténtelo de nuevo más tarde."
+    },
+    "nonSevereNotification": {
+        "notFound": "Detalle de notificación no grave no encontrado. Por favor, verifique el ID de la notificación e inténtelo de nuevo.",
+        "idRequired": "El ID de la notificación es obligatorio",
+        "notificationNotFound": "La notificación indicada no existe o está inactiva",
+        "notificationNotNonSevere": "La notificación con ID {{notificationId}} no es de tipo no grave, así que no admite un detalle de notificación no grave",
+        "alreadyExists": "La notificación con ID {{notificationId}} ya tiene un detalle de notificación no grave",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "healthFacilityNotFound": "El establecimiento de salud de vacunación indicado no existe o está inactivo",
+        "vaccinationSiteNotFound": "El sitio de vacunación indicado no existe, está inactivo o no pertenece al catálogo de sitios de vacunación",
+        "geoLocationNotFound": "La ubicación geográfica de vacunación indicada no existe, está inactiva o no corresponde al nivel geográfico más específico",
+        "otherSourceDescriptionRequired": "Se declaró otra fuente de verificación: la descripción de la otra fuente es obligatoria",
+        "otherSourceDescriptionNotAllowed": "La descripción de la otra fuente solo se admite cuando se declara otra fuente de verificación",
+        "notDeleted": "El detalle de notificación no grave con ID {{id}} no ha sido retirado. Desactive su notificación antes de eliminarlo permanentemente.",
+        "createdSuccess": "Detalle de notificación no grave creado exitosamente",
+        "createdFailed": "Error al crear el detalle de notificación no grave. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Detalle de notificación no grave obtenido exitosamente",
+        "getFailed": "Error al obtener el detalle de notificación no grave. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Detalle de notificación no grave actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el detalle de notificación no grave. Por favor, inténtelo de nuevo más tarde.",
+        "purgeSuccess": "Detalle de notificación no grave eliminado permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente el detalle de notificación no grave. Por favor, inténtelo de nuevo más tarde."
     }
 }

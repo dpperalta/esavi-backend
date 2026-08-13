@@ -386,5 +386,27 @@
         "updatedFailed": "Failed to update the severe notification detail. Please try again later.",
         "purgeSuccess": "Severe notification detail permanently deleted",
         "purgeFailed": "Error permanently deleting the severe notification detail. Please try again later."
+    },
+    "nonSevereNotification": {
+        "notFound": "Non severe notification detail not found. Please check the notification ID and try again.",
+        "idRequired": "The notification ID is required",
+        "notificationNotFound": "The given notification does not exist or is inactive",
+        "notificationNotNonSevere": "The notification with ID {{notificationId}} is not of non severe type, so it does not admit a non severe notification detail",
+        "alreadyExists": "The notification with ID {{notificationId}} already has a non severe notification detail",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "healthFacilityNotFound": "The given vaccination health facility does not exist or is inactive",
+        "vaccinationSiteNotFound": "The given vaccination site does not exist, is inactive or does not belong to the vaccination sites catalog",
+        "geoLocationNotFound": "The given vaccination geographic location does not exist, is inactive or does not belong to the most specific geographic level",
+        "otherSourceDescriptionRequired": "Another verification source was declared: the description of the other source is required",
+        "otherSourceDescriptionNotAllowed": "The description of the other source is only allowed when another verification source is declared",
+        "notDeleted": "The non severe notification detail with ID {{id}} has not been withdrawn. Deactivate its notification before deleting it permanently.",
+        "createdSuccess": "Non severe notification detail created successfully",
+        "createdFailed": "Failed to create the non severe notification detail. Please try again later.",
+        "getSuccess": "Non severe notification detail fetched successfully",
+        "getFailed": "Failed to fetch the non severe notification detail. Please try again later.",
+        "updatedSuccess": "Non severe notification detail updated successfully",
+        "updatedFailed": "Failed to update the non severe notification detail. Please try again later.",
+        "purgeSuccess": "Non severe notification detail permanently deleted",
+        "purgeFailed": "Error permanently deleting the non severe notification detail. Please try again later."
     }
 }
