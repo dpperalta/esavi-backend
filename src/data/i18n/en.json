@@ -408,5 +408,23 @@
         "updatedFailed": "Failed to update the non severe notification detail. Please try again later.",
         "purgeSuccess": "Non severe notification detail permanently deleted",
         "purgeFailed": "Error permanently deleting the non severe notification detail. Please try again later."
+    },
+    "diagnosticTerm": {
+        "createdSuccess": "Diagnostic term created successfully",
+        "createdFailed": "Failed to create the diagnostic term. Please try again later.",
+        "getSuccess": "Diagnostic term fetched successfully",
+        "getFailed": "Failed to fetch the diagnostic term. Please try again later.",
+        "getSuccessPlural": "Diagnostic terms fetched successfully",
+        "getFailedPlural": "Failed to fetch the diagnostic terms. Please try again later.",
+        "updatedSuccess": "Diagnostic term updated successfully",
+        "updatedFailed": "Failed to update the diagnostic term. Please try again later.",
+        "deletedSuccess": "Diagnostic term deleted successfully",
+        "deletedFailed": "Failed to delete the diagnostic term. Please try again later.",
+        "activatedSuccess": "Diagnostic term activated successfully",
+        "activatedFailed": "Failed to activate the diagnostic term. Please try again later.",
+        "notFound": "Diagnostic term not found. Please check the diagnostic term ID and try again.",
+        "codeExists": "A diagnostic term with code {{code}} already exists in the {{source}} source",
+        "alreadyActive": "The diagnostic term with ID {{id}} is already active",
+        "alreadyInactive": "The diagnostic term with ID {{id}} is already inactive"
     }
 }

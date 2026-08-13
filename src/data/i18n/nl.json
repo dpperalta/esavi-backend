@@ -408,5 +408,23 @@
         "updatedFailed": "Bijwerken van het detail van de niet-ernstige melding mislukt. Probeer het later opnieuw.",
         "purgeSuccess": "Detail van niet-ernstige melding permanent verwijderd",
         "purgeFailed": "Fout bij het permanent verwijderen van het detail van de niet-ernstige melding. Probeer het later opnieuw."
+    },
+    "diagnosticTerm": {
+        "createdSuccess": "Diagnostische term succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de diagnostische term mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Diagnostische term succesvol opgehaald",
+        "getFailed": "Ophalen van de diagnostische term mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Diagnostische termen succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de diagnostische termen mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Diagnostische term succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de diagnostische term mislukt. Probeer het later opnieuw.",
+        "deletedSuccess": "Diagnostische term succesvol verwijderd",
+        "deletedFailed": "Verwijderen van de diagnostische term mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Diagnostische term succesvol geactiveerd",
+        "activatedFailed": "Activeren van de diagnostische term mislukt. Probeer het later opnieuw.",
+        "notFound": "Diagnostische term niet gevonden. Controleer de ID van de diagnostische term en probeer het opnieuw.",
+        "codeExists": "Er bestaat al een diagnostische term met code {{code}} in de bron {{source}}",
+        "alreadyActive": "De diagnostische term met ID {{id}} is al actief",
+        "alreadyInactive": "De diagnostische term met ID {{id}} is al inactief"
     }
 }

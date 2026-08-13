@@ -408,5 +408,23 @@
         "updatedFailed": "Error al actualizar el detalle de notificación no grave. Por favor, inténtelo de nuevo más tarde.",
         "purgeSuccess": "Detalle de notificación no grave eliminado permanentemente",
         "purgeFailed": "Error al eliminar permanentemente el detalle de notificación no grave. Por favor, inténtelo de nuevo más tarde."
+    },
+    "diagnosticTerm": {
+        "createdSuccess": "Término diagnóstico creado exitosamente",
+        "createdFailed": "Error al crear el término diagnóstico. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Término diagnóstico obtenido exitosamente",
+        "getFailed": "Error al obtener el término diagnóstico. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Términos diagnósticos obtenidos exitosamente",
+        "getFailedPlural": "Error al obtener los términos diagnósticos. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Término diagnóstico actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el término diagnóstico. Por favor, inténtelo de nuevo más tarde.",
+        "deletedSuccess": "Término diagnóstico eliminado exitosamente",
+        "deletedFailed": "Error al eliminar el término diagnóstico. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Término diagnóstico activado exitosamente",
+        "activatedFailed": "Error al activar el término diagnóstico. Por favor, inténtelo de nuevo más tarde.",
+        "notFound": "Término diagnóstico no encontrado. Por favor, verifique el ID del término diagnóstico e inténtelo de nuevo.",
+        "codeExists": "Ya existe un término diagnóstico con el código {{code}} en la fuente {{source}}",
+        "alreadyActive": "El término diagnóstico con ID {{id}} ya está activo",
+        "alreadyInactive": "El término diagnóstico con ID {{id}} ya está inactivo"
     }
 }
