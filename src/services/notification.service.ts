@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Notification, SevereNotification } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -492,6 +492,75 @@ const cascadeClearSevereNotification = async (
     }, { transaction });
 }
 
+// The non severe branch, sibling of the two above and written beside them rather than merged
+// with them. SPEC F14 adds the second satellite to the same mechanism, with the same criterion
+// for `method` and the same upward-cascade exception.
+//
+// A notification holds at most one of the two branches, because notificationType is unique per
+// row: the cascade attempts both and one of them always finds zero rows. That is not an error and
+// deserves no log — it is the normal outcome of the branch that does not apply
+const cascadeSealNonSevereNotification = async (
+    notificationId: string,
+    authUser: AuthUser | undefined,
+    transaction: Transaction
+) => {
+    const nonSevereNotification = await NonSevereNotification.findOne({ where: { notificationId }, transaction });
+
+    // A notification with no detail drags zero rows and does not fail. A detail that was already
+    // sealed keeps its original date and receives no new entry: the fact was already recorded
+    if( !nonSevereNotification || nonSevereNotification.deletedAt ) {
+        return;
+    }
+
+    const now = new Date();
+    const currentAppDetails = Array.isArray(nonSevereNotification.appDetails) ? nonSevereNotification.appDetails : [];
+    await nonSevereNotification.update({
+        deletedAt: now,
+        updatedAt: now,
+        appDetails: [
+            ...currentAppDetails,
+            {
+                createdAt: now,
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-NOTIFCN-005A',
+                detail: 'Non severe notification detail sealed by cascade from its Notification'
+            }
+        ]
+    }, { transaction });
+}
+
+// The other half for the non severe branch, with the same reasoning as its severe sibling: the
+// detail has no decision of its own to respect, so leaving it sealed under an active header would
+// produce a state no client knows how to represent
+const cascadeClearNonSevereNotification = async (
+    notificationId: string,
+    authUser: AuthUser | undefined,
+    transaction: Transaction
+) => {
+    const nonSevereNotification = await NonSevereNotification.findOne({ where: { notificationId }, transaction });
+
+    // Nothing sealed is nothing to clear, and an entry recording no change is noise
+    if( !nonSevereNotification || !nonSevereNotification.deletedAt ) {
+        return;
+    }
+
+    const now = new Date();
+    const currentAppDetails = Array.isArray(nonSevereNotification.appDetails) ? nonSevereNotification.appDetails : [];
+    await nonSevereNotification.update({
+        deletedAt: null,
+        updatedAt: now,
+        appDetails: [
+            ...currentAppDetails,
+            {
+                createdAt: now,
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-NOTIFCN-005B',
+                detail: 'Non severe notification detail cleared by cascade from its Notification'
+            }
+        ]
+    }, { transaction });
+}
+
 // Setting Notification Active/Inactive Service
 // Code: ESAVI-NOTIFCN-005A / ESAVI-NOTIFCN-005B
 // Reactivating does NOT require the case to be active, for the same reason as in notifier and
@@ -530,8 +599,10 @@ const setNotificationActivationService = async (
         // activation that answers 'already in that state' must leave everything as it was
         if( isActive ) {
             await cascadeClearSevereNotification(id, authUser, transaction);
+            await cascadeClearNonSevereNotification(id, authUser, transaction);
         } else {
             await cascadeSealSevereNotification(id, authUser, transaction);
+            await cascadeSealNonSevereNotification(id, authUser, transaction);
         }
 
         await transaction.commit();
