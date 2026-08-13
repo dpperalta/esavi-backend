@@ -1,5 +1,11 @@
-import { body, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import { TERM_SOURCES } from '../constants/enums.constants';
+
+export const diagnosticTermIdValidator = [
+    param('id').notEmpty().withMessage('Diagnostic Term ID is required')
+        .isUUID().withMessage('Diagnostic Term ID must be a valid UUID')
+        .trim()
+];
 
 // Query validator shared by both listings. The two character minimum on search is what keeps the
 // unindexed Op.iLike from scanning the whole catalog on a single letter; reviewStatus is declared

@@ -169,7 +169,7 @@ Orden de declaración en `diagnosticTerm.routes.ts`: las rutas literales `/admin
 
 **`ESAVI-DIAGTERM-002B` — listar admin.** Gemela sin `isActive` en el `where`, más un cuarto filtro: `reviewStatus`, resuelto sobre la clave JSONB `metadata.reviewStatus`. Mismo orden y misma paginación.
 
-**`ESAVI-DIAGTERM-003` — obtener por ID.** Existencia → 404 `DIAGTERM_003_NOT_FOUND`. Un término inactivo devuelve 404 salvo que `canViewInactive(req.user)` sea verdadero. Sin includes: la entidad no tiene asociaciones.
+**`ESAVI-DIAGTERM-003` — obtener por ID.** Existencia → 404 `DIAGTERM_003_NOT_FOUND`. Un término inactivo devuelve 404 salvo que `canViewInactive(req.user)` sea verdadero — y ese predicado es **solo SUPERADMIN** (`src/helpers/permissions.helper.ts:24`), así que un ADMIN recibe el mismo 404 que un USER. Es la asimetría que ya tiene `healthFacility`: el `002B` es ADMIN y lista inactivos, pero el `003` no los deja pedir por ID. Sin includes: la entidad no tiene asociaciones.
 
 **`ESAVI-DIAGTERM-005A` / `005B` — desactivar y reactivar.** Sobre `setEntityActiveStatusService`, con transacción propia, igual que `setCatalogItemActivationService`. El `where` filtra **solo por la PK**. **No se comprueba ninguna FK entrante**: es borrado lógico, los `ON DELETE RESTRICT` no se disparan, y un término inactivo se sigue referenciando por diseño. Desactivar significa «deja de ofrecerse en el autocomplete», no «deja de existir». **No pasan por `buildDifferentialUpdate`**: son escrituras con intención propia que registran un hecho de estado.
 
@@ -266,7 +266,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
    *Verificación:* un ADMIN ve los inactivos; un USER recibe **403**; `?reviewStatus=PENDING` devuelve solo los términos con esa clave en `metadata`.
 
 7. **`ESAVI-DIAGTERM-003` — obtener por ID.** `getDiagnosticTermByIdService(id, lang, includeInactive)`; controlador que pasa `canViewInactive(req.user)`; ruta `GET /:id` declarada **después** de las literales, con su `diagnosticTermIdValidator`.
-   *Verificación:* un ID inexistente devuelve **404**; `GET /admin` no se interpreta como un `:id`; un término inactivo devuelve **404** para USER y **200** para ADMIN.
+   *Verificación:* un ID inexistente devuelve **404**; `GET /admin` no se interpreta como un `:id`; un término inactivo devuelve **404** para USER y para ADMIN, y **200** para SUPERADMIN.
 
 8. **`ESAVI-DIAGTERM-004` — actualizar.** `updateDiagnosticTermService` con la tabla de `candidates` de §3.5 y `buildDifferentialUpdate`. Unicidad del par contra el `source` **guardado**, antes del diff. Preserva el historial con `[...currentAppDetails, newEntry]`. Ruta `PUT /:id` con `validateUserRole(ADMIN)`.
    *Verificación:* un `PUT` que reenvía íntegra la respuesta del `GET` devuelve **200** sin tocar `appDetails`, `updatedAt` ni `sysDetails.version`; un `PUT` con `source` distinto lo ignora sin error; un `PUT` con `reviewStatus: 'APPROVED'` conserva `autoCreated` y `createdFrom` en `metadata`.
@@ -297,7 +297,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] Crear el mismo `code` con `source` distinto devuelve 201: la unicidad es del par.
 - [ ] `?search=cef` encuentra `Cefalea` y `Dolor cefálico`; `?search=c` devuelve 400.
 - [ ] `GET /admin` no se interpreta como un `:id`.
-- [ ] `GET /:id` de un término inactivo: 404 para USER, 200 para ADMIN.
+- [ ] `GET /:id` de un término inactivo: 404 para USER **y para ADMIN**, 200 para SUPERADMIN. `canViewInactive` es SUPERADMIN-only, y el `002B` sigue siendo ADMIN: la asimetría es deliberada y la misma que tiene `healthFacility`.
 - [ ] `?reviewStatus=PENDING` en `002B` devuelve solo los términos con esa clave en `metadata`; el filtro no existe en `002A`.
 - [ ] `DELETE /:id` deja `isActive: false` y `deletedAt` con fecha; `PATCH /activate/:id` lo revierte.
 - [ ] `DELETE` y `PATCH /activate` responden `{ ok, message }` sin `data`.

@@ -75,6 +75,8 @@ const getActiveDiagnosticTermsService = async (filters: DiagnosticTermListFilter
             ...buildDiagnosticTermWhere(filters),
             isActive: true
         },
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [['name', 'ASC']],
         limit,
         offset
@@ -86,6 +88,8 @@ const getActiveDiagnosticTermsService = async (filters: DiagnosticTermListFilter
 const getAllDiagnosticTermsService = async (filters: DiagnosticTermListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const diagnosticTerms = await DiagnosticTerm.findAndCountAll({
         where: buildDiagnosticTermWhere(filters),
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [['name', 'ASC']],
         limit,
         offset
@@ -93,8 +97,24 @@ const getAllDiagnosticTermsService = async (filters: DiagnosticTermListFilters, 
     return diagnosticTerms;
 }
 
+// ESAVI-DIAGTERM-003 - Get Diagnostic Term by ID Service
+const getDiagnosticTermByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const whereClause = includeInactive ? { diagnosticTermId: id } : { diagnosticTermId: id, isActive: true };
+    // No includes: the entity has no associations at all, so there is nothing to join
+    const diagnosticTerm = await DiagnosticTerm.findOne({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] }
+    });
+    if (!diagnosticTerm) {
+        throw new AppError(getMessage('diagnosticTerm.notFound', lang), 404, 'DIAGTERM_003_NOT_FOUND');
+    }
+    return diagnosticTerm;
+}
+
 export {
     createDiagnosticTermService,
     getActiveDiagnosticTermsService,
-    getAllDiagnosticTermsService
+    getAllDiagnosticTermsService,
+    getDiagnosticTermByIdService
 }

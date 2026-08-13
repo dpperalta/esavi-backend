@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
 import { DiagnosticTermListFilters } from '../types';
 import {
     createDiagnosticTermService,
     getActiveDiagnosticTermsService,
-    getAllDiagnosticTermsService
+    getAllDiagnosticTermsService,
+    getDiagnosticTermByIdService
 } from '../services/diagnosticTerm.service';
 
 // Unwraps the query filters shared by both listings. reviewStatus is read here but ignored by the
@@ -85,8 +87,30 @@ const getAllDiagnosticTerms = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Get Diagnostic Term by ID Controller
+// Code: ESAVI-DIAGTERM-003
+const getDiagnosticTermById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getDiagnosticTermByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diagnosticTerm.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DIAGTERM-003: Error getting Diagnostic Term by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diagnosticTerm.getFailed', req.lang), 500, 'DIAGTERM_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createDiagnosticTerm,
     getDiagnosticTerms,
-    getAllDiagnosticTerms
+    getAllDiagnosticTerms,
+    getDiagnosticTermById
 }
