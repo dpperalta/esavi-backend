@@ -180,6 +180,8 @@ Orden de declaración en `diagnosticTerm.routes.ts`: las rutas literales `/admin
 3. Si no existe, `create` con `name` `.trim()`, `metadata: { autoCreated: true, createdFrom: operationCode, reviewStatus: 'PENDING' }` y una entrada de auditoría con `method: 'ESAVI-DIAGTERM-006'` y el `userId` de la sesión que notificó.
 4. Si el `create` lanza `SequelizeUniqueConstraintError`, otra transacción ganó la carrera: relee por el mismo `where` y devuelve la fila ganadora. **El índice único es el árbitro, no el `findOne` del paso 2.** Si la relectura tampoco encuentra nada, se propaga el error original — es un fallo real, no una carrera.
 
+   **El `create` —y solo él— va dentro de un `SAVEPOINT`** de la transacción del llamante, con `sequelize.transaction({ transaction }, …)`. Sin él la rama 4 es inalcanzable en el único escenario que la justifica: en Postgres, una violación de restricción **aborta la transacción entera**, y toda orden posterior del bloque se rechaza con `current transaction is aborted`, incluida la relectura. El savepoint no es una transacción propia — vive dentro de la del llamante, y el `rollback` del llamante lo deshace igual, así que la garantía de la sección 6 se mantiene intacta.
+
 El resolver no lanza 404 ni 409 propios: su contrato es «siempre devuelve un término». Los errores de infraestructura los envuelve el endpoint llamante con su propio código de operación.
 
 #### Contrato de update diferencial
@@ -330,6 +332,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] Resolver un `code` nuevo crea la fila con `source: 'LOCAL'`, `metadata.autoCreated: true`, `metadata.createdFrom` con el código del endpoint llamante y `metadata.reviewStatus: 'PENDING'`.
 - [ ] Resolver con `code: "  11002-10115  "` encuentra el término guardado como `11002_10115`: el resolver y el `001` normalizan igual.
 - [ ] Dos resoluciones concurrentes del mismo `code` nuevo terminan con **una sola** fila y devuelven el mismo `diagnosticTermId`.
+- [ ] La rama 4 responde **con la transacción del llamante abierta**: el `INSERT` perdedor colisiona, la relectura devuelve la fila ganadora y el llamante confirma sin error. Es el caso que el `SAVEPOINT` hace posible.
 - [ ] Un `rollback` de la transacción del llamante deshace también el término creado: `grep -n "sequelize.transaction()" src/services/common/diagnosticTermResolution.service.ts` no devuelve resultados.
 
 ---
@@ -347,6 +350,8 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - **Sí:** el maestro manda sobre el nombre entrante. Si el `code` existe con otro `name`, se referencia y no se toca nada. Actualizar el maestro con lo último que llegó dejaría que un notificador con un error tipográfico renombrase el término para todas las notificaciones históricas.
 - **No:** responder 409 cuando el `name` entrante difiere del guardado. Endurecería el flujo de captura por una discrepancia que el campo `*Raw*` de la tabla llamante ya conserva íntegra.
 - **Sí:** resolver la carrera por violación de unicidad y relectura. `findOrCreate` de Sequelize no cierra la ventana entre el `SELECT` y el `INSERT`. El índice único es el único árbitro fiable bajo concurrencia.
+- **Sí:** el `create` del `006` dentro de un `SAVEPOINT`. Es la única forma de que la relectura de la rama 4 pueda ejecutarse: Postgres aborta la transacción completa ante una violación de restricción, y sin punto de recuperación la relectura muere con un `current transaction is aborted` que se lleva por delante la notificación entera. Verificado a mano antes de escribirlo: sin savepoint, el caso falla; con él, devuelve la fila ganadora y la transacción del llamante confirma con normalidad.
+- **No:** dar al resolver una transacción propia para aislar el `create`. Resolvería el aborto y rompería lo importante: un término creado sobreviviría al `rollback` de la notificación que lo originó. El savepoint da lo primero sin costar lo segundo.
 - **Sí:** un término inactivo se referencia igual. Desactivar significa «deja de ofrecerse en el autocomplete». Reactivarlo desde una notificación anularía en silencio la decisión de un administrador.
 - **No:** bloquear la desactivación cuando el término ya está referenciado. Es borrado lógico: los `ON DELETE RESTRICT` no se disparan, y consultar tres tablas de otros dominios acoplaría este catálogo a notificación y a investigación. Es el mismo razonamiento que el SPEC 09 aplicó a `healthFacility`.
 - **Sí:** marcar lo autogenerado con `metadata.autoCreated`, `createdFrom` y `reviewStatus`. Sin el marcador nadie distingue el término revisado del que entró por un formulario, y en seis meses conviven `Cefalea`, `Dolor de Cabeza` y `DOLOR CABEZA` sin forma de saber cuál mirar.
@@ -371,6 +376,8 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 |---|---|
 | El maestro se llena de variantes del mismo término introducidas por notificadores | Todo lo autogenerado nace con `reviewStatus: 'PENDING'` y es filtrable en `002B`. La fusión y la aprobación son el spec de gobernanza; este spec garantiza que la cola exista y sea consultable |
 | Dos notificaciones simultáneas con el mismo `code` nuevo duplican la fila | El `INSERT` se intenta y el `SequelizeUniqueConstraintError` se captura releyendo la fila ganadora. El árbitro es el índice único, no el `SELECT` previo |
+| La violación de unicidad aborta la transacción del llamante y la relectura no puede ejecutarse | El `create` va en un `SAVEPOINT`: la violación revierte solo hasta ahí y el bloque exterior sigue operativo. Cubierto por un criterio de aceptación propio |
+| Dos transacciones abiertas insertan el mismo `code` a la vez | Postgres **bloquea** el segundo `INSERT` hasta que la primera termina; no falla de inmediato. Es comportamiento correcto, pero conviene saberlo al escribir pruebas: dos resoluciones concurrentes sin confirmar se esperan mutuamente |
 | El `006` normaliza el `code` distinto que el `001` y nunca encuentra lo guardado | Ambos aplican `toConstantCase(code.trim())`. Cubierto por un criterio de aceptación explícito |
 | Un notificador escribe un `code` inventado y crea un término basura | Es el precio de no bloquear la captura, y por eso se marca. Sin la marca el problema existiría igual y además sería invisible |
 | `Op.iLike` con `%valor%` no usa índice y degrada con el catálogo lleno | El mínimo de 2 caracteres y el `limit` acotan el coste. Si MedDRA entra completo —del orden de 80 000 términos—, hará falta un índice `gin_trgm_ops`, y eso es un cambio de esquema con su propio spec |
