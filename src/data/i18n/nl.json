@@ -425,6 +425,11 @@
         "notFound": "Diagnostische term niet gevonden. Controleer de ID van de diagnostische term en probeer het opnieuw.",
         "codeExists": "Er bestaat al een diagnostische term met code {{code}} in de bron {{source}}",
         "alreadyActive": "De diagnostische term met ID {{id}} is al actief",
-        "alreadyInactive": "De diagnostische term met ID {{id}} is al inactief"
+        "alreadyInactive": "De diagnostische term met ID {{id}} is al inactief",
+        "importedSuccess": "Diagnostische termen succesvol geïmporteerd",
+        "importedFailed": "Importeren van de diagnostische termen mislukt. Probeer het later opnieuw.",
+        "fileRequired": "Het te importeren bestand moet in het veld file worden meegestuurd",
+        "fileInvalid": "Het bestand bevat geen enkele geldige regel. Controleer het formaat en probeer het opnieuw.",
+        "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB"
     }
 }

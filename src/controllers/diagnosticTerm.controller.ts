@@ -1,14 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser } from '../types';
-import { DiagnosticTermListFilters } from '../types';
+import { DiagnosticTermListFilters, ImportDiagnosticTermsInput } from '../types';
 import {
     createDiagnosticTermService,
     getActiveDiagnosticTermsService,
     getAllDiagnosticTermsService,
     getDiagnosticTermByIdService,
     updateDiagnosticTermService,
-    setDiagnosticTermActivationService
+    setDiagnosticTermActivationService,
+    importDiagnosticTermsService
 } from '../services/diagnosticTerm.service';
 
 // Unwraps the query filters shared by both listings. reviewStatus is read here but ignored by the
@@ -171,6 +172,41 @@ const activateDiagnosticTerm = async (req: Request, res: Response, next: NextFun
     }
 }
 
+// Import Diagnostic Terms Controller - For SuperAdmin
+// Code: ESAVI-DIAGTERM-007
+const importDiagnosticTerms = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    // A request with no multipart body at all leaves req.body undefined — multer only fills it when
+    // it has something to parse — and that is precisely the request that must end in a 400 for the
+    // missing file, not in a 500 for reading a key off undefined
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    // Everything arrives as a text field of the multipart body, so the booleans come as strings and
+    // are turned into values here. The file itself was left in req.file by uploadSingleFile
+    const data: ImportDiagnosticTermsInput = {
+        source: body.source ? (body.source as ImportDiagnosticTermsInput['source']) : undefined,
+        termGroup: body.termGroup ? (body.termGroup as string).trim() : undefined,
+        dictionaryVersion: body.dictionaryVersion ? (body.dictionaryVersion as string).trim() : undefined,
+        encoding: body.encoding ? (body.encoding as ImportDiagnosticTermsInput['encoding']) : undefined,
+        dryRun: body.dryRun !== undefined ? String(body.dryRun) === 'true' : undefined
+    };
+    try {
+        // 200 and not 201: there is no identifiable resource to return and no URL to point at.
+        // What comes back is the report of a process
+        const report = await importDiagnosticTermsService(req.file?.buffer, data, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diagnosticTerm.importedSuccess', req.lang),
+            data: report
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DIAGTERM-007: Error importing Diagnostic Terms: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diagnosticTerm.importedFailed', req.lang), 500, 'DIAGTERM_007_IMPORT_FAILED', error));
+    }
+}
+
 export {
     createDiagnosticTerm,
     getDiagnosticTerms,
@@ -178,5 +214,6 @@ export {
     getDiagnosticTermById,
     updateDiagnosticTerm,
     deleteDiagnosticTerm,
-    activateDiagnosticTerm
+    activateDiagnosticTerm,
+    importDiagnosticTerms
 }

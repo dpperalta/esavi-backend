@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
+import { tokenValidation, uploadSingleFile, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
     activateDiagnosticTerm,
@@ -8,9 +8,10 @@ import {
     getAllDiagnosticTerms,
     getDiagnosticTermById,
     getDiagnosticTerms,
+    importDiagnosticTerms,
     updateDiagnosticTerm
 } from '../controllers/diagnosticTerm.controller';
-import { createDiagnosticTermValidator, diagnosticTermIdValidator, diagnosticTermListValidator, updateDiagnosticTermValidator } from '../validators';
+import { createDiagnosticTermValidator, diagnosticTermIdValidator, diagnosticTermListValidator, importDiagnosticTermsValidator, updateDiagnosticTermValidator } from '../validators';
 
 const { SUPERADMIN, ADMIN, USER } = ROLES;
 
@@ -33,6 +34,12 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...diagnosticTerm
 // Code: ESAVI-DIAGTERM-005B
 // Literal path, declared before '/:id' so Express does not capture 'activate' as an :id
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...diagnosticTermIdValidator, validateFields, activateDiagnosticTerm);
+
+// Import Diagnostic Terms from a MedDRA .asc file - For SuperAdmin
+// Code: ESAVI-DIAGTERM-007
+// Literal path, declared before '/:id' for coherence with the rest of the file. uploadSingleFile
+// runs before the validators because the multipart body does not exist until multer parses it
+router.post('/import', tokenValidation, validateUserRole(SUPERADMIN), uploadSingleFile('file'), ...importDiagnosticTermsValidator, validateFields, importDiagnosticTerms);
 
 // Get Diagnostic Term by ID
 // Code: ESAVI-DIAGTERM-003

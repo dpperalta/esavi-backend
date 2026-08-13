@@ -1,3 +1,4 @@
+import path from 'path';
 import request from 'supertest';
 import { app } from '../../src/app';
 import { sequelize } from '../../src/database/connection';
@@ -639,6 +640,224 @@ describe('diagnosticTerm contract', () => {
 
             await transaction.commit();
             expect(await DiagnosticTerm.count({ where: { code } })).toBe(1);
+        });
+    });
+
+    /**
+     * SPEC F17 — ESAVI-DIAGTERM-007, bulk import from a MedDRA .asc file. It is the only operation
+     * of the entity that speaks multipart/form-data, the only one that answers with the report of a
+     * process instead of a resource, and the only one that writes isActive out of the file.
+     *
+     * The fixture has six lines on purpose: two current, one withdrawn with 'N', one repeating a
+     * code already seen, one with no name and one with a single field. That is read: 6,
+     * inserted: 3, invalid: 2, duplicated: 1.
+     */
+    describe('bulk import — ESAVI-DIAGTERM-007', () => {
+
+        const fixturePath = path.resolve(__dirname, '../fixtures/meddra-llt-sample.asc');
+
+        // The fixture codes, so the assertions read as what they are
+        const currentCode = '10099001';
+        const renamedCode = '10099002';
+        const withdrawnCode = '10099003';
+
+        const importFile = ( role: string = 'SUPERADMIN' ) =>
+            request(app).post('/api/diagnostic-terms/import').set(authHeader(role));
+
+        // Earlier blocks of this suite leave MEDDRA rows of their own behind, so every count here
+        // is scoped to the three codes of the fixture
+        const countFixtureRows = () =>
+            DiagnosticTerm.count({ where: { source: 'MEDDRA', code: [currentCode, renamedCode, withdrawnCode] } });
+
+        const readByCode = async ( code: string ) => {
+            const row = await DiagnosticTerm.findOne({ where: { source: 'MEDDRA', code } });
+            return {
+                name: row!.getDataValue('name'),
+                termGroup: row!.getDataValue('termGroup'),
+                isActive: row!.getDataValue('isActive'),
+                deletedAt: row!.getDataValue('deletedAt'),
+                updatedAt: row!.getDataValue('updatedAt'),
+                metadata: row!.getDataValue('metadata') as Record<string, unknown>,
+                appDetails: ( row!.getDataValue('appDetails') as { method: string }[] ).length,
+                version: ( row!.getDataValue('sysDetails') as { version?: number } ).version
+            };
+        };
+
+        // The three lines the fixture imports, rebuilt in memory so a variant can change one field
+        const buildFile = ( withdrawnFlag: string = 'N', renamedName: string = 'Déficit de 11-beta-hidroxilasa' ) =>
+            Buffer.from([
+                `${ currentCode }$Fiebre posvacunal$${ currentCode }$$$$$$$Y$$`,
+                `${ renamedCode }$${ renamedName }$${ renamedCode }$$$$$$$Y$$`,
+                `${ withdrawnCode }$Término retirado por MedDRA$${ withdrawnCode }$$$$$$$${ withdrawnFlag }$$`
+            ].join('\n'), 'utf8');
+
+        it('rejects ADMIN with 403 — the widest write of the repository is SUPERADMIN only', async () => {
+            const response = await importFile('ADMIN').attach('file', fixturePath);
+
+            expect(response.status).toBe(403);
+        });
+
+        it('responds 400 when no file travels', async () => {
+            const response = await importFile();
+
+            expect(response.status).toBe(400);
+            expect(response.body.ok).toBe(false);
+            expect(response.body.code).toBe('DIAGTERM_007_FILE_REQUIRED');
+        });
+
+        it('responds 400 when the file yields no valid line', async () => {
+            const response = await importFile()
+                .attach('file', Buffer.from('sin;separador\notra;linea', 'utf8'), 'bad.asc');
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('DIAGTERM_007_FILE_INVALID');
+        });
+
+        // dryRun runs before the real import on purpose: it is the only moment the table is
+        // guaranteed empty of these codes, so "wrote nothing" can be asserted without ambiguity
+        it('dryRun reports the same numbers and writes nothing', async () => {
+            const response = await importFile().field('dryRun', 'true').attach('file', fixturePath);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({
+                read: 6, inserted: 3, updated: 0, unchanged: 0, invalid: 2, duplicated: 1, dryRun: true
+            });
+            expect(await countFixtureRows()).toBe(0);
+        });
+
+        it('responds 200 with the process report and writes only the valid rows', async () => {
+            const response = await importFile()
+                .field('dictionaryVersion', '28.0')
+                .attach('file', fixturePath);
+
+            // 200 and not 201: there is no resource to point at, only the report of a process
+            expect(response.status).toBe(200);
+            expect(response.body.ok).toBe(true);
+            expect(response.body.message.length).toBeGreaterThan(0);
+            expect(response.body.data).toMatchObject({
+                read: 6, inserted: 3, updated: 0, unchanged: 0, invalid: 2, duplicated: 1,
+                dryRun: false, source: 'MEDDRA', termGroup: 'LLT'
+            });
+            // Not a single diagnosticTermId comes back
+            expect(JSON.stringify(response.body.data)).not.toContain('diagnosticTermId');
+            // The rejected sample carries the line number and the reason of each one
+            expect(response.body.data.errors).toEqual([
+                { line: 4, reason: 'DUPLICATE_IN_FILE', raw: expect.any(String) },
+                { line: 5, reason: 'EMPTY_NAME', raw: expect.any(String) },
+                { line: 6, reason: 'MISSING_FIELDS', raw: expect.any(String) }
+            ]);
+            expect(await countFixtureRows()).toBe(3);
+        });
+
+        it('derives isActive and deletedAt from the currency field', async () => {
+            const current = await readByCode(currentCode);
+            expect(current.isActive).toBe(true);
+            expect(current.deletedAt).toBeNull();
+
+            const withdrawn = await readByCode(withdrawnCode);
+            expect(withdrawn.isActive).toBe(false);
+            expect(withdrawn.deletedAt).not.toBeNull();
+        });
+
+        it('stores the name as quoted data and marks the row as imported', async () => {
+            const renamed = await readByCode(renamedCode);
+
+            // Never toTitleCase, and the accents survive the round trip
+            expect(renamed.name).toBe('Déficit de 11-beta-hidroxilasa');
+            // termGroup defaults to LLT when the body does not carry it
+            expect(renamed.termGroup).toBe('LLT');
+            // The opposite of what 006 writes: the official dictionary is nobody's review queue
+            expect(renamed.metadata).toMatchObject({
+                importedFrom: 'MEDDRA',
+                reviewStatus: 'APPROVED',
+                autoCreated: false,
+                dictionaryVersion: '28.0'
+            });
+        });
+
+        it('creates a separate row when the same code already exists as LOCAL', async () => {
+            // Uniqueness is by the pair, and MEDDRA/10099001 and LOCAL/10099001 are two terms
+            const local = await DiagnosticTerm.create({ source: 'LOCAL', code: currentCode, name: 'Termino local homonimo' });
+
+            expect(await DiagnosticTerm.count({ where: { code: currentCode } })).toBe(2);
+            expect(local.getDataValue('source')).toBe('LOCAL');
+            // The row is left in place: TRG_diagnosticTerm_preventPhysicalDelete blocks a DELETE,
+            // and the MEDDRA side of the pair is what the rest of the block reads
+        });
+
+        // The criterion that really discriminates: a differential update that is not differential
+        // would pass every other test in this block
+        it('reimporting the same file writes nothing at all', async () => {
+            const before = await Promise.all([currentCode, renamedCode, withdrawnCode].map(readByCode));
+
+            const response = await importFile().field('dictionaryVersion', '28.0').attach('file', fixturePath);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({ read: 6, inserted: 0, updated: 0, unchanged: 3 });
+
+            const after = await Promise.all([currentCode, renamedCode, withdrawnCode].map(readByCode));
+            // No appDetails entry, no sysDetails.version bump and no updatedAt moved
+            expect(after).toEqual(before);
+        });
+
+        it('updates only the row whose name changed', async () => {
+            const before = await readByCode(renamedCode);
+
+            const response = await importFile()
+                .attach('file', buildFile('N', 'Déficit de 11-beta-hidroxilasa (revisado)'), 'llt.asc');
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({ read: 3, inserted: 0, updated: 1, unchanged: 2 });
+
+            const after = await readByCode(renamedCode);
+            expect(after.name).toBe('Déficit de 11-beta-hidroxilasa (revisado)');
+            expect(after.appDetails).toBe(before.appDetails + 1);
+            expect(after.version).toBe(( before.version ?? 0 ) + 1);
+            // The update branch never rewrites metadata
+            expect(after.metadata).toEqual(before.metadata);
+        });
+
+        it('flips the currency of a single row and touches no other deletedAt', async () => {
+            const untouchedBefore = await readByCode(currentCode);
+
+            // Same file, except the withdrawn term is declared current again
+            const response = await importFile()
+                .attach('file', buildFile('Y', 'Déficit de 11-beta-hidroxilasa (revisado)'), 'llt.asc');
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({ inserted: 0, updated: 1, unchanged: 2 });
+
+            const reactivated = await readByCode(withdrawnCode);
+            // Over source MEDDRA the file is the authority, so a reimport reactivates
+            expect(reactivated.isActive).toBe(true);
+            expect(reactivated.deletedAt).toBeNull();
+
+            expect(await readByCode(currentCode)).toEqual(untouchedBefore);
+        });
+
+        it('keeps the metadata of a term born out of ESAVI-DIAGTERM-006', async () => {
+            const code = `10099${ suffix.slice(-3) }`;
+            await DiagnosticTerm.create({
+                source: 'MEDDRA',
+                code,
+                name: 'Nombre anterior',
+                metadata: { autoCreated: true, createdFrom: 'ESAVI-NOTEVENT-001', reviewStatus: 'PENDING' }
+            });
+
+            const response = await importFile()
+                .attach('file', Buffer.from(`${ code }$Nombre del diccionario$1$$$$$$$Y$$`, 'utf8'), 'llt.asc');
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({ inserted: 0, updated: 1 });
+
+            const row = await readByCode(code);
+            expect(row.name).toBe('Nombre del diccionario');
+            // Reconciling the two origins is the governance spec, and it needs these keys alive
+            expect(row.metadata).toMatchObject({
+                autoCreated: true,
+                createdFrom: 'ESAVI-NOTEVENT-001',
+                reviewStatus: 'PENDING'
+            });
         });
     });
 });

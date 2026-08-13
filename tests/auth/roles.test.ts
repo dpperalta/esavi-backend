@@ -207,7 +207,10 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/diagnostic-terms/${ UUID }`,              minRole: 'USER',       code: 'ESAVI-DIAGTERM-003' },
     { method: 'put',    path: `/api/diagnostic-terms/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-DIAGTERM-004' },
     { method: 'delete', path: `/api/diagnostic-terms/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-DIAGTERM-005A' },
-    { method: 'patch',  path: `/api/diagnostic-terms/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-005B' }
+    { method: 'patch',  path: `/api/diagnostic-terms/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-005B' },
+    // ESAVI-DIAGTERM-007 (SPEC F17) — bulk import from a MedDRA .asc file. SUPERADMIN because it is
+    // the widest write of the repository: tens of thousands of rows in a single request
+    { method: 'post',   path: '/api/diagnostic-terms/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-007' }
 ];
 
 /**
@@ -263,7 +266,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(125);
+            expect(ROUTE_RULES).toHaveLength(126);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

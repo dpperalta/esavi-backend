@@ -35,3 +35,46 @@ export interface ResolveDiagnosticTermInput {
     name: string;
     operationCode: string;
 }
+
+// Body of the bulk import (ESAVI-DIAGTERM-007). It carries no code and no name: the data comes from
+// the uploaded file, never from the body. dictionaryVersion is free text and is only kept inside the
+// metadata of each imported row — there is no dictionary version table in this spec
+export interface ImportDiagnosticTermsInput {
+    source?: TermSource;
+    termGroup?: string;
+    dictionaryVersion?: string;
+    encoding?: 'utf8' | 'latin1';
+    dryRun?: boolean;
+}
+
+// One accepted line of the .asc file. line is 1-based so the report points at the file the way the
+// operator sees it in an editor
+export interface ParsedDiagnosticTermRow {
+    line: number;
+    code: string;
+    name: string;
+    isActive: boolean;
+}
+
+// One rejected line. raw is trimmed to 200 characters: a binary file uploaded by mistake would
+// otherwise put whole megabytes into the response
+export interface RejectedDiagnosticTermRow {
+    line: number;
+    reason: 'EMPTY_CODE' | 'EMPTY_NAME' | 'CODE_TOO_LONG' | 'NAME_TOO_LONG' | 'MISSING_FIELDS' | 'DUPLICATE_IN_FILE';
+    raw: string;
+}
+
+// What the import returns instead of a resource: the report of a process. The counters are exact;
+// errors carries only the first 20 entries
+export interface DiagnosticTermImportReport {
+    read: number;
+    inserted: number;
+    updated: number;
+    unchanged: number;
+    invalid: number;
+    duplicated: number;
+    dryRun: boolean;
+    source: TermSource;
+    termGroup: string;
+    errors: RejectedDiagnosticTermRow[];
+}
