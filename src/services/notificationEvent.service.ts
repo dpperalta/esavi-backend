@@ -1,6 +1,6 @@
 import { InferAttributes, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { DiagnosticTerm, Notification, NotificationEvent } from '../models';
+import { DiagnosticTerm, EsaviCase, Notification, NotificationEvent } from '../models';
 import { AppError, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateNotificationEventInput } from '../types';
@@ -399,9 +399,59 @@ const getNotificationEventByIdService = async (id: string, lang: string, canView
     return toNotificationEventResponse(notificationEvent);
 }
 
+// Get Notification Events By Case ID Service
+// Code: ESAVI-NOTIFEVT-006
+// The real query of the domain: the client holds the caseId, not the notificationId. The chain
+// case -> notification is one to one, but N events hang from the notification, so unlike the 006
+// of its two siblings this one returns { count, rows } and not a single record.
+//
+// The two 404 are deliberately distinct — the client enters through a caseId and needs to know
+// which link of the chain broke — and from there it is the 002A: active events only, ordered by
+// sortOrder. No admin variant is declared: the rows carry the notificationId, which is the entry
+// to the 002B for whoever needs to see the retired ones
+const getNotificationEventsByCaseIdService = async (
+    caseId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('notificationEvent.caseNotFound', lang), 404, 'NOTIFEVT_006_CASE_NOT_FOUND');
+    }
+
+    const where = canViewInactive ? { caseId } : { caseId, isActive: true };
+    const notification = await Notification.findOne({ where, attributes: ['notificationId'] });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationEvent.notificationNotFound', lang),
+            404,
+            'NOTIFEVT_006_NOTIFICATION_NOT_FOUND'
+        );
+    }
+
+    const notificationEvents = await NotificationEvent.findAndCountAll({
+        where: { notificationId: notification.notificationId, isActive: true },
+        include: [DIAGNOSTIC_TERM_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationEvents.count,
+        rows: notificationEvents.rows.map(toNotificationEventResponse)
+    };
+}
+
 export {
     createNotificationEventService,
     getNotificationEventsByNotificationService,
     getAllNotificationEventsByNotificationService,
-    getNotificationEventByIdService
+    getNotificationEventByIdService,
+    getNotificationEventsByCaseIdService
 };

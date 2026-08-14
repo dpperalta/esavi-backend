@@ -5,6 +5,7 @@ import {
     createNotificationEventService,
     getAllNotificationEventsByNotificationService,
     getNotificationEventByIdService,
+    getNotificationEventsByCaseIdService,
     getNotificationEventsByNotificationService
 } from '../services/notificationEvent.service';
 
@@ -111,9 +112,39 @@ const getNotificationEventById = async (req: Request, res: Response, next: NextF
     }
 }
 
+// Get Notification Events By Case ID Controller
+// Code: ESAVI-NOTIFEVT-006
+const getNotificationEventsByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getNotificationEventsByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationEvent.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFEVT-006: Error fetching Notification Events by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationEvent.getFailed', req.lang), 500, 'NOTIFEVT_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationEvent,
     getNotificationEventsByNotification,
     getAllNotificationEventsByNotification,
-    getNotificationEventById
+    getNotificationEventById,
+    getNotificationEventsByCaseId
 };

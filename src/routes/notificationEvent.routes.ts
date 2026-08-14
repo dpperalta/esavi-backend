@@ -5,10 +5,12 @@ import {
     createNotificationEvent,
     getAllNotificationEventsByNotification,
     getNotificationEventById,
+    getNotificationEventsByCaseId,
     getNotificationEventsByNotification
 } from '../controllers/notificationEvent.controller';
 import {
     createNotificationEventValidator,
+    notificationEventCaseIdValidator,
     notificationEventIdValidator,
     notificationEventListValidator,
     notificationEventNotificationIdValidator
@@ -25,6 +27,13 @@ const router = Router();
 // Create Notification Event
 // Code: ESAVI-NOTIFEVT-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationEventValidator, validateFields, createNotificationEvent);
+
+// Get Notification Events by Case
+// Code: ESAVI-NOTIFEVT-006
+// The real query of the domain, and the only non-canonical operation of the entity. Unlike the
+// 006 of DIAGTERM it does have an HTTP route: it is a read, and it opens no door the 002A does
+// not have open already
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...notificationEventCaseIdValidator, ...notificationEventListValidator, validateFields, getNotificationEventsByCaseId);
 
 // Get All Notification Events By Notification - For Admin
 // Code: ESAVI-NOTIFEVT-002B
