@@ -6,14 +6,16 @@ import {
     getAllNotificationEventsByNotification,
     getNotificationEventById,
     getNotificationEventsByCaseId,
-    getNotificationEventsByNotification
+    getNotificationEventsByNotification,
+    updateNotificationEvent
 } from '../controllers/notificationEvent.controller';
 import {
     createNotificationEventValidator,
     notificationEventCaseIdValidator,
     notificationEventIdValidator,
     notificationEventListValidator,
-    notificationEventNotificationIdValidator
+    notificationEventNotificationIdValidator,
+    updateNotificationEventValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -52,5 +54,9 @@ router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...noti
 // Declared after every literal path so Express does not capture 'case', 'admin', 'notification',
 // 'purge' or 'activate' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationEventIdValidator, validateFields, getNotificationEventById);
+
+// Update Notification Event
+// Code: ESAVI-NOTIFEVT-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, ...updateNotificationEventValidator, validateFields, updateNotificationEvent);
 
 export default router;

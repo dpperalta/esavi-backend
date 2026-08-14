@@ -1,7 +1,7 @@
 import { InferAttributes, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm, EsaviCase, Notification, NotificationEvent } from '../models';
-import { AppError, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateNotificationEventInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
@@ -82,6 +82,22 @@ const findNotificationEventWithRelations = async (id: string, includeInactive: b
     });
 }
 
+// The same read as above without the diagnosticTerm include, which is what ESAVI-NOTIFEVT-004
+// needs: the update compares the raw foreign key, not the resolved object, and an include would
+// only add a join to a query whose instance is about to be written. The header include stays, so
+// the inherited visibility is checked in the same query the update instance comes from
+const findNotificationEventRow = async (id: string, includeInactive: boolean = false, transaction?: Transaction) => {
+    return await NotificationEvent.findOne({
+        where: includeInactive ? { eventId: id } : { eventId: id, isActive: true },
+        include: [{
+            ...NOTIFICATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }],
+        transaction
+    });
+}
+
 // The notification must exist and be active: a retired header does not take a new event. No check
 // by notificationType — an ESAVI is described the same way whether it is severe or not, which is
 // the single guard that separates this entity from its two one to one siblings
@@ -127,6 +143,16 @@ const normalizeText = (value: string | null | undefined): string | null => {
     if( value === undefined || value === null ) return null;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
+}
+
+// A `time` column reads back from pg as 'HH:MM:SS', and the validator admits 'HH:MM' because a
+// form that only asks for hours and minutes must not have to invent the seconds. Padding them
+// here is what keeps a PUT sending '14:30' over a stored '14:30:00' from counting as a change:
+// Postgres would store the very same value and the row would still gain an audit entry
+const normalizeTime = (value: string | null | undefined): string | null => {
+    const trimmed = normalizeText(value);
+    if( !trimmed ) return null;
+    return trimmed.length === 5 ? `${ trimmed }:00` : trimmed;
 }
 
 // The coherence rule of the "other" event, shared by 001 and 004. It lives here and not in the
@@ -298,7 +324,7 @@ const createNotificationEventService = async (
             esaviRawName: resolved.esaviRawName,
             isMainEsavi: data.isMainEsavi ?? false,
             startDate: data.startDate ?? null,
-            startTime: data.startTime ?? null,
+            startTime: normalizeTime(data.startTime),
             isOtherEsavi: data.isOtherEsavi ?? false,
             otherDescription: normalizeText(data.otherDescription),
             notes: normalizeText(data.notes),
@@ -448,10 +474,148 @@ const getNotificationEventsByCaseIdService = async (
     };
 }
 
+// Update Notification Event Service
+// Code: ESAVI-NOTIFEVT-004
+// notificationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// answers 400: the first one is immutable — moving an event to another notification is not
+// updating it, it is creating a different one — and the second one is governed by the database.
+// Answering 400 for a field a client resends whole from a GET is hostile for no reason
+const updateNotificationEventService = async (
+    id: string,
+    data: Partial<CreateNotificationEventInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const notificationEvent = await findNotificationEventRow(id, canViewInactive, transaction);
+        if( !notificationEvent ) {
+            throw new AppError(getMessage('notificationEvent.notFound', lang), 404, 'NOTIFEVT_004_NOT_FOUND');
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate, and
+        // an instance read with a narrowed `attributes` reads back undefined for what it left out,
+        // so every comparison would count as a change
+        const stored = notificationEvent.get({ plain: true }) as Record<string, unknown>;
+
+        // The two inputs of the resolution, resolved against the stored row when they do not
+        // travel. incomingRawName falls back to esaviRawName before esaviName because that is what
+        // the notifier wrote: when the two differ, esaviName holds the master's word, not the
+        // client's, and comparing against it would make every PUT look like a rename
+        const incomingCode = data.esaviCode !== undefined
+            ? ( normalizeText(data.esaviCode) ? toConstantCase(normalizeText(data.esaviCode) as string) : null )
+            : ( stored.esaviCode as string | null );
+        // An esaviName that arrives equal to the stored one is not a rewrite: it is the master's
+        // word travelling back in the body of a client that resent its GET. Taking it literally
+        // would make incomingRawName equal to the master's name, the divergence would compare as
+        // "no longer divergent" and esaviRawName would be cleared — a PUT that changes nothing
+        // would destroy what the notifier wrote. So it falls back like an absent key
+        const incomingRawName = ( data.esaviName !== undefined && data.esaviName.trim() !== stored.esaviName )
+            ? data.esaviName.trim()
+            : ( ( stored.esaviRawName ?? stored.esaviName ) as string );
+
+        const codeChanged = incomingCode !== stored.esaviCode;
+
+        // The rule is evaluated over the resulting state and not over the body: otherwise a PUT
+        // moving isOtherEsavi from false to true without touching the code would leave an event
+        // declared as "not in the catalog" pointing at a catalog term. It runs before the
+        // resolution on purpose — coining a term for an event that is about to be rejected would
+        // leave the master dirtier than it was
+        const resultingIsOther = data.isOtherEsavi !== undefined
+            ? data.isOtherEsavi
+            : ( stored.isOtherEsavi as boolean );
+        const resultingDescription = data.otherDescription !== undefined
+            ? normalizeText(data.otherDescription)
+            : ( stored.otherDescription as string | null );
+
+        assertOtherEsaviRule(
+            resultingIsOther,
+            resultingDescription,
+            incomingCode,
+            codeChanged ? null : ( stored.diagnosticTermId as string | null ),
+            '004',
+            lang
+        );
+
+        // The resolution fires on the real change of value, never on the presence of the key. A
+        // code that arrives equal to the stored one neither queries nor writes diagnosticTerm, so
+        // resending the GET response leaves the clinical master untouched — which is the whole
+        // reason esaviCode is stored normalized.
+        // When it does not fire the three derived values are rebuilt from the stored row: the
+        // master already ruled over esaviName when the code was resolved, and the divergence is
+        // recomputed against it in case esaviName is what changed
+        const resolved = codeChanged
+            ? await resolveEsaviTerm(incomingCode, incomingRawName, data.source, '004', authUser, lang, transaction)
+            : {
+                esaviCode: stored.esaviCode as string | null,
+                diagnosticTermId: stored.diagnosticTermId as string | null,
+                esaviName: stored.diagnosticTermId ? ( stored.esaviName as string ) : incomingRawName,
+                esaviRawName: stored.diagnosticTermId && incomingRawName !== stored.esaviName ? incomingRawName : null
+            };
+
+        // notificationId, sortOrder and isActive are deliberately absent: the first two are
+        // immutable and the state moves through 005A and 005B. The three derived fields always
+        // enter, because a change in esaviName alone moves esaviRawName without the client having
+        // named it
+        const candidates: Record<string, unknown> = {
+            esaviCode: resolved.esaviCode,
+            diagnosticTermId: resolved.diagnosticTermId,
+            esaviName: resolved.esaviName,
+            esaviRawName: resolved.esaviRawName,
+            // NOT NULL in the DDL, so they are never sent to null and never compared by
+            // truthiness: an `if( data.x )` would silently discard a deliberate false
+            isMainEsavi: data.isMainEsavi !== undefined ? data.isMainEsavi : undefined,
+            isOtherEsavi: data.isOtherEsavi !== undefined ? data.isOtherEsavi : undefined,
+            startDate: data.startDate !== undefined ? ( data.startDate ?? null ) : undefined,
+            startTime: data.startTime !== undefined ? normalizeTime(data.startTime) : undefined,
+            otherDescription: data.otherDescription !== undefined ? normalizeText(data.otherDescription) : undefined,
+            notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_notificationEvent_setSysDetails fires on every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        // Nothing to write: the transaction closes without an UPDATE and the row is re-read
+        // outside it, exactly like the branch that did write
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns:
+            // the generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(notificationEvent.appDetails) ? notificationEvent.appDetails : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-NOTIFEVT-004',
+                detail: 'Notification event updated by service'
+            };
+            await notificationEvent.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    const updated = await findNotificationEventWithRelations(id, true);
+    return updated ? toNotificationEventResponse(updated) : null;
+}
+
 export {
     createNotificationEventService,
     getNotificationEventsByNotificationService,
     getAllNotificationEventsByNotificationService,
     getNotificationEventByIdService,
-    getNotificationEventsByCaseIdService
+    getNotificationEventsByCaseIdService,
+    updateNotificationEventService
 };
