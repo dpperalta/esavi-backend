@@ -9,7 +9,8 @@ import {
     getNotificationEventsByNotification,
     updateNotificationEvent,
     deleteNotificationEvent,
-    activateNotificationEvent
+    activateNotificationEvent,
+    purgeNotificationEvent
 } from '../controllers/notificationEvent.controller';
 import {
     createNotificationEventValidator,
@@ -50,6 +51,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // The :id is the notificationId, not an event id: the listing is entered by the foreign key.
 // Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationEventNotificationIdValidator, ...notificationEventListValidator, validateFields, getNotificationEventsByNotification);
+
+// Purge Notification Event - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFEVT-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationEventIdValidator, validateFields, purgeNotificationEvent);
 
 // Activate Notification Event - For SuperAdmin
 // Code: ESAVI-NOTIFEVT-005B

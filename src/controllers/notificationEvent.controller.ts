@@ -7,6 +7,7 @@ import {
     getNotificationEventByIdService,
     getNotificationEventsByCaseIdService,
     getNotificationEventsByNotificationService,
+    purgeNotificationEventService,
     setNotificationEventActivationService,
     updateNotificationEventService
 } from '../services/notificationEvent.service';
@@ -210,6 +211,27 @@ const activateNotificationEvent = async (req: Request, res: Response, next: Next
     }
 }
 
+// Purge Notification Event Controller - For SuperAdmin
+// Code: ESAVI-NOTIFEVT-005C
+// Responds without data: there is nothing left to return
+const purgeNotificationEvent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationEventService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationEvent.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFEVT-005C: Error purging Notification Event: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationEvent.purgeFailed', req.lang), 500, 'NOTIFEVT_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createNotificationEvent,
     getNotificationEventsByNotification,
@@ -218,5 +240,6 @@ export {
     getNotificationEventsByCaseId,
     updateNotificationEvent,
     deleteNotificationEvent,
-    activateNotificationEvent
+    activateNotificationEvent,
+    purgeNotificationEvent
 };

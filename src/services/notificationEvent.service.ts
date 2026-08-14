@@ -4,6 +4,7 @@ import { DiagnosticTerm, EsaviCase, Notification, NotificationEvent } from '../m
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateNotificationEventInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -724,6 +725,43 @@ const setNotificationEventActivationService = async (
     }
 }
 
+// Purging Notification Event Service - For SuperAdmin
+// Code: ESAVI-NOTIFEVT-005C
+// notificationEvent is outside the preventPhysicalDelete loop of esaviapp.sql:1355-1361, so the
+// row can really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification: this entity does have an isActive
+// column, so its canonical guard — the row must have been retired with a 005A first, 409
+// otherwise — applies over the row itself with no helper of its own. That is the difference with
+// severeNotification and nonSevereNotification, whose tables lack the column.
+//
+// The state of the notification is deliberately not checked. A mistyped event is retired and
+// purged with its notification active, which is the use case that motivates the operation; the
+// safety net is the canonical one, two deliberate steps over the row itself.
+//
+// No appDetails entry — the row is destroyed in the same transaction — and the trace is the warn
+// dump the helper already writes
+const purgeNotificationEventService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: NotificationEvent,
+            where: { eventId: id },
+            transaction,
+            operationCode: 'ESAVI-NOTIFEVT-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('notificationEvent.notFound', lang),
+            notFoundCode: 'NOTIFEVT_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('notificationEvent.stillActive', lang, { id }),
+            stillActiveCode: 'NOTIFEVT_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationEventService,
     getNotificationEventsByNotificationService,
@@ -731,5 +769,6 @@ export {
     getNotificationEventByIdService,
     getNotificationEventsByCaseIdService,
     updateNotificationEventService,
-    setNotificationEventActivationService
+    setNotificationEventActivationService,
+    purgeNotificationEventService
 };
