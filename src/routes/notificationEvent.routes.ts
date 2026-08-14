@@ -7,7 +7,8 @@ import {
     getNotificationEventById,
     getNotificationEventsByCaseId,
     getNotificationEventsByNotification,
-    updateNotificationEvent
+    updateNotificationEvent,
+    deleteNotificationEvent
 } from '../controllers/notificationEvent.controller';
 import {
     createNotificationEventValidator,
@@ -58,5 +59,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationEvent
 // Update Notification Event
 // Code: ESAVI-NOTIFEVT-004
 router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, ...updateNotificationEventValidator, validateFields, updateNotificationEvent);
+
+// Delete Notification Event - Logical delete
+// Code: ESAVI-NOTIFEVT-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, validateFields, deleteNotificationEvent);
 
 export default router;

@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { DiagnosticTerm, EsaviCase, Notification, NotificationEvent } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateNotificationEventInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -611,11 +612,56 @@ const updateNotificationEventService = async (
     return updated ? toNotificationEventResponse(updated) : null;
 }
 
+// ESAVI-NOTIFEVT-005A / 005B - Setting Notification Event Active/Inactive Service
+// One service for the two operations, so the number is not written fixed: it is computed on entry
+// and used in the three places CONVENTIONS.md §6 requires.
+//
+// 005A seals deletedAt, which releases the sortOrder from the partial unique index
+// UQ_notificationEvent_parent_sortOrder — the index is conditioned by deletedAt, not by isActive.
+// That is deliberate: the number becomes available to the next event, and the gap left in the
+// listing is presentation, not a defect.
+//
+// The state of the notification is not checked here, in either direction: retiring an event is an
+// operation over its own row
+const setNotificationEventActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const notificationEvent = await setEntityActiveStatusService({
+            model: NotificationEvent,
+            where: { eventId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('notificationEvent.notFound', lang),
+            notFoundCode: `NOTIFEVT_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`notificationEvent.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `NOTIFEVT_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-NOTIFEVT-${ op }`,
+                detail: `Notification event ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return notificationEvent;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationEventService,
     getNotificationEventsByNotificationService,
     getAllNotificationEventsByNotificationService,
     getNotificationEventByIdService,
     getNotificationEventsByCaseIdService,
-    updateNotificationEventService
+    updateNotificationEventService,
+    setNotificationEventActivationService
 };

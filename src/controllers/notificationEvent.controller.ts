@@ -7,6 +7,7 @@ import {
     getNotificationEventByIdService,
     getNotificationEventsByCaseIdService,
     getNotificationEventsByNotificationService,
+    setNotificationEventActivationService,
     updateNotificationEventService
 } from '../services/notificationEvent.service';
 
@@ -169,11 +170,32 @@ const updateNotificationEvent = async (req: Request, res: Response, next: NextFu
     }
 }
 
+// Delete Notification Event Controller
+// Code: ESAVI-NOTIFEVT-005A
+const deleteNotificationEvent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationEventActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationEvent.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFEVT-005A: Error deleting Notification Event: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationEvent.deletedFailed', req.lang), 500, 'NOTIFEVT_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createNotificationEvent,
     getNotificationEventsByNotification,
     getAllNotificationEventsByNotification,
     getNotificationEventById,
     getNotificationEventsByCaseId,
-    updateNotificationEvent
+    updateNotificationEvent,
+    deleteNotificationEvent
 };
