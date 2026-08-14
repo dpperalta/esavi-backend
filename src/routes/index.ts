@@ -19,6 +19,7 @@ import notificationRoutes from './notification.routes';
 import severeNotificationRoutes from './severeNotification.routes';
 import nonSevereNotificationRoutes from './nonSevereNotification.routes';
 import diagnosticTermRoutes from './diagnosticTerm.routes';
+import notificationEventRoutes from './notificationEvent.routes';
 
 const router = Router();
 
@@ -48,5 +49,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/severe-notifications', severeNotificationRoutes);
 router.use('/non-severe-notifications', nonSevereNotificationRoutes);
 router.use('/diagnostic-terms', diagnosticTermRoutes);
+router.use('/notification-events', notificationEventRoutes);
 
 export default router;
