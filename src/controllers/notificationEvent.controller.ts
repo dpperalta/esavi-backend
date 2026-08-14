@@ -3,6 +3,7 @@ import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createNotificationEventService,
+    getAllNotificationEventsByNotificationService,
     getNotificationEventsByNotificationService
 } from '../services/notificationEvent.service';
 
@@ -55,7 +56,37 @@ const getNotificationEventsByNotification = async (req: Request, res: Response, 
     }
 }
 
+// Get All Notification Events By Notification Controller - For Admin
+// Code: ESAVI-NOTIFEVT-002B
+const getAllNotificationEventsByNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllNotificationEventsByNotificationService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationEvent.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFEVT-002B: Error fetching all Notification Events by Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationEvent.getFailed', req.lang), 500, 'NOTIFEVT_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationEvent,
-    getNotificationEventsByNotification
+    getNotificationEventsByNotification,
+    getAllNotificationEventsByNotification
 };

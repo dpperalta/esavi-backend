@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationEvent,
+    getAllNotificationEventsByNotification,
     getNotificationEventsByNotification
 } from '../controllers/notificationEvent.controller';
 import {
@@ -22,6 +23,12 @@ const router = Router();
 // Create Notification Event
 // Code: ESAVI-NOTIFEVT-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationEventValidator, validateFields, createNotificationEvent);
+
+// Get All Notification Events By Notification - For Admin
+// Code: ESAVI-NOTIFEVT-002B
+// Two distinct routes and not one GET branching by role, which is why each one carries its own
+// letter in the five places: they also differ in the minimum role
+router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventNotificationIdValidator, ...notificationEventListValidator, validateFields, getAllNotificationEventsByNotification);
 
 // Get Active Notification Events By Notification
 // Code: ESAVI-NOTIFEVT-002A
