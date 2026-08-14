@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, SevereNotification } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationEvent, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -674,6 +674,38 @@ const dumpNonSevereNotificationBeforeCascade = async (
     }
 }
 
+// The dump of the third satellite, and the first one that is not a single row: notificationEvent
+// is one to many, so N events hang from the notification. One single warn line with the count and
+// the list of eventId, never the content of the rows: dumping N whole rows turns a warning into
+// noise, and dumping nothing leaves a destruction with no trace. The identifiers are enough to
+// cross the line with the audit each event carried before it was destroyed.
+// A notification with no events leaves no line at all
+const dumpNotificationEventsBeforeCascade = async (
+    notificationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const notificationEvents = await NotificationEvent.findAll({
+            where: { notificationId },
+            attributes: ['eventId'],
+            paranoid: false,
+            transaction
+        });
+        if( notificationEvents.length === 0 ) {
+            return;
+        }
+        esaviLog(
+            `ESAVI-NOTIFCN-005C: ${ notificationEvents.length } notificationEvent row(s) dragged by ` +
+            `ON DELETE CASCADE and purged by ${ userId }. eventId: ` +
+            `${ notificationEvents.map(( notificationEvent ) => notificationEvent.eventId).join(', ') }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged notificationEvents: ${ error }`, 'error');
+    }
+}
+
 // Purging Notification Service - For SuperAdmin
 // Code: ESAVI-NOTIFCN-005C
 // notification is outside the preventPhysicalDelete loop of esaviapp.sql:1363-1366, so the row
@@ -700,6 +732,7 @@ const purgeNotificationService = async (id: string, authUser: AuthUser | undefin
         if( notification && notification.isActive === false ) {
             await dumpSevereNotificationBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNonSevereNotificationBeforeCascade(id, authUser?.userId || 'undefined', transaction);
+            await dumpNotificationEventsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
         }
 
         await purgeEntityService({
