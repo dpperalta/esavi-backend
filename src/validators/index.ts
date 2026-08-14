@@ -16,3 +16,4 @@ export * from './notification.validator';
 export * from './severeNotification.validator';
 export * from './nonSevereNotification.validator';
 export * from './diagnosticTerm.validator';
+export * from './notificationEvent.validator';
