@@ -57,7 +57,7 @@ En concreto: eventos 1, 2 y 3; se desactiva el 3; se crea uno nuevo que recibe e
 - **Update diferencial con `buildDifferentialUpdate`** (SPEC F12), con la tabla de `candidates` de §3.5: `notificationId` y `sortOrder` inmutables, tres campos derivados de la resolución y siete anulables.
 - Alta de la abreviatura **`NOTIFEVT`** en `references/CONVENTIONS.md` §6.
 - Claves i18n nuevas en `es`, `en` y `nl`.
-- Nueve filas nuevas en `ROUTE_RULES` de `tests/auth/roles.test.ts` —de **125 a 134**— y suite `tests/contract/notificationEvent.test.ts`.
+- Nueve filas nuevas en `ROUTE_RULES` de `tests/auth/roles.test.ts` —de **126 a 135**— y suite `tests/contract/notificationEvent.test.ts`.
 
 **Precondiciones de datos** (no son parte de la implementación):
 
@@ -128,6 +128,8 @@ Archivo: `src/models/notificationEvent.model.ts`. Clase `NotificationEvent`.
 
 **`sortOrder` se declara `allowNull: false` y sin `defaultValue`.** No llevarlo al `create` es lo que deja actuar al trigger; declararle un `defaultValue: 0` en Sequelize haría que el `INSERT` mandara `0` explícito, que es justo el valor que el trigger interpreta como «asígnamelo tú» (`:169`) — funcionaría, pero por accidente. Se omite del `create` y punto.
 
+> **Nota de implementación.** Omitir el valor **no basta**: Sequelize corre su propia validación `notNull` sobre todos los atributos del modelo antes de emitir el `INSERT`, así que el alta muere en la aplicación con `notNull Violation: NotificationEvent.sortOrder cannot be null` y el trigger nunca llega a ejecutarse. Lo que deja la columna fuera de la sentencia es pasar la lista explícita de columnas al `create` — `NotificationEvent.create({ ... }, { transaction, fields: CREATE_FIELDS })`, con `CREATE_FIELDS` declarada en el servicio y sin `sortOrder` ni `eventId`. El modelo queda como se describe arriba.
+
 Las longitudes van explícitas, para que un texto largo falle en Sequelize y no en Postgres: `esaviName` `DataTypes.STRING(250)` con `allowNull: false`; `esaviCode` `DataTypes.STRING(250)`; `esaviRawName` y `otherDescription` `DataTypes.STRING(500)`; `notes` `DataTypes.TEXT`.
 
 `isMainEsavi` e `isOtherEsavi` van `DataTypes.BOOLEAN` con `allowNull: false` y `defaultValue: false`. **No son tri-estado**, a diferencia de los seis `verified*` de F14: el DDL los declara `NOT NULL`, así que `null` no es un valor posible y la comparación en el diff nunca es contra `undefined` por veracidad.
@@ -170,7 +172,9 @@ Tres ausencias deliberadas en la interfaz:
 - **`diagnosticTermId` no está.** No lo elige el cliente: lo devuelve la resolución. Aceptarlo abriría una segunda puerta para apuntar a un término sin pasar por `esaviCode`, y con ella la pregunta de qué gana entre los dos.
 - **`esaviRawName` no está.** Es derivado: lo calcula el servicio comparando lo que mandó el notificador con lo que dice el maestro.
 
-**`source` es el único campo de entrada que no es columna.** Gobierna qué rama de resolución se toma y se descarta después. Sus tres valores son los del ENUM `termSource` del DDL; la lista literal se toma de `src/constants/enums.constants.ts`, que F13 creó y F15 amplió, sin redeclararla aquí.
+**`source` es el único campo de entrada que no es columna.** Gobierna qué rama de resolución se toma y se descarta después. Sus valores son los del ENUM `termSource` del DDL; la lista literal se toma de `src/constants/enums.constants.ts`, que F13 creó y F15 amplió, sin redeclararla aquí.
+
+> **Nota de implementación.** El snippet de arriba escribe tres literales, pero `TERM_SOURCES` tiene **cuatro** valores — `MEDDRA`, `WHODRUG`, `LOCAL` y `OTHER`. Manda la regla de no redeclarar: el tipo del campo es `TermSource`, así que `OTHER` también se admite y cae en la rama externa —buscar el par `(source, code)` sin crear nada, 404 si no existe—, que es coherente con la regla «`source` distinto de `LOCAL` no acuña».
 
 ### 3.4 Superficie HTTP
 
@@ -194,7 +198,9 @@ DELETE /api/notification-events/:id                      ESAVI-NOTIFEVT-005A  AD
 
 `ESAVI-NOTIFEVT-006` **sí tiene ruta** —a diferencia del `006` de `DIAGTERM`— y por tanto sí lleva fila en `ROUTE_RULES` y el código en los cinco lugares. Se registra en la tabla de operaciones no canónicas de §6 como: *«listar los eventos de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N eventos»*.
 
-Nueve filas nuevas en `ROUTE_RULES`: de **125** a **134**.
+Nueve filas nuevas en `ROUTE_RULES`: de **126** a **135**.
+
+> **Nota de implementación.** El spec se escribió cuando `ROUTE_RULES` tenía 125 filas. La 126 es `ESAVI-DIAGTERM-007`, la importación masiva que entró con SPEC F17 antes que este spec, así que el total real es 126 → 135. Corregido aquí, en §2 y en §5.
 
 ### 3.5 Reglas de negocio por operación
 
@@ -240,8 +246,12 @@ El orden de los pasos 3 y 4 es la clave entera: invertirlos hace fallar el índi
 Los tres valores derivados se calculan así, y **entran siempre en `candidates`**:
 
 - `incomingCode` = `data.esaviCode !== undefined ? (data.esaviCode ? toConstantCase(data.esaviCode.trim()) : null) : stored.esaviCode`
-- `incomingRawName` = `data.esaviName !== undefined ? data.esaviName.trim() : (stored.esaviRawName ?? stored.esaviName)`
+- `incomingRawName` = `data.esaviName !== undefined && data.esaviName.trim() !== stored.esaviName ? data.esaviName.trim() : (stored.esaviRawName ?? stored.esaviName)`
 - **La resolución solo se dispara si `incomingCode !== stored.esaviCode`.** Un código que llega igual al guardado no consulta el maestro ni lo escribe.
+
+> **Nota de implementación — por qué `incomingRawName` lleva la segunda condición.** La fórmula original era `data.esaviName !== undefined ? data.esaviName.trim() : (...)`, y choca con el criterio de §5 *«un `PUT` que reenvía íntegra la respuesta de su `GET` no escribe nada»* en toda fila con divergencia. El `GET` devuelve `esaviName` con el nombre **del maestro**, así que al reenviarlo `incomingRawName` pasaba a ser ese mismo nombre, coincidía con el maestro y `esaviRawName` se borraba a `null`: un `PUT` que no cambia nada destruía lo que escribió el notificador. Un `esaviName` que llega **igual** al guardado no es una reescritura —es la palabra del maestro volviendo en el body— y por eso cae al fallback como una clave ausente. Cambiar el nombre a cualquier otro texto sigue moviendo `esaviRawName`.
+
+> **Nota de implementación — `startTime` se normaliza antes de comparar.** La columna es `time` y `pg` la devuelve como `'HH:MM:SS'`, mientras que el validador admite `'HH:MM'` porque un formulario que solo pregunta horas y minutos no tiene por qué inventarse los segundos. Sin rellenarlos, un `PUT` con `'14:30'` sobre un `'14:30:00'` guardado contaría como cambio y dejaría entrada de auditoría por un valor que Postgres almacena idéntico — justo lo que combate F12. El candidato es `data.startTime !== undefined ? normalizeTime(data.startTime) : undefined`, y la misma normalización se aplica en el `001`.
 
 | Campo | Cómo entra en `candidates` | Nota |
 |---|---|---|
@@ -365,7 +375,7 @@ En `002A`, `002B` y `006`, `data` es el `{ count, rows }` de `findAndCountAll`, 
 15. **Volcado al log en la cascada de `ESAVI-NOTIFCN-005C`.** En `src/services/notification.service.ts`, antes del `destroy` de la notificación, una sola línea `warn` con el conteo y la lista de `eventId` que la cascada va a arrastrar. Es el único punto de este spec que toca un servicio ajeno.
     *Verificación:* purgar una notificación con cuatro eventos deja **una** línea con los cuatro `eventId`; purgar una sin eventos no deja línea alguna.
 
-16. **Cubrir las nueve rutas en `tests/auth/roles.test.ts`.** Nueve filas en `ROUTE_RULES` con su `minRole` y su código, y subir el total esperado de **125 a 134** en `tests/auth/roles.test.ts:266`.
+16. **Cubrir las nueve rutas en `tests/auth/roles.test.ts`.** Nueve filas en `ROUTE_RULES` con su `minRole` y su código, y subir el total esperado de **126 a 135** en la aserción de longitud de `tests/auth/roles.test.ts`.
     *Verificación:* `npm test -- roles` en 0.
 
 17. **Suite `tests/contract/notificationEvent.test.ts`.** Recorrido completo con `supertest`: crear → obtener por ID → listar por notificación → listar admin → listar por caso → actualizar → desactivar → reactivar → purgar. Más los caminos de error: 404 de notificación inactiva, 404 de caso inexistente, 404 de término externo inexistente, los tres 400 de coherencia del evento «otro», 409 de purga sobre fila activa, y los cinco casos de update diferencial de §5. Bloque aparte para el escenario de colisión de `sortOrder` del paso 13 y para las tres ramas de resolución del paso 6.
@@ -379,7 +389,7 @@ En `002A`, `002B` y `006`, `data` es el `{ count, rows }` de `findAndCountAll`, 
 - [ ] Los cinco puntos del código de operación (ruta, controlador, servicio, `AppError`, `appDetails.method`) coinciden en las nueve operaciones.
 - [ ] `grep -rn "ESAVI-NOTIFEVT-002[^AB]" src/` no devuelve resultados.
 - [ ] `references/CONVENTIONS.md` §6 contiene la fila `notificationEvent | NOTIFEVT` y la fila de `ESAVI-NOTIFEVT-006`.
-- [ ] `ROUTE_RULES` tiene 134 filas y `tests/auth/roles.test.ts:266` espera ese número.
+- [ ] `ROUTE_RULES` tiene 135 filas y la aserción de longitud de `tests/auth/roles.test.ts` espera ese número.
 
 **Resolución contra el catálogo clínico:**
 
@@ -393,7 +403,7 @@ En `002A`, `002B` y `006`, `data` es el `{ count, rows }` de `findAndCountAll`, 
 **Orden y estado:**
 
 - [ ] Tres altas seguidas sobre la misma notificación reciben `sortOrder` 1, 2 y 3 sin que ningún servicio envíe el campo.
-- [ ] `grep -n "sortOrder" src/types/notificationEvent/notificationEvent.types.ts` no devuelve resultados.
+- [ ] `grep -n "sortOrder" src/types/notificationEvent/notificationEvent.types.ts` no devuelve **ningún campo** — solo la línea de comentario que razona su ausencia, que es deliberada y no incumple el criterio.
 - [ ] Un `PUT` con `sortOrder: 99` en el body responde 200 y deja el `sortOrder` guardado intacto, sin 400.
 - [ ] **Escenario de colisión:** crear tres eventos, desactivar el tercero, crear un cuarto —que recibe `sortOrder: 3`—, y reactivar el tercero responde **200** y lo deja con `sortOrder: 4`.
 - [ ] Reactivar un evento cuyo `sortOrder` sigue libre responde 200 y **no** mueve el `sortOrder`.
