@@ -1,10 +1,17 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createNotificationEvent } from '../controllers/notificationEvent.controller';
-import { createNotificationEventValidator } from '../validators';
+import {
+    createNotificationEvent,
+    getNotificationEventsByNotification
+} from '../controllers/notificationEvent.controller';
+import {
+    createNotificationEventValidator,
+    notificationEventListValidator,
+    notificationEventNotificationIdValidator
+} from '../validators';
 
-const { ADMIN } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -15,5 +22,11 @@ const router = Router();
 // Create Notification Event
 // Code: ESAVI-NOTIFEVT-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationEventValidator, validateFields, createNotificationEvent);
+
+// Get Active Notification Events By Notification
+// Code: ESAVI-NOTIFEVT-002A
+// The :id is the notificationId, not an event id: the listing is entered by the foreign key.
+// Declared after /admin/notification/:id, which is the more specific literal path
+router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationEventNotificationIdValidator, ...notificationEventListValidator, validateFields, getNotificationEventsByNotification);
 
 export default router;

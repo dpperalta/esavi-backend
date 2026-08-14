@@ -5,6 +5,7 @@ import { AppError, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateNotificationEventInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot claim a term belongs to a licensed dictionary
@@ -90,6 +91,27 @@ const assertNotificationIsValid = async (notificationId: string, op: string, lan
         attributes: ['notificationId'],
         transaction
     });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationEvent.notificationNotFound', lang),
+            404,
+            `NOTIFEVT_${ op }_NOTIFICATION_NOT_FOUND`
+        );
+    }
+}
+
+// The same check as above, relaxed by canViewInactive: the inherited visibility applied to the
+// listings, where the header is not the target of the write but the gate to the collection. A
+// retired notification answers 404 for USER and ADMIN, and comes back for whoever may see
+// inactive rows — today SUPERADMIN
+const assertNotificationIsVisible = async (
+    notificationId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const where = canViewInactive ? { notificationId } : { notificationId, isActive: true };
+    const notification = await Notification.findOne({ where, attributes: ['notificationId'] });
     if( !notification ) {
         throw new AppError(
             getMessage('notificationEvent.notificationNotFound', lang),
@@ -297,6 +319,41 @@ const createNotificationEventService = async (
     return created ? toNotificationEventResponse(created) : null;
 }
 
+// Get Active Notification Events By Notification Service
+// Code: ESAVI-NOTIFEVT-002A
+// The listing is entered by the foreign key and never by /: an event does not exist without its
+// notification, and a global listing of events has no reader.
+//
+// The header guard is the inherited visibility applied to a collection: a retired notification
+// answers 404 instead of an empty page, because an empty page would say "this notification has no
+// events" to somebody who is simply not allowed to see them.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// isMainEsavi, diagnosticTermId, startDate or text — those are out of the scope of this spec
+const getNotificationEventsByNotificationService = async (
+    notificationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertNotificationIsVisible(notificationId, '002A', lang, canViewInactive);
+
+    const notificationEvents = await NotificationEvent.findAndCountAll({
+        where: { notificationId, isActive: true },
+        include: [DIAGNOSTIC_TERM_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationEvents.count,
+        rows: notificationEvents.rows.map(toNotificationEventResponse)
+    };
+}
+
 export {
-    createNotificationEventService
+    createNotificationEventService,
+    getNotificationEventsByNotificationService
 };
