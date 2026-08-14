@@ -210,7 +210,23 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/diagnostic-terms/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-005B' },
     // ESAVI-DIAGTERM-007 (SPEC F17) — bulk import from a MedDRA .asc file. SUPERADMIN because it is
     // the widest write of the repository: tens of thousands of rows in a single request
-    { method: 'post',   path: '/api/diagnostic-terms/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-007' }
+    { method: 'post',   path: '/api/diagnostic-terms/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-007' },
+
+    // notificationEvent (SPEC F16) — the first satellite of notification with one to many
+    // cardinality, its own activity flag and order among siblings, so it declares the eight
+    // canonical operations and not five. 005C is declared because the table sits outside the
+    // preventPhysicalDelete loop of esaviapp.sql:1355-1361.
+    // ESAVI-NOTIFEVT-006 does have a row here, unlike the 006 of DIAGTERM: it is a read with an
+    // HTTP route of its own. The two listings are entered by the foreign key and never by /
+    { method: 'post',   path: '/api/notification-events',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-001' },
+    { method: 'get',    path: `/api/notification-events/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFEVT-006' },
+    { method: 'get',    path: `/api/notification-events/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-002B' },
+    { method: 'get',    path: `/api/notification-events/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFEVT-002A' },
+    { method: 'delete', path: `/api/notification-events/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005C' },
+    { method: 'patch',  path: `/api/notification-events/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005B' },
+    { method: 'get',    path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-003' },
+    { method: 'put',    path: `/api/notification-events/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-004' },
+    { method: 'delete', path: `/api/notification-events/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-005A' }
 ];
 
 /**
@@ -266,7 +282,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(126);
+            expect(ROUTE_RULES).toHaveLength(135);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
