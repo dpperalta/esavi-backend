@@ -1,6 +1,6 @@
 # SPEC F16 — CRUD de `notificationEvent`
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F10 (`notification` — dependencia dura de modelo: es el padre de la FK y la fuente de la visibilidad heredada)**, **SPEC F15 (`diagnosticTerm` — dependencia dura de implementación: aporta `resolveDiagnosticTermService`, sobre el que se cuelga la resolución del `001` y del `004`)**, SPEC F06 (`esaviCase` — el `006` entra por el `caseId`), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa, y gobierna cuándo se re-dispara la resolución contra el maestro)
 > **Fecha:** 2026-08-13
 > **Objetivo:** Dar de alta `notificationEvent` —los eventos adversos que motivan una notificación— como la primera tabla satélite de `notification` con cardinalidad uno a muchos, estado propio y orden entre hermanas.
