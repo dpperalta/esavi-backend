@@ -385,8 +385,23 @@ const getAllNotificationEventsByNotificationService = async (
     };
 }
 
+// Get Notification Event By ID Service
+// Code: ESAVI-NOTIFEVT-003
+// Two filters, and the second one is the inherited visibility: the event must exist and be active,
+// and its notification must be active too, unless canViewInactive says otherwise — today
+// SUPERADMIN. The three failures answer the same 404 without distinguishing, because telling them
+// apart would confirm to a USER that an event exists under a notification it is not allowed to see
+const getNotificationEventByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const notificationEvent = await findNotificationEventWithRelations(id, canViewInactive);
+    if( !notificationEvent ) {
+        throw new AppError(getMessage('notificationEvent.notFound', lang), 404, 'NOTIFEVT_003_NOT_FOUND');
+    }
+    return toNotificationEventResponse(notificationEvent);
+}
+
 export {
     createNotificationEventService,
     getNotificationEventsByNotificationService,
-    getAllNotificationEventsByNotificationService
+    getAllNotificationEventsByNotificationService,
+    getNotificationEventByIdService
 };

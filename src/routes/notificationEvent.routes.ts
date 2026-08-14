@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationEvent,
     getAllNotificationEventsByNotification,
+    getNotificationEventById,
     getNotificationEventsByNotification
 } from '../controllers/notificationEvent.controller';
 import {
     createNotificationEventValidator,
+    notificationEventIdValidator,
     notificationEventListValidator,
     notificationEventNotificationIdValidator
 } from '../validators';
@@ -35,5 +37,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // The :id is the notificationId, not an event id: the listing is entered by the foreign key.
 // Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationEventNotificationIdValidator, ...notificationEventListValidator, validateFields, getNotificationEventsByNotification);
+
+// Get Notification Event by ID
+// Code: ESAVI-NOTIFEVT-003
+// Declared after every literal path so Express does not capture 'case', 'admin', 'notification',
+// 'purge' or 'activate' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationEventIdValidator, validateFields, getNotificationEventById);
 
 export default router;
