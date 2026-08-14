@@ -8,7 +8,8 @@ import {
     getNotificationEventsByCaseId,
     getNotificationEventsByNotification,
     updateNotificationEvent,
-    deleteNotificationEvent
+    deleteNotificationEvent,
+    activateNotificationEvent
 } from '../controllers/notificationEvent.controller';
 import {
     createNotificationEventValidator,
@@ -19,7 +20,7 @@ import {
     updateNotificationEventValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -49,6 +50,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // The :id is the notificationId, not an event id: the listing is entered by the foreign key.
 // Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationEventNotificationIdValidator, ...notificationEventListValidator, validateFields, getNotificationEventsByNotification);
+
+// Activate Notification Event - For SuperAdmin
+// Code: ESAVI-NOTIFEVT-005B
+// Declared with the literal paths, before /:id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationEventIdValidator, validateFields, activateNotificationEvent);
 
 // Get Notification Event by ID
 // Code: ESAVI-NOTIFEVT-003

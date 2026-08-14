@@ -190,6 +190,26 @@ const deleteNotificationEvent = async (req: Request, res: Response, next: NextFu
     }
 }
 
+// Activate Notification Event Controller - For SuperAdmin
+// Code: ESAVI-NOTIFEVT-005B
+const activateNotificationEvent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationEventActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationEvent.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFEVT-005B: Error activating Notification Event: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationEvent.activatedFailed', req.lang), 500, 'NOTIFEVT_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createNotificationEvent,
     getNotificationEventsByNotification,
@@ -197,5 +217,6 @@ export {
     getNotificationEventById,
     getNotificationEventsByCaseId,
     updateNotificationEvent,
-    deleteNotificationEvent
+    deleteNotificationEvent,
+    activateNotificationEvent
 };

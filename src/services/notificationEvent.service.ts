@@ -1,4 +1,4 @@
-import { InferAttributes, Transaction } from 'sequelize';
+import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm, EsaviCase, Notification, NotificationEvent } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
@@ -612,6 +612,70 @@ const updateNotificationEventService = async (
     return updated ? toNotificationEventResponse(updated) : null;
 }
 
+// The one piece of ESAVI-NOTIFEVT-005B that is not a clean delegation, and the reason this entity
+// cannot hand its activation to setEntityActiveStatusService and be done with it.
+//
+// UQ_notificationEvent_parent_sortOrder is a partial unique index over (notificationId, sortOrder)
+// WHERE deletedAt IS NULL (esaviapp.sql:1326-1328). A 005A seals deletedAt, so the number leaves
+// both the index and the MAX the insert trigger computes, and a later create legitimately reuses
+// it. The moment setEntityActiveStatusService:34 clears deletedAt, two live rows would share the
+// pair and the index would blow up — a 500 on an operation the norm describes as the plain undo
+// of a 005A.
+//
+// So the number is moved first, and only when it is actually taken. Reassigning always would move
+// events nobody asked to move; answering 409 would force purging or reordering another event to
+// undo one's own action, and the order is presentation, not identity.
+//
+// The order of the two writes is the whole point: while deletedAt is still sealed the row sits
+// outside the partial index, so this UPDATE is free. Doing it after the helper would fail inside
+// the helper's own UPDATE — the constraint is not deferrable and there would be no way to fix it
+// afterwards.
+//
+// This is a write with an intention of its own over a field the client neither sent nor can send,
+// so it does not go through buildDifferentialUpdate: it does not come from comparing an incoming
+// value against the stored one, but from a constraint of the database.
+//
+// A missing row is left alone: the helper right after raises the 404. An already active row finds
+// no collision either — the index guarantees no other live row shares its number — so nothing is
+// written and the helper raises its 409 as usual
+const reassignSortOrderOnCollision = async (id: string, transaction: Transaction) => {
+    const notificationEvent = await NotificationEvent.findOne({
+        where: { eventId: id },
+        paranoid: false,
+        transaction
+    });
+    if( !notificationEvent || notificationEvent.deletedAt === null ) {
+        return;
+    }
+
+    const collision = await NotificationEvent.findOne({
+        where: {
+            notificationId: notificationEvent.notificationId,
+            sortOrder: notificationEvent.sortOrder as number,
+            deletedAt: null,
+            eventId: { [Op.ne]: id }
+        },
+        attributes: ['eventId'],
+        paranoid: false,
+        transaction
+    });
+    if( !collision ) {
+        return;
+    }
+
+    // The same count TRG_notificationEvent_setSortOrder does on insert, so the reactivated event
+    // reappears at the end of the list
+    const highest = await NotificationEvent.max<number, NotificationEvent>('sortOrder', {
+        where: { notificationId: notificationEvent.notificationId, deletedAt: null },
+        transaction
+    });
+
+    await notificationEvent.update(
+        { sortOrder: ( Number(highest) || 0 ) + 1 },
+        { transaction, fields: ['sortOrder'] }
+    );
+}
+
 // ESAVI-NOTIFEVT-005A / 005B - Setting Notification Event Active/Inactive Service
 // One service for the two operations, so the number is not written fixed: it is computed on entry
 // and used in the three places CONVENTIONS.md §6 requires.
@@ -632,6 +696,10 @@ const setNotificationEventActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        if( isActive ) {
+            await reassignSortOrderOnCollision(id, transaction);
+        }
+
         const notificationEvent = await setEntityActiveStatusService({
             model: NotificationEvent,
             where: { eventId: id },
