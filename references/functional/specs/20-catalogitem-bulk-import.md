@@ -37,6 +37,7 @@ Ese cruce de tablas obliga además a una precisión que no se ve a simple vista:
 - **Siete cabeceras**, con emparejamiento normalizado —minúsculas, sin espacios, guiones ni guiones bajos—: `catalogTypeCode`, `catalogTypeName`, `code`, `name`, `value`, `description`, `sortOrder`.
 - Cabeceras **obligatorias**: `catalogTypeCode`, `catalogTypeName`, `code`, `name`. Si falta alguna, la operación corta con 400 antes de leer una sola fila de datos.
 - Lectura **siempre de la primera hoja** del libro, con la cabecera en la **fila 1** y los datos desde la 2.
+- **Relleno de `value` con `name`** cuando la celda de `value` viene vacía, copiado exacto del `name` ya normalizado. La columna nunca recibe `null` por esta puerta.
 - **Normalización al escribir**, igual que el `001` y a diferencia de F17 y F19: `toConstantCase` en `catalogItem.code`, `toTitleCase` en `catalogItem.name` y en `catalogType.name`, y **`toCamelCase`** en `catalogType.code`. La unicidad se compara siempre contra el valor ya normalizado.
 - **Resolución del `catalogType`** por su `code` normalizado, **sin filtrar por `isActive`**, con **creación al vuelo** cuando no existe, usando el `catalogTypeName` del fichero. Una caché en memoria por importación garantiza que un tipo nuevo que aparece en N filas se cree **una sola vez**.
 - Procesamiento por lotes de 1000 filas, cada lote en su propia transacción.
@@ -83,7 +84,7 @@ Ese cruce de tablas obliga además a una precisión que no se ve a simple vista:
 | `catalogTypeId` | `uuid NOT NULL`, FK `ON DELETE RESTRICT` | **resuelto**, nunca leído del fichero |
 | `code` | `varchar(100) NOT NULL` | del fichero, con `toConstantCase` |
 | `name` | `varchar(250) NOT NULL` | del fichero, con `toTitleCase` |
-| `value` | `varchar(250)` | del fichero, solo `.trim()` |
+| `value` | `varchar(250)` | del fichero, solo `.trim()`; **celda vacía → copia exacta de `name`**, nunca `null` |
 | `description` | `text` | del fichero, solo `.trim()` |
 | `sortOrder` | `smallint NOT NULL DEFAULT 0 CHECK (>= 0)` | del fichero, con coerción a `0` |
 | `metadata` | `jsonb DEFAULT '{}'` | **no se toca nunca** |
@@ -118,9 +119,10 @@ export interface ImportCatalogItemsInput {
     dryRun?: boolean;             // default false
 }
 
-// Las tres columnas opcionales del fichero. sortOrder llega ya coercionado a un entero válido
+// Las tres columnas opcionales del fichero. sortOrder llega ya coercionado a un entero válido,
+// y value nunca llega null: una celda vacía se rellena con el name ya normalizado
 export interface CatalogItemFileValues {
-    value: string | null;
+    value: string;
     description: string | null;
     sortOrder: number;
 }
@@ -203,13 +205,13 @@ El middleware se invoca con `uploadSingleFile('file', { i18nPrefix: 'catalogItem
 | `catalogTypeName` | `catalogType.name` (solo al crear) | `toTitleCase` | 200 |
 | `code` | `catalogItem.code` | `toConstantCase` | 100 |
 | `name` | `catalogItem.name` | `toTitleCase` | 250 |
-| `value` | `catalogItem.value` | solo `.trim()` | 250 |
+| `value` | `catalogItem.value` | solo `.trim()`; vacía → copia de `name` | 250 |
 | `description` | `catalogItem.description` | solo `.trim()` | — (`text`) |
 | `sortOrder` | `catalogItem.sortOrder` | entero, coerción a `0` | 0–32767 |
 
 4. **Cabeceras obligatorias**: `catalogTypeCode`, `catalogTypeName`, `code`, `name`. Si falta alguna → 400 `CATITEM_006_FILE_INVALID` con la lista, **antes de leer una sola fila de datos**. Una opcional ausente se anota en `missingOptionalHeaders` y su columna entra como `null` —o `0` en `sortOrder`— en todas las filas. Una desconocida se anota en `unknownHeaders` y se ignora.
 5. Una fila **totalmente vacía** se descarta: no cuenta como leída ni como inválida.
-6. Cada celda de texto se recorta; si queda vacía entra como **`null`**, nunca como `''`.
+6. Cada celda de texto se recorta; si queda vacía entra como **`null`**, nunca como `''`. **La excepción es `value`**: el modelo Sequelize lo declara `allowNull: false` aunque el DDL lo admita nulo, y esa contradicción no se resuelve dentro de un spec de importación. Una celda `value` vacía entra con la **copia exacta del `name` ya normalizado**, así que la columna nunca recibe `null` por esta puerta. Ver §6.
 7. **La normalización se aplica en el parser, no en el servicio**, porque la unicidad se compara contra el valor normalizado y el parser es quien detecta los duplicados internos del fichero.
 8. `catalogTypeCode` vacío → `EMPTY_CATALOG_TYPE_CODE`. `code` vacío → `EMPTY_CODE`. `name` vacío → `EMPTY_NAME`; los dos últimos romperían además el `NOT NULL` de su columna.
 9. `catalogTypeName` vacío **no rechaza aquí**: el parser no sabe si el tipo existe. Se deja en `null` y lo resuelve la fase 3.
@@ -259,7 +261,7 @@ Si el `bulkCreate` lanza `SequelizeUniqueConstraintError` —dos importaciones a
 | `catalogTypeId` | **no entra** | mitad de la clave de búsqueda |
 | `code` | **no entra** | la otra mitad; la fila se encontró *por* el par |
 | `name` | `row.name` — **siempre** | ya con `toTitleCase` |
-| `value` | `row.values.value` — **siempre** | `null` si la celda venía vacía |
+| `value` | `row.values.value` — **siempre** | nunca `null`: la celda vacía trae el `name` |
 | `description` | `row.values.description` — **siempre** | `null` si la celda venía vacía |
 | `sortOrder` | `row.values.sortOrder` — **siempre** | ya coercionado; nunca `undefined` |
 | `metadata` | **no entra** | campo del cliente; el importador no lo toca |
@@ -269,7 +271,7 @@ Si el `bulkCreate` lanza `SequelizeUniqueConstraintError` —dos importaciones a
 Tres puntos que la tabla no dice sola:
 
 - **Los cuatro entran siempre, sin `if` de presencia.** No hay body de cliente que preguntar: el fichero es la fuente completa de los cuatro, y es el helper quien decide si hay `UPDATE`. Una reimportación del mismo fichero deja todo en `unchanged` y no escribe una sola vez.
-- **Una celda vacía en `value` o `description` propone `null`, y eso es un cambio si había valor.** Es la consecuencia buscada de haber elegido que el fichero sea la fuente completa: la importación es idempotente y el estado final es el del fichero, no la unión del fichero con lo que hubiera antes.
+- **Una celda vacía en `description` propone `null`, y eso es un cambio si había valor.** Es la consecuencia buscada de haber elegido que el fichero sea la fuente completa: la importación es idempotente y el estado final es el del fichero, no la unión del fichero con lo que hubiera antes. **`value` no puede proponer `null`** —el modelo no lo admite—, así que una celda vacía propone el `name`, que sigue siendo el estado que el fichero declara y sigue siendo idempotente.
 - **`sortOrder` nunca entra bajo `if( row.values.sortOrder )`.** Es el error de copia-pega más probable de este spec: `0` es falso en JavaScript y es además el valor por defecto de la columna, así que ese `if` haría imposible devolver un ítem a la posición `0` por importación.
 
 La actualización que sí escribe añade su entrada a `appDetails` con `method: 'ESAVI-CATITEM-006'` y preserva el historial con `[...currentAppDetails, newEntry]`.
@@ -364,7 +366,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] Una fila cuyo tipo hay que crear pero sin `catalogTypeName` sale en `errors` con `CATALOG_TYPE_NAME_REQUIRED`, y **el tipo no se crea**.
 - [ ] Un libro sin la columna `code` devuelve **400** `CATITEM_006_FILE_INVALID` y **no escribe ninguna fila en ninguna de las dos tablas**.
 - [ ] Una cabecera desconocida no rompe la carga y aparece en `unknownHeaders`; una opcional ausente aparece en `missingOptionalHeaders` y su columna queda en `null` —o en `0` para `sortOrder`—.
-- [ ] Una celda vacía se guarda como `null`, **no** como `''`.
+- [ ] Una celda vacía se guarda como `null`, **no** como `''`. La única excepción es `value`: una celda vacía deja la fila con `value` idéntico a su `name`, y `SELECT count(*) FROM "catalogItem" WHERE "value" IS NULL` no crece con la importación.
 - [ ] `sortOrder` vacío, `-1`, `abc` y `40000` se guardan todos como `0` y suman a `sortOrderCoerced`; un `0` explícito se guarda como `0` y **no** suma.
 - [ ] Toda fila creada queda con `metadata` en `{}` y `isActive: true`; **`grep -n "metadata" src/services/catalogItem.service.ts`** no muestra ninguna referencia dentro de `importCatalogItemsService`.
 - [ ] Una petición sin fichero devuelve **400**; un fichero de 21 MB devuelve **413**; un libro que no produce ninguna fila válida devuelve **400** `CATITEM_006_FILE_INVALID`.
@@ -402,6 +404,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - **Sí:** mantener `toConstantCase` en `code` y `toTitleCase` en `name`, al revés que F17 y F19. Aquellos importan dato citado de un diccionario licenciado y por eso solo recortan; un `catalogItem` es configuración acuñada en esta aplicación, y si el importador no normalizara, el mismo valor entraría distinto según la puerta —`001` o `006`— y la unicidad dejaría de detectar el duplicado.
 - **Sí:** aplicar **`toCamelCase` a `catalogType.code`** y `toConstantCase` a `catalogItem.code`, distinto en cada tabla. No es una inconsistencia que este spec introduzca: es la que ya tienen los servicios (`catalogType.service.ts:94` frente a `catalogItem.service.ts:22`), y el importador la respeta porque su trabajo es resolver contra lo que ya existe. **No:** unificar las dos reglas aquí. Sería un cambio de comportamiento del `CATTYPE-001` y del `CATTYPE-004` escondido dentro de un spec de importación; si hay que unificarlas, es otro spec y con su migración de datos.
 - **Sí:** el fichero es la **fuente completa** de `name`, `value`, `description` y `sortOrder`, y una celda vacía propone `null` o `0`. Hace la importación idempotente: el estado final es el del fichero, no la unión del fichero con lo que hubiera antes, y `unchanged` se vuelve una señal fiable. **No:** que una celda vacía signifique «no lo toques». Protegería lo escrito a mano a cambio de que no hubiera forma de vaciar un campo por importación, y de que dos ficheros distintos pudieran dejar la tabla en el mismo estado por caminos que nadie sabe reconstruir.
+- **Sí:** una celda `value` vacía entra con la **copia exacta del `name`**, y no con `null`. Sale de una contradicción que este spec se encuentra hecha: `esaviapp.sql:218` declara `"value" varchar(250)` **nullable** y `catalogItem.model.ts:11,44` lo declara `allowNull: false`. La rama de inserción no la notaría —`bulkCreate` corre con `validate: false` por defecto en Sequelize 6—, pero `instance.update()` sí valida, así que vaciar un `value` por reimportación daría un **500 en una sola de las dos ramas**, que es la peor forma posible de fallar. Con el relleno, `value` nunca es `null` por esta puerta, el diff sigue teniendo los cuatro `candidates` y la importación sigue siendo idempotente. **No:** tocar `catalogItem.model.ts` para alinearlo con el DDL; es un cambio del modelo compartido por las siete operaciones canónicas escondido dentro de un spec de importación, y si hay que hacerlo va en su propio spec con su revisión del `001` y del `004`. **No:** `{ validate: false }` en el `update` del importador, que apagaría toda la validación de esa escritura para arreglar una columna. **No:** dejar `value` fuera del diff, que rompería la fuente completa de §6. **No:** escribir `''`, que es exactamente lo que el parser evita en todas las demás columnas.
 - **Sí:** `metadata` **fuera del importador por completo**, ni al insertar ni al actualizar. Es la tercera divergencia con F17 y F19, y sale de que aquí `metadata` es un campo de negocio que el cliente escribe con el `001` y el `004`, no un hueco reservado a la procedencia. **No:** estampar `importedFrom`/`importedAt` como hacen los otros dos; pisaría lo del administrador en la rama de inserción y obligaría a un merge en la de actualización. El coste asumido es que **no hay marca de procedencia por fila**: de dónde salió un ítem se mira en `appDetails`, que es donde vive el resto de su historia.
 - **Sí:** sin `dictionaryVersion` en el body. Sin `metadata` no hay dónde guardarlo, y un parámetro que se acepta y se descarta es peor que no tenerlo.
 - **Sí:** `sortOrder` inválido **se coerciona a `0` y se cuenta**, no rechaza la fila. El orden de un desplegable no vale un ítem perdido, y un rechazo por esa columna dejaría fuera datos buenos por un detalle cosmético. `sortOrderCoerced` es lo que impide que la coerción sea silenciosa. **No:** rechazar con `INVALID_SORT_ORDER`. **No:** coercionar sin contarlo.
@@ -430,6 +433,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 | Un `if( row.values.sortOrder )` descarta el `0` y un ítem no puede volver a la primera posición por importación | `0` es falso en JavaScript **y** es el valor por defecto de la columna, lo que hace el fallo silencioso por partida doble. Cubierto por un criterio de aceptación propio y por el bloque de contrato |
 | La caché de tipos se implementa **por lote** en vez de por importación, y un tipo nuevo repartido entre dos lotes choca contra `UQ_catalogType_code` arrastrando el segundo lote entero | Declarado en la fase 3 de §3.5 y verificado en el paso 8 con 30 tipos sobre ~2000 filas, que es lo que fuerza el reparto entre lotes. Con un fichero pequeño el fallo no aparece |
 | **Vaciar por celda vacía borra trabajo hecho a mano.** Un administrador escribe una `description` con el `004`; alguien reimporta el fichero original, que la trae vacía, y la descripción desaparece | Es la consecuencia buscada de que el fichero sea la fuente completa, no un efecto colateral: está en §6, en el contrato de §3.5 y en un criterio de aceptación. `metadata`, que es el otro campo que un administrador escribe, sí queda protegido porque no entra en el diff |
+| **La contradicción entre `catalogItem.model.ts` y el DDL sobre `value` sigue en pie** después de este spec, y el siguiente que escriba `null` en esa columna por otra puerta se encontrará el mismo 500 asimétrico — insertar pasa, actualizar revienta | El importador la rodea rellenando con `name` y la deja escrita en §6 en vez de arreglarla de tapadillo. Alinear el modelo con el DDL toca al `001` y al `004` y va en su propio spec; entretanto queda anotada aquí para que se encuentre |
 | Un fichero cuyo `catalogTypeName` difiere del almacenado hace pensar que el importador renombra tipos, y alguien lo «arregla» añadiendo ese diff | El criterio de aceptación es explícito y verificable: el tipo no crece en `appDetails` ni avanza `sysDetails.version`. La razón está en §6 |
 | El fixture `.xlsx` queda **fuera del commit** por el `*.xlsx` global de `.gitignore`, y la suite de contrato no corre en un clon limpio | Ya le pasó a F19 y por eso existe la excepción `!tests/fixtures/*.xlsx`. El paso 7 y un criterio de aceptación lo comprueban con `git check-ignore -v` en vez de darlo por hecho |
 | El endpoint se implementa **antes** de que F19 aterrice y `uploadSingleFile` todavía tiene la firma vieja de un solo argumento | Declarado como precondición al principio de §4, junto con el recuento de `ROUTE_RULES`, que también depende de F19 |

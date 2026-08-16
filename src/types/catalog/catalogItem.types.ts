@@ -16,10 +16,14 @@ export interface ImportCatalogItemsInput {
     dryRun?: boolean;
 }
 
-// The three optional columns of the file. sortOrder arrives already coerced into a valid smallint:
-// the parser never hands back an invalid one, so the service has no branch for it
+// The three optional columns of the file. sortOrder arrives already coerced into a valid smallint,
+// so the service has no branch for it.
+// value never arrives null, unlike description: the model declares the column allowNull: false while
+// the DDL admits null, and that contradiction is not this spec's to resolve — insertion would not
+// notice it, because bulkCreate does not validate, but an update emptying the cell would 500. An
+// empty cell therefore carries an exact copy of the already normalized name
 export interface CatalogItemFileValues {
-    value: string | null;
+    value: string;
     description: string | null;
     sortOrder: number;
 }

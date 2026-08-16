@@ -128,12 +128,45 @@ describe('parseCatalogItemsXlsxFile', () => {
 
         it('reads an empty cell as null and never as an empty string', async () => {
             const buffer = await buildWorkbook(FULL_HEADER, [
-                [ 'tipoEvento', 'Tipo Evento', 'ACTIVO', 'Activo', undefined, '   ' ]
+                [ 'tipoEvento', 'Tipo Evento', 'ACTIVO', 'Activo', 'A', '   ' ]
             ]);
             const parsed = await parseCatalogItemsXlsxFile(buffer);
 
-            expect(parsed.rows[0].values.value).toBeNull();
             expect(parsed.rows[0].values.description).toBeNull();
+        });
+
+        // The only column that never enters null: the model declares it allowNull: false while the
+        // DDL admits null, so an empty cell would insert fine and 500 on the update that empties it
+        it('fills an empty value with an exact copy of the already normalized name', async () => {
+            const buffer = await buildWorkbook(FULL_HEADER, [
+                [ 'tipoEvento', 'Tipo Evento', 'ACTIVO', '  ACTIVO simple  ', undefined ],
+                [ 'tipoEvento', 'Tipo Evento', 'VIGENTE', 'Vigente', '   ' ]
+            ]);
+            const parsed = await parseCatalogItemsXlsxFile(buffer);
+
+            expect(parsed.rows[0].name).toBe('Activo Simple');
+            expect(parsed.rows[0].values.value).toBe('Activo Simple');
+            expect(parsed.rows[1].values.value).toBe('Vigente');
+        });
+
+        it('keeps the value cell when it carries text, without copying the name over it', async () => {
+            const buffer = await buildWorkbook(FULL_HEADER, [
+                [ 'tipoEvento', 'Tipo Evento', 'ACTIVO', 'Activo', 'A' ]
+            ]);
+            const parsed = await parseCatalogItemsXlsxFile(buffer);
+
+            expect(parsed.rows[0].values.value).toBe('A');
+        });
+
+        it('fills value with the name when the value header is absent altogether', async () => {
+            const buffer = await buildWorkbook(
+                [ 'catalogTypeCode', 'catalogTypeName', 'code', 'name' ],
+                [ [ 'tipoEvento', 'Tipo Evento', 'ACTIVO', 'Activo' ] ]
+            );
+            const parsed = await parseCatalogItemsXlsxFile(buffer);
+
+            expect(parsed.missingOptionalHeaders).toContain('value');
+            expect(parsed.rows[0].values.value).toBe('Activo');
         });
 
     });

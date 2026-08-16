@@ -303,7 +303,11 @@ const readDataRow = (
     const catalogTypeName = rawCatalogTypeName === null ? null : toTitleCase(rawCatalogTypeName);
     const code = toConstantCase(rawCode);
     const name = toTitleCase(rawName);
-    const value = cellToText(raw.get('value') ?? null);
+    // The one column that never enters null. The model declares value allowNull: false while the DDL
+    // admits null, and an empty cell would insert fine — bulkCreate does not validate — but would 500
+    // on the update branch that empties it. An empty cell carries the already normalized name, so the
+    // two columns of that row come out identical and the diff keeps its four candidates
+    const value = cellToText(raw.get('value') ?? null) ?? name;
     const description = cellToText(raw.get('description') ?? null);
 
     // Length is checked against the normalized value because that is the one that reaches the
