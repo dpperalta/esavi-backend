@@ -1,3 +1,5 @@
+import path from 'path';
+import ExcelJS from 'exceljs';
 import request from 'supertest';
 import { app } from '../../src/app';
 import { VaccineWhodrug } from '../../src/models';
@@ -585,6 +587,284 @@ describe('vaccineWhodrug contract', () => {
 
             expect(response.status).toBe(404);
             expect(response.body.code).toBe('WHODRUG_005A_NOT_FOUND');
+        });
+    });
+
+    /**
+     * SPEC F19 — ESAVI-WHODRUG-007, bulk import from a WHODrug .xlsx file. It is the only operation
+     * of the entity that speaks multipart/form-data, the only one that answers with the report of a
+     * process instead of a resource, and the only entry that ever populates the catalog: there is no
+     * implicit resolution, so without this endpoint the dictionary stays empty forever.
+     *
+     * The fixture has seven data rows on purpose: the three BCG presentations of §1 — the same
+     * drugCode with three different ids, which is the case the whole schema change exists for — plus
+     * one with no id, one with no drugName, one repeating an id already seen and one whose drugCode
+     * exceeds the varchar(250) of the column. That is read: 7, inserted: 3, invalid: 3, duplicated: 1.
+     */
+    describe('bulk import — ESAVI-WHODRUG-007', () => {
+
+        const fixturePath = path.resolve(__dirname, '../fixtures/whodrug-vaccines-sample.xlsx');
+
+        // The fixture ids, so the assertions read as what they are
+        const firstId = 25120001;
+        const holderId = 25120002;
+        const spanishId = 25120003;
+        const fixtureIds = [firstId, holderId, spanishId];
+        const sharedDrugCode = '00002001001';
+
+        // The header row of the fixture, in its order, so a variant can drop or rename one column
+        const maHoldersColumn = 17;
+        const ingredientTranslationsColumn = 13;
+
+        const importFile = ( role: string = 'SUPERADMIN' ) =>
+            request(app).post(`${ base }/import`).set(authHeader(role));
+
+        const countFixtureRows = () => VaccineWhodrug.count({ where: { externalId: fixtureIds } });
+
+        const readByExternalId = async ( externalId: number ) => {
+            const row = await VaccineWhodrug.findOne({ where: { externalId } });
+            return {
+                drugCode: row!.getDataValue('drugCode'),
+                drugName: row!.getDataValue('drugName'),
+                iso3Code: row!.getDataValue('iso3Code'),
+                maHolders: row!.getDataValue('maHolders'),
+                atcs: row!.getDataValue('atcs'),
+                isActive: row!.getDataValue('isActive'),
+                isGeneric: row!.getDataValue('isGeneric'),
+                isPreferred: row!.getDataValue('isPreferred'),
+                notes: row!.getDataValue('notes'),
+                updatedAt: row!.getDataValue('updatedAt'),
+                metadata: row!.getDataValue('metadata') as Record<string, unknown>,
+                appDetails: ( row!.getDataValue('appDetails') as { method: string }[] ).length,
+                version: ( row!.getDataValue('sysDetails') as { version?: number } ).version
+            };
+        };
+
+        // The fixture itself, reopened so a variant can change exactly one cell and nothing else
+        const buildVariant = async ( mutate: ( worksheet: ExcelJS.Worksheet ) => void ): Promise<Buffer> => {
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(fixturePath);
+            mutate(workbook.worksheets[0]);
+            return Buffer.from(await workbook.xlsx.writeBuffer());
+        };
+
+        it('rejects ADMIN with 403 — the widest write over the entity is SUPERADMIN only', async () => {
+            const response = await importFile('ADMIN').attach('file', fixturePath);
+
+            expect(response.status).toBe(403);
+        });
+
+        it('responds 400 when no file travels', async () => {
+            const response = await importFile();
+
+            expect(response.status).toBe(400);
+            expect(response.body.ok).toBe(false);
+            expect(response.body.code).toBe('WHODRUG_007_FILE_REQUIRED');
+        });
+
+        it('responds 400 when the buffer is not an .xlsx workbook', async () => {
+            const response = await importFile()
+                .attach('file', Buffer.from('esto no es un libro de excel', 'utf8'), 'bad.xlsx');
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('WHODRUG_007_FILE_INVALID');
+        });
+
+        // The column exists or the file is not a WHODrug dictionary. The cut happens before a single
+        // data row is read, so a book that is valid everywhere else still writes nothing
+        it('responds 400 and writes nothing when a required header is missing', async () => {
+            const withoutIngredientTranslations = await buildVariant(( worksheet ) => {
+                worksheet.spliceColumns(ingredientTranslationsColumn, 1);
+            });
+
+            const response = await importFile().attach('file', withoutIngredientTranslations, 'whodrug.xlsx');
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('WHODRUG_007_FILE_INVALID');
+            expect(await countFixtureRows()).toBe(0);
+        });
+
+        // dryRun runs before the real import on purpose: it is the only moment the table is
+        // guaranteed empty of these ids, so "wrote nothing" can be asserted without ambiguity
+        it('dryRun reports the same numbers and writes nothing', async () => {
+            const response = await importFile().field('dryRun', 'true').attach('file', fixturePath);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({
+                read: 7, inserted: 3, updated: 0, unchanged: 0, invalid: 3, duplicated: 1, dryRun: true
+            });
+            expect(await countFixtureRows()).toBe(0);
+        });
+
+        it('responds 200 with the process report and writes only the valid rows', async () => {
+            const response = await importFile()
+                .field('dictionaryVersion', 'WHODrug Global 2025 Sep 1')
+                .attach('file', fixturePath);
+
+            // 200 and not 201: there is no resource to point at, only the report of a process
+            expect(response.status).toBe(200);
+            expect(response.body.ok).toBe(true);
+            expect(response.body.message.length).toBeGreaterThan(0);
+            expect(response.body.data).toMatchObject({
+                read: 7, inserted: 3, updated: 0, unchanged: 0, invalid: 3, duplicated: 1,
+                dryRun: false, sheet: 'WHODrug Vaccines'
+            });
+            // Not a single vaccineWhodrugId comes back
+            expect(JSON.stringify(response.body.data)).not.toContain('vaccineWhodrugId');
+            // The rejected sample carries the row number and the reason of each one, and column only
+            // where the reason does not name it already
+            expect(response.body.data.errors).toEqual([
+                { row: 5, reason: 'INVALID_EXTERNAL_ID' },
+                { row: 6, reason: 'EMPTY_DRUG_NAME' },
+                { row: 7, reason: 'DUPLICATE_IN_FILE' },
+                { row: 8, reason: 'VALUE_TOO_LONG', column: 'drugCode' }
+            ]);
+            // The whole header of the fixture resolves, and nothing is left over
+            expect(response.body.data.missingOptionalHeaders).toEqual([]);
+            expect(response.body.data.unknownHeaders).toEqual([]);
+            expect(await countFixtureRows()).toBe(3);
+        });
+
+        // The criterion that justifies the schema change of §3.1: with UQ_vaccineWhodrug_drugCode in
+        // place the second row of the file would have blown up the batch
+        it('imports the three presentations that share a drugCode', async () => {
+            const rows = await VaccineWhodrug.findAll({ where: { externalId: fixtureIds } });
+
+            expect(rows).toHaveLength(3);
+            expect(rows.every(( row ) => row.getDataValue('drugCode') === sharedDrugCode)).toBe(true);
+        });
+
+        it('stores the dictionary values as quoted data and marks the row as imported', async () => {
+            const first = await readByExternalId(firstId);
+            const spanish = await readByExternalId(spanishId);
+
+            // Only trimmed: never toConstantCase on the code, never toTitleCase on the name
+            expect(first.drugCode).toBe(sharedDrugCode);
+            expect(first.drugName).toBe('Bcg vaccine');
+            expect(spanish.drugName).toBe('{Vacuna BCG}');
+            // The column the DDL used to call 'acts'
+            expect(first.atcs).toBe('J07AN');
+            // There is no reviewStatus, unlike the .asc importer: this entity has no review queue
+            expect(first.metadata).toMatchObject({
+                importedFrom: 'WHODRUG',
+                autoCreated: false,
+                dictionaryVersion: 'WHODrug Global 2025 Sep 1'
+            });
+            expect(first.metadata.importedAt).toBeDefined();
+            expect(first.metadata.reviewStatus).toBeUndefined();
+            // The file does not bring notes, so the column stays null and a note written by the 004
+            // has somewhere to live
+            expect(first.notes).toBeNull();
+        });
+
+        it('reads an empty cell as null and each boolean by its own rule', async () => {
+            const first = await readByExternalId(firstId);
+            const holder = await readByExternalId(holderId);
+            const spanish = await readByExternalId(spanishId);
+
+            // Never '': an empty cell in Excel means "no data", and a '' would make the diff of a
+            // reimport see a change that is not there
+            expect(first.iso3Code).toBeNull();
+            expect(first.maHolders).toBeNull();
+            expect(holder.iso3Code).toBe('PRI');
+            // isPreferred is NOT NULL DEFAULT false and admits no null in any layer
+            expect(first.isPreferred).toBe(true);
+            expect(holder.isPreferred).toBe(false);
+            // isGeneric got no DEFAULT in the DDL, so null is a value of its own, distinct from false
+            expect(first.isGeneric).toBeNull();
+            expect(spanish.isGeneric).toBe(false);
+        });
+
+        // The criterion that really discriminates: a differential update that is not differential
+        // would pass every other test in this block
+        it('reimporting the same file writes nothing at all', async () => {
+            const before = await Promise.all(fixtureIds.map(readByExternalId));
+
+            const response = await importFile()
+                .field('dictionaryVersion', 'WHODrug Global 2025 Sep 1')
+                .attach('file', fixturePath);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({ read: 7, inserted: 0, updated: 0, unchanged: 3 });
+
+            const after = await Promise.all(fixtureIds.map(readByExternalId));
+            // No appDetails entry, no sysDetails.version bump and no updatedAt moved
+            expect(after).toEqual(before);
+        });
+
+        // Reimporting must not overwrite where a row first came from, which is the only thing that
+        // lets anyone audit which release each entry belongs to
+        it('does not rewrite metadata when the dictionaryVersion changes', async () => {
+            await importFile().field('dictionaryVersion', 'WHODrug Global 2026 Mar 1').attach('file', fixturePath);
+
+            const first = await readByExternalId(firstId);
+
+            expect(first.metadata.dictionaryVersion).toBe('WHODrug Global 2025 Sep 1');
+        });
+
+        it('a single changed cell produces updated: 1 and leaves the rest unchanged', async () => {
+            const before = await readByExternalId(holderId);
+            const renamedHolder = await buildVariant(( worksheet ) => {
+                worksheet.getRow(3).getCell(maHoldersColumn).value = 'Organon BV';
+            });
+
+            const response = await importFile().attach('file', renamedHolder, 'whodrug.xlsx');
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({ inserted: 0, updated: 1, unchanged: 2 });
+
+            const after = await readByExternalId(holderId);
+            expect(after.maHolders).toBe('Organon BV');
+            // Exactly one entry added and exactly one version bump
+            expect(after.appDetails).toBe(before.appDetails + 1);
+            expect(after.version).toBe(( before.version ?? 0 ) + 1);
+        });
+
+        // Unlike the .asc importer, this file declares no currency at all, so inferring one from it
+        // would be inventing it: whoever deactivated the row is the authority, not the dictionary
+        it('does not reactivate a row that was deactivated with the 005A', async () => {
+            const row = await VaccineWhodrug.findOne({ where: { externalId: spanishId } });
+            await request(app).delete(`${ base }/${ row!.getDataValue('vaccineWhodrugId') }`).set(authHeader('ADMIN'));
+            const before = await readByExternalId(spanishId);
+
+            const response = await importFile().attach('file', fixturePath);
+
+            expect(response.status).toBe(200);
+            const after = await readByExternalId(spanishId);
+            expect(after.isActive).toBe(false);
+            // isActive and deletedAt never enter the diff, so this row was left alone entirely: the
+            // aggregate is not asserted here because the previous test left another row to revert
+            expect(after.appDetails).toBe(before.appDetails);
+            expect(after.version).toBe(before.version);
+        });
+
+        // An export that renames a column does not fail — the load goes on — but it leaves that
+        // column null in every row, and without the notice nobody spots it
+        it('ignores an unknown header and reports both header lists', async () => {
+            const withRenamedColumn = await buildVariant(( worksheet ) => {
+                worksheet.getRow(1).getCell(maHoldersColumn).value = 'comentarios';
+            });
+
+            const response = await importFile().field('dryRun', 'true').attach('file', withRenamedColumn, 'whodrug.xlsx');
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.unknownHeaders).toEqual(['comentarios']);
+            expect(response.body.data.missingOptionalHeaders).toEqual(['maHolders']);
+        });
+
+        // The header is matched normalized on top of the alias table, so an export that changes the
+        // case or the separators of a column still resolves
+        it('resolves a header written with spaces and another case', async () => {
+            const shoutedHeader = await buildVariant(( worksheet ) => {
+                worksheet.getRow(1).getCell(21).value = 'FORMS MEDICINAL PRODUCT ID';
+            });
+
+            const response = await importFile().field('dryRun', 'true').attach('file', shoutedHeader, 'whodrug.xlsx');
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.unknownHeaders).toEqual([]);
+            expect(response.body.data.missingOptionalHeaders).toEqual([]);
+            expect(response.body.data.unchanged).toBe(3);
         });
     });
 });

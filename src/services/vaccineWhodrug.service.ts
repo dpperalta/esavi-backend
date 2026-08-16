@@ -1,10 +1,26 @@
-import { Op, WhereOptions } from 'sequelize';
+import { CreationAttributes, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { VaccineWhodrug } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
-import { AppDetails, AuthUser, CreateVaccineWhodrugInput, VaccineWhodrugListFilters } from '../types';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage, parseWhodrugXlsxFile, WhodrugFileError } from '../helpers';
+import {
+    AppDetails,
+    AuthUser,
+    CreateVaccineWhodrugInput,
+    ImportVaccineWhodrugsInput,
+    ParsedVaccineWhodrugRow,
+    VaccineWhodrugImportReport,
+    VaccineWhodrugListFilters
+} from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// The real file is around 3000 rows, which is three batches. The size is the one the .asc importer
+// already uses: the batch is the unit of the transaction, so it is also the unit of what survives a
+// failure halfway through, and the dictionary will grow
+const IMPORT_BATCH_SIZE = 1000;
+
+// The counters stay exact; only the sample of rejected rows is trimmed
+const MAX_REPORTED_IMPORT_ERRORS = 20;
 
 // The 23 nullable text columns of the entity, trimmed on write and never normalized any further.
 // undefined and null both land as null on create: an absent field and an explicitly emptied one
@@ -288,11 +304,230 @@ const setVaccineWhodrugActivationService = async (id: string, authUser: AuthUser
     }
 }
 
+// ESAVI-WHODRUG-007 - Import Vaccine Whodrugs Service
+const importVaccineWhodrugsService = async (
+    fileBuffer: Buffer | undefined,
+    data: ImportVaccineWhodrugsInput,
+    authUser: AuthUser | undefined,
+    lang: string
+): Promise<VaccineWhodrugImportReport> => {
+    // Phase 1 — reception. The controller already checks it, and so does this service: it is the
+    // only precondition whose absence would reach the parser as a crash instead of as a 400
+    if (!fileBuffer) {
+        throw new AppError(getMessage('vaccineWhodrug.fileRequired', lang), 400, 'WHODRUG_007_FILE_REQUIRED');
+    }
+    const dictionaryVersion = data.dictionaryVersion ? data.dictionaryVersion.trim() : undefined;
+    const dryRun = data.dryRun ?? false;
+    const userId = authUser?.userId || 'undefined';
+
+    // Phase 2 — parsing. A rejected row never aborts the process; it is counted and the file goes on
+    let parsedFile;
+    try {
+        parsedFile = await parseWhodrugXlsxFile(fileBuffer);
+    } catch (error) {
+        // Only a book that cannot be opened or carries no sheet arrives here as a 400. Anything else
+        // the parser may throw is a defect and stays a 500, so it never disguises itself as a bad file
+        if (error instanceof WhodrugFileError) {
+            throw new AppError(getMessage('vaccineWhodrug.fileInvalid', lang), 400, 'WHODRUG_007_FILE_INVALID', error);
+        }
+        throw error;
+    }
+    const { sheet, rows, rejected, missingOptionalHeaders, unknownHeaders, missingRequiredHeaders } = parsedFile;
+
+    // A missing required header cuts before a single data row was read, and therefore before
+    // anything could be written. The list of what is missing travels in the AppError
+    if (missingRequiredHeaders.length > 0) {
+        esaviLog(`ESAVI-WHODRUG-007 - Required headers missing from the uploaded file: ${ missingRequiredHeaders.join(', ') }`, 'warn');
+        throw new AppError(
+            getMessage('vaccineWhodrug.fileInvalid', lang),
+            400,
+            'WHODRUG_007_FILE_INVALID',
+            new Error(`Missing required headers: ${ missingRequiredHeaders.join(', ') }`)
+        );
+    }
+    // Fully empty rows are neither read nor invalid, so every counted row ended in one of the two lists
+    const read = rows.length + rejected.length;
+    const duplicated = rejected.filter(row => row.reason === 'DUPLICATE_IN_FILE').length;
+    const invalid = rejected.length - duplicated;
+    // The other content problem that cuts the operation, and it also cuts before writing: a book with
+    // the right header and not one usable row
+    if (rows.length === 0) {
+        throw new AppError(
+            getMessage('vaccineWhodrug.fileInvalid', lang),
+            400,
+            'WHODRUG_007_FILE_INVALID',
+            new Error('The file produced no valid row')
+        );
+    }
+
+    const importedAt = new Date();
+    // The same for every inserted row, so it is built once. There is no reviewStatus, unlike the .asc
+    // importer: vaccineWhodrug has no implicit resolution and therefore no review queue to feed.
+    // dictionaryVersion is omitted rather than stored as null when it did not travel in the body
+    const importMetadata: Record<string, unknown> = {
+        importedFrom: 'WHODRUG',
+        importedAt,
+        ...(dictionaryVersion ? { dictionaryVersion } : {}),
+        autoCreated: false
+    };
+    let inserted = 0;
+    let updated = 0;
+    let unchanged = 0;
+
+    // Phase 3 — one batch at a time. Reading the existing rows and computing the diff happens the
+    // same way in both modes; `transaction` is undefined on a dry run, where nothing is written
+    const processBatch = async (batch: ParsedVaccineWhodrugRow[], transaction?: Transaction): Promise<void> => {
+        // The whole row, with no narrowed `attributes` and no isActive filter: it is the precondition
+        // of buildDifferentialUpdate, and an inactive row still occupies the externalId
+        const existingVaccines = await VaccineWhodrug.findAll({
+            where: { externalId: { [Op.in]: batch.map(row => row.externalId) } },
+            transaction
+        });
+        const existingByExternalId = new Map(existingVaccines.map(vaccine => [vaccine.externalId as number, vaccine]));
+        const vaccinesToInsert: CreationAttributes<VaccineWhodrug>[] = [];
+
+        for (const row of batch) {
+            const storedVaccine = existingByExternalId.get(row.externalId);
+            if (!storedVaccine) {
+                // Phase 4 — insertion. notes is not written: the file does not bring it and the column
+                // stays null. isActive is always true — the .xlsx declares no currency, so inferring
+                // one from the file would be inventing it
+                vaccinesToInsert.push({
+                    externalId: row.externalId,
+                    drugCode: row.drugCode,
+                    drugName: row.drugName,
+                    ...row.values,
+                    isActive: true,
+                    deletedAt: null,
+                    metadata: importMetadata,
+                    appDetails: [{
+                        createdAt: new Date(),
+                        user: userId,
+                        method: 'ESAVI-WHODRUG-007',
+                        detail: 'Vaccine WHODrug created by bulk import service'
+                    }]
+                } as CreationAttributes<VaccineWhodrug>);
+                continue;
+            }
+            const stored = storedVaccine.get({ plain: true }) as Record<string, unknown>;
+            // The 26 columns the file is the complete source of, each one entering with no presence
+            // check: there is no client body to ask, and it is the helper that decides whether there
+            // is an UPDATE. Neither boolean is guarded by truthiness, or a false would be dropped in
+            // silence and the flag could never be cleared by import.
+            // externalId stays out — the row was found *by* it. notes stays out — the file does not
+            // bring it, and a note written by the 004 must survive a reimport. isActive and deletedAt
+            // stay out — the file declares no currency. metadata stays out: rewriting it would erase
+            // the importedAt and the dictionaryVersion the row first came in with
+            const objectToUpdate = buildDifferentialUpdate(stored, {
+                drugCode: row.drugCode,
+                drugName: row.drugName,
+                drugRecNo: row.values.drugRecNo,
+                drugRecNoSeq: row.values.drugRecNoSeq,
+                language: row.values.language,
+                medicinalProductId: row.values.medicinalProductId,
+                atcs: row.values.atcs,
+                icd11: row.values.icd11,
+                icd11Term: row.values.icd11Term,
+                abbreviation: row.values.abbreviation,
+                ingredient: row.values.ingredient,
+                ingredientTranslation: row.values.ingredientTranslation,
+                languageCode: row.values.languageCode,
+                iso3Code: row.values.iso3Code,
+                countryMedicinalProductId: row.values.countryMedicinalProductId,
+                maHolders: row.values.maHolders,
+                maHoldersMedicinalProductId: row.values.maHoldersMedicinalProductId,
+                form: row.values.form,
+                formTranslations: row.values.formTranslations,
+                formMedicinalProductId: row.values.formMedicinalProductId,
+                strength: row.values.strength,
+                strengthMedicinalProductId: row.values.strengthMedicinalProductId,
+                noDose: row.values.noDose,
+                diluent: row.values.diluent,
+                isGeneric: row.values.isGeneric,
+                isPreferred: row.values.isPreferred
+            });
+            // Nothing changed: no UPDATE, no updatedAt, no appDetails entry and no sysDetails event
+            if (Object.keys(objectToUpdate).length === 0) {
+                unchanged++;
+                continue;
+            }
+            updated++;
+            if (!dryRun) {
+                const currentAppDetails = Array.isArray(storedVaccine.appDetails) ? storedVaccine.appDetails : [];
+                const newEntry: AppDetails = {
+                    createdAt: new Date(),
+                    user: userId,
+                    method: 'ESAVI-WHODRUG-007',
+                    detail: 'Vaccine WHODrug updated by bulk import service'
+                };
+                await storedVaccine.update({
+                    ...objectToUpdate,
+                    updatedAt: new Date(),
+                    appDetails: [
+                        ...currentAppDetails,
+                        newEntry
+                    ]
+                }, { transaction });
+            }
+        }
+
+        if (vaccinesToInsert.length > 0) {
+            inserted += vaccinesToInsert.length;
+            // No updateOnDuplicate and no ignoreDuplicates: the previous SELECT already told apart
+            // what is new, and updateOnDuplicate would overwrite appDetails and metadata of the
+            // existing rows and write even when nothing changed
+            if (!dryRun) {
+                await VaccineWhodrug.bulkCreate(vaccinesToInsert, { transaction });
+            }
+        }
+    }
+
+    for (let index = 0; index < rows.length; index += IMPORT_BATCH_SIZE) {
+        const batch = rows.slice(index, index + IMPORT_BATCH_SIZE);
+        // A dry run opens no transaction at all: there is nothing to roll back
+        if (dryRun) {
+            await processBatch(batch);
+            continue;
+        }
+        // One transaction per batch instead of one for the whole file: a failure leaves the previous
+        // ones committed and the report says how far it got, and reimporting is idempotent
+        const transaction = await sequelize.transaction();
+        try {
+            await processBatch(batch, transaction);
+            await transaction.commit();
+        } catch (error) {
+            await transaction.rollback();
+            // No retry: a unique constraint violation here means two simultaneous imports, which with
+            // a SUPERADMIN role is an operation error and is better made visible
+            esaviLog(`ESAVI-WHODRUG-007 - Batch starting at row ${ batch[0].row } failed and was rolled back`, 'error');
+            throw new AppError(getMessage('vaccineWhodrug.importedFailed', lang), 500, 'WHODRUG_007_IMPORT_FAILED', error);
+        }
+    }
+
+    // Phase 5 — report. errors is trimmed to the first 20 entries; the counters are the real totals.
+    // The two header lists travel in the response and not only in the log: an export that renames a
+    // column does not fail, it silently leaves that column null in every row
+    return {
+        read,
+        inserted,
+        updated,
+        unchanged,
+        invalid,
+        duplicated,
+        dryRun,
+        sheet,
+        missingOptionalHeaders,
+        unknownHeaders,
+        errors: rejected.slice(0, MAX_REPORTED_IMPORT_ERRORS)
+    };
+}
+
 export {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
     getAllVaccineWhodrugsService,
     getVaccineWhodrugByIdService,
     updateVaccineWhodrugService,
-    setVaccineWhodrugActivationService
+    setVaccineWhodrugActivationService,
+    importVaccineWhodrugsService
 };

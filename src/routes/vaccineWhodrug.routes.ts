@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
+import { tokenValidation, uploadSingleFile, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
     activateVaccineWhodrug,
@@ -8,9 +8,16 @@ import {
     getAllVaccineWhodrugs,
     getVaccineWhodrugById,
     getVaccineWhodrugs,
+    importVaccineWhodrugs,
     updateVaccineWhodrug
 } from '../controllers/vaccineWhodrug.controller';
-import { createVaccineWhodrugValidator, updateVaccineWhodrugValidator, vaccineWhodrugIdValidator, vaccineWhodrugListValidator } from '../validators';
+import {
+    createVaccineWhodrugValidator,
+    importVaccineWhodrugsValidator,
+    updateVaccineWhodrugValidator,
+    vaccineWhodrugIdValidator,
+    vaccineWhodrugListValidator
+} from '../validators';
 
 // The only entity of the repository whose base route does not match its table name: the table is
 // vaccineWhodrug and the route is /api/whodrug-vaccines. The table reads "WHODrug medicinal product
@@ -38,6 +45,12 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...vaccineWhodrug
 // Code: ESAVI-WHODRUG-005B
 // Literal path, declared before '/:id' so Express does not capture 'activate' as an :id
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...vaccineWhodrugIdValidator, validateFields, activateVaccineWhodrug);
+
+// Import Vaccine Whodrugs from a WHODrug .xlsx file - For SuperAdmin
+// Code: ESAVI-WHODRUG-007
+// Literal path, declared before '/:id' for coherence with the rest of the file. uploadSingleFile
+// runs before the validators because the multipart body does not exist until multer parses it
+router.post('/import', tokenValidation, validateUserRole(SUPERADMIN), uploadSingleFile('file', { i18nPrefix: 'vaccineWhodrug', codePrefix: 'WHODRUG_007' }), ...importVaccineWhodrugsValidator, validateFields, importVaccineWhodrugs);
 
 // Get Vaccine Whodrug by ID
 // Code: ESAVI-WHODRUG-003

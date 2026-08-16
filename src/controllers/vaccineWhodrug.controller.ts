@@ -1,13 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
-import { VaccineWhodrugListFilters } from '../types';
+import { ImportVaccineWhodrugsInput, VaccineWhodrugListFilters } from '../types';
 import {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
     getAllVaccineWhodrugsService,
     getVaccineWhodrugByIdService,
     updateVaccineWhodrugService,
-    setVaccineWhodrugActivationService
+    setVaccineWhodrugActivationService,
+    importVaccineWhodrugsService
 } from '../services/vaccineWhodrug.service';
 
 // Unwraps the five query filters, identical in both listings. The two booleans arrive as the
@@ -172,6 +173,44 @@ const activateVaccineWhodrug = async (req: Request, res: Response, next: NextFun
     }
 }
 
+// Import Vaccine Whodrugs Controller - For SuperAdmin
+// Code: ESAVI-WHODRUG-007
+const importVaccineWhodrugs = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    // A request with no multipart body at all leaves req.body undefined — multer only fills it when
+    // it has something to parse — and that is precisely the request that must end in a 400 for the
+    // missing file, not in a 500 for reading a key off undefined
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    // Both fields arrive as text fields of the multipart body, so the boolean comes as a string and
+    // is turned into a value here. The file itself was left in req.file by uploadSingleFile. There
+    // is no encoding: a .xlsx resolves it inside the format
+    const data: ImportVaccineWhodrugsInput = {
+        dictionaryVersion: body.dictionaryVersion ? (body.dictionaryVersion as string).trim() : undefined,
+        dryRun: body.dryRun !== undefined ? String(body.dryRun) === 'true' : undefined
+    };
+    try {
+        // Checked here and again in the service: the controller is what turns a request with no file
+        // into a 400 instead of letting it reach the parser as a crash
+        if (!req.file) {
+            throw new AppError(getMessage('vaccineWhodrug.fileRequired', req.lang), 400, 'WHODRUG_007_FILE_REQUIRED');
+        }
+        // 200 and not 201: there is no identifiable resource to return and no URL to point at.
+        // What comes back is the report of a process
+        const report = await importVaccineWhodrugsService(req.file.buffer, data, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.importedSuccess', req.lang),
+            data: report
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-007: Error importing Vaccine WHODrugs: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.importedFailed', req.lang), 500, 'WHODRUG_007_IMPORT_FAILED', error));
+    }
+}
+
 export {
     createVaccineWhodrug,
     getVaccineWhodrugs,
@@ -179,5 +218,6 @@ export {
     getVaccineWhodrugById,
     updateVaccineWhodrug,
     deleteVaccineWhodrug,
-    activateVaccineWhodrug
+    activateVaccineWhodrug,
+    importVaccineWhodrugs
 };

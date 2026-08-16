@@ -11,3 +11,4 @@ export * from './permissions.helper';
 export * from './rowSeal.helper';
 export * from './severity.helper';
 export * from './stringHandling.helper';
+export * from './whodrugParser.helper';

@@ -1,6 +1,6 @@
 # SPEC F19 — Importación masiva de `vaccineWhodrug` desde ficheros WHODrug `.xlsx`
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F12 (`buildDifferentialUpdate` — la rama de actualización lo usa), **SPEC F18 (`vaccineWhodrug` — dependencia dura: aporta modelo, tipos, ruta base y la normalización de `drugCode`; este spec lo enmienda, ver §1)**, SPEC F17 (precedente de forma: aporta `multer`, `fileUpload.middleware.ts` y la estructura de lotes, `dryRun` e informe)
 > **Fecha:** 2026-08-14
 > **Objetivo:** Cargar el diccionario WHODrug de vacunas en `vaccineWhodrug` subiendo un `.xlsx` a un endpoint administrativo, con inserción de lo nuevo y actualización diferencial de lo existente, previa corrección del esquema para que la clave del fichero sea la clave de la tabla.

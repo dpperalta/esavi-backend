@@ -232,15 +232,19 @@ const ROUTE_RULES: RouteRule[] = [
     // and no deviation (§3.4). No 005C: the table sits inside the preventPhysicalDelete loop of
     // esaviapp.sql:1356-1370, so physical deletion is not declared. The base path deliberately
     // diverges from the table name — the catalog holds vaccines of the WHODrug dictionary, and that
-    // is the order an API consumer looks for them in. ESAVI-WHODRUG-007 has no row here: it is the
-    // bulk import of SPEC F19, which declares and implements its own route
+    // is the order an API consumer looks for them in
     { method: 'post',   path: '/api/whodrug-vaccines',                        minRole: 'ADMIN',      code: 'ESAVI-WHODRUG-001' },
     { method: 'get',    path: '/api/whodrug-vaccines',                        minRole: 'USER',       code: 'ESAVI-WHODRUG-002A' },
     { method: 'get',    path: '/api/whodrug-vaccines/admin',                  minRole: 'ADMIN',      code: 'ESAVI-WHODRUG-002B' },
     { method: 'get',    path: `/api/whodrug-vaccines/${ UUID }`,              minRole: 'USER',       code: 'ESAVI-WHODRUG-003' },
     { method: 'put',    path: `/api/whodrug-vaccines/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-WHODRUG-004' },
     { method: 'delete', path: `/api/whodrug-vaccines/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-WHODRUG-005A' },
-    { method: 'patch',  path: `/api/whodrug-vaccines/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-WHODRUG-005B' }
+    { method: 'patch',  path: `/api/whodrug-vaccines/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-WHODRUG-005B' },
+
+    // ESAVI-WHODRUG-007 (SPEC F19) — bulk import from a WHODrug .xlsx file. SUPERADMIN, same as the
+    // .asc importer: it is the widest write over the entity, and the 005B already reserved the role
+    // for moving a single row
+    { method: 'post',   path: '/api/whodrug-vaccines/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-WHODRUG-007' }
 ];
 
 /**
@@ -296,7 +300,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(142);
+            expect(ROUTE_RULES).toHaveLength(143);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

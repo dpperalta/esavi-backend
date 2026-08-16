@@ -1,6 +1,6 @@
 # SPEC F18 — CRUD de `vaccineWhodrug`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa), SPEC F15 (precedente directo: catálogo clínico plano, `Op.iLike` acotado y normalización de un dato citado), **SPEC F19 paso 1 (precondición de orden: los cuatro cambios de esquema sobre `vaccineWhodrug` se aplican antes de escribir el modelo de este spec)**
 > **Fecha:** 2026-08-14
 > **Objetivo:** Dar de alta `vaccineWhodrug` con sus siete operaciones canónicas, como catálogo de consulta del diccionario WHODrug de vacunas.

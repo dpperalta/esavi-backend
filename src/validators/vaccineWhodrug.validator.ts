@@ -141,3 +141,13 @@ export const updateVaccineWhodrugValidator = [
     body('isPreferred').optional().isBoolean().withMessage('Is Preferred must be a boolean'),
     body('notes').optional({ nullable: true }).trim()
 ];
+
+// Body of ESAVI-WHODRUG-007. It declares no data column: they all come from the file, which travels
+// as a file field and is validated by multer and by the parser, not here. Both fields arrive as
+// text fields of a multipart body, so isBoolean() reads the string 'true' the same way it would in
+// a query string. There is no encoding rule: a .xlsx resolves it inside the format
+export const importVaccineWhodrugsValidator = [
+    body('dictionaryVersion').optional().trim().notEmpty().withMessage('Dictionary Version cannot be empty')
+        .isLength({ max: 100 }).withMessage('Dictionary Version must be at most 100 characters long'),
+    body('dryRun').optional().isBoolean().withMessage('Dry Run must be a boolean')
+];

@@ -473,6 +473,11 @@
         "notFound": "WHODrug vaccine not found. Please check the WHODrug vaccine ID and try again.",
         "externalIdExists": "A WHODrug vaccine with external identifier {{externalId}} already exists",
         "alreadyActive": "The WHODrug vaccine with ID {{id}} is already active",
-        "alreadyInactive": "The WHODrug vaccine with ID {{id}} is already inactive"
+        "alreadyInactive": "The WHODrug vaccine with ID {{id}} is already inactive",
+        "importedSuccess": "WHODrug vaccines imported successfully",
+        "importedFailed": "Failed to import the WHODrug vaccines. Please try again later.",
+        "fileRequired": "The file to import must be attached in the file field",
+        "fileInvalid": "The file could not be processed. Please check that it is an .xlsx workbook with the expected header and try again.",
+        "fileTooLarge": "The file exceeds the maximum allowed size of 20 MB"
     }
 }

@@ -13,6 +13,9 @@ src/logs/*.log
 *.pdf
 
 *.xlsx
+# The WHODrug sample of SPEC F19 is test data, not a working document: the contract suite of
+# vaccineWhodrug uploads it, so a fresh clone without it cannot run the suite
+!tests/fixtures/*.xlsx
 
 *.docx
 .qodo
