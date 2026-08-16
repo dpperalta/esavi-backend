@@ -51,3 +51,54 @@ export interface VaccineWhodrugListFilters {
     isPreferred?: boolean;
     isGeneric?: boolean;
 }
+
+// Body of ESAVI-WHODRUG-007. It carries no data column: they all come from the file. There is no
+// encoding either — a .xlsx is a ZIP with XML inside and the encoding is the format's business,
+// not the client's
+export interface ImportVaccineWhodrugsInput {
+    dictionaryVersion?: string;
+    dryRun?: boolean;
+}
+
+// The 24 columns the file brings beyond the key and the two required ones. notes stays out: it is
+// not in the header, and isActive too — the .xlsx says nothing about currency
+export type VaccineWhodrugFileValues =
+    Omit<CreateVaccineWhodrugInput, 'notes' | 'isActive' | 'externalId' | 'drugCode' | 'drugName'>;
+
+// One accepted row. row is 1-based over the sheet, so the number points at the cell the way the
+// operator sees it in Excel; row 1 is the header
+export interface ParsedVaccineWhodrugRow {
+    row: number;
+    externalId: number;
+    drugCode: string;
+    drugName: string;
+    values: VaccineWhodrugFileValues;
+}
+
+// One rejected row. Unlike the .asc import there is no raw copy of the line: a 27-column row cut to
+// 200 characters says nothing useful, and the row number plus the reason take the reviewer straight
+// to the cell. column is filled only for VALUE_TOO_LONG — the other four name their column already
+export interface RejectedVaccineWhodrugRow {
+    row: number;
+    reason: 'INVALID_EXTERNAL_ID' | 'EMPTY_DRUG_CODE' | 'EMPTY_DRUG_NAME'
+          | 'VALUE_TOO_LONG' | 'DUPLICATE_IN_FILE';
+    column?: string;
+}
+
+// What the import returns instead of a resource: the report of a process. The counters are exact;
+// errors carries only the first 20 entries. sheet travels because the endpoint does not let you
+// choose one, and the two header lists are how a renamed column becomes visible instead of silently
+// leaving 3000 rows with a null
+export interface VaccineWhodrugImportReport {
+    read: number;
+    inserted: number;
+    updated: number;
+    unchanged: number;
+    invalid: number;
+    duplicated: number;
+    dryRun: boolean;
+    sheet: string;
+    missingOptionalHeaders: string[];
+    unknownHeaders: string[];
+    errors: RejectedVaccineWhodrugRow[];
+}
