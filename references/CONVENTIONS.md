@@ -287,6 +287,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | notifier | `NOTIFIER` |
 | patient | `PATIENT` |
 | severeNotification | `SEVNOT` |
+| vaccineWhodrug | `WHODRUG` |
 | user | `USER` |
 | auth | `AUTH` |
 | seed | `SEED` |
