@@ -1,7 +1,9 @@
 import { Op, WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { VaccineWhodrug } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateVaccineWhodrugInput, VaccineWhodrugListFilters } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The 23 nullable text columns of the entity, trimmed on write and never normalized any further.
@@ -250,10 +252,47 @@ const updateVaccineWhodrugService = async (id: string, data: Partial<CreateVacci
     return stripSysDetails(updatedVaccineWhodrug);
 }
 
+// ESAVI-WHODRUG-005A / ESAVI-WHODRUG-005B - Set Vaccine Whodrug Activation Service
+// Not a differential update: these are writes with an intention of their own. They record a state
+// fact, so they go through setEntityActiveStatusService and never through buildDifferentialUpdate.
+// The where filters by the primary key alone: no incoming foreign key is checked, because this is a
+// logical delete — the ON DELETE RESTRICT constraints of the two child tables never fire, an
+// inactive vaccine keeps being referenced by design, and neither table exists yet. Deactivating
+// means "stop offering it in the autocomplete", not "stop existing"
+const setVaccineWhodrugActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const vaccineWhodrug = await setEntityActiveStatusService({
+            model: VaccineWhodrug,
+            where: { vaccineWhodrugId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('vaccineWhodrug.notFound', lang),
+            notFoundCode: `WHODRUG_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`vaccineWhodrug.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `WHODRUG_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                // Only the computed operation code, with no _ACTIVATION stuck behind it
+                method: `ESAVI-WHODRUG-${ op }`,
+                detail: `VaccineWhodrug ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return vaccineWhodrug;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
     getAllVaccineWhodrugsService,
     getVaccineWhodrugByIdService,
-    updateVaccineWhodrugService
+    updateVaccineWhodrugService,
+    setVaccineWhodrugActivationService
 };

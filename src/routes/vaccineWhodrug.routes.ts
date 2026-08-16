@@ -1,7 +1,15 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createVaccineWhodrug, getAllVaccineWhodrugs, getVaccineWhodrugById, getVaccineWhodrugs, updateVaccineWhodrug } from '../controllers/vaccineWhodrug.controller';
+import {
+    activateVaccineWhodrug,
+    createVaccineWhodrug,
+    deleteVaccineWhodrug,
+    getAllVaccineWhodrugs,
+    getVaccineWhodrugById,
+    getVaccineWhodrugs,
+    updateVaccineWhodrug
+} from '../controllers/vaccineWhodrug.controller';
 import { createVaccineWhodrugValidator, updateVaccineWhodrugValidator, vaccineWhodrugIdValidator, vaccineWhodrugListValidator } from '../validators';
 
 // The only entity of the repository whose base route does not match its table name: the table is
@@ -9,7 +17,7 @@ import { createVaccineWhodrugValidator, updateVaccineWhodrugValidator, vaccineWh
 // of a vaccine"; what the catalog holds are vaccines of the WHODrug dictionary, and that is the
 // order an API consumer looks for them in. The file, the model, the types and the service keep the
 // table name, because there they have to match the DDL
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -26,6 +34,11 @@ router.get('/', tokenValidation, validateUserRole(USER), ...vaccineWhodrugListVa
 // Literal path, declared before '/:id' so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...vaccineWhodrugListValidator, validateFields, getAllVaccineWhodrugs);
 
+// Activate Vaccine Whodrug - For SuperAdmin
+// Code: ESAVI-WHODRUG-005B
+// Literal path, declared before '/:id' so Express does not capture 'activate' as an :id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...vaccineWhodrugIdValidator, validateFields, activateVaccineWhodrug);
+
 // Get Vaccine Whodrug by ID
 // Code: ESAVI-WHODRUG-003
 // Declared after the literal paths so Express does not capture 'admin' or 'activate' as an :id
@@ -34,5 +47,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...vaccineWhodrugIdV
 // Update Vaccine Whodrug
 // Code: ESAVI-WHODRUG-004
 router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...vaccineWhodrugIdValidator, ...updateVaccineWhodrugValidator, validateFields, updateVaccineWhodrug);
+
+// Soft delete Vaccine Whodrug
+// Code: ESAVI-WHODRUG-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...vaccineWhodrugIdValidator, validateFields, deleteVaccineWhodrug);
 
 export default router;

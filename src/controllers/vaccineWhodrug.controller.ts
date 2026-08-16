@@ -6,7 +6,8 @@ import {
     getActiveVaccineWhodrugsService,
     getAllVaccineWhodrugsService,
     getVaccineWhodrugByIdService,
-    updateVaccineWhodrugService
+    updateVaccineWhodrugService,
+    setVaccineWhodrugActivationService
 } from '../services/vaccineWhodrug.service';
 
 // Unwraps the five query filters, identical in both listings. The two booleans arrive as the
@@ -130,10 +131,53 @@ const updateVaccineWhodrug = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Delete Vaccine Whodrug Controller - Soft delete
+// Code: ESAVI-WHODRUG-005A
+const deleteVaccineWhodrug = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setVaccineWhodrugActivationService(id, req.user, req.lang, false);
+        // No data: there is nothing left to return but the fact itself
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-005A: Error deleting Vaccine WHODrug: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.deletedFailed', req.lang), 500, 'WHODRUG_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Vaccine Whodrug Controller - For SuperAdmin
+// Code: ESAVI-WHODRUG-005B
+const activateVaccineWhodrug = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setVaccineWhodrugActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-005B: Error activating Vaccine WHODrug: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.activatedFailed', req.lang), 500, 'WHODRUG_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createVaccineWhodrug,
     getVaccineWhodrugs,
     getAllVaccineWhodrugs,
     getVaccineWhodrugById,
-    updateVaccineWhodrug
+    updateVaccineWhodrug,
+    deleteVaccineWhodrug,
+    activateVaccineWhodrug
 };
