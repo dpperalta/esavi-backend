@@ -127,7 +127,23 @@ const getActiveVaccineWhodrugsService = async (filters: VaccineWhodrugListFilter
     return vaccineWhodrugs;
 }
 
+// ESAVI-WHODRUG-002B - Get All Vaccine Whodrugs Service (including inactive) - For Admin
+const getAllVaccineWhodrugsService = async (filters: VaccineWhodrugListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    // The twin of 002A without isActive in the where, and with no filter of its own: unlike
+    // diagnosticTerm, this entity has no review queue to look into
+    const vaccineWhodrugs = await VaccineWhodrug.findAndCountAll({
+        where: buildVaccineWhodrugWhere(filters),
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        order: [['drugName', 'ASC']],
+        limit,
+        offset
+    });
+    return vaccineWhodrugs;
+}
+
 export {
     createVaccineWhodrugService,
-    getActiveVaccineWhodrugsService
+    getActiveVaccineWhodrugsService,
+    getAllVaccineWhodrugsService
 };

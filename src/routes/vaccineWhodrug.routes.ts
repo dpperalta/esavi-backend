@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createVaccineWhodrug, getVaccineWhodrugs } from '../controllers/vaccineWhodrug.controller';
+import { createVaccineWhodrug, getAllVaccineWhodrugs, getVaccineWhodrugs } from '../controllers/vaccineWhodrug.controller';
 import { createVaccineWhodrugValidator, vaccineWhodrugListValidator } from '../validators';
 
 // The only entity of the repository whose base route does not match its table name: the table is
@@ -20,5 +20,10 @@ router.post('/', tokenValidation, validateUserRole(ADMIN), ...createVaccineWhodr
 // Get Active Vaccine Whodrugs
 // Code: ESAVI-WHODRUG-002A
 router.get('/', tokenValidation, validateUserRole(USER), ...vaccineWhodrugListValidator, validateFields, getVaccineWhodrugs);
+
+// Get All Vaccine Whodrugs - For Admin
+// Code: ESAVI-WHODRUG-002B
+// Literal path, declared before '/:id' so Express does not capture 'admin' as an :id
+router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...vaccineWhodrugListValidator, validateFields, getAllVaccineWhodrugs);
 
 export default router;

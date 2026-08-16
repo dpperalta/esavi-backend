@@ -3,7 +3,8 @@ import { AppError, esaviLog, getMessage } from '../helpers';
 import { VaccineWhodrugListFilters } from '../types';
 import {
     createVaccineWhodrugService,
-    getActiveVaccineWhodrugsService
+    getActiveVaccineWhodrugsService,
+    getAllVaccineWhodrugsService
 } from '../services/vaccineWhodrug.service';
 
 // Unwraps the five query filters, identical in both listings. The two booleans arrive as the
@@ -59,7 +60,31 @@ const getVaccineWhodrugs = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Get All Vaccine Whodrugs Controller - For Admin
+// Code: ESAVI-WHODRUG-002B
+const getAllVaccineWhodrugs = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        // The same five filters as the public listing: this variant adds none of its own
+        const data = await getAllVaccineWhodrugsService(readListFilters(req.query), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-002B: Error getting all Vaccine WHODrugs: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.getFailedPlural', req.lang), 500, 'WHODRUG_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
     createVaccineWhodrug,
-    getVaccineWhodrugs
+    getVaccineWhodrugs,
+    getAllVaccineWhodrugs
 };
