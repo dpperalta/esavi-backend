@@ -456,5 +456,23 @@
         "alreadyInactive": "De meldingsgebeurtenis met ID {{id}} is al inactief",
         "purgeSuccess": "Meldingsgebeurtenis definitief verwijderd",
         "purgeFailed": "Definitief verwijderen van de meldingsgebeurtenis mislukt. Probeer het later opnieuw."
+    },
+    "vaccineWhodrug": {
+        "createdSuccess": "WHODrug-vaccin succesvol aangemaakt",
+        "createdFailed": "Aanmaken van het WHODrug-vaccin mislukt. Probeer het later opnieuw.",
+        "getSuccess": "WHODrug-vaccin succesvol opgehaald",
+        "getFailed": "Ophalen van het WHODrug-vaccin mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "WHODrug-vaccins succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de WHODrug-vaccins mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "WHODrug-vaccin succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van het WHODrug-vaccin mislukt. Probeer het later opnieuw.",
+        "deletedSuccess": "WHODrug-vaccin succesvol verwijderd",
+        "deletedFailed": "Verwijderen van het WHODrug-vaccin mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "WHODrug-vaccin succesvol geactiveerd",
+        "activatedFailed": "Activeren van het WHODrug-vaccin mislukt. Probeer het later opnieuw.",
+        "notFound": "WHODrug-vaccin niet gevonden. Controleer de ID van het WHODrug-vaccin en probeer het opnieuw.",
+        "externalIdExists": "Er bestaat al een WHODrug-vaccin met externe identificator {{externalId}}",
+        "alreadyActive": "Het WHODrug-vaccin met ID {{id}} is al actief",
+        "alreadyInactive": "Het WHODrug-vaccin met ID {{id}} is al inactief"
     }
 }

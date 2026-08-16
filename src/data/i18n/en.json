@@ -456,5 +456,23 @@
         "alreadyInactive": "The notification event with ID {{id}} is already inactive",
         "purgeSuccess": "Notification event deleted permanently",
         "purgeFailed": "Failed to permanently delete the notification event. Please try again later."
+    },
+    "vaccineWhodrug": {
+        "createdSuccess": "WHODrug vaccine created successfully",
+        "createdFailed": "Failed to create the WHODrug vaccine. Please try again later.",
+        "getSuccess": "WHODrug vaccine fetched successfully",
+        "getFailed": "Failed to fetch the WHODrug vaccine. Please try again later.",
+        "getSuccessPlural": "WHODrug vaccines fetched successfully",
+        "getFailedPlural": "Failed to fetch the WHODrug vaccines. Please try again later.",
+        "updatedSuccess": "WHODrug vaccine updated successfully",
+        "updatedFailed": "Failed to update the WHODrug vaccine. Please try again later.",
+        "deletedSuccess": "WHODrug vaccine deleted successfully",
+        "deletedFailed": "Failed to delete the WHODrug vaccine. Please try again later.",
+        "activatedSuccess": "WHODrug vaccine activated successfully",
+        "activatedFailed": "Failed to activate the WHODrug vaccine. Please try again later.",
+        "notFound": "WHODrug vaccine not found. Please check the WHODrug vaccine ID and try again.",
+        "externalIdExists": "A WHODrug vaccine with external identifier {{externalId}} already exists",
+        "alreadyActive": "The WHODrug vaccine with ID {{id}} is already active",
+        "alreadyInactive": "The WHODrug vaccine with ID {{id}} is already inactive"
     }
 }

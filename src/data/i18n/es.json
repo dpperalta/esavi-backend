@@ -456,5 +456,23 @@
         "alreadyInactive": "El evento de notificación con ID {{id}} ya está inactivo",
         "purgeSuccess": "Evento de notificación eliminado permanentemente",
         "purgeFailed": "Error al eliminar permanentemente el evento de notificación. Por favor, inténtelo de nuevo más tarde."
+    },
+    "vaccineWhodrug": {
+        "createdSuccess": "Vacuna WHODrug creada exitosamente",
+        "createdFailed": "Error al crear la vacuna WHODrug. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Vacuna WHODrug obtenida exitosamente",
+        "getFailed": "Error al obtener la vacuna WHODrug. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Vacunas WHODrug obtenidas exitosamente",
+        "getFailedPlural": "Error al obtener las vacunas WHODrug. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Vacuna WHODrug actualizada exitosamente",
+        "updatedFailed": "Error al actualizar la vacuna WHODrug. Por favor, inténtelo de nuevo más tarde.",
+        "deletedSuccess": "Vacuna WHODrug eliminada exitosamente",
+        "deletedFailed": "Error al eliminar la vacuna WHODrug. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Vacuna WHODrug activada exitosamente",
+        "activatedFailed": "Error al activar la vacuna WHODrug. Por favor, inténtelo de nuevo más tarde.",
+        "notFound": "Vacuna WHODrug no encontrada. Por favor, verifique el ID de la vacuna WHODrug e inténtelo de nuevo.",
+        "externalIdExists": "Ya existe una vacuna WHODrug con el identificador externo {{externalId}}",
+        "alreadyActive": "La vacuna WHODrug con ID {{id}} ya está activa",
+        "alreadyInactive": "La vacuna WHODrug con ID {{id}} ya está inactiva"
     }
 }
