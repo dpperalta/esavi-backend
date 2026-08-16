@@ -142,8 +142,24 @@ const getAllVaccineWhodrugsService = async (filters: VaccineWhodrugListFilters, 
     return vaccineWhodrugs;
 }
 
+// ESAVI-WHODRUG-003 - Get Vaccine Whodrug by ID Service
+const getVaccineWhodrugByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const whereClause = includeInactive ? { vaccineWhodrugId: id } : { vaccineWhodrugId: id, isActive: true };
+    // No includes: the entity has no associations at all, so there is nothing to join
+    const vaccineWhodrug = await VaccineWhodrug.findOne({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] }
+    });
+    if (!vaccineWhodrug) {
+        throw new AppError(getMessage('vaccineWhodrug.notFound', lang), 404, 'WHODRUG_003_NOT_FOUND');
+    }
+    return vaccineWhodrug;
+}
+
 export {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
-    getAllVaccineWhodrugsService
+    getAllVaccineWhodrugsService,
+    getVaccineWhodrugByIdService
 };

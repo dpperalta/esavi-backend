@@ -1,4 +1,10 @@
-import { body, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
+
+export const vaccineWhodrugIdValidator = [
+    param('id').notEmpty().withMessage('Vaccine WHODrug ID is required')
+        .isUUID().withMessage('Vaccine WHODrug ID must be a valid UUID')
+        .trim()
+];
 
 // Query validator shared by both listings — they take exactly the same five filters. The two
 // character minimum on search is what keeps the unindexed Op.iLike from scanning the whole catalog

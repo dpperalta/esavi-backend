@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { VaccineWhodrugListFilters } from '../types';
 import {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
-    getAllVaccineWhodrugsService
+    getAllVaccineWhodrugsService,
+    getVaccineWhodrugByIdService
 } from '../services/vaccineWhodrug.service';
 
 // Unwraps the five query filters, identical in both listings. The two booleans arrive as the
@@ -83,8 +84,33 @@ const getAllVaccineWhodrugs = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Get Vaccine Whodrug by ID Controller
+// Code: ESAVI-WHODRUG-003
+const getVaccineWhodrugById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        // canViewInactive is SUPERADMIN-only, so an ADMIN gets the same 404 as a USER even though
+        // the 002B listing does show it inactive rows. The asymmetry is deliberate and is the same
+        // one healthFacility and diagnosticTerm already have
+        const data = await getVaccineWhodrugByIdService(id, req.lang, canViewInactive(req.user));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-003: Error getting Vaccine WHODrug by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.getFailed', req.lang), 500, 'WHODRUG_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createVaccineWhodrug,
     getVaccineWhodrugs,
-    getAllVaccineWhodrugs
+    getAllVaccineWhodrugs,
+    getVaccineWhodrugById
 };
