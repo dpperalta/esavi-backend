@@ -210,7 +210,37 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/diagnostic-terms/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-005B' },
     // ESAVI-DIAGTERM-007 (SPEC F17) — bulk import from a MedDRA .asc file. SUPERADMIN because it is
     // the widest write of the repository: tens of thousands of rows in a single request
-    { method: 'post',   path: '/api/diagnostic-terms/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-007' }
+    { method: 'post',   path: '/api/diagnostic-terms/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-DIAGTERM-007' },
+
+    // notificationEvent (SPEC F16) — the first satellite of notification with one to many
+    // cardinality, its own activity flag and order among siblings, so it declares the eight
+    // canonical operations and not five. 005C is declared because the table sits outside the
+    // preventPhysicalDelete loop of esaviapp.sql:1355-1361.
+    // ESAVI-NOTIFEVT-006 does have a row here, unlike the 006 of DIAGTERM: it is a read with an
+    // HTTP route of its own. The two listings are entered by the foreign key and never by /
+    { method: 'post',   path: '/api/notification-events',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-001' },
+    { method: 'get',    path: `/api/notification-events/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFEVT-006' },
+    { method: 'get',    path: `/api/notification-events/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-002B' },
+    { method: 'get',    path: `/api/notification-events/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFEVT-002A' },
+    { method: 'delete', path: `/api/notification-events/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005C' },
+    { method: 'patch',  path: `/api/notification-events/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005B' },
+    { method: 'get',    path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-003' },
+    { method: 'put',    path: `/api/notification-events/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-004' },
+    { method: 'delete', path: `/api/notification-events/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-005A' },
+
+    // vaccineWhodrug (SPEC F18) — the seven canonical operations, with the canonical role matrix
+    // and no deviation (§3.4). No 005C: the table sits inside the preventPhysicalDelete loop of
+    // esaviapp.sql:1356-1370, so physical deletion is not declared. The base path deliberately
+    // diverges from the table name — the catalog holds vaccines of the WHODrug dictionary, and that
+    // is the order an API consumer looks for them in. ESAVI-WHODRUG-007 has no row here: it is the
+    // bulk import of SPEC F19, which declares and implements its own route
+    { method: 'post',   path: '/api/whodrug-vaccines',                        minRole: 'ADMIN',      code: 'ESAVI-WHODRUG-001' },
+    { method: 'get',    path: '/api/whodrug-vaccines',                        minRole: 'USER',       code: 'ESAVI-WHODRUG-002A' },
+    { method: 'get',    path: '/api/whodrug-vaccines/admin',                  minRole: 'ADMIN',      code: 'ESAVI-WHODRUG-002B' },
+    { method: 'get',    path: `/api/whodrug-vaccines/${ UUID }`,              minRole: 'USER',       code: 'ESAVI-WHODRUG-003' },
+    { method: 'put',    path: `/api/whodrug-vaccines/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-WHODRUG-004' },
+    { method: 'delete', path: `/api/whodrug-vaccines/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-WHODRUG-005A' },
+    { method: 'patch',  path: `/api/whodrug-vaccines/activate/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-WHODRUG-005B' }
 ];
 
 /**
@@ -266,7 +296,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(126);
+            expect(ROUTE_RULES).toHaveLength(142);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

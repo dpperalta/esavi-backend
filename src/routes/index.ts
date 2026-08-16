@@ -19,6 +19,8 @@ import notificationRoutes from './notification.routes';
 import severeNotificationRoutes from './severeNotification.routes';
 import nonSevereNotificationRoutes from './nonSevereNotification.routes';
 import diagnosticTermRoutes from './diagnosticTerm.routes';
+import notificationEventRoutes from './notificationEvent.routes';
+import vaccineWhodrugRoutes from './vaccineWhodrug.routes';
 
 const router = Router();
 
@@ -48,5 +50,9 @@ router.use('/notifications', notificationRoutes);
 router.use('/severe-notifications', severeNotificationRoutes);
 router.use('/non-severe-notifications', nonSevereNotificationRoutes);
 router.use('/diagnostic-terms', diagnosticTermRoutes);
+router.use('/notification-events', notificationEventRoutes);
+// The base path deliberately diverges from the table name vaccineWhodrug — see the header comment
+// of vaccineWhodrug.routes.ts
+router.use('/whodrug-vaccines', vaccineWhodrugRoutes);
 
 export default router;

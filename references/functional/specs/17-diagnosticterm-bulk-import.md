@@ -1,6 +1,6 @@
 # SPEC F17 — Importación masiva de `diagnosticTerm` desde ficheros MedDRA `.asc`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F15 (`diagnosticTerm` — dependencia dura: aporta modelo, tipos, ruta base, `TERM_SOURCES` y la normalización de `code`)**, SPEC F12 (`buildDifferentialUpdate` — la rama de actualización lo usa)
 > **Fecha:** 2026-08-13
 > **Objetivo:** Cargar el diccionario MedDRA en `diagnosticTerm` subiendo un fichero `.asc` a un endpoint administrativo, con inserción de lo nuevo y actualización diferencial de lo existente.

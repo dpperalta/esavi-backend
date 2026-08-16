@@ -567,9 +567,11 @@ CREATE TABLE IF NOT EXISTS "vaccineWhodrug" (
   "drugName" text NOT NULL,
   "language" varchar(10),
   "medicinalProductId" varchar(250),
-  "acts" varchar(250),
+  "atcs" varchar(250),
   "icd11" varchar(250),
   "icd11Term" varchar(500),
+  "abbreviation" varchar(250),
+  "ingredient" text,
   "ingredientTranslation" text,
   "languageCode" varchar(100),
   "iso3Code" varchar(250),
@@ -586,13 +588,15 @@ CREATE TABLE IF NOT EXISTS "vaccineWhodrug" (
   "isGeneric" boolean,
   "isPreferred" boolean NOT NULL DEFAULT false,
   "notes" text,
+  "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
   "isActive" boolean NOT NULL DEFAULT true,
   "createdAt" timestamptz NOT NULL DEFAULT current_timestamp,
   "updatedAt" timestamptz,
   "deletedAt" timestamptz,
   "sysDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
   "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
-  CONSTRAINT "UQ_vaccineWhodrug_drugCode" UNIQUE ("drugCode")
+  --CONSTRAINT "UQ_vaccineWhodrug_drugCode" UNIQUE ("drugCode")
+  CONSTRAINT "UQ_vaccineWhodrug_externalId" UNIQUE ("externalId")
 );
 CREATE INDEX IF NOT EXISTS "IX_vaccineWhodrug_name" ON "vaccineWhodrug" USING gin (to_tsvector('simple', coalesce("drugName", '')));
 

@@ -17,6 +17,8 @@ import { Notification } from './notification.model';
 import { SevereNotification } from './severeNotification.model';
 import { NonSevereNotification } from './nonSevereNotification.model';
 import { DiagnosticTerm } from './diagnosticTerm.model';
+import { NotificationEvent } from './notificationEvent.model';
+import { VaccineWhodrug } from './vaccineWhodrug.model';
 
 export const initModels = (): void => {
     initAssociations();
@@ -40,5 +42,7 @@ export {
     Notification,
     SevereNotification,
     NonSevereNotification,
-    DiagnosticTerm
+    DiagnosticTerm,
+    NotificationEvent,
+    VaccineWhodrug
 };
