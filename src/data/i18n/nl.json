@@ -148,7 +148,12 @@
         "deletedSuccess": "Catalogusitem succesvol verwijderd",
         "deletedFailed": "Verwijderen van het catalogusitem mislukt. Probeer het later opnieuw.",
         "activatedSuccess": "Catalogusitem succesvol geactiveerd",
-        "activatedFailed": "Activeren van het catalogusitem mislukt. Probeer het later opnieuw."
+        "activatedFailed": "Activeren van het catalogusitem mislukt. Probeer het later opnieuw.",
+        "importedSuccess": "Catalogusitems succesvol geïmporteerd",
+        "importedFailed": "Importeren van de catalogusitems mislukt. Probeer het later opnieuw.",
+        "fileRequired": "Het te importeren bestand moet in het veld file worden meegestuurd",
+        "fileInvalid": "Het bestand kon niet worden verwerkt. Controleer of het een .xlsx-werkmap met de verwachte koptekst is en probeer het opnieuw.",
+        "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB"
     },
     "healthFacility": {
         "codeExists": "Er bestaat al een zorginstelling met code {{code}}",

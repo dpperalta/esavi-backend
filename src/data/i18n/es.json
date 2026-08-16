@@ -148,7 +148,12 @@
         "deletedSuccess": "Elemento de catálogo eliminado exitosamente",
         "deletedFailed": "Error al eliminar el elemento de catálogo. Por favor, inténtelo de nuevo más tarde.",
         "activatedSuccess": "Elemento de catálogo activado exitosamente",
-        "activatedFailed": "Error al activar el elemento de catálogo. Por favor, inténtelo de nuevo más tarde."
+        "activatedFailed": "Error al activar el elemento de catálogo. Por favor, inténtelo de nuevo más tarde.",
+        "importedSuccess": "Importación de elementos de catálogo completada exitosamente",
+        "importedFailed": "Error al importar los elementos de catálogo. Por favor, inténtelo de nuevo más tarde.",
+        "fileRequired": "Debe adjuntar el fichero a importar en el campo file",
+        "fileInvalid": "El fichero no se pudo procesar. Por favor, verifique que sea un libro .xlsx con la cabecera esperada e inténtelo de nuevo.",
+        "fileTooLarge": "El fichero supera el tamaño máximo permitido de 20 MB"
     },
     "healthFacility": {
         "codeExists": "Un establecimiento de salud con el código {{code}} ya existe",
