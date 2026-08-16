@@ -1,6 +1,8 @@
+import { Op, WhereOptions } from 'sequelize';
 import { VaccineWhodrug } from '../models';
 import { AppError, getMessage } from '../helpers';
-import { AppDetails, AuthUser, CreateVaccineWhodrugInput } from '../types';
+import { AppDetails, AuthUser, CreateVaccineWhodrugInput, VaccineWhodrugListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The 23 nullable text columns of the entity, trimmed on write and never normalized any further.
 // undefined and null both land as null on create: an absent field and an explicitly emptied one
@@ -15,6 +17,33 @@ const stripSysDetails = (vaccineWhodrug: VaccineWhodrug): Record<string, unknown
     const plain = vaccineWhodrug.get({ plain: true }) as Record<string, unknown>;
     delete plain.sysDetails;
     return plain;
+}
+
+// Shared by both listings, which take exactly the same five filters. search is an Op.iLike over
+// drugName and stays confined to these two services: the real use case is the autocomplete of the
+// notification form, and an autocomplete needs prefixes and fragments — which is why the GIN index
+// IX_vaccineWhodrug_name is deliberately left unconsumed. The two booleans are compared against
+// undefined and never by truthiness, or ?isPreferred=false would silently return everything
+const buildVaccineWhodrugWhere = (filters: VaccineWhodrugListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if (filters.search) {
+        where.drugName = { [Op.iLike]: `%${filters.search.trim()}%` };
+    }
+    if (filters.language) {
+        where.language = filters.language.trim();
+    }
+    if (filters.iso3Code) {
+        where.iso3Code = filters.iso3Code.trim();
+    }
+    if (filters.isPreferred !== undefined) {
+        where.isPreferred = filters.isPreferred;
+    }
+    // There is no way to ask for isGeneric IS NULL: it would need a sentinel value in the query and
+    // it is out of this spec's scope
+    if (filters.isGeneric !== undefined) {
+        where.isGeneric = filters.isGeneric;
+    }
+    return where;
 }
 
 // ESAVI-WHODRUG-001 - Create Vaccine Whodrug Service
@@ -82,6 +111,23 @@ const createVaccineWhodrugService = async (data: CreateVaccineWhodrugInput, auth
     return stripSysDetails(newVaccineWhodrug);
 }
 
+// ESAVI-WHODRUG-002A - Get Active Vaccine Whodrugs Service
+const getActiveVaccineWhodrugsService = async (filters: VaccineWhodrugListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const vaccineWhodrugs = await VaccineWhodrug.findAndCountAll({
+        where: {
+            ...buildVaccineWhodrugWhere(filters),
+            isActive: true
+        },
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        order: [['drugName', 'ASC']],
+        limit,
+        offset
+    });
+    return vaccineWhodrugs;
+}
+
 export {
-    createVaccineWhodrugService
+    createVaccineWhodrugService,
+    getActiveVaccineWhodrugsService
 };

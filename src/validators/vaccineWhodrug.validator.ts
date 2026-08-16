@@ -1,4 +1,24 @@
-import { body } from 'express-validator';
+import { body, query } from 'express-validator';
+
+// Query validator shared by both listings — they take exactly the same five filters. The two
+// character minimum on search is what keeps the unindexed Op.iLike from scanning the whole catalog
+// on a single letter; the GIN index IX_vaccineWhodrug_name is deliberately not used, so that
+// minimum and the ceiling of 100 rows are what bound the cost
+export const vaccineWhodrugListValidator = [
+    query('limit').optional().isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be an integer between 1 and 100'),
+    query('offset').optional().isInt({ min: 0 })
+        .withMessage('Offset must be a non-negative integer'),
+    query('search').optional().trim()
+        .isLength({ min: 2 }).withMessage('Search must be at least 2 characters long')
+        .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long'),
+    query('language').optional().trim().notEmpty().withMessage('Language cannot be empty')
+        .isLength({ max: 10 }).withMessage('Language must be at most 10 characters long'),
+    query('iso3Code').optional().trim().notEmpty().withMessage('ISO3 Code cannot be empty')
+        .isLength({ max: 250 }).withMessage('ISO3 Code must be at most 250 characters long'),
+    query('isPreferred').optional().isBoolean().withMessage('Is Preferred must be a boolean'),
+    query('isGeneric').optional().isBoolean().withMessage('Is Generic must be a boolean')
+];
 
 // drugCode is required here even though esaviapp.sql:564 admits null: a dictionary entry without a
 // code cannot be crossed against anything, which is the only thing the catalog exists for. It
