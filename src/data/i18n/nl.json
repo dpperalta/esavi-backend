@@ -473,6 +473,11 @@
         "notFound": "WHODrug-vaccin niet gevonden. Controleer de ID van het WHODrug-vaccin en probeer het opnieuw.",
         "externalIdExists": "Er bestaat al een WHODrug-vaccin met externe identificator {{externalId}}",
         "alreadyActive": "Het WHODrug-vaccin met ID {{id}} is al actief",
-        "alreadyInactive": "Het WHODrug-vaccin met ID {{id}} is al inactief"
+        "alreadyInactive": "Het WHODrug-vaccin met ID {{id}} is al inactief",
+        "importedSuccess": "WHODrug-vaccins succesvol geïmporteerd",
+        "importedFailed": "Importeren van de WHODrug-vaccins mislukt. Probeer het later opnieuw.",
+        "fileRequired": "Het te importeren bestand moet in het veld file worden meegestuurd",
+        "fileInvalid": "Het bestand kon niet worden verwerkt. Controleer of het een .xlsx-werkmap met de verwachte koptekst is en probeer het opnieuw.",
+        "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB"
     }
 }

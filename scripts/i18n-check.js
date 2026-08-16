@@ -116,6 +116,15 @@ for (const file of collectSourceFiles(SRC_DIR)) {
 
     for (const match of content.matchAll(/getMessage\(\s*(['"`])([^'"`]+)\1/g)) {
         const key = match[2];
+
+        // A template literal with an interpolation is not a key, it is a family of keys: the shared
+        // upload middleware builds `${i18nPrefix}.fileTooLarge` from the entity that mounted it.
+        // Each entity declares its own, and the suffix is checked against every block below.
+        if (match[1] === '`' && key.includes('${')) {
+            dynamicReferences.push(`${relativePath}: getMessage(${key}...)`);
+            continue;
+        }
+
         if (!messages[REFERENCE_LANGUAGE].has(key)) {
             problems.push(`${relativePath} references the key '${key}', absent from ${REFERENCE_LANGUAGE}.json`);
         }
