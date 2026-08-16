@@ -39,7 +39,7 @@ router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...
 // Code: ESAVI-DIAGTERM-007
 // Literal path, declared before '/:id' for coherence with the rest of the file. uploadSingleFile
 // runs before the validators because the multipart body does not exist until multer parses it
-router.post('/import', tokenValidation, validateUserRole(SUPERADMIN), uploadSingleFile('file'), ...importDiagnosticTermsValidator, validateFields, importDiagnosticTerms);
+router.post('/import', tokenValidation, validateUserRole(SUPERADMIN), uploadSingleFile('file', { i18nPrefix: 'diagnosticTerm', codePrefix: 'DIAGTERM_007' }), ...importDiagnosticTermsValidator, validateFields, importDiagnosticTerms);
 
 // Get Diagnostic Term by ID
 // Code: ESAVI-DIAGTERM-003
