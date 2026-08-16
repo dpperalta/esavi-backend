@@ -595,7 +595,7 @@ CREATE TABLE IF NOT EXISTS "vaccineWhodrug" (
   "deletedAt" timestamptz,
   "sysDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
   "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
-  --CONSTRAINT "UQ_vaccineWhodrug_drugCode" UNIQUE ("drugCode")
+  -- The file repeats drugCode by design (one row per country presentation); only "id" is unique per row.
   CONSTRAINT "UQ_vaccineWhodrug_externalId" UNIQUE ("externalId")
 );
 CREATE INDEX IF NOT EXISTS "IX_vaccineWhodrug_name" ON "vaccineWhodrug" USING gin (to_tsvector('simple', coalesce("drugName", '')));
