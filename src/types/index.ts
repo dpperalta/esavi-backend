@@ -12,3 +12,4 @@ export * from './severeNotification/index';
 export * from './nonSevereNotification/index';
 export * from './diagnosticTerm/index';
 export * from './notificationEvent/index';
+export * from './vaccineWhodrug/index';
