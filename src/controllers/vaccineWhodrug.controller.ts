@@ -5,7 +5,8 @@ import {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
     getAllVaccineWhodrugsService,
-    getVaccineWhodrugByIdService
+    getVaccineWhodrugByIdService,
+    updateVaccineWhodrugService
 } from '../services/vaccineWhodrug.service';
 
 // Unwraps the five query filters, identical in both listings. The two booleans arrive as the
@@ -108,9 +109,31 @@ const getVaccineWhodrugById = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Update Vaccine Whodrug Controller
+// Code: ESAVI-WHODRUG-004
+const updateVaccineWhodrug = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateVaccineWhodrugService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-004: Error updating Vaccine WHODrug: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.updatedFailed', req.lang), 500, 'WHODRUG_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createVaccineWhodrug,
     getVaccineWhodrugs,
     getAllVaccineWhodrugs,
-    getVaccineWhodrugById
+    getVaccineWhodrugById,
+    updateVaccineWhodrug
 };

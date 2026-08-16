@@ -1,6 +1,6 @@
 import { Op, WhereOptions } from 'sequelize';
 import { VaccineWhodrug } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateVaccineWhodrugInput, VaccineWhodrugListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -10,7 +10,7 @@ import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants
 const trimOrNull = (value?: string | null): string | null =>
     value !== undefined && value !== null ? value.trim() : null;
 
-// sysDetails is trigger metadata and never leaves the service. The reads drop it through
+// sysDetails is internal trigger state and never leaves the service. The reads drop it through
 // `attributes: { exclude }`, which a create cannot use, so the returned instance is flattened and
 // stripped here — the response shape of §3.7 is the 36 columns minus this one
 const stripSysDetails = (vaccineWhodrug: VaccineWhodrug): Record<string, unknown> => {
@@ -157,9 +157,103 @@ const getVaccineWhodrugByIdService = async (id: string, lang: string, includeIna
     return vaccineWhodrug;
 }
 
+// How every nullable text column enters `candidates`: null empties the column and undefined means
+// the key never travelled, which are two different intents. The comparison is against undefined
+// and never a truthiness test, or an empty string would be silently dropped
+const textCandidate = (value?: string | null): string | null | undefined =>
+    value !== undefined ? (value?.trim() ?? null) : undefined;
+
+// ESAVI-WHODRUG-004 - Update Vaccine Whodrug Service
+const updateVaccineWhodrugService = async (id: string, data: Partial<CreateVaccineWhodrugInput>, authUser: AuthUser | undefined, lang: string) => {
+    const { userId } = authUser || {};
+    const vaccineWhodrug = await VaccineWhodrug.findByPk(id);
+    if (!vaccineWhodrug) {
+        throw new AppError(getMessage('vaccineWhodrug.notFound', lang), 404, 'WHODRUG_004_NOT_FOUND');
+    }
+    let updatedVaccineWhodrug = vaccineWhodrug;
+    // Uniqueness runs before the diff and independently of it: an occupied externalId is a 409 even
+    // when the rest of the body changes nothing. It only runs when the body brings it non-null —
+    // emptying the column can never collide — and excluding the own id is what lets a client resend
+    // its own value without colliding with itself. drugCode is not checked: it has no uniqueness
+    const targetExternalId = data.externalId !== undefined ? (data.externalId ?? null) : undefined;
+    if (targetExternalId !== undefined && targetExternalId !== null) {
+        const existingVaccine = await VaccineWhodrug.findOne({
+            where: {
+                externalId: targetExternalId,
+                vaccineWhodrugId: { [Op.ne]: id }
+            },
+            attributes: ['vaccineWhodrugId']
+        });
+        if (existingVaccine) {
+            throw new AppError(getMessage('vaccineWhodrug.externalIdExists', lang, { externalId: targetExternalId }), 409, 'WHODRUG_004_EXTERNAL_ID_EXISTS');
+        }
+    }
+    const currentAppDetails = Array.isArray(vaccineWhodrug.appDetails) ? vaccineWhodrug.appDetails : [];
+    // `stored` is the whole row, which is the precondition of the helper: a narrowed `attributes`
+    // would read back undefined for the columns it left out and every comparison would count as a
+    // change. The 28 data columns are candidates and nothing else — isActive is governed by 005A
+    // and 005B, and the provenance column only ever by the bulk import of SPEC F19
+    const stored = vaccineWhodrug.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        // Mutable and with nothing to check: a typo in a manually entered code has to be fixable,
+        // and the column no longer constrains anything. Only trimmed, as in the create
+        drugCode: data.drugCode ? data.drugCode.trim() : undefined,
+        drugName: data.drugName ? data.drugName.trim() : undefined,
+        externalId: targetExternalId,
+        drugRecNo: textCandidate(data.drugRecNo),
+        drugRecNoSeq: textCandidate(data.drugRecNoSeq),
+        language: textCandidate(data.language),
+        medicinalProductId: textCandidate(data.medicinalProductId),
+        atcs: textCandidate(data.atcs),
+        icd11: textCandidate(data.icd11),
+        icd11Term: textCandidate(data.icd11Term),
+        abbreviation: textCandidate(data.abbreviation),
+        ingredient: textCandidate(data.ingredient),
+        ingredientTranslation: textCandidate(data.ingredientTranslation),
+        languageCode: textCandidate(data.languageCode),
+        iso3Code: textCandidate(data.iso3Code),
+        countryMedicinalProductId: textCandidate(data.countryMedicinalProductId),
+        maHolders: textCandidate(data.maHolders),
+        maHoldersMedicinalProductId: textCandidate(data.maHoldersMedicinalProductId),
+        form: textCandidate(data.form),
+        formTranslations: textCandidate(data.formTranslations),
+        formMedicinalProductId: textCandidate(data.formMedicinalProductId),
+        strength: textCandidate(data.strength),
+        strengthMedicinalProductId: textCandidate(data.strengthMedicinalProductId),
+        noDose: textCandidate(data.noDose),
+        diluent: textCandidate(data.diluent),
+        // Nullable boolean: false and null are different values, so a PUT with isGeneric: null
+        // empties the column and a PUT with isGeneric: false writes false over a stored null
+        isGeneric: data.isGeneric !== undefined ? (data.isGeneric ?? null) : undefined,
+        // NOT NULL in the DDL, so never null. Never `if( data.isPreferred )` either: that would
+        // discard an explicit false and the flag could never be unset
+        isPreferred: data.isPreferred !== undefined ? data.isPreferred : undefined,
+        notes: textCandidate(data.notes)
+    });
+    // Nothing changed: no UPDATE, no updatedAt, no appDetails entry and no sysDetails event
+    if (Object.keys(objectToUpdate).length > 0) {
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: userId || 'undefined',
+            method: 'ESAVI-WHODRUG-004',
+            detail: 'Vaccine WHODrug updated by service'
+        };
+        updatedVaccineWhodrug = await vaccineWhodrug.update({
+            ...objectToUpdate,
+            updatedAt: new Date(),
+            appDetails: [
+                ...currentAppDetails,
+                newEntry
+            ]
+        }, { returning: true });
+    }
+    return stripSysDetails(updatedVaccineWhodrug);
+}
+
 export {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
     getAllVaccineWhodrugsService,
-    getVaccineWhodrugByIdService
+    getVaccineWhodrugByIdService,
+    updateVaccineWhodrugService
 };

@@ -87,3 +87,57 @@ export const createVaccineWhodrugValidator = [
     body('notes').optional({ nullable: true }).trim(),
     body('isActive').optional().isBoolean().withMessage('Is Active must be a boolean')
 ];
+
+// The create validator in its optional variant: drugCode and drugName stop being required but may
+// not arrive empty, and the other 26 fields keep exactly the same rules. Both are mutable — a typo
+// in a manually entered code has to be fixable — and neither carries uniqueness; only externalId
+// does, and the service checks it before the diff.
+// isActive is accepted and ignored: activation belongs to 005A and 005B, and rejecting a client
+// that resends its own GET response would turn a field nobody meant to change into a 400.
+// metadata is absent for the same reason as in the create
+export const updateVaccineWhodrugValidator = [
+    body('drugCode').optional().trim().notEmpty().withMessage('Drug Code cannot be empty')
+        .isLength({ max: 250 }).withMessage('Drug Code must be at most 250 characters long'),
+    body('drugName').optional().trim().notEmpty().withMessage('Drug Name cannot be empty'),
+    body('externalId').optional({ nullable: true }).isInt()
+        .withMessage('External ID must be an integer'),
+    body('drugRecNo').optional({ nullable: true }).trim()
+        .isLength({ max: 50 }).withMessage('Drug Rec No must be at most 50 characters long'),
+    body('drugRecNoSeq').optional({ nullable: true }).trim()
+        .isLength({ max: 50 }).withMessage('Drug Rec No Seq must be at most 50 characters long'),
+    body('language').optional({ nullable: true }).trim()
+        .isLength({ max: 10 }).withMessage('Language must be at most 10 characters long'),
+    body('medicinalProductId').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('Medicinal Product ID must be at most 250 characters long'),
+    body('atcs').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('ATCs must be at most 250 characters long'),
+    body('icd11').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('ICD-11 must be at most 250 characters long'),
+    body('icd11Term').optional({ nullable: true }).trim()
+        .isLength({ max: 500 }).withMessage('ICD-11 Term must be at most 500 characters long'),
+    body('abbreviation').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('Abbreviation must be at most 250 characters long'),
+    body('ingredient').optional({ nullable: true }).trim(),
+    body('ingredientTranslation').optional({ nullable: true }).trim(),
+    body('languageCode').optional({ nullable: true }).trim()
+        .isLength({ max: 100 }).withMessage('Language Code must be at most 100 characters long'),
+    body('iso3Code').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('ISO3 Code must be at most 250 characters long'),
+    body('countryMedicinalProductId').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('Country Medicinal Product ID must be at most 250 characters long'),
+    body('maHolders').optional({ nullable: true }).trim(),
+    body('maHoldersMedicinalProductId').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('MA Holders Medicinal Product ID must be at most 250 characters long'),
+    body('form').optional({ nullable: true }).trim(),
+    body('formTranslations').optional({ nullable: true }).trim(),
+    body('formMedicinalProductId').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('Form Medicinal Product ID must be at most 250 characters long'),
+    body('strength').optional({ nullable: true }).trim(),
+    body('strengthMedicinalProductId').optional({ nullable: true }).trim()
+        .isLength({ max: 250 }).withMessage('Strength Medicinal Product ID must be at most 250 characters long'),
+    body('noDose').optional({ nullable: true }).trim(),
+    body('diluent').optional({ nullable: true }).trim(),
+    body('isGeneric').optional({ nullable: true }).isBoolean().withMessage('Is Generic must be a boolean'),
+    body('isPreferred').optional().isBoolean().withMessage('Is Preferred must be a boolean'),
+    body('notes').optional({ nullable: true }).trim()
+];
