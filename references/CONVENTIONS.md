@@ -170,6 +170,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | diagnosticTerm | `006` | resolver término — busca por el par `(LOCAL, code)` y crea la fila si no existe. **Sin ruta HTTP:** es un servicio interno que otros dominios invocan dentro de su propia transacción |
 | diagnosticTerm | `007` | importación masiva desde fichero MedDRA `.asc` — SUPERADMIN, `POST /import` |
 | notificationEvent | `006` | listar los eventos de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N eventos |
+| vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
