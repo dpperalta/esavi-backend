@@ -40,3 +40,12 @@ export const updateCatalogItemValidator = [
     body('metadata').optional().isObject().withMessage('Metadata must be an object'),
     body('isActive').optional().isBoolean().withMessage('isActive must be a boolean value')
 ];
+
+// Body of ESAVI-CATITEM-006. It declares no data column: they all come from the file, which travels
+// as a file field and is validated by multer and by the parser, not here. dryRun arrives as a text
+// field of a multipart body, so isBoolean() reads the string 'true' the same way it would in a query
+// string. There is no dictionaryVersion: this importer never writes metadata, so there would be
+// nowhere to keep it
+export const importCatalogItemsValidator = [
+    body('dryRun').optional().isBoolean().withMessage('Dry Run must be a boolean')
+];

@@ -1,6 +1,7 @@
 ﻿import { Request, Response, NextFunction } from "express"
 import { AppError, canViewInactive, esaviLog, getMessage } from "../helpers";
-import { createCatalogItemService, getActiveCatalogItemsByTypeService, getAllCatalogItemsByTypeService, getCatalogItemByIdService, setCatalogItemActivationService, updateCatalogItemService } from "../services/catalogItem.service";
+import { createCatalogItemService, getActiveCatalogItemsByTypeService, getAllCatalogItemsByTypeService, getCatalogItemByIdService, importCatalogItemsService, setCatalogItemActivationService, updateCatalogItemService } from "../services/catalogItem.service";
+import { ImportCatalogItemsInput } from "../types";
 
 // Create Catalog Item Controller
 // Code: ESAVI-CATITEM-001
@@ -150,6 +151,42 @@ const activateCatalogItem = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+// Import Catalog Items Controller - For SuperAdmin
+// Code: ESAVI-CATITEM-006
+const importCatalogItems = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    // A request with no multipart body at all leaves req.body undefined — multer only fills it when
+    // it has something to parse — and that is precisely the request that must end in a 400 for the
+    // missing file, not in a 500 for reading a key off undefined
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    // dryRun arrives as a text field of the multipart body, so the boolean comes as a string and is
+    // turned into a value here. The file itself was left in req.file by uploadSingleFile
+    const data: ImportCatalogItemsInput = {
+        dryRun: body.dryRun !== undefined ? String(body.dryRun) === 'true' : undefined
+    };
+    try {
+        // Checked here and again in the service: the controller is what turns a request with no file
+        // into a 400 instead of letting it reach the parser as a crash
+        if (!req.file) {
+            throw new AppError(getMessage('catalogItem.fileRequired', req.lang), 400, 'CATITEM_006_FILE_REQUIRED');
+        }
+        // 200 and not 201: there is no identifiable resource to return and no URL to point at.
+        // What comes back is the report of a process, with not a single catalogItemId in it
+        const report = await importCatalogItemsService(req.file.buffer, data, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('catalogItem.importedSuccess', req.lang),
+            data: report
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CATITEM-006: Error importing Catalog Items: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('catalogItem.importedFailed', req.lang), 500, 'CATITEM_006_IMPORT_FAILED', error));
+    }
+}
+
 export {
     createCatalogItem,
     getCatalogItemsByType,
@@ -157,5 +194,6 @@ export {
     getCatalogItemById,
     updateCatalogItem,
     deleteCatalogItem,
-    activateCatalogItem
+    activateCatalogItem,
+    importCatalogItems
 }
