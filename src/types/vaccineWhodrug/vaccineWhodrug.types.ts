@@ -6,8 +6,8 @@
 // with NULL coexist, so a manual entry without it never collides with the dictionary key space.
 // isGeneric admits null — three states, because the DDL gave the column no DEFAULT — while
 // isPreferred never does: it is NOT NULL DEFAULT false.
-// metadata is deliberately absent: it is not a field the client writes. The bulk import
-// (ESAVI-WHODRUG-007) stamps it at insert time and not even the update touches it
+// metadata is deliberately absent: it is not a field the client writes. The bulk import of SPEC F19
+// stamps it at insert time and not even the update touches it
 export interface CreateVaccineWhodrugInput {
     drugCode: string;
     drugName: string;

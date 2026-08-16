@@ -32,8 +32,8 @@ export const vaccineWhodrugListValidator = [
 // The 26 optional fields admit null explicitly, which is how a column is emptied and is a different
 // intent from omitting the key. Every isLength ceiling matches the varchar width of the DDL; the
 // text columns declare none because the column declares none.
-// metadata is deliberately absent: it is not a field the client writes — the bulk import
-// (ESAVI-WHODRUG-007) stamps it at insert time and nobody else touches it
+// metadata is deliberately absent: it is not a field the client writes — the bulk import of
+// SPEC F19 stamps it at insert time and nobody else touches it
 export const createVaccineWhodrugValidator = [
     body('drugCode').trim().notEmpty().withMessage('Drug Code is required')
         .isLength({ max: 250 }).withMessage('Drug Code must be at most 250 characters long'),

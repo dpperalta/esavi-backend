@@ -69,8 +69,8 @@ export class VaccineWhodrug extends Model<InferAttributes<VaccineWhodrug>, Infer
     declare notes?: CreationOptional<string | null>;
 
     // Read-only from this entity's CRUD. It exists because the column exists and reads return it,
-    // but no operation of SPEC F18 writes it: the bulk import (ESAVI-WHODRUG-007) stamps the
-    // provenance of the load at insert time and nobody else touches it
+    // but no operation of SPEC F18 writes it: the bulk import of SPEC F19 stamps the provenance of
+    // the load at insert time and nobody else touches it
     declare metadata?: CreationOptional<object | null>;
 
     declare isActive?: CreationOptional<boolean>;
