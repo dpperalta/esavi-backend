@@ -5,10 +5,12 @@ import {
     createNotificationMedication,
     getAllNotificationMedicationsByNotification,
     getNotificationMedicationById,
+    getNotificationMedicationsByCaseId,
     getNotificationMedicationsByNotification
 } from '../controllers/notificationMedication.controller';
 import {
     createNotificationMedicationValidator,
+    notificationMedicationCaseIdValidator,
     notificationMedicationIdValidator,
     notificationMedicationListValidator,
     notificationMedicationNotificationIdValidator
@@ -25,6 +27,13 @@ const router = Router();
 // Create Notification Medication
 // Code: ESAVI-NOTIFMED-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationMedicationValidator, validateFields, createNotificationMedication);
+
+// Get Notification Medications by Case
+// Code: ESAVI-NOTIFMED-006
+// The real query of the domain, and the only non-canonical operation of the entity. Like the 006 of
+// NOTIFEVT it does have an HTTP route: it is a read, and it opens no door the 002A does not have
+// open already
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...notificationMedicationCaseIdValidator, ...notificationMedicationListValidator, validateFields, getNotificationMedicationsByCaseId);
 
 // Get All Notification Medications By Notification - For Admin
 // Code: ESAVI-NOTIFMED-002B

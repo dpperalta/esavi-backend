@@ -5,6 +5,7 @@ import {
     createNotificationMedicationService,
     getAllNotificationMedicationsByNotificationService,
     getNotificationMedicationByIdService,
+    getNotificationMedicationsByCaseIdService,
     getNotificationMedicationsByNotificationService
 } from '../services/notificationMedication.service';
 
@@ -111,9 +112,39 @@ const getNotificationMedicationById = async (req: Request, res: Response, next: 
     }
 }
 
+// Get Notification Medications By Case ID Controller
+// Code: ESAVI-NOTIFMED-006
+const getNotificationMedicationsByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getNotificationMedicationsByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedication.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFMED-006: Error fetching Notification Medications by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedication.getFailed', req.lang), 500, 'NOTIFMED_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationMedication,
     getNotificationMedicationsByNotification,
     getAllNotificationMedicationsByNotification,
-    getNotificationMedicationById
+    getNotificationMedicationById,
+    getNotificationMedicationsByCaseId
 };

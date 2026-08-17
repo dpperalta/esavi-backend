@@ -1,5 +1,5 @@
 import { InferAttributes, Transaction } from 'sequelize';
-import { CatalogItem, CatalogType, Notification, NotificationMedication } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, NotificationMedication } from '../models';
 import { AppError, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationMedicationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -381,9 +381,59 @@ const getNotificationMedicationByIdService = async (id: string, lang: string, ca
     return toNotificationMedicationResponse(notificationMedication);
 }
 
+// Get Notification Medications By Case ID Service
+// Code: ESAVI-NOTIFMED-006
+// The real query of the domain: the client holds the caseId, not the notificationId. The chain
+// case -> notification is one to one, but N medications hang from the notification, so like the 006
+// of notificationEvent this one returns { count, rows } and not a single record.
+//
+// The two 404 are deliberately distinct — the client enters through a caseId and needs to know
+// which link of the chain broke — and from there it is the 002A: active medications only, ordered
+// by sortOrder. No admin variant is declared: the rows carry the notificationId, which is the entry
+// to the 002B for whoever needs to see the retired ones
+const getNotificationMedicationsByCaseIdService = async (
+    caseId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('notificationMedication.caseNotFound', lang), 404, 'NOTIFMED_006_CASE_NOT_FOUND');
+    }
+
+    const where = canViewInactive ? { caseId } : { caseId, isActive: true };
+    const notification = await Notification.findOne({ where, attributes: ['notificationId'] });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationMedication.notificationNotFound', lang),
+            404,
+            'NOTIFMED_006_NOTIFICATION_NOT_FOUND'
+        );
+    }
+
+    const notificationMedications = await NotificationMedication.findAndCountAll({
+        where: { notificationId: notification.notificationId, isActive: true },
+        include: [PHARMACEUTICAL_FORM_INCLUDE, ADMINISTRATION_ROUTE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationMedications.count,
+        rows: notificationMedications.rows.map(toNotificationMedicationResponse)
+    };
+}
+
 export {
     createNotificationMedicationService,
     getNotificationMedicationsByNotificationService,
     getAllNotificationMedicationsByNotificationService,
-    getNotificationMedicationByIdService
+    getNotificationMedicationByIdService,
+    getNotificationMedicationsByCaseIdService
 };
