@@ -232,6 +232,23 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/notification-events/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-004' },
     { method: 'delete', path: `/api/notification-events/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-005A' },
 
+    // notificationMedication (SPEC F21) — the fourth satellite of notification and the second one to
+    // many, so it repeats the surface of notificationEvent without variation: eight canonical
+    // operations and not five. 005C is declared because the table sits outside the
+    // preventPhysicalDelete loop of esaviapp.sql:1358-1375.
+    // ESAVI-NOTIFMED-006 does have a row here, for the same reason the 006 of NOTIFEVT does: it is a
+    // read with an HTTP route of its own. The two listings are entered by the foreign key and never
+    // by /
+    { method: 'post',   path: '/api/notification-medications',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-001' },
+    { method: 'get',    path: `/api/notification-medications/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFMED-006' },
+    { method: 'get',    path: `/api/notification-medications/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-002B' },
+    { method: 'get',    path: `/api/notification-medications/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFMED-002A' },
+    { method: 'delete', path: `/api/notification-medications/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFMED-005C' },
+    { method: 'patch',  path: `/api/notification-medications/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFMED-005B' },
+    { method: 'get',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-003' },
+    { method: 'put',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-004' },
+    { method: 'delete', path: `/api/notification-medications/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-005A' },
+
     // vaccineWhodrug (SPEC F18) — the seven canonical operations, with the canonical role matrix
     // and no deviation (§3.4). No 005C: the table sits inside the preventPhysicalDelete loop of
     // esaviapp.sql:1356-1370, so physical deletion is not declared. The base path deliberately
@@ -304,7 +321,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(144);
+            expect(ROUTE_RULES).toHaveLength(153);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
