@@ -102,7 +102,7 @@ Every controller catch block follows the same pattern — log with the operation
 
 **Audit trail** — every create/update/activation appends an entry to the row's `appDetails` JSONB array: `{ createdAt, user: authUser.userId, method: <operation code>, detail }`. Services must spread the existing array (`[...currentAppDetails, newEntry]`) so history is preserved.
 
-**Normalization** — helpers in `stringHandling.helper.ts` are applied on write: `toConstantCase` for `code` fields, `toTitleCase` for `name`. Uniqueness checks must compare against the normalized value.
+**Normalization** — helpers in `stringHandling.helper.ts` are applied on write: `toConstantCase` for `code` fields, `toTitleCase` for `name`. Uniqueness checks must compare against the normalized value. Two entities mint their code instead of receiving it, and are the declared exception (`references/CONVENTIONS.md` §Normalización): `catalogType.code` with `toCamelCase`, and `catalogItem.code` with `toCodeFromName` **from its own `name`** — no `code` travels in the body or in the import file.
 
 **Logging** — `esaviLog(message, level)` (log4js) writes to `src/logs/esaviLog.log`; morgan writes `access.log` in production and console output in development. The `src/logs` directory is gitignored.
 

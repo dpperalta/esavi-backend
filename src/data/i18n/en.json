@@ -131,6 +131,7 @@
     },
     "catalogItem": {
         "codeExists": "A catalog item with code {{code}} already exists for catalog type ID {{catalogTypeId}}",
+        "codeNotDerivable": "No code can be derived from the name {{name}}. The name must produce an identifier between 1 and 100 characters long.",
         "notFound": "Catalog item not found. Please check the catalog item ID and try again.",
         "notFoundPlural": "One or more catalog items not found. Please check the catalog item IDs and try again.",
         "createdSuccess": "Catalog item created successfully",
@@ -148,7 +149,12 @@
         "deletedSuccess": "Catalog item deleted successfully",
         "deletedFailed": "Failed to delete the catalog item. Please try again later.",
         "activatedSuccess": "Catalog item activated successfully",
-        "activatedFailed": "Failed to activate the catalog item. Please try again later."
+        "activatedFailed": "Failed to activate the catalog item. Please try again later.",
+        "importedSuccess": "Catalog items imported successfully",
+        "importedFailed": "Failed to import the catalog items. Please try again later.",
+        "fileRequired": "The file to import must be attached in the file field",
+        "fileInvalid": "The file could not be processed. Please check that it is an .xlsx workbook with the expected header and try again.",
+        "fileTooLarge": "The file exceeds the maximum allowed size of 20 MB"
     },
     "healthFacility": {
         "codeExists": "A health facility with code {{code}} already exists",

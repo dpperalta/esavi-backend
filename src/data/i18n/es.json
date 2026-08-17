@@ -131,6 +131,7 @@
     },
     "catalogItem": {
         "codeExists": "Un elemento de catálogo con el código {{code}} ya existe para el ID del tipo de catálogo {{catalogTypeId}}",
+        "codeNotDerivable": "No se puede generar un código a partir del nombre {{name}}. El nombre debe producir un identificador de entre 1 y 100 caracteres.",
         "notFound": "Elemento de catálogo no encontrado. Por favor, verifique el ID del elemento de catálogo e inténtelo de nuevo.",
         "notFoundPlural": "Uno o más elementos de catálogo no encontrados. Por favor, verifique los IDs de los elementos de catálogo e inténtelo de nuevo.",
         "createdSuccess": "Elemento de catálogo creado exitosamente",
@@ -148,7 +149,12 @@
         "deletedSuccess": "Elemento de catálogo eliminado exitosamente",
         "deletedFailed": "Error al eliminar el elemento de catálogo. Por favor, inténtelo de nuevo más tarde.",
         "activatedSuccess": "Elemento de catálogo activado exitosamente",
-        "activatedFailed": "Error al activar el elemento de catálogo. Por favor, inténtelo de nuevo más tarde."
+        "activatedFailed": "Error al activar el elemento de catálogo. Por favor, inténtelo de nuevo más tarde.",
+        "importedSuccess": "Importación de elementos de catálogo completada exitosamente",
+        "importedFailed": "Error al importar los elementos de catálogo. Por favor, inténtelo de nuevo más tarde.",
+        "fileRequired": "Debe adjuntar el fichero a importar en el campo file",
+        "fileInvalid": "El fichero no se pudo procesar. Por favor, verifique que sea un libro .xlsx con la cabecera esperada e inténtelo de nuevo.",
+        "fileTooLarge": "El fichero supera el tamaño máximo permitido de 20 MB"
     },
     "healthFacility": {
         "codeExists": "Un establecimiento de salud con el código {{code}} ya existe",

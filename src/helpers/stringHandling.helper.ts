@@ -9,6 +9,15 @@ export const toCamelCase = (text: string): string => {
     }).join('');
 }
 
+// Mint a code out of the name it belongs to. toTitleCase runs first on purpose: toCamelCase
+// lowercases only the first word and keeps the case of the rest, so 'Pharmaceutical FORM' and
+// 'pharmaceutical form' would otherwise mint two different codes for the same name. Passing through
+// the title case makes the function idempotent — the code of a stored name is the same code the
+// stored name mints again — which is what lets a differential update and a reimport see no change
+export const toCodeFromName = (text: string): string => {
+    return toCamelCase(toTitleCase(text.trim()));
+}
+
 // Convert text to snake_case
 export const toSnakeCase = (text: string): string => {
     return text.replace(/([A-Z])/g, (match) => {

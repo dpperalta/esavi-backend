@@ -171,6 +171,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | diagnosticTerm | `007` | importación masiva desde fichero MedDRA `.asc` — SUPERADMIN, `POST /import` |
 | notificationEvent | `006` | listar los eventos de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N eventos |
 | vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
+| catalogItem | `006` | importación masiva desde fichero `.xlsx`, con creación de `catalogType` al vuelo — SUPERADMIN, `POST /import` |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
@@ -506,6 +507,15 @@ Es lo que garantizan de verdad las `UNIQUE` del DDL, que tampoco filtran por `is
 ### Normalización en escritura
 
 `toConstantCase` para `code`, `toTitleCase` para `name`, `.trim()` para el resto (`src/helpers/stringHandling.helper.ts`). **La comprobación de unicidad se hace sobre el valor ya normalizado**, nunca sobre el crudo.
+
+**Dos entidades acuñan el `code` en vez de recibirlo, y son la excepción declarada:**
+
+| Entidad | Regla | De dónde sale |
+|---|---|---|
+| `catalogType` | `toCamelCase` | de la clave `code` del body |
+| `catalogItem` | `toCodeFromName` — `toTitleCase` y después `toCamelCase` | **del `name`**; el `code` no viaja en el body ni en el fichero de importación, y uno que viaje se ignora |
+
+En `catalogItem` eso vale para las tres puertas de escritura —`001`, `004` y `006`— y hace del `name` la identidad de la fila dentro de su tipo: si el `name` cambia, el `code` cambia con él. `toTitleCase` va primero para que la función sea idempotente y `PHARMACEUTICAL FORM` y `Pharmaceutical form` acuñen el mismo `pharmaceuticalForm`; sin eso, un update diferencial vería un cambio donde no lo hay. Un `name` que no acuñe entre 1 y 100 caracteres es **400**, no un `code` inventado. Las filas cargadas antes de esta regla conservan su `code` en `CONSTANT_CASE`: no hubo migración.
 
 ### Update diferencial — solo se escribe lo que cambió
 
