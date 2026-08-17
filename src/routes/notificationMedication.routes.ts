@@ -6,14 +6,16 @@ import {
     getAllNotificationMedicationsByNotification,
     getNotificationMedicationById,
     getNotificationMedicationsByCaseId,
-    getNotificationMedicationsByNotification
+    getNotificationMedicationsByNotification,
+    updateNotificationMedication
 } from '../controllers/notificationMedication.controller';
 import {
     createNotificationMedicationValidator,
     notificationMedicationCaseIdValidator,
     notificationMedicationIdValidator,
     notificationMedicationListValidator,
-    notificationMedicationNotificationIdValidator
+    notificationMedicationNotificationIdValidator,
+    updateNotificationMedicationValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -52,5 +54,9 @@ router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...noti
 // Declared after every literal path so Express does not capture 'case', 'admin', 'notification',
 // 'purge' or 'activate' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationIdValidator, validateFields, getNotificationMedicationById);
+
+// Update Notification Medication
+// Code: ESAVI-NOTIFMED-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationIdValidator, ...updateNotificationMedicationValidator, validateFields, updateNotificationMedication);
 
 export default router;

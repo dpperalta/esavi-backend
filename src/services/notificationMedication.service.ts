@@ -1,6 +1,7 @@
 import { InferAttributes, Transaction } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification, NotificationMedication } from '../models';
-import { AppError, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationMedicationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -93,6 +94,22 @@ const findNotificationMedicationWithRelations = async (id: string, includeInacti
             PHARMACEUTICAL_FORM_INCLUDE,
             ADMINISTRATION_ROUTE_INCLUDE
         ]
+    });
+}
+
+// The same read as above without the two catalog includes, which is what ESAVI-NOTIFMED-004 needs:
+// the update compares the raw foreign keys, not the resolved objects, and the includes would only
+// add two joins to a query whose instance is about to be written. The header include stays, so the
+// inherited visibility is checked in the same query the update instance comes from
+const findNotificationMedicationRow = async (id: string, includeInactive: boolean = false, transaction?: Transaction) => {
+    return await NotificationMedication.findOne({
+        where: includeInactive ? { medicationId: id } : { medicationId: id, isActive: true },
+        include: [{
+            ...NOTIFICATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }],
+        transaction
     });
 }
 
@@ -430,10 +447,127 @@ const getNotificationMedicationsByCaseIdService = async (
     };
 }
 
+// Update Notification Medication Service
+// Code: ESAVI-NOTIFMED-004
+// notificationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// answers 400: the first one is immutable — moving a medication to another notification is not
+// updating it, it is creating a different one — and the second one is governed by the database.
+// Answering 400 for a field a client resends whole from a GET is hostile for no reason
+const updateNotificationMedicationService = async (
+    id: string,
+    data: Partial<CreateNotificationMedicationInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const notificationMedication = await findNotificationMedicationRow(id, canViewInactive, transaction);
+        if( !notificationMedication ) {
+            throw new AppError(getMessage('notificationMedication.notFound', lang), 404, 'NOTIFMED_004_NOT_FOUND');
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate, and
+        // an instance read with a narrowed `attributes` reads back undefined for what it left out,
+        // so every comparison would count as a change
+        const stored = notificationMedication.get({ plain: true }) as Record<string, unknown>;
+
+        // The rule is evaluated over the resulting state and not over the body: otherwise a PUT
+        // sending only otherMedicationText over a row with isOtherMedication false would slip
+        // through, and the rule could be evaded by splitting the two fields into two requests
+        const resultingIsOther = data.isOtherMedication !== undefined
+            ? data.isOtherMedication
+            : ( stored.isOtherMedication as boolean );
+        const resultingText = data.otherMedicationText !== undefined
+            ? normalizeText(data.otherMedicationText)
+            : ( stored.otherMedicationText as string | null );
+
+        assertOtherMedicationRule(resultingIsOther, resultingText, '004', lang);
+
+        // Before the diff and independently of it: a PUT carrying a retired pharmaceutical form
+        // answers 404 even when no other field changes. Only the keys arriving with a non null
+        // value are checked — an explicit null clears the column and validates nothing
+        await assertCatalogItemsAreValid(
+            data.pharmaceuticalFormItemId,
+            data.administrationRouteItemId,
+            '004',
+            lang
+        );
+
+        // notificationId, sortOrder and isActive are deliberately absent: the first two are
+        // immutable and the state moves through 005A and 005B. No field is derived — unlike
+        // notificationEvent, which dragged three — so the eight candidates are compared against
+        // what is stored and nothing is computed from another table
+        const candidates: Record<string, unknown> = {
+            // NOT NULL in the DDL, so it is never sent to null. Normalized before comparing, or a
+            // PUT resending the GET with the name in upper case would count as a change and leave
+            // an audit entry for a value the database would store identical
+            medicationName: data.medicationName !== undefined
+                ? toTitleCase(data.medicationName.trim())
+                : undefined,
+            medicationCode: data.medicationCode !== undefined ? normalizeText(data.medicationCode) : undefined,
+            dose: data.dose !== undefined ? normalizeText(data.dose) : undefined,
+            pharmaceuticalFormItemId: data.pharmaceuticalFormItemId !== undefined
+                ? ( data.pharmaceuticalFormItemId ?? null )
+                : undefined,
+            administrationRouteItemId: data.administrationRouteItemId !== undefined
+                ? ( data.administrationRouteItemId ?? null )
+                : undefined,
+            // DATEONLY: the helper compares it with slice(0, 10)
+            startDate: data.startDate !== undefined ? ( data.startDate ?? null ) : undefined,
+            // NOT NULL in the DDL, so it is never compared by truthiness: an `if( data.x )` would
+            // silently discard a deliberate false
+            isOtherMedication: data.isOtherMedication !== undefined ? data.isOtherMedication : undefined,
+            otherMedicationText: data.otherMedicationText !== undefined
+                ? normalizeText(data.otherMedicationText)
+                : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_notificationMedication_setSysDetails fires on every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        // Nothing to write: the transaction closes without an UPDATE and the row is re-read outside
+        // it, exactly like the branch that did write
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(notificationMedication.appDetails)
+                ? notificationMedication.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-NOTIFMED-004',
+                detail: 'Notification medication updated by service'
+            };
+            await notificationMedication.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    const updated = await findNotificationMedicationWithRelations(id, true);
+    return updated ? toNotificationMedicationResponse(updated) : null;
+}
+
 export {
     createNotificationMedicationService,
     getNotificationMedicationsByNotificationService,
     getAllNotificationMedicationsByNotificationService,
     getNotificationMedicationByIdService,
-    getNotificationMedicationsByCaseIdService
+    getNotificationMedicationsByCaseIdService,
+    updateNotificationMedicationService
 };

@@ -6,7 +6,8 @@ import {
     getAllNotificationMedicationsByNotificationService,
     getNotificationMedicationByIdService,
     getNotificationMedicationsByCaseIdService,
-    getNotificationMedicationsByNotificationService
+    getNotificationMedicationsByNotificationService,
+    updateNotificationMedicationService
 } from '../services/notificationMedication.service';
 
 // Create Notification Medication Controller
@@ -141,10 +142,38 @@ const getNotificationMedicationsByCaseId = async (req: Request, res: Response, n
     }
 }
 
+// Update Notification Medication Controller
+// Code: ESAVI-NOTIFMED-004
+const updateNotificationMedication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateNotificationMedicationService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedication.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFMED-004: Error updating Notification Medication: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedication.updatedFailed', req.lang), 500, 'NOTIFMED_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createNotificationMedication,
     getNotificationMedicationsByNotification,
     getAllNotificationMedicationsByNotification,
     getNotificationMedicationById,
-    getNotificationMedicationsByCaseId
+    getNotificationMedicationsByCaseId,
+    updateNotificationMedication
 };
