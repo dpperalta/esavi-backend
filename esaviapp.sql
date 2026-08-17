@@ -833,6 +833,7 @@ CREATE TABLE IF NOT EXISTS "notificationMedication" (
   CONSTRAINT "FK_notificationMedication_form" FOREIGN KEY ("pharmaceuticalFormItemId") REFERENCES "catalogItem" ("catalogItemId") ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT "FK_notificationMedication_route" FOREIGN KEY ("administrationRouteItemId") REFERENCES "catalogItem" ("catalogItemId") ON UPDATE CASCADE ON DELETE RESTRICT
 );
+CREATE INDEX IF NOT EXISTS "IX_notificationMedication_notification" ON "notificationMedication" ("notificationId");
 
 CREATE TABLE IF NOT EXISTS "notificationVaccine" (
   "vaccineId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
