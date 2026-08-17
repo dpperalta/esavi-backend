@@ -2,6 +2,7 @@ import { InferAttributes, Transaction } from 'sequelize';
 import { CatalogItem, CatalogType, Notification, NotificationMedication } from '../models';
 import { AppError, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationMedicationInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Codes of the two catalogTypes these foreign keys point at. Nothing in the database checks them:
 // the only validateCatalogItemType trigger of the DDL is the one of healthFacility, so without
@@ -104,6 +105,27 @@ const assertNotificationIsValid = async (notificationId: string, op: string, lan
         attributes: ['notificationId'],
         transaction
     });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationMedication.notificationNotFound', lang),
+            404,
+            `NOTIFMED_${ op }_NOTIFICATION_NOT_FOUND`
+        );
+    }
+}
+
+// The same check as above, relaxed by canViewInactive: the inherited visibility applied to the
+// listings, where the header is not the target of the write but the gate to the collection. A
+// retired notification answers 404 for USER and ADMIN, and comes back for whoever may see inactive
+// rows — today SUPERADMIN
+const assertNotificationIsVisible = async (
+    notificationId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const where = canViewInactive ? { notificationId } : { notificationId, isActive: true };
+    const notification = await Notification.findOne({ where, attributes: ['notificationId'] });
     if( !notification ) {
         throw new AppError(
             getMessage('notificationMedication.notificationNotFound', lang),
@@ -277,6 +299,42 @@ const createNotificationMedicationService = async (
     return notificationMedication ? toNotificationMedicationResponse(notificationMedication) : null;
 }
 
+// Get Active Notification Medications By Notification Service
+// Code: ESAVI-NOTIFMED-002A
+// The listing is entered by the foreign key and never by /: a medication does not exist without its
+// notification, and a global listing of medications has no reader.
+//
+// The header guard is the inherited visibility applied to a collection: a retired notification
+// answers 404 instead of an empty page, because an empty page would say "this notification has no
+// medications" to somebody who is simply not allowed to see them.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// isOtherMedication, the two catalog keys, startDate or text — those are out of the scope of this
+// spec
+const getNotificationMedicationsByNotificationService = async (
+    notificationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertNotificationIsVisible(notificationId, '002A', lang, canViewInactive);
+
+    const notificationMedications = await NotificationMedication.findAndCountAll({
+        where: { notificationId, isActive: true },
+        include: [PHARMACEUTICAL_FORM_INCLUDE, ADMINISTRATION_ROUTE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationMedications.count,
+        rows: notificationMedications.rows.map(toNotificationMedicationResponse)
+    };
+}
+
 export {
-    createNotificationMedicationService
+    createNotificationMedicationService,
+    getNotificationMedicationsByNotificationService
 };

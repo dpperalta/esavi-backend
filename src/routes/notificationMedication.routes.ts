@@ -2,13 +2,16 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
-    createNotificationMedication
+    createNotificationMedication,
+    getNotificationMedicationsByNotification
 } from '../controllers/notificationMedication.controller';
 import {
-    createNotificationMedicationValidator
+    createNotificationMedicationValidator,
+    notificationMedicationListValidator,
+    notificationMedicationNotificationIdValidator
 } from '../validators';
 
-const { ADMIN } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -19,5 +22,11 @@ const router = Router();
 // Create Notification Medication
 // Code: ESAVI-NOTIFMED-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationMedicationValidator, validateFields, createNotificationMedication);
+
+// Get Active Notification Medications By Notification
+// Code: ESAVI-NOTIFMED-002A
+// The :id is the notificationId, not a medication id: the listing is entered by the foreign key.
+// Declared after /admin/notification/:id, which is the more specific literal path
+router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationNotificationIdValidator, ...notificationMedicationListValidator, validateFields, getNotificationMedicationsByNotification);
 
 export default router;

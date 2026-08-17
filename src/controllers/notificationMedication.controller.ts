@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
 import {
-    createNotificationMedicationService
+    createNotificationMedicationService,
+    getNotificationMedicationsByNotificationService
 } from '../services/notificationMedication.service';
 
 // Create Notification Medication Controller
@@ -24,6 +26,36 @@ const createNotificationMedication = async (req: Request, res: Response, next: N
     }
 }
 
+// Get Active Notification Medications By Notification Controller
+// Code: ESAVI-NOTIFMED-002A
+const getNotificationMedicationsByNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getNotificationMedicationsByNotificationService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedication.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFMED-002A: Error fetching Notification Medications by Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedication.getFailed', req.lang), 500, 'NOTIFMED_002A_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createNotificationMedication
+    createNotificationMedication,
+    getNotificationMedicationsByNotification
 };
