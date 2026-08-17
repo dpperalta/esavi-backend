@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationMedication,
     getAllNotificationMedicationsByNotification,
+    getNotificationMedicationById,
     getNotificationMedicationsByNotification
 } from '../controllers/notificationMedication.controller';
 import {
     createNotificationMedicationValidator,
+    notificationMedicationIdValidator,
     notificationMedicationListValidator,
     notificationMedicationNotificationIdValidator
 } from '../validators';
@@ -35,5 +37,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // The :id is the notificationId, not a medication id: the listing is entered by the foreign key.
 // Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationNotificationIdValidator, ...notificationMedicationListValidator, validateFields, getNotificationMedicationsByNotification);
+
+// Get Notification Medication by ID
+// Code: ESAVI-NOTIFMED-003
+// Declared after every literal path so Express does not capture 'case', 'admin', 'notification',
+// 'purge' or 'activate' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationIdValidator, validateFields, getNotificationMedicationById);
 
 export default router;

@@ -366,8 +366,24 @@ const getAllNotificationMedicationsByNotificationService = async (
     };
 }
 
+// Get Notification Medication By ID Service
+// Code: ESAVI-NOTIFMED-003
+// Two filters, and the second one is the inherited visibility: the medication must exist and be
+// active, and its notification must be active too, unless canViewInactive says otherwise — today
+// SUPERADMIN. The three failures answer the same 404 without distinguishing, because telling them
+// apart would confirm to a USER that a medication exists under a notification it is not allowed to
+// see
+const getNotificationMedicationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const notificationMedication = await findNotificationMedicationWithRelations(id, canViewInactive);
+    if( !notificationMedication ) {
+        throw new AppError(getMessage('notificationMedication.notFound', lang), 404, 'NOTIFMED_003_NOT_FOUND');
+    }
+    return toNotificationMedicationResponse(notificationMedication);
+}
+
 export {
     createNotificationMedicationService,
     getNotificationMedicationsByNotificationService,
-    getAllNotificationMedicationsByNotificationService
+    getAllNotificationMedicationsByNotificationService,
+    getNotificationMedicationByIdService
 };
