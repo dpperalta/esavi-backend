@@ -7,6 +7,7 @@ import {
     getNotificationMedicationByIdService,
     getNotificationMedicationsByCaseIdService,
     getNotificationMedicationsByNotificationService,
+    purgeNotificationMedicationService,
     setNotificationMedicationActivationService,
     updateNotificationMedicationService
 } from '../services/notificationMedication.service';
@@ -210,6 +211,27 @@ const activateNotificationMedication = async (req: Request, res: Response, next:
     }
 }
 
+// Purge Notification Medication Controller - For SuperAdmin
+// Code: ESAVI-NOTIFMED-005C
+// Responds without data: there is nothing left to return
+const purgeNotificationMedication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationMedicationService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedication.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFMED-005C: Error purging Notification Medication: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedication.purgeFailed', req.lang), 500, 'NOTIFMED_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createNotificationMedication,
     getNotificationMedicationsByNotification,
@@ -218,5 +240,6 @@ export {
     getNotificationMedicationsByCaseId,
     updateNotificationMedication,
     deleteNotificationMedication,
-    activateNotificationMedication
+    activateNotificationMedication,
+    purgeNotificationMedication
 };

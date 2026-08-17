@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification, NotificationMedication } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateNotificationMedicationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -682,6 +683,42 @@ const setNotificationMedicationActivationService = async (
     }
 }
 
+// Purging Notification Medication Service - For SuperAdmin
+// Code: ESAVI-NOTIFMED-005C
+// notificationMedication is outside the preventPhysicalDelete loop of esaviapp.sql:1358-1375, so
+// the row can really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification: this entity does have an isActive
+// column, so its canonical guard — the row must have been retired with a 005A first, 409 otherwise
+// — applies over the row itself with no helper of its own.
+//
+// The state of the notification is deliberately not checked. A mistyped medication is retired and
+// purged with its notification active, which is the use case that motivates the operation; the
+// safety net is the canonical one, two deliberate steps over the row itself.
+//
+// No appDetails entry — the row is destroyed in the same transaction — and the trace is the warn
+// dump the helper already writes
+const purgeNotificationMedicationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: NotificationMedication,
+            where: { medicationId: id },
+            transaction,
+            operationCode: 'ESAVI-NOTIFMED-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('notificationMedication.notFound', lang),
+            notFoundCode: 'NOTIFMED_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('notificationMedication.stillActive', lang, { id }),
+            stillActiveCode: 'NOTIFMED_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationMedicationService,
     getNotificationMedicationsByNotificationService,
@@ -689,5 +726,6 @@ export {
     getNotificationMedicationByIdService,
     getNotificationMedicationsByCaseIdService,
     updateNotificationMedicationService,
-    setNotificationMedicationActivationService
+    setNotificationMedicationActivationService,
+    purgeNotificationMedicationService
 };

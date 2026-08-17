@@ -9,6 +9,7 @@ import {
     getNotificationMedicationById,
     getNotificationMedicationsByCaseId,
     getNotificationMedicationsByNotification,
+    purgeNotificationMedication,
     updateNotificationMedication
 } from '../controllers/notificationMedication.controller';
 import {
@@ -50,6 +51,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // The :id is the notificationId, not a medication id: the listing is entered by the foreign key.
 // Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationNotificationIdValidator, ...notificationMedicationListValidator, validateFields, getNotificationMedicationsByNotification);
+
+// Purge Notification Medication - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFMED-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicationIdValidator, validateFields, purgeNotificationMedication);
 
 // Activate Notification Medication - For SuperAdmin
 // Code: ESAVI-NOTIFMED-005B
