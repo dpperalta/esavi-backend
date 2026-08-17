@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationMedication,
+    getAllNotificationMedicationsByNotification,
     getNotificationMedicationsByNotification
 } from '../controllers/notificationMedication.controller';
 import {
@@ -22,6 +23,12 @@ const router = Router();
 // Create Notification Medication
 // Code: ESAVI-NOTIFMED-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationMedicationValidator, validateFields, createNotificationMedication);
+
+// Get All Notification Medications By Notification - For Admin
+// Code: ESAVI-NOTIFMED-002B
+// Two distinct routes and not one GET branching by role, which is why each one carries its own
+// letter in the five places: they also differ in the minimum role
+router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationNotificationIdValidator, ...notificationMedicationListValidator, validateFields, getAllNotificationMedicationsByNotification);
 
 // Get Active Notification Medications By Notification
 // Code: ESAVI-NOTIFMED-002A

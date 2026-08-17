@@ -334,7 +334,40 @@ const getNotificationMedicationsByNotificationService = async (
     };
 }
 
+// Get All Notification Medications By Notification Service - For Admin
+// Code: ESAVI-NOTIFMED-002B
+// The same listing as 002A without the isActive filter: it is the only door to a medication that
+// was retired, and therefore the entry point of whoever is going to reactivate or purge it.
+// paranoid: false is declarative here — the model is not paranoid, so deletedAt is a plain column
+// and no scope would hide the sealed rows — and it is written for the same reason
+// entityActivation.service.ts:21 writes it: the intent is to see everything, including what a 005A
+// sealed
+const getAllNotificationMedicationsByNotificationService = async (
+    notificationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertNotificationIsVisible(notificationId, '002B', lang, canViewInactive);
+
+    const notificationMedications = await NotificationMedication.findAndCountAll({
+        where: { notificationId },
+        include: [PHARMACEUTICAL_FORM_INCLUDE, ADMINISTRATION_ROUTE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationMedications.count,
+        rows: notificationMedications.rows.map(toNotificationMedicationResponse)
+    };
+}
+
 export {
     createNotificationMedicationService,
-    getNotificationMedicationsByNotificationService
+    getNotificationMedicationsByNotificationService,
+    getAllNotificationMedicationsByNotificationService
 };
