@@ -171,6 +171,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | diagnosticTerm | `007` | importación masiva desde fichero MedDRA `.asc` — SUPERADMIN, `POST /import` |
 | notificationEvent | `006` | listar los eventos de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N eventos |
 | notificationMedication | `006` | listar los medicamentos de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N medicamentos |
+| notificationVaccine | `006` | listar las vacunas de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N vacunas |
 | vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
 | catalogItem | `006` | importación masiva desde fichero `.xlsx`, con creación de `catalogType` al vuelo — SUPERADMIN, `POST /import` |
 
@@ -288,6 +289,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | notification | `NOTIFCN` |
 | notificationEvent | `NOTIFEVT` |
 | notificationMedication | `NOTIFMED` |
+| notificationVaccine | `NOTIFVAC` |
 | notifier | `NOTIFIER` |
 | patient | `PATIENT` |
 | severeNotification | `SEVNOT` |

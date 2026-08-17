@@ -840,7 +840,7 @@ CREATE TABLE IF NOT EXISTS "notificationVaccine" (
   "notificationId" uuid NOT NULL,
   "vaccineWhodrugId" uuid,
   "sortOrder" smallint NOT NULL DEFAULT 0 CHECK ("sortOrder" >= 0),
-  "isSuspected" "answerOption",
+  "isSuspected" boolean NOT NULL DEFAULT false,
   "whoCode" varchar(250),
   "vaccineCode" varchar(250),
   "vaccineName" varchar(500),
