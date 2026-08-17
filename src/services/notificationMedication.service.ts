@@ -216,9 +216,8 @@ const assertOtherMedicationRule = (
 const assertCatalogItemIsValid = async (
     catalogItemId: string,
     catalogTypeCode: string,
-    messageKey: string,
-    errorCode: string,
-    lang: string
+    message: string,
+    errorCode: string
 ) => {
     const catalogItem = await CatalogItem.findOne({
         where: { catalogItemId, isActive: true },
@@ -231,7 +230,7 @@ const assertCatalogItemIsValid = async (
         }]
     });
     if( !catalogItem ) {
-        throw new AppError(getMessage(messageKey, lang), 404, errorCode);
+        throw new AppError(message, 404, errorCode);
     }
 }
 
@@ -244,13 +243,14 @@ const assertCatalogItemsAreValid = async (
     op: string,
     lang: string
 ) => {
+    // The i18n keys are written literally at the call site and never passed as a variable, so
+    // scripts/i18n-check.js can verify them statically
     if( pharmaceuticalFormItemId ) {
         await assertCatalogItemIsValid(
             pharmaceuticalFormItemId,
             PHARMACEUTICAL_FORM_CATALOG_CODE,
-            'notificationMedication.pharmaceuticalFormNotFound',
-            `NOTIFMED_${ op }_PHARMACEUTICAL_FORM_NOT_FOUND`,
-            lang
+            getMessage('notificationMedication.pharmaceuticalFormNotFound', lang),
+            `NOTIFMED_${ op }_PHARMACEUTICAL_FORM_NOT_FOUND`
         );
     }
 
@@ -258,9 +258,8 @@ const assertCatalogItemsAreValid = async (
         await assertCatalogItemIsValid(
             administrationRouteItemId,
             ADMINISTRATION_ROUTE_CATALOG_CODE,
-            'notificationMedication.administrationRouteNotFound',
-            `NOTIFMED_${ op }_ADMINISTRATION_ROUTE_NOT_FOUND`,
-            lang
+            getMessage('notificationMedication.administrationRouteNotFound', lang),
+            `NOTIFMED_${ op }_ADMINISTRATION_ROUTE_NOT_FOUND`
         );
     }
 }
