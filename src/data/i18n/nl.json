@@ -131,6 +131,7 @@
     },
     "catalogItem": {
         "codeExists": "Er bestaat al een catalogusitem met code {{code}} voor catalogustype-ID {{catalogTypeId}}",
+        "codeNotDerivable": "Er kan geen code worden afgeleid uit de naam {{name}}. De naam moet een identificatie van 1 tot 100 tekens opleveren.",
         "notFound": "Catalogusitem niet gevonden. Controleer de ID van het catalogusitem en probeer het opnieuw.",
         "notFoundPlural": "Een of meer catalogusitems niet gevonden. Controleer de ID's van de catalogusitems en probeer het opnieuw.",
         "createdSuccess": "Catalogusitem succesvol aangemaakt",

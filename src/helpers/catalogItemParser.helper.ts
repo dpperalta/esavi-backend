@@ -1,34 +1,39 @@
 import ExcelJS from 'exceljs';
 
-import { toCamelCase, toConstantCase, toTitleCase } from './stringHandling.helper';
+import { toCamelCase, toCodeFromName, toTitleCase } from './stringHandling.helper';
 import {
     CatalogItemFileValues,
     ParsedCatalogItemRow,
     RejectedCatalogItemRow
 } from '../types/catalog/catalogItem.types';
 
-// The seven columns of the file, mapped to their destination. Unlike the WHODrug export, which
+// The six columns of the file, mapped to their destination. Unlike the WHODrug export, which
 // writes 'drugRecNo+Seq01' and 'forms_medicinalProductID', this header is authored here and every
 // name already matches its column — the table exists so the whole header reads in one place and so
-// an alias can be added later without touching the reader
+// an alias can be added later without touching the reader.
+// There is no 'code': the code of an item is minted from its name and never read from the sheet, so
+// a file that still carries the column has it reported in unknownHeaders and ignored
 const HEADER_ALIASES: Record<string, string> = {
     'catalogTypeCode': 'catalogTypeCode',
     'catalogTypeName': 'catalogTypeName',
-    'code': 'code',
     'name': 'name',
     'value': 'value',
     'description': 'description',
     'sortOrder': 'sortOrder'
 };
 
-// Without these four a row cannot be placed: the first two are what resolves — or founds — the type,
-// and the last two are the NOT NULL columns of catalogItem. What is required is that the column
-// exists, not that it carries a value: an empty catalogTypeName only rejects its row, and only if
-// the type turns out not to exist, which the service decides and this parser cannot
-const REQUIRED_HEADERS = [ 'catalogTypeCode', 'catalogTypeName', 'code', 'name' ];
+// Without these three a row cannot be placed: the first two are what resolves — or founds — the
+// type, and name is both the NOT NULL column of catalogItem and the source of its code. What is
+// required is that the column exists, not that it carries a value: an empty catalogTypeName only
+// rejects its row, and only if the type turns out not to exist, which the service decides and this
+// parser cannot
+const REQUIRED_HEADERS = [ 'catalogTypeCode', 'catalogTypeName', 'name' ];
 
 // varchar limits of the two DDLs, and they are not the same table: catalogItem.name is 250 while
-// catalogType.name is 200. description is absent because it is text and has no limit to check.
+// catalogType.name is 200. code is still checked although the sheet no longer brings it: it is
+// minted from a name of up to 250 characters and its own column only admits 100, so a long name
+// rejects its row naming `code` and not `name`. description is absent because it is text and has no
+// limit to check.
 // Filtering here is what keeps one oversized cell from blowing up the whole batch
 const MAX_LENGTHS: Record<string, number> = {
     catalogTypeCode: 100,
@@ -140,9 +145,11 @@ const cellToSortOrder = ( value: ExcelJS.CellValue ): { sortOrder: number; coerc
  * or which types have to be founded, which is the service's business.
  *
  * Normalization happens here and not in the service because uniqueness is compared against the
- * normalized value and this is where the file's own duplicates are detected. And it is not one
- * normalization but three: toConstantCase for catalogItem.code, toCamelCase for catalogType.code and
- * toTitleCase for both names — which is exactly what the two services already do, each to its table.
+ * normalized value and this is where the file's own duplicates are detected: toTitleCase for both
+ * names, toCamelCase for catalogType.code and toCodeFromName for catalogItem.code, which is minted
+ * from the name — exactly what the two services already do, each to its table. Since the code is
+ * derived, the name is what identifies an item inside its type: two rows with the same name under
+ * the same type are the same row, and a name changed in the file is a new item and not a rename.
  *
  * A rejected row never aborts the parse; it is counted and the file keeps going. Only two content
  * problems stop the read, and both stop it before any write: a book that cannot be opened and a
@@ -276,23 +283,18 @@ const readDataRow = (
     };
 
     // A catalogItem is configuration coined in this application and not quoted dictionary data, so
-    // unlike the two importers before it this one normalizes on write — and each code with the rule
-    // its own table already uses. Applying one rule to both would found a duplicate of every type
-    // that already exists, on every single load.
+    // unlike the two importers before it this one normalizes on write, and with the same rule the
+    // 001 and the 004 use: the code is minted from the name with toCodeFromName and the sheet has no
+    // say in it.
     const rawCatalogTypeCode = cellToText(raw.get('catalogTypeCode') ?? null);
     const rawCatalogTypeName = cellToText(raw.get('catalogTypeName') ?? null);
-    const rawCode = cellToText(raw.get('code') ?? null);
     const rawName = cellToText(raw.get('name') ?? null);
 
     if( rawCatalogTypeCode === null ) {
         return reject('EMPTY_CATALOG_TYPE_CODE');
     }
 
-    // Empty would break the NOT NULL of the column on top of leaving the item unidentifiable.
-    if( rawCode === null ) {
-        return reject('EMPTY_CODE');
-    }
-
+    // Empty would break the NOT NULL of the column on top of leaving the item without a code.
     if( rawName === null ) {
         return reject('EMPTY_NAME');
     }
@@ -301,8 +303,16 @@ const readDataRow = (
     // Not a rejection when empty: the parser cannot know whether the type already exists. It travels
     // as null and phase 3 of the service rejects the row only if the type has to be created.
     const catalogTypeName = rawCatalogTypeName === null ? null : toTitleCase(rawCatalogTypeName);
-    const code = toConstantCase(rawCode);
     const name = toTitleCase(rawName);
+    // Minted from the already normalized name, which is what makes it stable: the code stored for a
+    // name is the one that same stored name mints again, so a reimport of an untouched file sees no
+    // change. A name of only separators — '---' — passes the NOT NULL of its column and still mints
+    // nothing, and an item with an empty code would occupy the pair of the next one like it
+    const code = toCodeFromName(name);
+
+    if( code.length === 0 ) {
+        return reject('EMPTY_CODE');
+    }
     // The one column that never enters null. The model declares value allowNull: false while the DDL
     // admits null, and an empty cell would insert fine — bulkCreate does not validate — but would 500
     // on the update branch that empties it. An empty cell carries the already normalized name, so the
@@ -312,7 +322,10 @@ const readDataRow = (
 
     // Length is checked against the normalized value because that is the one that reaches the
     // column. Without this filter the row would blow up the whole batch it travels in.
-    const lengths: Record<string, string | null> = { catalogTypeCode, catalogTypeName, code, name, value };
+    // code goes last on purpose: it is minted from name, so an oversized name overflows both and the
+    // operator has to be pointed at the cell they wrote. Naming code is then left for the case that
+    // is really its own — a name within its 250 whose code does not fit in its 100
+    const lengths: Record<string, string | null> = { catalogTypeCode, catalogTypeName, name, value, code };
 
     for( const [ column, text ] of Object.entries(lengths) ) {
         if( text !== null && text.length > MAX_LENGTHS[column] ) {

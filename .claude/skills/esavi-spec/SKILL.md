@@ -146,7 +146,7 @@ Ejemplo de bloque bien formado:
 > Antes de escribir el modelo de datos necesito cerrar cuatro cosas:
 >
 > 1. **Abreviatura.** Propongo `DIAGTERM` para `diagnosticTerm` (8 letras, no colisiona con las 8 registradas). ¿La damos de alta así?
-> 2. **Unicidad.** `esaviapp.sql:549` declara `UNIQUE ("code")`. ¿Se compara contra el valor ya normalizado con `toConstantCase`, como en `catalogItem`?
+> 2. **Unicidad.** `esaviapp.sql:549` declara `UNIQUE ("code")`. ¿Se compara contra el valor ya normalizado con `toConstantCase`, como en `healthFacility`?
 > 3. **Listado.** ¿Dual (`002A` público / `002B` admin) como `catalogItem`, o único `002` porque el catálogo es pequeño? Recomiendo dual: mantiene la simetría con el resto.
 > 4. **Desactivación.** ¿Bloqueamos desactivar un término ya referenciado por un `esaviCase`, o se permite y el caso conserva la referencia histórica?
 

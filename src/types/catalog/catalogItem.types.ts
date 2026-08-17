@@ -1,6 +1,7 @@
+// There is no code: it is minted from the name with toCodeFromName, both in the 001 and in the 004,
+// so a code travelling in the body would be accepted and discarded
 export interface CreateCatalogItemInput {
     catalogTypeId: string;
-    code?: string | null;
     name: string;
     value: string;
     description?: string | null;
@@ -32,14 +33,16 @@ export interface CatalogItemFileValues {
 // operator sees it in Excel; row 1 is the header.
 // Every text field arrives normalized from the parser and not from the service, because uniqueness
 // is compared against the normalized value and it is the parser that detects the file's own
-// duplicates. The two codes carry different normalizations on purpose: catalogItem.code goes through
-// toConstantCase and catalogType.code through toCamelCase, which is what the two services already do
+// duplicates. The two codes are minted differently on purpose: catalogItem.code comes from its own
+// name through toCodeFromName and catalogType.code from the cell through toCamelCase, which is what
+// the two services already do
 export interface ParsedCatalogItemRow {
     row: number;
     catalogTypeCode: string;
     // Only used if the type has to be created. Null is not a rejection here: the parser is pure and
     // cannot know whether the type already exists, so the service decides
     catalogTypeName: string | null;
+    // Never read from the sheet: minted from the normalized name
     code: string;
     name: string;
     values: CatalogItemFileValues;
@@ -49,7 +52,8 @@ export interface ParsedCatalogItemRow {
 
 // One rejected row. column is filled only for VALUE_TOO_LONG — the other reasons name their column
 // already. CATALOG_TYPE_NAME_REQUIRED is the only one the service emits and not the parser, so
-// errors gathers rejections from two origins, both carrying their row number
+// errors gathers rejections from two origins, both carrying their row number.
+// EMPTY_CODE no longer names a cell of the sheet: it is a name that mints no code, such as '---'
 export interface RejectedCatalogItemRow {
     row: number;
     reason: 'EMPTY_CATALOG_TYPE_CODE' | 'EMPTY_CODE' | 'EMPTY_NAME'

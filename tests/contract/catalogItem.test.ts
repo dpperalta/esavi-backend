@@ -43,7 +43,6 @@ describe('catalogItem contract', () => {
                 .set(authHeader('SUPERADMIN'))
                 .send({
                     catalogTypeId,
-                    code: `differential ${ suffix }`,
                     name: `differential ${ suffix }`,
                     value: 'DIFFERENTIAL',
                     description: 'Catalog item of the differential update case',
@@ -59,6 +58,89 @@ describe('catalogItem contract', () => {
                 model: CatalogItem,
                 role: 'SUPERADMIN'
             });
+        });
+
+    });
+
+    /**
+     * The code is minted from the name and never sent by the client, so the same name produces the
+     * same code whichever door it comes through — the 001, the 004 or the 006.
+     */
+    describe('code minted from the name', () => {
+
+        // Digits only: toTitleCase lowercases everything after the first letter of each word, so a
+        // suffix carrying letters would come back mangled and the expectations would read as noise.
+        // The catalogType of this block is created fresh for the run anyway
+        const tag = Date.now().toString().slice(-6);
+
+        // errorHandler logs every error it handles and two of these cases trigger one on purpose
+        let consoleError: jest.SpyInstance;
+
+        beforeAll(() => {
+            consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+        });
+
+        afterAll(() => {
+            consoleError.mockRestore();
+        });
+
+        it('mints the code in camelCase and ignores a code travelling in the body', async () => {
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({
+                    catalogTypeId,
+                    code: 'OTRA_COSA',
+                    name: `Pharmaceutical form ${ tag }`,
+                    value: 'PF'
+                });
+
+            expect(created.status).toBe(201);
+            expect(created.body.data.code).toBe(`pharmaceuticalForm${ tag }`);
+            expect(created.body.data.name).toBe(`Pharmaceutical Form ${ tag }`);
+        });
+
+        it('returns 409 for a name that mints a code already taken inside the same type', async () => {
+            // Different case, same minted code: it is the same item, and the 409 is what says so
+            const response = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({
+                    catalogTypeId,
+                    name: `PHARMACEUTICAL FORM ${ tag }`,
+                    value: 'PF'
+                });
+
+            expect(response.status).toBe(409);
+            expect(response.body.code).toBe('CATITEM_001_CODE_EXISTS');
+        });
+
+        it('returns 400 when the name mints no usable code', async () => {
+            const response = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: '---', value: 'X' });
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('CATITEM_001_CODE_NOT_DERIVABLE');
+        });
+
+        it('mints the code again when the name changes on an update', async () => {
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: `Renamed item ${ tag }`, value: 'R' });
+
+            expect(created.status).toBe(201);
+            expect(created.body.data.code).toBe(`renamedItem${ tag }`);
+
+            const updated = await request(app)
+                .put(`/api/catalog-items/${ created.body.data.catalogItemId }`)
+                .set(authHeader('SUPERADMIN'))
+                .send({ name: `Renamed item ${ tag } bis` });
+
+            expect(updated.status).toBe(200);
+            expect(updated.body.data.code).toBe(`renamedItem${ tag }Bis`);
         });
 
     });
@@ -189,11 +271,12 @@ describe('catalogItem contract', () => {
                 .toBe('ESAVI-CATITEM-006');
         });
 
-        it('normalizes code and name the way the 001 does, and fills an empty value with the name', async () => {
+        it('mints the code from the name the way the 001 does, and fills an empty value with the name', async () => {
             const typeId = await typeIdOf(existingTypeCode);
-            const activo = await readItem(typeId, 'ACTIVO');
-            const cerrado = await readItem(typeId, 'CERRADO');
+            const activo = await readItem(typeId, 'activo');
+            const cerrado = await readItem(typeId, 'cerrado');
 
+            // The row is found by the code the file never brought: 'Activo' minted 'activo'
             expect(activo).toMatchObject({ name: 'Activo', value: 'A', description: 'Estado activo', sortOrder: 1 });
             // The one column that never lands null: an empty cell carries the already normalized name
             expect(cerrado).toMatchObject({ name: 'Cerrado', value: 'Cerrado', description: 'Estado cerrado' });
@@ -201,14 +284,14 @@ describe('catalogItem contract', () => {
 
         it('coerces an invalid sortOrder to 0 instead of losing the row', async () => {
             const typeId = await typeIdOf(existingTypeCode);
-            const orden = await readItem(typeId, 'ORDEN');
+            const orden = await readItem(typeId, 'orden');
 
             expect(orden).toMatchObject({ name: 'Orden', sortOrder: 0 });
         });
 
         it('leaves every inserted row with metadata at {} and isActive true', async () => {
             const typeId = await typeIdOf(existingTypeCode);
-            const activo = await readItem(typeId, 'ACTIVO');
+            const activo = await readItem(typeId, 'activo');
 
             expect(activo!.metadata).toEqual({});
             expect(activo!.isActive).toBe(true);
@@ -218,15 +301,17 @@ describe('catalogItem contract', () => {
 
         it('keeps the first appearance of a repeated pair and rejects the second', async () => {
             const typeId = await typeIdOf(existingTypeCode);
-            const activo = await readItem(typeId, 'ACTIVO');
+            const activo = await readItem(typeId, 'activo');
 
-            // Row 8 carries the same pair with name 'Activo Repetido' and must not have won
+            // Row 8 writes the name as 'ACTIVO', which mints the same code and is therefore the same
+            // pair. Its value is 'X' and must not have won over the 'A' of row 2
+            expect(activo!.value).toBe('A');
             expect(activo!.name).toBe('Activo');
         });
 
         it('reimports the same file without writing a single row', async () => {
             const typeId = await typeIdOf(existingTypeCode);
-            const before = await readItem(typeId, 'ACTIVO');
+            const before = await readItem(typeId, 'activo');
 
             const response = await importFixture();
 
@@ -235,22 +320,23 @@ describe('catalogItem contract', () => {
                 read: 8, inserted: 0, updated: 0, unchanged: 6, catalogTypesCreated: 0
             });
 
-            const after = await readItem(typeId, 'ACTIVO');
+            const after = await readItem(typeId, 'activo');
             // No UPDATE means no appDetails entry and no sysDetails event. This is the criterion that
             // really discriminates: a non-differential importer passes every test above and fails here
             expect(after!.appDetails).toHaveLength(before!.appDetails.length);
             expect(after!.version).toBe(before!.version);
         });
 
-        it('updates only the row whose name changed', async () => {
+        it('updates only the row whose value changed', async () => {
             const typeId = await typeIdOf(existingTypeCode);
-            const before = await readItem(typeId, 'VIGENTE');
+            const before = await readItem(typeId, 'vigente');
 
             // The same book with one cell changed, built in memory so the fixture on disk stays the
-            // one the rest of the block asserts against
+            // one the rest of the block asserts against. The cell is `value` and not `name`: the code
+            // is minted from the name, so touching the name changes the identity of the row
             const workbook = new ExcelJS.Workbook();
             await workbook.xlsx.readFile(fixture);
-            workbook.worksheets[0].getRow(3).getCell(4).value = 'Vigente Renombrado';
+            workbook.worksheets[0].getRow(3).getCell(4).value = 'V2';
             const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
 
             const response = await request(app).post(importPath)
@@ -260,8 +346,8 @@ describe('catalogItem contract', () => {
             expect(response.status).toBe(200);
             expect(response.body.data).toMatchObject({ updated: 1, unchanged: 5, inserted: 0 });
 
-            const after = await readItem(typeId, 'VIGENTE');
-            expect(after!.name).toBe('Vigente Renombrado');
+            const after = await readItem(typeId, 'vigente');
+            expect(after!.value).toBe('V2');
             expect(after!.appDetails).toHaveLength(before!.appDetails.length + 1);
             expect(after!.version).toBe(( before!.version ?? 0 ) + 1);
         });
@@ -293,7 +379,7 @@ describe('catalogItem contract', () => {
 
         it('does not reactivate an item deactivated with the 005A', async () => {
             const typeId = await typeIdOf(foundedTypeCode);
-            const target = await CatalogItem.findOne({ where: { catalogTypeId: typeId, code: 'LEVE' } });
+            const target = await CatalogItem.findOne({ where: { catalogTypeId: typeId, code: 'leve' } });
 
             const deleted = await request(app)
                 .delete(`/api/catalog-items/${ target!.getDataValue('catalogItemId') }`)
@@ -307,6 +393,27 @@ describe('catalogItem contract', () => {
             // The file declares no currency, so inferring one from it would be inventing it
             expect(after!.getDataValue('isActive')).toBe(false);
             expect(after!.getDataValue('deletedAt')).not.toBeNull();
+        });
+
+        // The consequence of minting the code from the name: the name is the identity of an item
+        // inside its type, so the importer cannot rename. A changed name is a different pair, which
+        // is an insertion, and the old row stays where it was — renaming is the 004's business
+        it('inserts a new item when the name changes, instead of renaming the existing one', async () => {
+            const typeId = await typeIdOf(existingTypeCode);
+
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(fixture);
+            workbook.worksheets[0].getRow(3).getCell(3).value = 'Vigente Renombrado';
+            const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+            const response = await request(app).post(importPath)
+                .set(authHeader('SUPERADMIN'))
+                .attach('file', buffer, 'catalog-items-sample.xlsx');
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toMatchObject({ inserted: 1 });
+            expect(await readItem(typeId, 'vigenteRenombrado')).toMatchObject({ name: 'Vigente Renombrado' });
+            expect(await readItem(typeId, 'vigente')).not.toBeNull();
         });
 
         it('returns 400 CATITEM_006_FILE_INVALID for a book that is not a workbook', async () => {
@@ -324,13 +431,13 @@ describe('catalogItem contract', () => {
 
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet('Items');
-            worksheet.addRow([ 'catalogTypeCode', 'catalogTypeName', 'name' ]);
-            worksheet.addRow([ 'tipo sin code', 'Tipo Sin Code', 'Uno' ]);
+            worksheet.addRow([ 'catalogTypeCode', 'catalogTypeName', 'value' ]);
+            worksheet.addRow([ 'tipo sin name', 'Tipo Sin Name', 'Uno' ]);
             const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
 
             const response = await request(app).post(importPath)
                 .set(authHeader('SUPERADMIN'))
-                .attach('file', buffer, 'sin-code.xlsx');
+                .attach('file', buffer, 'sin-name.xlsx');
 
             expect(response.status).toBe(400);
             expect(response.body.code).toBe('CATITEM_006_FILE_INVALID');

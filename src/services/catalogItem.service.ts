@@ -1,5 +1,5 @@
 import { CreationAttributes, Op, Transaction } from "sequelize";
-import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toConstantCase, toTitleCase } from "../helpers";
+import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromName, toTitleCase } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
 import {
@@ -28,6 +28,32 @@ const MAX_REPORTED_IMPORT_ERRORS = 20;
 // inserted instead of as an error
 const DRY_RUN_TYPE_ID_PREFIX = 'dry-run:';
 
+// varchar(100) of catalogItem.code against varchar(250) of catalogItem.name. Now that the code is
+// minted from the name, a legal name can mint an illegal code, and that has to end in a 400 and not
+// in the 500 the column would raise
+const MAX_CODE_LENGTH = 100;
+
+/**
+ * The code of a catalogItem, minted from its name. It is never taken from the client nor from the
+ * import file: the same name has to produce the same code whichever door it comes through — the 001,
+ * the 004 or the 006 — or the uniqueness of the pair would stop detecting the duplicate.
+ * Two names mint nothing usable and both end in a 400: one made only of separators, which mints an
+ * empty code, and one long enough for the code to overflow its own column.
+ */
+const mintCatalogItemCode = ( name: string, operation: string, lang: string ): string => {
+    const code = toCodeFromName(name);
+
+    if( code.length === 0 || code.length > MAX_CODE_LENGTH ) {
+        throw new AppError(
+            getMessage('catalogItem.codeNotDerivable', lang, { name: name.trim() }),
+            400,
+            `CATITEM_${ operation }_CODE_NOT_DERIVABLE`
+        );
+    }
+
+    return code;
+}
+
 // ESAVI-CATITEM-001 - Create Catalog Item Service
 const createCatalogItemService = async (data: CreateCatalogItemInput, authUser: AuthUser | undefined, lang: string) => {
     // Validate that the referenced Catalog Type exists and is active
@@ -41,18 +67,18 @@ const createCatalogItemService = async (data: CreateCatalogItemInput, authUser: 
         throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATITEM_001_CATTYPE_NOT_FOUND');
     }
     const catalogTypeId = data.catalogTypeId;
-    const code = data.code ? toConstantCase(data.code.trim()) : null;
-    // If code is provided, validate that it's unique within the same Catalog Type
-    if (code) {
-        const existingItem = await CatalogItem.findOne({
-            where: {
-                catalogTypeId,
-                code: code
-            }
-        });
-        if (existingItem) {
-            throw new AppError(getMessage('catalogItem.codeExists', lang, { code }), 409, 'CATITEM_001_CODE_EXISTS');
+    // Minted from the name and not taken from the body, so it is never absent and the item never
+    // ends up with a placeholder code
+    const code = mintCatalogItemCode(data.name, '001', lang);
+    // The code must be unique within its Catalog Type: the UNIQUE of the DDL is of the pair
+    const existingItem = await CatalogItem.findOne({
+        where: {
+            catalogTypeId,
+            code
         }
+    });
+    if (existingItem) {
+        throw new AppError(getMessage('catalogItem.codeExists', lang, { code, catalogTypeId }), 409, 'CATITEM_001_CODE_EXISTS');
     }
     // Defining sortOrder: if provided in the request, use it. Otherwise, set it to max existing sortOrder + 1 for the same catalogTypeId
     let sortOrder: number | null = null;
@@ -75,7 +101,7 @@ const createCatalogItemService = async (data: CreateCatalogItemInput, authUser: 
     };
     const createdItem = await CatalogItem.create({
         catalogTypeId: data.catalogTypeId,
-        code: code ? code : 'NO_CODE_' + Date.now(),
+        code,
         name: toTitleCase(data.name.trim()),
         value: data.value.trim(),
         description: data.description ? data.description.trim() : null,
@@ -157,8 +183,10 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
         }
         targetCatalogTypeId = data.catalogTypeId;
     }
+    // The code is minted again from the name, so a renamed item changes its code with it and a body
+    // that does not bring the name keeps the stored one. A code travelling in the body is ignored
+    const targetCode = data.name ? mintCatalogItemCode(data.name, '004', lang) : catalogItem.code;
     // The code must be unique within the target Catalog Type, which may differ from the current one
-    const targetCode = data.code ? toConstantCase(data.code.trim()) : catalogItem.code;
     if( targetCode && ( targetCode !== catalogItem.code || targetCatalogTypeId !== catalogItem.catalogTypeId ) ) {
         const existingItem = await CatalogItem.findOne({
             where: {
@@ -168,7 +196,7 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
             }
         });
         if( existingItem ) {
-            throw new AppError(getMessage('catalogItem.codeExists', lang), 409, 'CATITEM_004_CODE_EXISTS');
+            throw new AppError(getMessage('catalogItem.codeExists', lang, { code: targetCode, catalogTypeId: targetCatalogTypeId }), 409, 'CATITEM_004_CODE_EXISTS');
         }
     }
     const currentAppDetails = Array.isArray(catalogItem.appDetails) ? catalogItem.appDetails : [];
@@ -178,7 +206,9 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
     const stored = catalogItem.get({ plain: true }) as Record<string, unknown>;
     const objectToUpdate = buildDifferentialUpdate(stored, {
         catalogTypeId: targetCatalogTypeId,
-        code: data.code ? toConstantCase(data.code.trim()) : undefined,
+        // Both come from the same body key: the code is not a field of its own any more, so it
+        // enters the diff exactly when the name does — and reaches the UPDATE only if it changed
+        code: data.name ? targetCode : undefined,
         name: data.name ? toTitleCase(data.name.trim()) : undefined,
         value: data.value ? data.value.trim() : undefined,
         description: data.description ? data.description.trim() : undefined,

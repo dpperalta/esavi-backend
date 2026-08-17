@@ -131,6 +131,7 @@
     },
     "catalogItem": {
         "codeExists": "A catalog item with code {{code}} already exists for catalog type ID {{catalogTypeId}}",
+        "codeNotDerivable": "No code can be derived from the name {{name}}. The name must produce an identifier between 1 and 100 characters long.",
         "notFound": "Catalog item not found. Please check the catalog item ID and try again.",
         "notFoundPlural": "One or more catalog items not found. Please check the catalog item IDs and try again.",
         "createdSuccess": "Catalog item created successfully",
