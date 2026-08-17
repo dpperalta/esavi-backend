@@ -190,6 +190,26 @@ const deleteNotificationMedication = async (req: Request, res: Response, next: N
     }
 }
 
+// Activate Notification Medication Controller - For SuperAdmin
+// Code: ESAVI-NOTIFMED-005B
+const activateNotificationMedication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationMedicationActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedication.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFMED-005B: Error activating Notification Medication: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedication.activatedFailed', req.lang), 500, 'NOTIFMED_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createNotificationMedication,
     getNotificationMedicationsByNotification,
@@ -197,5 +217,6 @@ export {
     getNotificationMedicationById,
     getNotificationMedicationsByCaseId,
     updateNotificationMedication,
-    deleteNotificationMedication
+    deleteNotificationMedication,
+    activateNotificationMedication
 };

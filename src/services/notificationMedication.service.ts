@@ -1,4 +1,4 @@
-import { InferAttributes, Transaction } from 'sequelize';
+import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification, NotificationMedication } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
@@ -564,6 +564,72 @@ const updateNotificationMedicationService = async (
     return updated ? toNotificationMedicationResponse(updated) : null;
 }
 
+// The one piece of ESAVI-NOTIFMED-005B that is not a clean delegation, and the reason this entity
+// cannot hand its activation to setEntityActiveStatusService and be done with it. The problem and
+// its solution are the ones F16 verified over the very same configuration, adopted here without
+// being reasoned again.
+//
+// UQ_notificationMedication_parent_sortOrder is a partial unique index over
+// (notificationId, sortOrder) WHERE deletedAt IS NULL (esaviapp.sql:1334-1336). A 005A seals
+// deletedAt, so the number leaves both the index and the MAX the insert trigger computes, and a
+// later create legitimately reuses it. The moment setEntityActiveStatusService:34 clears deletedAt,
+// two live rows would share the pair and the index would blow up — a 500 on an operation the norm
+// describes as the plain undo of a 005A.
+//
+// So the number is moved first, and only when it is actually taken. Reassigning always would move
+// medications nobody asked to move; answering 409 would force purging or reordering another
+// medication to undo one's own action, and the order is presentation, not identity.
+//
+// The order of the two writes is the whole point: while deletedAt is still sealed the row sits
+// outside the partial index, so this UPDATE is free. Doing it after the helper would fail inside
+// the helper's own UPDATE — the constraint is not deferrable and there would be no way to fix it
+// afterwards.
+//
+// This is a write with an intention of its own over a field the client neither sent nor can send,
+// so it does not go through buildDifferentialUpdate: it does not come from comparing an incoming
+// value against the stored one, but from a constraint of the database.
+//
+// A missing row is left alone: the helper right after raises the 404. An already active row finds
+// no collision either — the index guarantees no other live row shares its number — so nothing is
+// written and the helper raises its 409 as usual
+const reassignSortOrderOnCollision = async (id: string, transaction: Transaction) => {
+    const notificationMedication = await NotificationMedication.findOne({
+        where: { medicationId: id },
+        paranoid: false,
+        transaction
+    });
+    if( !notificationMedication || notificationMedication.deletedAt === null ) {
+        return;
+    }
+
+    const collision = await NotificationMedication.findOne({
+        where: {
+            notificationId: notificationMedication.notificationId,
+            sortOrder: notificationMedication.sortOrder as number,
+            deletedAt: null,
+            medicationId: { [Op.ne]: id }
+        },
+        attributes: ['medicationId'],
+        paranoid: false,
+        transaction
+    });
+    if( !collision ) {
+        return;
+    }
+
+    // The same count TRG_notificationMedication_setSortOrder does on insert, so the reactivated
+    // medication reappears at the end of the list
+    const highest = await NotificationMedication.max<number, NotificationMedication>('sortOrder', {
+        where: { notificationId: notificationMedication.notificationId, deletedAt: null },
+        transaction
+    });
+
+    await notificationMedication.update(
+        { sortOrder: ( Number(highest) || 0 ) + 1 },
+        { transaction, fields: ['sortOrder'] }
+    );
+}
+
 // ESAVI-NOTIFMED-005A / 005B - Setting Notification Medication Active/Inactive Service
 // One service for the two operations, so the number is not written fixed: it is computed on entry
 // and used in the three places CONVENTIONS.md §6 requires.
@@ -584,6 +650,14 @@ const setNotificationMedicationActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // Only on the way back: a 005A is what frees the number, so it never collides.
+        // The reactivation does not revalidate the catalogs — a pharmaceutical form retired while
+        // the medication was withdrawn does not prevent bringing it back to life, because the data
+        // is historical and this operation does not write those columns
+        if( isActive ) {
+            await reassignSortOrderOnCollision(id, transaction);
+        }
+
         const notificationMedication = await setEntityActiveStatusService({
             model: NotificationMedication,
             where: { medicationId: id },

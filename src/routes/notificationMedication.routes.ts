@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateNotificationMedication,
     createNotificationMedication,
     deleteNotificationMedication,
     getAllNotificationMedicationsByNotification,
@@ -19,7 +20,7 @@ import {
     updateNotificationMedicationValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -49,6 +50,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // The :id is the notificationId, not a medication id: the listing is entered by the foreign key.
 // Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationNotificationIdValidator, ...notificationMedicationListValidator, validateFields, getNotificationMedicationsByNotification);
+
+// Activate Notification Medication - For SuperAdmin
+// Code: ESAVI-NOTIFMED-005B
+// Declared with the literal paths, before /:id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicationIdValidator, validateFields, activateNotificationMedication);
 
 // Get Notification Medication by ID
 // Code: ESAVI-NOTIFMED-003
