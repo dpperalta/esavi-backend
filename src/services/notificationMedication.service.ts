@@ -2,6 +2,7 @@ import { InferAttributes, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification, NotificationMedication } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateNotificationMedicationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -563,11 +564,56 @@ const updateNotificationMedicationService = async (
     return updated ? toNotificationMedicationResponse(updated) : null;
 }
 
+// ESAVI-NOTIFMED-005A / 005B - Setting Notification Medication Active/Inactive Service
+// One service for the two operations, so the number is not written fixed: it is computed on entry
+// and used in the three places CONVENTIONS.md §6 requires.
+//
+// 005A seals deletedAt, which releases the sortOrder from the partial unique index
+// UQ_notificationMedication_parent_sortOrder — the index is conditioned by deletedAt, not by
+// isActive. That is deliberate: the number becomes available to the next medication, and the gap
+// left in the listing is presentation, not a defect.
+//
+// The state of the notification is not checked here, in either direction: retiring a medication is
+// an operation over its own row
+const setNotificationMedicationActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const notificationMedication = await setEntityActiveStatusService({
+            model: NotificationMedication,
+            where: { medicationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('notificationMedication.notFound', lang),
+            notFoundCode: `NOTIFMED_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`notificationMedication.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `NOTIFMED_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-NOTIFMED-${ op }`,
+                detail: `Notification medication ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return notificationMedication;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationMedicationService,
     getNotificationMedicationsByNotificationService,
     getAllNotificationMedicationsByNotificationService,
     getNotificationMedicationByIdService,
     getNotificationMedicationsByCaseIdService,
-    updateNotificationMedicationService
+    updateNotificationMedicationService,
+    setNotificationMedicationActivationService
 };

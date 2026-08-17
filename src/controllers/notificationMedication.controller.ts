@@ -7,6 +7,7 @@ import {
     getNotificationMedicationByIdService,
     getNotificationMedicationsByCaseIdService,
     getNotificationMedicationsByNotificationService,
+    setNotificationMedicationActivationService,
     updateNotificationMedicationService
 } from '../services/notificationMedication.service';
 
@@ -169,11 +170,32 @@ const updateNotificationMedication = async (req: Request, res: Response, next: N
     }
 }
 
+// Delete Notification Medication Controller
+// Code: ESAVI-NOTIFMED-005A
+const deleteNotificationMedication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationMedicationActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedication.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFMED-005A: Error deleting Notification Medication: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedication.deletedFailed', req.lang), 500, 'NOTIFMED_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createNotificationMedication,
     getNotificationMedicationsByNotification,
     getAllNotificationMedicationsByNotification,
     getNotificationMedicationById,
     getNotificationMedicationsByCaseId,
-    updateNotificationMedication
+    updateNotificationMedication,
+    deleteNotificationMedication
 };

@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationMedication,
+    deleteNotificationMedication,
     getAllNotificationMedicationsByNotification,
     getNotificationMedicationById,
     getNotificationMedicationsByCaseId,
@@ -58,5 +59,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedic
 // Update Notification Medication
 // Code: ESAVI-NOTIFMED-004
 router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationIdValidator, ...updateNotificationMedicationValidator, validateFields, updateNotificationMedication);
+
+// Delete Notification Medication - Logical delete
+// Code: ESAVI-NOTIFMED-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationIdValidator, validateFields, deleteNotificationMedication);
 
 export default router;
