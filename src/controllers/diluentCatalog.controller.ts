@@ -5,7 +5,9 @@ import {
     createDiluentCatalogService,
     getActiveDiluentCatalogsService,
     getAllDiluentCatalogsService,
-    getDiluentCatalogByIdService
+    getDiluentCatalogByIdService,
+    updateDiluentCatalogService,
+    setDiluentCatalogActivationService
 } from '../services/diluentCatalog.service';
 
 // Unwraps the single query filter, identical in both listings
@@ -102,9 +104,74 @@ const getDiluentCatalogById = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Update Diluent Catalog Controller
+// Code: ESAVI-DILUENT-004
+const updateDiluentCatalog = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateDiluentCatalogService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diluentCatalog.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DILUENT-004: Error updating Diluent Catalog: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diluentCatalog.updatedFailed', req.lang), 500, 'DILUENT_004_UPDATE_FAILED', error));
+    }
+}
+
+// Delete Diluent Catalog Controller - Soft delete
+// Code: ESAVI-DILUENT-005A
+const deleteDiluentCatalog = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setDiluentCatalogActivationService(id, req.user, req.lang, false);
+        // No data: there is nothing left to return but the fact itself
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diluentCatalog.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DILUENT-005A: Error deleting Diluent Catalog: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diluentCatalog.deletedFailed', req.lang), 500, 'DILUENT_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Diluent Catalog Controller - For SuperAdmin
+// Code: ESAVI-DILUENT-005B
+const activateDiluentCatalog = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setDiluentCatalogActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diluentCatalog.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DILUENT-005B: Error activating Diluent Catalog: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diluentCatalog.activatedFailed', req.lang), 500, 'DILUENT_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createDiluentCatalog,
     getDiluentCatalogs,
     getAllDiluentCatalogs,
-    getDiluentCatalogById
+    getDiluentCatalogById,
+    updateDiluentCatalog,
+    deleteDiluentCatalog,
+    activateDiluentCatalog
 };

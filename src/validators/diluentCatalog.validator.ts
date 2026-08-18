@@ -36,3 +36,18 @@ export const createDiluentCatalogValidator = [
     body('composition').optional({ nullable: true }).trim(),
     body('isActive').optional().isBoolean().withMessage('Is Active must be a boolean')
 ];
+
+// The create validator in its optional variant: code and name stop being required but may not
+// arrive empty, and the two nullable columns keep exactly the same rules. code is mutable — a typo
+// in a manually entered code has to be fixable — and the service checks its uniqueness against the
+// already normalized value, before the diff.
+// isActive is accepted and ignored: activation belongs to 005A and 005B, and rejecting a client that
+// resends its own GET response would turn a field nobody meant to change into a 400
+export const updateDiluentCatalogValidator = [
+    body('code').optional().trim().notEmpty().withMessage('Diluent code cannot be empty')
+        .isLength({ max: 100 }).withMessage('Diluent code must be at most 100 characters long'),
+    body('name').optional().trim().notEmpty().withMessage('Diluent name cannot be empty')
+        .isLength({ max: 250 }).withMessage('Diluent name must be at most 250 characters long'),
+    body('description').optional({ nullable: true }).trim(),
+    body('composition').optional({ nullable: true }).trim()
+];

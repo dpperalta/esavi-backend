@@ -1,7 +1,9 @@
 import { Op, WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { DiluentCatalog } from '../models';
-import { AppError, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { AppDetails, AuthUser, CreateDiluentCatalogInput, DiluentCatalogListFilters } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The two nullable text columns of the entity, trimmed on write and never normalized any further.
@@ -115,9 +117,117 @@ const getDiluentCatalogByIdService = async (id: string, lang: string, includeIna
     return diluentCatalog;
 }
 
+// How every nullable text column enters `candidates`: null empties the column and undefined means
+// the key never travelled, which are two different intents. The comparison is against undefined and
+// never a truthiness test, or an empty string would be silently dropped
+const textCandidate = (value?: string | null): string | null | undefined =>
+    value !== undefined ? (value?.trim() ?? null) : undefined;
+
+// ESAVI-DILUENT-004 - Update Diluent Catalog Service
+const updateDiluentCatalogService = async (id: string, data: Partial<CreateDiluentCatalogInput>, authUser: AuthUser | undefined, lang: string) => {
+    const { userId } = authUser || {};
+    const diluentCatalog = await DiluentCatalog.findByPk(id);
+    if (!diluentCatalog) {
+        throw new AppError(getMessage('diluentCatalog.notFound', lang), 404, 'DILUENT_004_NOT_FOUND');
+    }
+    let updatedDiluentCatalog = diluentCatalog;
+    // Normalized once, with the same function the create uses, and reused both for the uniqueness
+    // query and for the diff. Comparing the raw body against the normalized stored value would make
+    // a PUT with 'agua destilada' over a row holding AGUA_DESTILADA look like a change and write on
+    // every call
+    const candidateCode = data.code ? toConstantCase(data.code.trim()) : undefined;
+    // Uniqueness runs before the diff and independently of it: an occupied code is a 409 even when
+    // the rest of the body changes nothing. It does not filter by isActive — a code taken by a
+    // deactivated row is still taken — and excluding the own id is what lets a client resend its own
+    // value without colliding with itself
+    if (candidateCode !== undefined) {
+        const existingDiluent = await DiluentCatalog.findOne({
+            where: {
+                code: candidateCode,
+                diluentCatalogId: { [Op.ne]: id }
+            },
+            attributes: ['diluentCatalogId']
+        });
+        if (existingDiluent) {
+            throw new AppError(getMessage('diluentCatalog.codeExists', lang, { code: candidateCode }), 409, 'DILUENT_004_CODE_EXISTS');
+        }
+    }
+    const currentAppDetails = Array.isArray(diluentCatalog.appDetails) ? diluentCatalog.appDetails : [];
+    // `stored` is the whole row, which is the precondition of the helper: a narrowed `attributes`
+    // would read back undefined for the columns it left out and every comparison would count as a
+    // change. The four data columns are candidates and nothing else — isActive is governed by 005A
+    // and 005B
+    const stored = diluentCatalog.get({ plain: true }) as Record<string, unknown>;
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        // Mutable: a typo in a manually entered code has to be fixable, and the uniqueness check
+        // above already protects the result
+        code: candidateCode,
+        // Only trimmed, never toTitleCase — see the create
+        name: data.name ? data.name.trim() : undefined,
+        description: textCandidate(data.description),
+        composition: textCandidate(data.composition)
+    });
+    // Nothing changed: no UPDATE, no updatedAt, no appDetails entry and no sysDetails event
+    if (Object.keys(objectToUpdate).length > 0) {
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: userId || 'undefined',
+            method: 'ESAVI-DILUENT-004',
+            detail: 'Diluent catalog entry updated by service'
+        };
+        updatedDiluentCatalog = await diluentCatalog.update({
+            ...objectToUpdate,
+            updatedAt: new Date(),
+            appDetails: [
+                ...currentAppDetails,
+                newEntry
+            ]
+        }, { returning: true });
+    }
+    return stripSysDetails(updatedDiluentCatalog);
+}
+
+// ESAVI-DILUENT-005A / ESAVI-DILUENT-005B - Set Diluent Catalog Activation Service
+// Not a differential update: these are writes with an intention of their own. They record a state
+// fact, so they go through setEntityActiveStatusService and never through buildDifferentialUpdate.
+// The where filters by the primary key alone: no incoming foreign key is checked, because this is a
+// logical delete — the ON DELETE RESTRICT of the single child table never fires, an inactive diluent
+// keeps being referenced by design, and that table does not even exist yet. Deactivating means
+// "stop offering it in the dropdown", not "stop existing"
+const setDiluentCatalogActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const diluentCatalog = await setEntityActiveStatusService({
+            model: DiluentCatalog,
+            where: { diluentCatalogId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('diluentCatalog.notFound', lang),
+            notFoundCode: `DILUENT_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`diluentCatalog.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `DILUENT_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                // Only the computed operation code, with no _ACTIVATION stuck behind it
+                method: `ESAVI-DILUENT-${ op }`,
+                detail: `DiluentCatalog ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return diluentCatalog;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createDiluentCatalogService,
     getActiveDiluentCatalogsService,
     getAllDiluentCatalogsService,
-    getDiluentCatalogByIdService
+    getDiluentCatalogByIdService,
+    updateDiluentCatalogService,
+    setDiluentCatalogActivationService
 };

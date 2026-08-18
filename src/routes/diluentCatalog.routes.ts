@@ -2,15 +2,19 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateDiluentCatalog,
     createDiluentCatalog,
+    deleteDiluentCatalog,
     getAllDiluentCatalogs,
     getDiluentCatalogById,
-    getDiluentCatalogs
+    getDiluentCatalogs,
+    updateDiluentCatalog
 } from '../controllers/diluentCatalog.controller';
 import {
     createDiluentCatalogValidator,
     diluentCatalogIdValidator,
-    diluentCatalogListValidator
+    diluentCatalogListValidator,
+    updateDiluentCatalogValidator
 } from '../validators';
 
 // The second entity of the repository whose base route does not match its table name, after
@@ -18,7 +22,7 @@ import {
 // What the catalog holds are diluents; 'catalog' names the container, not the resource, and a REST
 // resource is named after what it returns. The file, the model, the types and the service keep the
 // table name, because there they have to match the DDL
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -35,9 +39,22 @@ router.get('/', tokenValidation, validateUserRole(USER), ...diluentCatalogListVa
 // Literal path, declared before '/:id' so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...diluentCatalogListValidator, validateFields, getAllDiluentCatalogs);
 
+// Activate Diluent Catalog - For SuperAdmin
+// Code: ESAVI-DILUENT-005B
+// Literal path, declared before '/:id' so Express does not capture 'activate' as an :id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...diluentCatalogIdValidator, validateFields, activateDiluentCatalog);
+
 // Get Diluent Catalog by ID
 // Code: ESAVI-DILUENT-003
 // Declared after the literal paths so Express does not capture 'admin' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...diluentCatalogIdValidator, validateFields, getDiluentCatalogById);
+
+// Update Diluent Catalog
+// Code: ESAVI-DILUENT-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...diluentCatalogIdValidator, ...updateDiluentCatalogValidator, validateFields, updateDiluentCatalog);
+
+// Soft delete Diluent Catalog
+// Code: ESAVI-DILUENT-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...diluentCatalogIdValidator, validateFields, deleteDiluentCatalog);
 
 export default router;
