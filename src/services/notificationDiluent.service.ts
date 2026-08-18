@@ -206,6 +206,41 @@ const assertDiluentCatalogIsValid = async (
     }
 }
 
+// The temporal coherence rule, shared by 001 and 004. A vial is reconstituted before, or the very
+// same day, the vaccine is administered — reconstituting it after the shot is an impossible datum,
+// not a rare case.
+//
+// It is a single hop, against the direct parent, and it deliberately does not reach esaviCase. If
+// vaccinationDate is already coherent with eventDate by the rule of F22, and reconstitutionDate is
+// coherent with vaccinationDate, transitivity does the rest: checking against the case here would
+// duplicate an existing validation and tie this entity to a table three hops up.
+//
+// The same day is valid, and here it is the normal case rather than a tolerated exception: a vial is
+// reconstituted minutes before being administered, and requiring strictly earlier would block the
+// ordinary record.
+//
+// It compares only the dates, never the times. notificationVaccine.vaccinationDate is a `date` and
+// there is no hour to compare against, even though the vaccine does carry a vaccinationTime.
+//
+// It does not apply when either date is missing. Both values are cut to their first ten characters,
+// so an ISO 8601 string with time compares as the calendar date it denotes
+const assertReconstitutionDateIsCoherent = (
+    reconstitutionDate: string | null | undefined,
+    vaccinationDate: string | null | undefined,
+    op: string,
+    lang: string
+) => {
+    if( !reconstitutionDate || !vaccinationDate ) return;
+
+    if( reconstitutionDate.slice(0, 10) > vaccinationDate.slice(0, 10) ) {
+        throw new AppError(
+            getMessage('notificationDiluent.reconstitutionAfterVaccination', lang),
+            400,
+            `NOTIFDIL_${ op }_RECONSTITUTION_AFTER_VACCINATION`
+        );
+    }
+}
+
 // Create Notification Diluent Service
 // Code: ESAVI-NOTIFDIL-001
 // No transaction of its own, as in notificationMedication and notificationVaccine: nothing is
@@ -216,12 +251,16 @@ const createNotificationDiluentService = async (
     authUser: AuthUser | undefined,
     lang: string
 ) => {
-    await findValidVaccine(data.vaccineId, '001', lang);
+    const vaccine = await findValidVaccine(data.vaccineId, '001', lang);
 
     // On create the body is the whole resulting state, so the guards are evaluated over it directly
     assertMinimumContent(data.diluentCatalogId, data.diluentName, '001', lang);
 
     await assertDiluentCatalogIsValid(data.diluentCatalogId, '001', lang);
+
+    // The vaccinationDate came back in the same query that validated the parent chain, so the rule
+    // costs no second read
+    assertReconstitutionDateIsCoherent(data.reconstitutionDate, vaccine.vaccinationDate, '001', lang);
 
     const newEntry: AppDetails = {
         createdAt: new Date(),
