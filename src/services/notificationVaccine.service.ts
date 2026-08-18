@@ -1,6 +1,7 @@
 import { InferAttributes, Transaction } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { EsaviCase, Notification, NotificationVaccine, VaccineWhodrug } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationVaccineInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -81,6 +82,28 @@ const findNotificationVaccineWithRelations = async (id: string, includeInactive:
             },
             VACCINE_WHODRUG_INCLUDE
         ]
+    });
+}
+
+// The same read as above without the master include, which is what ESAVI-NOTIFVAC-004 needs: the
+// update compares the raw foreign key, not the resolved object, and the include would only add a
+// join to a query whose instance is about to be written. The header include stays, so the inherited
+// visibility is checked in the same query the update instance comes from, and it carries the case
+// nested because the temporal coherence rule needs its eventDate
+const findNotificationVaccineRow = async (id: string, includeInactive: boolean = false, transaction?: Transaction) => {
+    return await NotificationVaccine.findOne({
+        where: includeInactive ? { vaccineId: id } : { vaccineId: id, isActive: true },
+        include: [{
+            ...NOTIFICATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true },
+            include: [{
+                model: EsaviCase,
+                as: 'case',
+                attributes: ['caseId', 'eventDate']
+            }]
+        }],
+        transaction
     });
 }
 
@@ -426,10 +449,129 @@ const getNotificationVaccinesByCaseIdService = async (
     };
 }
 
+// Update Notification Vaccine Service
+// Code: ESAVI-NOTIFVAC-004
+// notificationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// answers 400: the first one is immutable — moving a vaccine to another notification is not
+// updating it, it is creating a different one — and the second one is governed by the database.
+// Answering 400 for a field a client resends whole from a GET is hostile for no reason
+const updateNotificationVaccineService = async (
+    id: string,
+    data: Partial<CreateNotificationVaccineInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const notificationVaccine = await findNotificationVaccineRow(id, canViewInactive, transaction);
+        if( !notificationVaccine ) {
+            throw new AppError(getMessage('notificationVaccine.notFound', lang), 404, 'NOTIFVAC_004_NOT_FOUND');
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate, and
+        // an instance read with a narrowed `attributes` reads back undefined for what it left out,
+        // so every comparison would count as a change
+        const stored = notificationVaccine.get({ plain: true }) as Record<string, unknown>;
+
+        // The guards are evaluated over the resulting state and not over the body: otherwise a PUT
+        // clearing vaccineName over a row with no master key would empty the row, and a PUT moving
+        // only the vaccination date would never be checked against the case
+        const resultingWhodrugId = data.vaccineWhodrugId !== undefined
+            ? ( data.vaccineWhodrugId ?? null )
+            : ( stored.vaccineWhodrugId as string | null );
+        const resultingVaccineName = data.vaccineName !== undefined
+            ? normalizeText(data.vaccineName)
+            : ( stored.vaccineName as string | null );
+        const resultingVaccinationDate = data.vaccinationDate !== undefined
+            ? ( data.vaccinationDate ?? null )
+            : ( stored.vaccinationDate as string | null );
+
+        assertMinimumContent(resultingWhodrugId, resultingVaccineName, '004', lang);
+
+        // Before the diff and independently of it: a PUT carrying a retired master entry answers
+        // 404 even when no other field changes. Only a key arriving with a non null value is
+        // checked — an explicit null clears the column and validates nothing
+        await assertVaccineWhodrugIsValid(data.vaccineWhodrugId, '004', lang);
+
+        assertVaccinationDateIsCoherent(
+            resultingVaccinationDate,
+            notificationVaccine.notification?.case?.eventDate,
+            '004',
+            lang
+        );
+
+        // notificationId, sortOrder and isActive are deliberately absent: the first two are
+        // immutable and the state moves through 005A and 005B. No field is derived — the three free
+        // texts are the client's copy of what was notified and are never filled in from the master —
+        // so the eleven candidates are compared against what is stored and nothing is computed
+        const candidates: Record<string, unknown> = {
+            vaccineWhodrugId: data.vaccineWhodrugId !== undefined
+                ? ( data.vaccineWhodrugId ?? null )
+                : undefined,
+            // NOT NULL in the DDL, so it is never compared by truthiness: an `if( data.x )` would
+            // silently discard a deliberate false
+            isSuspected: data.isSuspected !== undefined ? data.isSuspected : undefined,
+            // Trimmed and never title cased, or a PUT resending the GET would rewrite BCG into Bcg
+            whoCode: data.whoCode !== undefined ? normalizeText(data.whoCode) : undefined,
+            vaccineCode: data.vaccineCode !== undefined ? normalizeText(data.vaccineCode) : undefined,
+            vaccineName: data.vaccineName !== undefined ? normalizeText(data.vaccineName) : undefined,
+            // DATEONLY: the helper compares it with slice(0, 10)
+            vaccinationDate: data.vaccinationDate !== undefined ? ( data.vaccinationDate ?? null ) : undefined,
+            // Padded to HH:MM:SS before comparing, or a PUT sending '14:30' over a stored
+            // '14:30:00' would count as a change for a value Postgres would store identical
+            vaccinationTime: data.vaccinationTime !== undefined ? normalizeTime(data.vaccinationTime) : undefined,
+            doseNumber: data.doseNumber !== undefined ? ( data.doseNumber ?? null ) : undefined,
+            batchNumber: data.batchNumber !== undefined ? normalizeText(data.batchNumber) : undefined,
+            expirationDate: data.expirationDate !== undefined ? ( data.expirationDate ?? null ) : undefined,
+            notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_notificationVaccine_setSysDetails fires on every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        // Nothing to write: the transaction closes without an UPDATE and the row is re-read outside
+        // it, exactly like the branch that did write
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(notificationVaccine.appDetails)
+                ? notificationVaccine.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-NOTIFVAC-004',
+                detail: 'Notification vaccine updated by service'
+            };
+            await notificationVaccine.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    const updated = await findNotificationVaccineWithRelations(id, true);
+    return updated ? toNotificationVaccineResponse(updated) : null;
+}
+
 export {
     createNotificationVaccineService,
     getAllNotificationVaccinesByNotificationService,
     getNotificationVaccineByIdService,
     getNotificationVaccinesByCaseIdService,
-    getNotificationVaccinesByNotificationService
+    getNotificationVaccinesByNotificationService,
+    updateNotificationVaccineService
 };

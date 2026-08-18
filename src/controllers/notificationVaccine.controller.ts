@@ -6,7 +6,8 @@ import {
     getAllNotificationVaccinesByNotificationService,
     getNotificationVaccineByIdService,
     getNotificationVaccinesByCaseIdService,
-    getNotificationVaccinesByNotificationService
+    getNotificationVaccinesByNotificationService,
+    updateNotificationVaccineService
 } from '../services/notificationVaccine.service';
 
 // Create Notification Vaccine Controller
@@ -137,10 +138,38 @@ const getNotificationVaccinesByCaseId = async (req: Request, res: Response, next
     }
 }
 
+// Update Notification Vaccine Controller
+// Code: ESAVI-NOTIFVAC-004
+const updateNotificationVaccine = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateNotificationVaccineService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationVaccine.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFVAC-004: Error updating Notification Vaccine: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationVaccine.updatedFailed', req.lang), 500, 'NOTIFVAC_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createNotificationVaccine,
     getAllNotificationVaccinesByNotification,
     getNotificationVaccineById,
     getNotificationVaccinesByCaseId,
-    getNotificationVaccinesByNotification
+    getNotificationVaccinesByNotification,
+    updateNotificationVaccine
 };
