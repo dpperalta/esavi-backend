@@ -1,0 +1,243 @@
+import { InferAttributes, Transaction } from 'sequelize';
+import { EsaviCase, Notification, NotificationVaccine, VaccineWhodrug } from '../models';
+import { AppError, getMessage } from '../helpers';
+import { AppDetails, AuthUser, CreateNotificationVaccineInput } from '../types';
+
+// The columns the INSERT of ESAVI-NOTIFVAC-001 writes, listed one by one so sortOrder stays out of
+// it. Omitting the value is not enough: the column is allowNull: false and Sequelize runs its own
+// notNull validation over every attribute of the create before reaching Postgres, so an unlisted
+// sortOrder would be rejected in the application and TRG_notificationVaccine_setSortOrder would
+// never get to assign it. Passing the field list is what makes the column absent from the
+// statement. vaccineId is out for the same reason it is out of the body: gen_random_uuid() writes it
+const CREATE_FIELDS: (keyof InferAttributes<NotificationVaccine>)[] = [
+    'notificationId',
+    'vaccineWhodrugId',
+    'isSuspected',
+    'whoCode',
+    'vaccineCode',
+    'vaccineName',
+    'vaccinationDate',
+    'vaccinationTime',
+    'doseNumber',
+    'batchNumber',
+    'expirationDate',
+    'notes',
+    'isActive',
+    'appDetails'
+];
+
+// The header is read on every operation to implement the inherited visibility, and it is read with
+// two attributes because that is all the check needs. It never reaches the response — whoever needs
+// the header enters through ESAVI-NOTIFCN-003
+const NOTIFICATION_INCLUDE = {
+    model: Notification,
+    as: 'notification',
+    attributes: ['notificationId', 'isActive']
+};
+
+// The resolved master entry, with three fields. The other twenty six columns of vaccineWhodrug are
+// governance of the dictionary, not data of the notification: whoever needs the whole record enters
+// through ESAVI-WHODRUG-003.
+//
+// The include does not filter by isActive, deliberately. An entry retired after the record was
+// written still says which vaccine was given: the row is historical, and F18 decided that
+// deactivating means "stops being offered in the autocomplete", not "stops existing"
+const VACCINE_WHODRUG_INCLUDE = {
+    model: VaccineWhodrug,
+    as: 'vaccineWhodrug',
+    attributes: ['vaccineWhodrugId', 'drugCode', 'drugName']
+};
+
+// sysDetails is trigger metadata and never leaves the service. The header is dropped here after
+// having done its job in the query, and the master entry comes back as an explicit null when the
+// vaccine was notified without being coded, so a client does not have to tell "empty" from
+// "absent".
+//
+// The raw foreign key travels next to the resolved object, as in notificationEvent and
+// notificationMedication: the 004 accepts vaccineWhodrugId in the body, so a PUT resending the
+// response of its GET needs to find it there
+const toNotificationVaccineResponse = (notificationVaccine: NotificationVaccine) => {
+    const plain = notificationVaccine.toJSON() as Record<string, unknown>;
+    delete plain.sysDetails;
+    delete plain.notification;
+
+    plain.vaccineWhodrug = plain.vaccineWhodrug ?? null;
+
+    return plain;
+}
+
+// The read every operation shares to build its response. The header include is mandatory and not
+// decorative: with required: true and the isActive filter it is what implements the inherited
+// visibility, so a vaccine hanging from a retired notification simply does not come back
+const findNotificationVaccineWithRelations = async (id: string, includeInactive: boolean = false) => {
+    return await NotificationVaccine.findOne({
+        where: includeInactive ? { vaccineId: id } : { vaccineId: id, isActive: true },
+        include: [
+            {
+                ...NOTIFICATION_INCLUDE,
+                required: true,
+                where: includeInactive ? {} : { isActive: true }
+            },
+            VACCINE_WHODRUG_INCLUDE
+        ]
+    });
+}
+
+// The notification must exist and be active: a retired header does not take a new vaccine. No check
+// by notificationType — the administered vaccines are recorded the same way whether the
+// notification is severe or not.
+//
+// The case is included with two attributes because the create needs its eventDate for the temporal
+// coherence rule, and reading it here saves a second query
+const findValidNotification = async (notificationId: string, op: string, lang: string, transaction?: Transaction) => {
+    const notification = await Notification.findOne({
+        where: { notificationId, isActive: true },
+        attributes: ['notificationId'],
+        include: [{
+            model: EsaviCase,
+            as: 'case',
+            attributes: ['caseId', 'eventDate']
+        }],
+        transaction
+    });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationVaccine.notificationNotFound', lang),
+            404,
+            `NOTIFVAC_${ op }_NOTIFICATION_NOT_FOUND`
+        );
+    }
+    return notification;
+}
+
+// The free texts are normalized on write with trim, and a text that is blank after trimming is no
+// text at all. None of them goes through toTitleCase, against the letter of CONVENTIONS.md §11:
+// vaccine names are mostly acronyms — BCG, SRP, DPT, VPH, COVID-19 mRNA — and title casing would
+// mutilate them into Bcg or Covid-19 Mrna, destroying the only value the column has, which is
+// reproducing what the notifier read on the vaccination card
+const normalizeText = (value: string | null | undefined): string | null => {
+    if( value === undefined || value === null ) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+// A `time` column reads back from pg as 'HH:MM:SS', and the validator admits 'HH:MM' because a form
+// that only asks for hours and minutes must not have to invent the seconds. Padding them here is
+// what keeps a PUT sending '14:30' over a stored '14:30:00' from counting as a change: Postgres
+// would store the very same value and the row would still gain an audit entry
+const normalizeTime = (value: string | null | undefined): string | null => {
+    const trimmed = normalizeText(value);
+    if( !trimmed ) return null;
+    return trimmed.length === 5 ? `${ trimmed }:00` : trimmed;
+}
+
+// The minimum content guard, shared by 001 and 004. The DDL leaves the eleven data columns nullable
+// without exception, so it admits a row that only says "this notification has a vaccine" without
+// saying which one — that is not a record, it is noise with a sortOrder.
+//
+// Requiring one of the two branches and not a specific one is what respects the "coded or raw"
+// design F18 fixed for this table: a coded vaccine does not need the name copied over, and a
+// vaccine the dictionary does not list is still perfectly reportable by name.
+//
+// It lives here and not in the validator because on update it is evaluated over the resulting state
+// — the stored row merged with what arrives — and the validator only sees the body
+const assertMinimumContent = (
+    vaccineWhodrugId: string | null | undefined,
+    vaccineName: string | null | undefined,
+    op: string,
+    lang: string
+) => {
+    if( !vaccineWhodrugId && !normalizeText(vaccineName) ) {
+        throw new AppError(
+            getMessage('notificationVaccine.vaccineRequired', lang),
+            400,
+            `NOTIFVAC_${ op }_VACCINE_REQUIRED`
+        );
+    }
+}
+
+// The master entry must exist and be active. A plain findOne over the table is enough, without the
+// double hop against catalogType that nonSevereNotification and notificationMedication needed:
+// vaccineWhodrug is a standalone master and hangs from no catalog type, so replicating that pattern
+// here would be copying a solution without its problem.
+//
+// Choosing a retired entry today is an error; having chosen it yesterday is a fact, which is why
+// the reads do not filter by isActive.
+//
+// The key is optional: absent or null nothing is checked, and the row stays uncoded — a legitimate
+// state, and the reason an empty master does not block the notification
+const assertVaccineWhodrugIsValid = async (
+    vaccineWhodrugId: string | null | undefined,
+    op: string,
+    lang: string
+) => {
+    if( !vaccineWhodrugId ) return;
+
+    const vaccineWhodrug = await VaccineWhodrug.findOne({
+        where: { vaccineWhodrugId, isActive: true },
+        attributes: ['vaccineWhodrugId']
+    });
+    if( !vaccineWhodrug ) {
+        throw new AppError(
+            getMessage('notificationVaccine.whodrugNotFound', lang),
+            404,
+            `NOTIFVAC_${ op }_WHODRUG_NOT_FOUND`
+        );
+    }
+}
+
+// Create Notification Vaccine Service
+// Code: ESAVI-NOTIFVAC-001
+// No transaction of its own, as in notificationMedication and unlike notificationEvent: nothing is
+// written outside this table — there is no master to mint against, F18 ruled out implicit
+// resolution, and no field is derived — so the create is a single statement and the implicit
+// transaction of Sequelize is enough
+const createNotificationVaccineService = async (
+    data: CreateNotificationVaccineInput,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    await findValidNotification(data.notificationId, '001', lang);
+
+    // On create the body is the whole resulting state, so the guard is evaluated over it directly
+    assertMinimumContent(data.vaccineWhodrugId, data.vaccineName, '001', lang);
+
+    await assertVaccineWhodrugIsValid(data.vaccineWhodrugId, '001', lang);
+
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-NOTIFVAC-001',
+        detail: 'Notification vaccine created by service'
+    };
+
+    // sortOrder is deliberately absent from the create: leaving the column out of the INSERT is
+    // what lets TRG_notificationVaccine_setSortOrder assign it, under the advisory lock that keeps
+    // two concurrent inserts from colliding. Sending an explicit 0 would work by accident, not by
+    // contract
+    const created = await NotificationVaccine.create({
+        notificationId: data.notificationId,
+        vaccineWhodrugId: data.vaccineWhodrugId ?? null,
+        isSuspected: data.isSuspected ?? false,
+        whoCode: normalizeText(data.whoCode),
+        vaccineCode: normalizeText(data.vaccineCode),
+        vaccineName: normalizeText(data.vaccineName),
+        vaccinationDate: data.vaccinationDate ?? null,
+        vaccinationTime: normalizeTime(data.vaccinationTime),
+        doseNumber: data.doseNumber ?? null,
+        batchNumber: normalizeText(data.batchNumber),
+        expirationDate: data.expirationDate ?? null,
+        notes: normalizeText(data.notes),
+        isActive: data.isActive ?? true,
+        appDetails: [newEntry]
+    }, { fields: CREATE_FIELDS });
+
+    // Re-read so the response carries the resolved master entry and the sortOrder the trigger
+    // assigned, which the create instance does not know
+    const notificationVaccine = await findNotificationVaccineWithRelations(created.vaccineId, true);
+    return notificationVaccine ? toNotificationVaccineResponse(notificationVaccine) : null;
+}
+
+export {
+    createNotificationVaccineService
+};
