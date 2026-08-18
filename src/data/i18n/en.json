@@ -552,5 +552,28 @@
         "codeExists": "A diluent with code {{code}} already exists",
         "alreadyActive": "The diluent with ID {{id}} is already active",
         "alreadyInactive": "The diluent with ID {{id}} is already inactive"
+    },
+    "notificationDiluent": {
+        "notFound": "Notification diluent not found. Please check the diluent ID and try again.",
+        "idRequired": "The notification diluent ID is required",
+        "vaccineNotFound": "The given notification vaccine does not exist or is inactive",
+        "catalogNotFound": "The given catalog diluent does not exist or is inactive",
+        "diluentRequired": "Either the catalog diluent or the diluent name must be provided",
+        "reconstitutionAfterVaccination": "The reconstitution date cannot be later than the vaccination date of the notification vaccine",
+        "stillActive": "The notification diluent with ID {{id}} is still active. Deactivate it before deleting it permanently.",
+        "createdSuccess": "Notification diluent created successfully",
+        "createdFailed": "Failed to create the notification diluent. Please try again later.",
+        "getSuccess": "Notification diluent fetched successfully",
+        "getFailed": "Failed to fetch the notification diluent. Please try again later.",
+        "updatedSuccess": "Notification diluent updated successfully",
+        "updatedFailed": "Failed to update the notification diluent. Please try again later.",
+        "deletedSuccess": "Notification diluent deleted successfully",
+        "deletedFailed": "Failed to delete the notification diluent. Please try again later.",
+        "activatedSuccess": "Notification diluent activated successfully",
+        "activatedFailed": "Failed to activate the notification diluent. Please try again later.",
+        "alreadyActive": "The notification diluent with ID {{id}} is already active",
+        "alreadyInactive": "The notification diluent with ID {{id}} is already inactive",
+        "purgeSuccess": "Notification diluent deleted permanently",
+        "purgeFailed": "Failed to permanently delete the notification diluent. Please try again later."
     }
 }

@@ -552,5 +552,28 @@
         "codeExists": "Ya existe un diluyente con el código {{code}}",
         "alreadyActive": "El diluyente con ID {{id}} ya está activo",
         "alreadyInactive": "El diluyente con ID {{id}} ya está inactivo"
+    },
+    "notificationDiluent": {
+        "notFound": "Diluyente de notificación no encontrado. Por favor, verifique el ID del diluyente e inténtelo de nuevo.",
+        "idRequired": "El ID del diluyente de notificación es obligatorio",
+        "vaccineNotFound": "La vacuna de notificación indicada no existe o está inactiva",
+        "catalogNotFound": "El diluyente del catálogo indicado no existe o está inactivo",
+        "diluentRequired": "Debe indicar el diluyente del catálogo o el nombre del diluyente",
+        "reconstitutionAfterVaccination": "La fecha de reconstitución no puede ser posterior a la fecha de vacunación de la vacuna de notificación",
+        "stillActive": "El diluyente de notificación con ID {{id}} sigue activo. Desactívelo antes de eliminarlo permanentemente.",
+        "createdSuccess": "Diluyente de notificación creado exitosamente",
+        "createdFailed": "Error al crear el diluyente de notificación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Diluyente de notificación obtenido exitosamente",
+        "getFailed": "Error al obtener el diluyente de notificación. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Diluyente de notificación actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el diluyente de notificación. Por favor, inténtelo de nuevo más tarde.",
+        "deletedSuccess": "Diluyente de notificación eliminado exitosamente",
+        "deletedFailed": "Error al eliminar el diluyente de notificación. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Diluyente de notificación activado exitosamente",
+        "activatedFailed": "Error al activar el diluyente de notificación. Por favor, inténtelo de nuevo más tarde.",
+        "alreadyActive": "El diluyente de notificación con ID {{id}} ya está activo",
+        "alreadyInactive": "El diluyente de notificación con ID {{id}} ya está inactivo",
+        "purgeSuccess": "Diluyente de notificación eliminado permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente el diluyente de notificación. Por favor, inténtelo de nuevo más tarde."
     }
 }
