@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationVaccine,
+    getAllNotificationVaccinesByNotification,
     getNotificationVaccinesByNotification
 } from '../controllers/notificationVaccine.controller';
 import {
@@ -23,10 +24,16 @@ const router = Router();
 // Code: ESAVI-NOTIFVAC-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationVaccineValidator, validateFields, createNotificationVaccine);
 
+// Get All Notification Vaccines By Notification - For Admin
+// Code: ESAVI-NOTIFVAC-002B
+// Two distinct routes and not one GET branching by role, which is why each one carries its own
+// letter in the five places: they also differ in the minimum role
+router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), ...notificationVaccineNotificationIdValidator, ...notificationVaccineListValidator, validateFields, getAllNotificationVaccinesByNotification);
+
 // Get Active Notification Vaccines By Notification
 // Code: ESAVI-NOTIFVAC-002A
-// The :id is the notificationId, not a vaccine id: the listing is entered by the foreign key. It
-// will be declared after /admin/notification/:id, which is the more specific literal path
+// The :id is the notificationId, not a vaccine id: the listing is entered by the foreign key.
+// Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineNotificationIdValidator, ...notificationVaccineListValidator, validateFields, getNotificationVaccinesByNotification);
 
 export default router;
