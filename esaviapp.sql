@@ -881,6 +881,7 @@ CREATE TABLE IF NOT EXISTS "notificationDiluent" (
   CONSTRAINT "FK_notificationDiluent_vaccine" FOREIGN KEY ("vaccineId") REFERENCES "notificationVaccine" ("vaccineId") ON UPDATE CASCADE ON DELETE CASCADE,
   CONSTRAINT "FK_notificationDiluent_catalog" FOREIGN KEY ("diluentCatalogId") REFERENCES "diluentCatalog" ("diluentCatalogId") ON UPDATE CASCADE ON DELETE RESTRICT
 );
+CREATE INDEX IF NOT EXISTS "IX_notificationDiluent_vaccine" ON "notificationDiluent" ("vaccineId");
 
 CREATE TABLE IF NOT EXISTS "notificationPregnancy" (
   "pregnancyId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
