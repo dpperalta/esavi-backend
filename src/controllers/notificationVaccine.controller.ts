@@ -7,6 +7,7 @@ import {
     getNotificationVaccineByIdService,
     getNotificationVaccinesByCaseIdService,
     getNotificationVaccinesByNotificationService,
+    purgeNotificationVaccineService,
     setNotificationVaccineActivationService,
     updateNotificationVaccineService
 } from '../services/notificationVaccine.service';
@@ -208,6 +209,27 @@ const activateNotificationVaccine = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Purge Notification Vaccine Controller - Physical delete
+// Code: ESAVI-NOTIFVAC-005C
+const purgeNotificationVaccine = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationVaccineService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationVaccine.purgeSuccess', req.lang),
+            data: null
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFVAC-005C: Error purging Notification Vaccine: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationVaccine.purgeFailed', req.lang), 500, 'NOTIFVAC_005C_DELETE_FAILED', error));
+    }
+}
+
 export {
     activateNotificationVaccine,
     createNotificationVaccine,
@@ -216,5 +238,6 @@ export {
     getNotificationVaccineById,
     getNotificationVaccinesByCaseId,
     getNotificationVaccinesByNotification,
+    purgeNotificationVaccine,
     updateNotificationVaccine
 };

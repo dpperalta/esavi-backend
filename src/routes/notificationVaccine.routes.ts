@@ -9,6 +9,7 @@ import {
     getNotificationVaccineById,
     getNotificationVaccinesByCaseId,
     getNotificationVaccinesByNotification,
+    purgeNotificationVaccine,
     updateNotificationVaccine
 } from '../controllers/notificationVaccine.controller';
 import {
@@ -50,6 +51,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // The :id is the notificationId, not a vaccine id: the listing is entered by the foreign key.
 // Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineNotificationIdValidator, ...notificationVaccineListValidator, validateFields, getNotificationVaccinesByNotification);
+
+// Purge Notification Vaccine - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFVAC-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationVaccineIdValidator, validateFields, purgeNotificationVaccine);
 
 // Activate Notification Vaccine - For SuperAdmin
 // Code: ESAVI-NOTIFVAC-005B

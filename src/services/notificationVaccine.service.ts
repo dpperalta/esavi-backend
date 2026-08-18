@@ -1,8 +1,9 @@
-import { InferAttributes, Op, Transaction } from 'sequelize';
+import { InferAttributes, Op, QueryTypes, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { EsaviCase, Notification, NotificationVaccine, VaccineWhodrug } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateNotificationVaccineInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -684,12 +685,68 @@ const setNotificationVaccineActivationService = async (
     }
 }
 
+// Purging Notification Vaccine Service - For SuperAdmin
+// Code: ESAVI-NOTIFVAC-005C
+// notificationVaccine is outside the preventPhysicalDelete loop of esaviapp.sql:1361-1373, so the
+// row can really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification: its canonical guard — the row must have
+// been retired with a 005A first, 409 otherwise — applies over the row itself. The state of the
+// notification is deliberately not checked.
+//
+// What is proper to this entity is the child cascade. notificationDiluent hangs from vaccineId with
+// ON DELETE CASCADE (esaviapp.sql:881), so purging a vaccine destroys rows of a table that has no
+// model and that this spec does not give one to. Without this line that destruction would leave no
+// trace anywhere. The ids are read with raw SQL for that very reason, and the warn line is written
+// only after the helper returned without error, so a purge ending in 409 or 404 leaves no notice of
+// a destruction that did not happen
+const purgeNotificationVaccineService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    let diluentIds: string[] = [];
+    try {
+        const diluents = await sequelize.query<{ diluentId: string }>(
+            'SELECT "diluentId" FROM "notificationDiluent" WHERE "vaccineId" = :vaccineId',
+            {
+                replacements: { vaccineId: id },
+                type: QueryTypes.SELECT,
+                transaction
+            }
+        );
+        diluentIds = diluents.map(diluent => diluent.diluentId);
+
+        await purgeEntityService({
+            model: NotificationVaccine,
+            where: { vaccineId: id },
+            transaction,
+            operationCode: 'ESAVI-NOTIFVAC-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('notificationVaccine.notFound', lang),
+            notFoundCode: 'NOTIFVAC_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('notificationVaccine.stillActive', lang, { id }),
+            stillActiveCode: 'NOTIFVAC_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    // A vaccine with no diluents leaves no line at all: an empty dump is noise
+    if( diluentIds.length > 0 ) {
+        esaviLog(
+            `ESAVI-NOTIFVAC-005C: ${ diluentIds.length } notificationDiluent row(s) dragged by the cascade of vaccine ${ id }: ${ diluentIds.join(', ') }`,
+            'warn'
+        );
+    }
+}
+
 export {
     createNotificationVaccineService,
     getAllNotificationVaccinesByNotificationService,
     getNotificationVaccineByIdService,
     getNotificationVaccinesByCaseIdService,
     getNotificationVaccinesByNotificationService,
+    purgeNotificationVaccineService,
     setNotificationVaccineActivationService,
     updateNotificationVaccineService
 };
