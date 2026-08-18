@@ -1,10 +1,17 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createNotificationVaccine } from '../controllers/notificationVaccine.controller';
-import { createNotificationVaccineValidator } from '../validators';
+import {
+    createNotificationVaccine,
+    getNotificationVaccinesByNotification
+} from '../controllers/notificationVaccine.controller';
+import {
+    createNotificationVaccineValidator,
+    notificationVaccineListValidator,
+    notificationVaccineNotificationIdValidator
+} from '../validators';
 
-const { ADMIN } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -15,5 +22,11 @@ const router = Router();
 // Create Notification Vaccine
 // Code: ESAVI-NOTIFVAC-001
 router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationVaccineValidator, validateFields, createNotificationVaccine);
+
+// Get Active Notification Vaccines By Notification
+// Code: ESAVI-NOTIFVAC-002A
+// The :id is the notificationId, not a vaccine id: the listing is entered by the foreign key. It
+// will be declared after /admin/notification/:id, which is the more specific literal path
+router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineNotificationIdValidator, ...notificationVaccineListValidator, validateFields, getNotificationVaccinesByNotification);
 
 export default router;

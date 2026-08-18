@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { createNotificationVaccineService } from '../services/notificationVaccine.service';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
+import {
+    createNotificationVaccineService,
+    getNotificationVaccinesByNotificationService
+} from '../services/notificationVaccine.service';
 
 // Create Notification Vaccine Controller
 // Code: ESAVI-NOTIFVAC-001
@@ -22,6 +26,36 @@ const createNotificationVaccine = async (req: Request, res: Response, next: Next
     }
 }
 
+// Get Active Notification Vaccines By Notification Controller
+// Code: ESAVI-NOTIFVAC-002A
+const getNotificationVaccinesByNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getNotificationVaccinesByNotificationService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationVaccine.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFVAC-002A: Error fetching Notification Vaccines by Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationVaccine.getFailed', req.lang), 500, 'NOTIFVAC_002A_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createNotificationVaccine
+    createNotificationVaccine,
+    getNotificationVaccinesByNotification
 };

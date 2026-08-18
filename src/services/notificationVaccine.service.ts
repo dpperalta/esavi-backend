@@ -2,6 +2,7 @@ import { InferAttributes, Transaction } from 'sequelize';
 import { EsaviCase, Notification, NotificationVaccine, VaccineWhodrug } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationVaccineInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The columns the INSERT of ESAVI-NOTIFVAC-001 writes, listed one by one so sortOrder stays out of
 // it. Omitting the value is not enough: the column is allowNull: false and Sequelize runs its own
@@ -108,6 +109,29 @@ const findValidNotification = async (notificationId: string, op: string, lang: s
         );
     }
     return notification;
+}
+
+// The same check as above, relaxed by canViewInactive: the inherited visibility applied to the
+// listings, where the header is not the target of the write but the gate to the collection. A
+// retired notification answers 404 for USER and ADMIN, and comes back for whoever may see inactive
+// rows — today SUPERADMIN.
+//
+// It does not read the case: no listing needs eventDate, which is only used by the two writes
+const assertNotificationIsVisible = async (
+    notificationId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const where = canViewInactive ? { notificationId } : { notificationId, isActive: true };
+    const notification = await Notification.findOne({ where, attributes: ['notificationId'] });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationVaccine.notificationNotFound', lang),
+            404,
+            `NOTIFVAC_${ op }_NOTIFICATION_NOT_FOUND`
+        );
+    }
 }
 
 // The free texts are normalized on write with trim, and a text that is blank after trimming is no
@@ -271,6 +295,42 @@ const createNotificationVaccineService = async (
     return notificationVaccine ? toNotificationVaccineResponse(notificationVaccine) : null;
 }
 
+// Get Active Notification Vaccines By Notification Service
+// Code: ESAVI-NOTIFVAC-002A
+// The listing is entered by the foreign key and never by /: a vaccine does not exist without its
+// notification, and a global listing of notified vaccines has no reader.
+//
+// The header guard is the inherited visibility applied to a collection: a retired notification
+// answers 404 instead of an empty page, because an empty page would say "this notification has no
+// vaccines" to somebody who is simply not allowed to see them.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// isSuspected, vaccineWhodrugId, batchNumber, dates or text — those are out of the scope of this
+// spec
+const getNotificationVaccinesByNotificationService = async (
+    notificationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertNotificationIsVisible(notificationId, '002A', lang, canViewInactive);
+
+    const notificationVaccines = await NotificationVaccine.findAndCountAll({
+        where: { notificationId, isActive: true },
+        include: [VACCINE_WHODRUG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationVaccines.count,
+        rows: notificationVaccines.rows.map(toNotificationVaccineResponse)
+    };
+}
+
 export {
-    createNotificationVaccineService
+    createNotificationVaccineService,
+    getNotificationVaccinesByNotificationService
 };
