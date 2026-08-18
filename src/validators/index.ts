@@ -18,4 +18,5 @@ export * from './nonSevereNotification.validator';
 export * from './diagnosticTerm.validator';
 export * from './notificationEvent.validator';
 export * from './notificationMedication.validator';
+export * from './notificationVaccine.validator';
 export * from './vaccineWhodrug.validator';
