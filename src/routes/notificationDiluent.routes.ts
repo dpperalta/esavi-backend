@@ -5,13 +5,15 @@ import {
     createNotificationDiluent,
     getAllNotificationDiluentsByVaccine,
     getNotificationDiluentById,
-    getNotificationDiluentsByVaccine
+    getNotificationDiluentsByVaccine,
+    updateNotificationDiluent
 } from '../controllers/notificationDiluent.controller';
 import {
     createNotificationDiluentValidator,
     notificationDiluentIdValidator,
     notificationDiluentListValidator,
-    notificationDiluentVaccineIdValidator
+    notificationDiluentVaccineIdValidator,
+    updateNotificationDiluentValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -43,5 +45,9 @@ router.get('/vaccine/:id', tokenValidation, validateUserRole(USER), ...notificat
 // Declared after every literal path: an /:id first would swallow /admin, /vaccine, /purge and
 // /activate, and the UUID validator would answer 400 for routes that do exist
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationDiluentIdValidator, validateFields, getNotificationDiluentById);
+
+// Update Notification Diluent
+// Code: ESAVI-NOTIFDIL-004
+router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationDiluentIdValidator, ...updateNotificationDiluentValidator, validateFields, updateNotificationDiluent);
 
 export default router;

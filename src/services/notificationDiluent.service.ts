@@ -1,6 +1,7 @@
-import { InferAttributes } from 'sequelize';
+import { InferAttributes, Transaction } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { DiluentCatalog, Notification, NotificationDiluent, NotificationVaccine } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationDiluentInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -93,6 +94,28 @@ const findNotificationDiluentWithRelations = async (id: string, includeInactive:
             },
             DILUENT_CATALOG_INCLUDE
         ]
+    });
+}
+
+// The same read as above without the master include, which is what ESAVI-NOTIFDIL-004 needs: the
+// update compares the raw foreign key, not the resolved object, and the include would only add a
+// join to a query whose instance is about to be written. The parent chain stays, so the inherited
+// visibility is checked in the same query the update instance comes from, and it carries
+// vaccinationDate because the temporal coherence rule needs it
+const findNotificationDiluentRow = async (id: string, includeInactive: boolean = false, transaction?: Transaction) => {
+    return await NotificationDiluent.findOne({
+        where: includeInactive ? { diluentId: id } : { diluentId: id, isActive: true },
+        include: [{
+            ...VACCINE_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true },
+            include: [{
+                ...VACCINE_INCLUDE.include[0],
+                required: true,
+                where: includeInactive ? {} : { isActive: true }
+            }]
+        }],
+        transaction
     });
 }
 
@@ -420,9 +443,124 @@ const getNotificationDiluentByIdService = async (id: string, lang: string, canVi
     return toNotificationDiluentResponse(notificationDiluent);
 }
 
+// Update Notification Diluent Service
+// Code: ESAVI-NOTIFDIL-004
+// vaccineId and sortOrder are ignored whether or not they arrive in the body, and neither answers
+// 400: the first one is immutable — moving a diluent to another vaccine is not updating it, it is
+// creating a different one — and the second one is governed by the database. Answering 400 for a
+// field a client resends whole from a GET is hostile for no reason
+const updateNotificationDiluentService = async (
+    id: string,
+    data: Partial<CreateNotificationDiluentInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const notificationDiluent = await findNotificationDiluentRow(id, canViewInactive, transaction);
+        if( !notificationDiluent ) {
+            throw new AppError(getMessage('notificationDiluent.notFound', lang), 404, 'NOTIFDIL_004_NOT_FOUND');
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate, and an
+        // instance read with a narrowed `attributes` reads back undefined for what it left out, so
+        // every comparison would count as a change
+        const stored = notificationDiluent.get({ plain: true }) as Record<string, unknown>;
+
+        // The guards are evaluated over the resulting state and not over the body: otherwise a PUT
+        // clearing diluentName over a row with no master key would empty the row, and a PUT moving
+        // only the reconstitution date would never be checked against the vaccine
+        const resultingCatalogId = data.diluentCatalogId !== undefined
+            ? ( data.diluentCatalogId ?? null )
+            : ( stored.diluentCatalogId as string | null );
+        const resultingDiluentName = data.diluentName !== undefined
+            ? normalizeText(data.diluentName)
+            : ( stored.diluentName as string | null );
+        const resultingReconstitutionDate = data.reconstitutionDate !== undefined
+            ? ( data.reconstitutionDate ?? null )
+            : ( stored.reconstitutionDate as string | null );
+
+        assertMinimumContent(resultingCatalogId, resultingDiluentName, '004', lang);
+
+        // Before the diff and independently of it: a PUT carrying a retired master entry answers 404
+        // even when no other field changes. Only a key arriving with a non null value is checked —
+        // an explicit null clears the column and validates nothing
+        await assertDiluentCatalogIsValid(data.diluentCatalogId, '004', lang);
+
+        assertReconstitutionDateIsCoherent(
+            resultingReconstitutionDate,
+            notificationDiluent.vaccine?.vaccinationDate,
+            '004',
+            lang
+        );
+
+        // vaccineId, sortOrder and isActive are deliberately absent: the first two are immutable and
+        // the state moves through 005A and 005B. No field is derived — the two free texts are the
+        // client's copy of what was transcribed from the vial and are never filled in from the
+        // master — so the seven candidates are compared against what is stored and nothing is
+        // computed
+        const candidates: Record<string, unknown> = {
+            diluentCatalogId: data.diluentCatalogId !== undefined
+                ? ( data.diluentCatalogId ?? null )
+                : undefined,
+            // Trimmed and never title cased, or a PUT resending the GET would rewrite what the
+            // notifier read on the vial
+            batchNumber: data.batchNumber !== undefined ? normalizeText(data.batchNumber) : undefined,
+            // DATEONLY: the helper compares it with slice(0, 10)
+            expirationDate: data.expirationDate !== undefined ? ( data.expirationDate ?? null ) : undefined,
+            reconstitutionDate: data.reconstitutionDate !== undefined ? ( data.reconstitutionDate ?? null ) : undefined,
+            // Padded to HH:MM:SS before comparing, or a PUT sending '09:15' over a stored '09:15:00'
+            // would count as a change for a value Postgres would store identical
+            reconstitutionTime: data.reconstitutionTime !== undefined ? normalizeTime(data.reconstitutionTime) : undefined,
+            diluentName: data.diluentName !== undefined ? normalizeText(data.diluentName) : undefined,
+            diluentCode: data.diluentCode !== undefined ? normalizeText(data.diluentCode) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_notificationDiluent_setSysDetails fires on every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        // Nothing to write: the transaction closes without an UPDATE and the row is re-read outside
+        // it, exactly like the branch that did write
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(notificationDiluent.appDetails)
+                ? notificationDiluent.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-NOTIFDIL-004',
+                detail: 'Notification diluent updated by service'
+            };
+            await notificationDiluent.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    const updated = await findNotificationDiluentWithRelations(id, true);
+    return updated ? toNotificationDiluentResponse(updated) : null;
+}
+
 export {
     createNotificationDiluentService,
     getAllNotificationDiluentsByVaccineService,
     getNotificationDiluentByIdService,
-    getNotificationDiluentsByVaccineService
+    getNotificationDiluentsByVaccineService,
+    updateNotificationDiluentService
 };
