@@ -5,6 +5,7 @@ import {
     createNotificationVaccineService,
     getAllNotificationVaccinesByNotificationService,
     getNotificationVaccineByIdService,
+    getNotificationVaccinesByCaseIdService,
     getNotificationVaccinesByNotificationService
 } from '../services/notificationVaccine.service';
 
@@ -107,9 +108,39 @@ const getNotificationVaccineById = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Get Notification Vaccines By Case ID Controller
+// Code: ESAVI-NOTIFVAC-006
+const getNotificationVaccinesByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const caseId = (req.params.caseId).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getNotificationVaccinesByCaseIdService(
+            caseId,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationVaccine.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFVAC-006: Error fetching Notification Vaccines by Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationVaccine.getFailed', req.lang), 500, 'NOTIFVAC_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationVaccine,
     getAllNotificationVaccinesByNotification,
     getNotificationVaccineById,
+    getNotificationVaccinesByCaseId,
     getNotificationVaccinesByNotification
 };

@@ -376,9 +376,60 @@ const getNotificationVaccineByIdService = async (id: string, lang: string, canVi
     return toNotificationVaccineResponse(notificationVaccine);
 }
 
+// Get Notification Vaccines By Case ID Service
+// Code: ESAVI-NOTIFVAC-006
+// The real query of the domain: the client holds the caseId, not the notificationId. The chain
+// case -> notification is one to one, but N vaccines hang from the notification, so like the 006 of
+// notificationEvent and notificationMedication this one returns { count, rows } and not a single
+// record.
+//
+// The two 404 are deliberately distinct — the client enters through a caseId and needs to know
+// which link of the chain broke — and from there it is the 002A: active vaccines only, ordered by
+// sortOrder. No admin variant is declared: the rows carry the notificationId, which is the entry to
+// the 002B for whoever needs to see the retired ones
+const getNotificationVaccinesByCaseIdService = async (
+    caseId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('notificationVaccine.caseNotFound', lang), 404, 'NOTIFVAC_006_CASE_NOT_FOUND');
+    }
+
+    const where = canViewInactive ? { caseId } : { caseId, isActive: true };
+    const notification = await Notification.findOne({ where, attributes: ['notificationId'] });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationVaccine.notificationNotFound', lang),
+            404,
+            'NOTIFVAC_006_NOTIFICATION_NOT_FOUND'
+        );
+    }
+
+    const notificationVaccines = await NotificationVaccine.findAndCountAll({
+        where: { notificationId: notification.notificationId, isActive: true },
+        include: [VACCINE_WHODRUG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationVaccines.count,
+        rows: notificationVaccines.rows.map(toNotificationVaccineResponse)
+    };
+}
+
 export {
     createNotificationVaccineService,
     getAllNotificationVaccinesByNotificationService,
     getNotificationVaccineByIdService,
+    getNotificationVaccinesByCaseIdService,
     getNotificationVaccinesByNotificationService
 };
