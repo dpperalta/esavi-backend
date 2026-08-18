@@ -401,8 +401,28 @@ const getAllNotificationDiluentsByVaccineService = async (
     };
 }
 
+// Get Notification Diluent By ID Service
+// Code: ESAVI-NOTIFDIL-003
+// Three filters, and two of them are the inherited visibility in chain: the diluent must exist and
+// be active, its vaccine must be active, and the notification that vaccine hangs from must be active
+// too — unless canViewInactive says otherwise, today SUPERADMIN.
+//
+// This is the first entity of the repository whose visibility is two hops instead of one, and the
+// three conditions are evaluated the same way, with no priority among them: it is enough that one
+// fails, so there is nothing to decide when two of them fail at once. The three failures answer the
+// same 404 without distinguishing, because telling them apart would confirm to a USER that a diluent
+// exists under a vaccine it is not allowed to see
+const getNotificationDiluentByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const notificationDiluent = await findNotificationDiluentWithRelations(id, canViewInactive);
+    if( !notificationDiluent ) {
+        throw new AppError(getMessage('notificationDiluent.notFound', lang), 404, 'NOTIFDIL_003_NOT_FOUND');
+    }
+    return toNotificationDiluentResponse(notificationDiluent);
+}
+
 export {
     createNotificationDiluentService,
     getAllNotificationDiluentsByVaccineService,
+    getNotificationDiluentByIdService,
     getNotificationDiluentsByVaccineService
 };

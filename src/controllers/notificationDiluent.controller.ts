@@ -4,6 +4,7 @@ import { AuthUser } from '../types';
 import {
     createNotificationDiluentService,
     getAllNotificationDiluentsByVaccineService,
+    getNotificationDiluentByIdService,
     getNotificationDiluentsByVaccineService
 } from '../services/notificationDiluent.service';
 
@@ -85,8 +86,30 @@ const getAllNotificationDiluentsByVaccine = async (req: Request, res: Response, 
     }
 }
 
+// Get Notification Diluent By ID Controller
+// Code: ESAVI-NOTIFDIL-003
+const getNotificationDiluentById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getNotificationDiluentByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationDiluent.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFDIL-003: Error fetching Notification Diluent by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationDiluent.getFailed', req.lang), 500, 'NOTIFDIL_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationDiluent,
     getAllNotificationDiluentsByVaccine,
+    getNotificationDiluentById,
     getNotificationDiluentsByVaccine
 };
