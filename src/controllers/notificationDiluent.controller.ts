@@ -6,6 +6,7 @@ import {
     getAllNotificationDiluentsByVaccineService,
     getNotificationDiluentByIdService,
     getNotificationDiluentsByVaccineService,
+    setNotificationDiluentActivationService,
     updateNotificationDiluentService
 } from '../services/notificationDiluent.service';
 
@@ -135,8 +136,30 @@ const updateNotificationDiluent = async (req: Request, res: Response, next: Next
     }
 }
 
+// Delete Notification Diluent Controller - Soft delete
+// Code: ESAVI-NOTIFDIL-005A
+const deleteNotificationDiluent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setNotificationDiluentActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationDiluent.deletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFDIL-005A: Error deleting Notification Diluent: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationDiluent.deletedFailed', req.lang), 500, 'NOTIFDIL_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createNotificationDiluent,
+    deleteNotificationDiluent,
     getAllNotificationDiluentsByVaccine,
     getNotificationDiluentById,
     getNotificationDiluentsByVaccine,

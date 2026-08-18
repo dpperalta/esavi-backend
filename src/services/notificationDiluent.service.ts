@@ -2,6 +2,7 @@ import { InferAttributes, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiluentCatalog, Notification, NotificationDiluent, NotificationVaccine } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateNotificationDiluentInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -557,10 +558,57 @@ const updateNotificationDiluentService = async (
     return updated ? toNotificationDiluentResponse(updated) : null;
 }
 
+// Set Notification Diluent Activation Service
+// Code: ESAVI-NOTIFDIL-005A / ESAVI-NOTIFDIL-005B
+// One service for the two operations, with the number computed as the rest of the repository does
+// it. Neither is a differential update: they are state writes with an intent of their own, they
+// record a fact even though no data column changes, and that is why they go through
+// setEntityActiveStatusService and never through buildDifferentialUpdate.
+//
+// The 005A seals deletedAt, which frees the sortOrder from the partial unique index. That is correct
+// and deliberate: the gap stays available for the next diluent.
+//
+// Neither operation is blocked by anything. notificationDiluent is a leaf of the graph: there are no
+// children to query and no state to drag, in either direction. Deactivating a diluent touches
+// nothing else, and the inherited visibility already resolves the reading side
+const setNotificationDiluentActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const notificationDiluent = await setEntityActiveStatusService({
+            model: NotificationDiluent,
+            where: { diluentId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('notificationDiluent.notFound', lang),
+            notFoundCode: `NOTIFDIL_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`notificationDiluent.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `NOTIFDIL_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-NOTIFDIL-${ op }`,
+                detail: `Notification diluent ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return notificationDiluent;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationDiluentService,
     getAllNotificationDiluentsByVaccineService,
     getNotificationDiluentByIdService,
     getNotificationDiluentsByVaccineService,
+    setNotificationDiluentActivationService,
     updateNotificationDiluentService
 };
