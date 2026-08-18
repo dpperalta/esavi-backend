@@ -3,6 +3,7 @@ import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createNotificationDiluentService,
+    getAllNotificationDiluentsByVaccineService,
     getNotificationDiluentsByVaccineService
 } from '../services/notificationDiluent.service';
 
@@ -55,7 +56,37 @@ const getNotificationDiluentsByVaccine = async (req: Request, res: Response, nex
     }
 }
 
+// Get All Notification Diluents By Vaccine Controller - For Admin
+// Code: ESAVI-NOTIFDIL-002B
+const getAllNotificationDiluentsByVaccine = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllNotificationDiluentsByVaccineService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationDiluent.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFDIL-002B: Error fetching all Notification Diluents by Vaccine: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationDiluent.getFailed', req.lang), 500, 'NOTIFDIL_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationDiluent,
+    getAllNotificationDiluentsByVaccine,
     getNotificationDiluentsByVaccine
 };

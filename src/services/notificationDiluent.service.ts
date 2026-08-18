@@ -369,7 +369,40 @@ const getNotificationDiluentsByVaccineService = async (
     };
 }
 
+// Get All Notification Diluents By Vaccine Service - For Admin
+// Code: ESAVI-NOTIFDIL-002B
+// The same listing as 002A without the isActive filter: it is the only door to a diluent that was
+// retired, and therefore the entry point of whoever is going to reactivate or purge it.
+// paranoid: false is declarative here — the model is not paranoid, so deletedAt is a plain column
+// and no scope would hide the sealed rows — and it is written for the same reason
+// entityActivation.service.ts:21 writes it: the intent is to see everything, including what a 005A
+// sealed
+const getAllNotificationDiluentsByVaccineService = async (
+    vaccineId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertVaccineIsVisible(vaccineId, '002B', lang, canViewInactive);
+
+    const notificationDiluents = await NotificationDiluent.findAndCountAll({
+        where: { vaccineId },
+        include: [DILUENT_CATALOG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationDiluents.count,
+        rows: notificationDiluents.rows.map(toNotificationDiluentResponse)
+    };
+}
+
 export {
     createNotificationDiluentService,
+    getAllNotificationDiluentsByVaccineService,
     getNotificationDiluentsByVaccineService
 };
