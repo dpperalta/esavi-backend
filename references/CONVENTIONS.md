@@ -288,6 +288,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | healthFacility | `HFAC` |
 | nonSevereNotification | `NSEVNOT` |
 | notification | `NOTIFCN` |
+| notificationDiluent | `NOTIFDIL` |
 | notificationEvent | `NOTIFEVT` |
 | notificationMedication | `NOTIFMED` |
 | notificationVaccine | `NOTIFVAC` |
