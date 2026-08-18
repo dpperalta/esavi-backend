@@ -12,6 +12,7 @@ import { initSevereNotificationAssociations } from './severeNotification.associa
 import { initNonSevereNotificationAssociations } from './nonSevereNotification.associations';
 import { initNotificationEventAssociations } from './notificationEvent.associations';
 import { initNotificationMedicationAssociations } from './notificationMedication.associations';
+import { initNotificationVaccineAssociations } from './notificationVaccine.associations';
 
 export const initAssociations = (): void => {
     initAuthAssociations();
@@ -28,4 +29,5 @@ export const initAssociations = (): void => {
     initNonSevereNotificationAssociations();
     initNotificationEventAssociations();
     initNotificationMedicationAssociations();
+    initNotificationVaccineAssociations();
 }
