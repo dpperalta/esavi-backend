@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationEvent, NotificationMedication, SevereNotification } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationEvent, NotificationMedication, NotificationVaccine, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -736,6 +736,41 @@ const dumpNotificationMedicationsBeforeCascade = async (
     }
 }
 
+// The dump of the fifth satellite, and the third one to many: N vaccines hang from the
+// notification, so it follows the shape of the events and the medications above — one single warn
+// line with the count and the list of vaccineId, never the content of the rows.
+// A notification with no vaccines leaves no line at all.
+//
+// The notificationDiluent rows that fall in the second hop — they hang from vaccineId, not from
+// notificationId — are deliberately not dumped here: reaching them would need a raw query over a
+// table this service does not model. Their own spec will add that line, the same way SPEC F22 added
+// the one the 005C of the vaccine already writes
+const dumpNotificationVaccinesBeforeCascade = async (
+    notificationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const notificationVaccines = await NotificationVaccine.findAll({
+            where: { notificationId },
+            attributes: ['vaccineId'],
+            paranoid: false,
+            transaction
+        });
+        if( notificationVaccines.length === 0 ) {
+            return;
+        }
+        esaviLog(
+            `ESAVI-NOTIFCN-005C: ${ notificationVaccines.length } notificationVaccine row(s) dragged by ` +
+            `ON DELETE CASCADE and purged by ${ userId }. vaccineId: ` +
+            `${ notificationVaccines.map(( notificationVaccine ) => notificationVaccine.vaccineId).join(', ') }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged notificationVaccines: ${ error }`, 'error');
+    }
+}
+
 // Purging Notification Service - For SuperAdmin
 // Code: ESAVI-NOTIFCN-005C
 // notification is outside the preventPhysicalDelete loop of esaviapp.sql:1363-1366, so the row
@@ -764,6 +799,7 @@ const purgeNotificationService = async (id: string, authUser: AuthUser | undefin
             await dumpNonSevereNotificationBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationEventsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationMedicationsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
+            await dumpNotificationVaccinesBeforeCascade(id, authUser?.userId || 'undefined', transaction);
         }
 
         await purgeEntityService({
