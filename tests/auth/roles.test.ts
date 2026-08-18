@@ -265,7 +265,24 @@ const ROUTE_RULES: RouteRule[] = [
     // ESAVI-WHODRUG-007 (SPEC F19) — bulk import from a WHODrug .xlsx file. SUPERADMIN, same as the
     // .asc importer: it is the widest write over the entity, and the 005B already reserved the role
     // for moving a single row
-    { method: 'post',   path: '/api/whodrug-vaccines/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-WHODRUG-007' }
+    { method: 'post',   path: '/api/whodrug-vaccines/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-WHODRUG-007' },
+
+    // notificationVaccine (SPEC F22) — the fifth satellite of notification and the third of the one
+    // to many family, so it repeats the nine rows of NOTIFEVT and NOTIFMED with the canonical role
+    // matrix. The 005C exists because the table sits outside the preventPhysicalDelete loop of
+    // esaviapp.sql:1361-1373.
+    // ESAVI-NOTIFVAC-006 does have a row here, for the same reason the 006 of NOTIFEVT and NOTIFMED
+    // do: it is a read with an HTTP route of its own. The two listings are entered by the foreign
+    // key and never by /
+    { method: 'post',   path: '/api/notification-vaccines',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-001' },
+    { method: 'get',    path: `/api/notification-vaccines/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFVAC-006' },
+    { method: 'get',    path: `/api/notification-vaccines/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-002B' },
+    { method: 'get',    path: `/api/notification-vaccines/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFVAC-002A' },
+    { method: 'delete', path: `/api/notification-vaccines/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFVAC-005C' },
+    { method: 'patch',  path: `/api/notification-vaccines/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFVAC-005B' },
+    { method: 'get',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-003' },
+    { method: 'put',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-004' },
+    { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-005A' }
 ];
 
 /**
@@ -321,7 +338,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(153);
+            expect(ROUTE_RULES).toHaveLength(162);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
