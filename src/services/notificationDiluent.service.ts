@@ -2,6 +2,7 @@ import { InferAttributes } from 'sequelize';
 import { DiluentCatalog, Notification, NotificationDiluent, NotificationVaccine } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationDiluentInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The columns the INSERT of ESAVI-NOTIFDIL-001 writes, listed one by one so sortOrder stays out of
 // it. Omitting the value is not enough: the column is allowNull: false and Sequelize runs its own
@@ -121,6 +122,42 @@ const findValidVaccine = async (vaccineId: string, op: string, lang: string) => 
         );
     }
     return vaccine;
+}
+
+// The same check as above, relaxed by canViewInactive: the inherited visibility applied to the
+// listings, where the parent is not the target of the write but the gate to the collection. A
+// retired vaccine — or one whose notification was retired — answers 404 for USER and ADMIN, and
+// comes back for whoever may see inactive rows, today SUPERADMIN.
+//
+// The two levels are checked here too. Settling for the vaccine alone would be cheaper by one join
+// and would leave visible the diluents of a notification that was withdrawn whole, breaking the
+// transitivity of the rule exactly where the graph gets deep.
+//
+// It does not read vaccinationDate: no listing needs it, and it is only used by the two writes
+const assertVaccineIsVisible = async (
+    vaccineId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const vaccine = await NotificationVaccine.findOne({
+        where: canViewInactive ? { vaccineId } : { vaccineId, isActive: true },
+        attributes: ['vaccineId'],
+        include: [{
+            model: Notification,
+            as: 'notification',
+            attributes: ['notificationId'],
+            required: true,
+            where: canViewInactive ? {} : { isActive: true }
+        }]
+    });
+    if( !vaccine ) {
+        throw new AppError(
+            getMessage('notificationDiluent.vaccineNotFound', lang),
+            404,
+            `NOTIFDIL_${ op }_VACCINE_NOT_FOUND`
+        );
+    }
 }
 
 // The free texts are normalized on write with trim, and a text that is blank after trimming is no
@@ -296,6 +333,43 @@ const createNotificationDiluentService = async (
     return notificationDiluent ? toNotificationDiluentResponse(notificationDiluent) : null;
 }
 
+// Get Active Notification Diluents By Vaccine Service
+// Code: ESAVI-NOTIFDIL-002A
+// The listing is entered by the foreign key and never by /: a notified diluent does not exist
+// without its vaccine, and a global listing has no reader. It is not entered by the case or by the
+// notification either — that would flatten a two level fan out and mix rows of different vaccines
+// under a sortOrder that is relative to each of them.
+//
+// The parent guard is the inherited visibility applied to a collection: a retired vaccine answers
+// 404 instead of an empty page, because an empty page would say "this vaccine has no diluents" to
+// somebody who is simply not allowed to see them.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// diluentCatalogId, batchNumber, dates or text — those are out of the scope of this spec
+const getNotificationDiluentsByVaccineService = async (
+    vaccineId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertVaccineIsVisible(vaccineId, '002A', lang, canViewInactive);
+
+    const notificationDiluents = await NotificationDiluent.findAndCountAll({
+        where: { vaccineId, isActive: true },
+        include: [DILUENT_CATALOG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: notificationDiluents.count,
+        rows: notificationDiluents.rows.map(toNotificationDiluentResponse)
+    };
+}
+
 export {
-    createNotificationDiluentService
+    createNotificationDiluentService,
+    getNotificationDiluentsByVaccineService
 };
