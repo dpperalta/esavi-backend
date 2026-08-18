@@ -186,6 +186,37 @@ const assertVaccineWhodrugIsValid = async (
     }
 }
 
+// The temporal coherence rule, shared by 001 and 004. An ESAVI is by definition an event after the
+// immunization, so a vaccine administered after the event it is blamed for is an impossible datum,
+// not a rare case.
+//
+// It compares against esaviCase.eventDate and not against notificationEvent.startDate: the date of
+// the ESAVI is a single one and lives in the case, while the notified events are the diagnoses,
+// they are N, and their date answers another question.
+//
+// The same day is valid: an immediate reaction is recorded with the date of the vaccination, and
+// requiring strictly later would invalidate the most acute cases.
+//
+// It does not apply when either date is missing, which is the ordinary case and not the exception:
+// vaccines are usually loaded before the case has an eventDate. Both values are cut to their first
+// ten characters, so an ISO 8601 string with time compares as the calendar date it denotes
+const assertVaccinationDateIsCoherent = (
+    vaccinationDate: string | null | undefined,
+    eventDate: string | null | undefined,
+    op: string,
+    lang: string
+) => {
+    if( !vaccinationDate || !eventDate ) return;
+
+    if( vaccinationDate.slice(0, 10) > eventDate.slice(0, 10) ) {
+        throw new AppError(
+            getMessage('notificationVaccine.vaccinationAfterEvent', lang),
+            400,
+            `NOTIFVAC_${ op }_VACCINATION_AFTER_EVENT`
+        );
+    }
+}
+
 // Create Notification Vaccine Service
 // Code: ESAVI-NOTIFVAC-001
 // No transaction of its own, as in notificationMedication and unlike notificationEvent: nothing is
@@ -197,12 +228,14 @@ const createNotificationVaccineService = async (
     authUser: AuthUser | undefined,
     lang: string
 ) => {
-    await findValidNotification(data.notificationId, '001', lang);
+    const notification = await findValidNotification(data.notificationId, '001', lang);
 
-    // On create the body is the whole resulting state, so the guard is evaluated over it directly
+    // On create the body is the whole resulting state, so the guards are evaluated over it directly
     assertMinimumContent(data.vaccineWhodrugId, data.vaccineName, '001', lang);
 
     await assertVaccineWhodrugIsValid(data.vaccineWhodrugId, '001', lang);
+
+    assertVaccinationDateIsCoherent(data.vaccinationDate, notification.case?.eventDate, '001', lang);
 
     const newEntry: AppDetails = {
         createdAt: new Date(),
