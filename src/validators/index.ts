@@ -20,3 +20,4 @@ export * from './notificationEvent.validator';
 export * from './notificationMedication.validator';
 export * from './notificationVaccine.validator';
 export * from './vaccineWhodrug.validator';
+export * from './diluentCatalog.validator';

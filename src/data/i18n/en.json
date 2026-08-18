@@ -534,5 +534,23 @@
         "fileRequired": "The file to import must be attached in the file field",
         "fileInvalid": "The file could not be processed. Please check that it is an .xlsx workbook with the expected header and try again.",
         "fileTooLarge": "The file exceeds the maximum allowed size of 20 MB"
+    },
+    "diluentCatalog": {
+        "createdSuccess": "Diluent created successfully",
+        "createdFailed": "Failed to create the diluent. Please try again later.",
+        "getSuccess": "Diluent fetched successfully",
+        "getFailed": "Failed to fetch the diluent. Please try again later.",
+        "getSuccessPlural": "Diluents fetched successfully",
+        "getFailedPlural": "Failed to fetch the diluents. Please try again later.",
+        "updatedSuccess": "Diluent updated successfully",
+        "updatedFailed": "Failed to update the diluent. Please try again later.",
+        "deletedSuccess": "Diluent deleted successfully",
+        "deletedFailed": "Failed to delete the diluent. Please try again later.",
+        "activatedSuccess": "Diluent activated successfully",
+        "activatedFailed": "Failed to activate the diluent. Please try again later.",
+        "notFound": "Diluent not found. Please check the diluent ID and try again.",
+        "codeExists": "A diluent with code {{code}} already exists",
+        "alreadyActive": "The diluent with ID {{id}} is already active",
+        "alreadyInactive": "The diluent with ID {{id}} is already inactive"
     }
 }

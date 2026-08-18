@@ -282,7 +282,21 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/notification-vaccines/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFVAC-005B' },
     { method: 'get',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-003' },
     { method: 'put',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-004' },
-    { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-005A' }
+    { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-005A' },
+
+    // diluentCatalog (SPEC F23) — the third and last of the flat clinical catalogs, so it repeats the
+    // seven rows of DIAGTERM and WHODRUG with the canonical role matrix and no deviation (§3.4).
+    // No 005C: the table sits inside the preventPhysicalDelete loop of esaviapp.sql:1361-1375, so
+    // physical deletion is not declared. No 006 either — there is no implicit resolution and no bulk
+    // import. The base path deliberately diverges from the table name: what the catalog holds are
+    // diluents, and 'catalog' names the container rather than the resource
+    { method: 'post',   path: '/api/diluents',                                           minRole: 'ADMIN',      code: 'ESAVI-DILUENT-001' },
+    { method: 'get',    path: '/api/diluents',                                           minRole: 'USER',       code: 'ESAVI-DILUENT-002A' },
+    { method: 'get',    path: '/api/diluents/admin',                                     minRole: 'ADMIN',      code: 'ESAVI-DILUENT-002B' },
+    { method: 'get',    path: `/api/diluents/${ UUID }`,                                 minRole: 'USER',       code: 'ESAVI-DILUENT-003' },
+    { method: 'put',    path: `/api/diluents/${ UUID }`,                                 minRole: 'ADMIN',      code: 'ESAVI-DILUENT-004' },
+    { method: 'delete', path: `/api/diluents/${ UUID }`,                                 minRole: 'ADMIN',      code: 'ESAVI-DILUENT-005A' },
+    { method: 'patch',  path: `/api/diluents/activate/${ UUID }`,                        minRole: 'SUPERADMIN', code: 'ESAVI-DILUENT-005B' }
 ];
 
 /**
@@ -338,7 +352,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(162);
+            expect(ROUTE_RULES).toHaveLength(169);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

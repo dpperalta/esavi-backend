@@ -249,7 +249,7 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 
 **`005C` es una variante de `005`, no una operación nueva.** Por eso lleva letra y no un número desde `006`: los sufijos `A`/`B`/`C` distinguen variantes de la misma operación, y las tres son formas de borrar o de deshacer el borrado. Numerarla `006` la habría dejado con un número distinto en cada entidad —`006` en `notifier`, `009` en `appUserGeoLocation`— y el mismo concepto sería imposible de buscar de forma uniforme en el log.
 
-**Regla de disponibilidad.** Una entidad expone `005C` **si y solo si** su tabla **no** figura en el bucle `preventPhysicalDelete` de `esaviapp.sql:1354-1360`. La regla es objetiva y se verifica contra el DDL, no se decide por entidad. En las 18 tablas protegidas el endpoint **no se declara**: el trigger rechazaría el `DELETE` en la base y el cliente recibiría un 500 por una operación que la norma nunca debió ofrecer.
+**Regla de disponibilidad.** Una entidad expone `005C` **si y solo si** su tabla **no** figura en el bucle `preventPhysicalDelete` de `esaviapp.sql:1361-1375`. La regla es objetiva y se verifica contra el DDL, no se decide por entidad. En las 18 tablas protegidas el endpoint **no se declara**: el trigger rechazaría el `DELETE` en la base y el cliente recibiría un 500 por una operación que la norma nunca debió ofrecer.
 
 Protegidas, y por tanto **sin** `005C` — `catalogType`, `catalogItem`, `geoLevelType`, `geoLocation`, `healthFacility`, `diagnosticTerm`, `vaccineWhodrug`, `diluentCatalog`, `patient`, `esaviCase`, `appUser`, `appRole`, `appPermission`, `appUserRole`, `appRolePermission`, `appSession`, `systemConfig`, `systemConfigHistory`.
 
@@ -281,6 +281,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | catalogType | `CATTYPE` |
 | classification | `CLASSIF` |
 | diagnosticTerm | `DIAGTERM` |
+| diluentCatalog | `DILUENT` |
 | esaviCase | `CASE` |
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
@@ -1112,7 +1113,7 @@ La ruta base va en **kebab-case plural**: `/catalog-items`, `/geo-level-types`, 
 - [ ] Los símbolos siguen el patrón: controlador sin sufijo, servicio con `Service`, tipo con `Input`.
 - [ ] El código `ESAVI-*` es **idéntico** en los cinco lugares (ruta, controlador, servicio, `AppError`, `appDetails.method`).
 - [ ] La numeración respeta el esquema fijo (`001` create … `005C` borrado físico).
-- [ ] Si la tabla **no** figura en `preventPhysicalDelete` (`esaviapp.sql:1354-1360`), la entidad expone su `005C` en `DELETE /purge/:id` con `validateUserRole(SUPERADMIN)`; si figura, **no** lo expone.
+- [ ] Si la tabla **no** figura en `preventPhysicalDelete` (`esaviapp.sql:1361-1375`), la entidad expone su `005C` en `DELETE /purge/:id` con `validateUserRole(SUPERADMIN)`; si figura, **no** lo expone.
 - [ ] El `005C` exige `isActive: false` (409 si sigue activa) y vuelca la fila a `esaviLog` en nivel `warn` **antes** del `destroy`. Que no escriba en `appDetails` es correcto y no cuenta como incumplimiento del código en cinco lugares.
 - [ ] La abreviatura de entidad está registrada en la tabla de la sección 6.
 - [ ] Toda función exportada lleva el comentario de dos líneas.

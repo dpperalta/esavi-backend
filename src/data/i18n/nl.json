@@ -534,5 +534,23 @@
         "fileRequired": "Het te importeren bestand moet in het veld file worden meegestuurd",
         "fileInvalid": "Het bestand kon niet worden verwerkt. Controleer of het een .xlsx-werkmap met de verwachte koptekst is en probeer het opnieuw.",
         "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB"
+    },
+    "diluentCatalog": {
+        "createdSuccess": "Verdunningsmiddel succesvol aangemaakt",
+        "createdFailed": "Aanmaken van het verdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Verdunningsmiddel succesvol opgehaald",
+        "getFailed": "Ophalen van het verdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Verdunningsmiddelen succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de verdunningsmiddelen mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Verdunningsmiddel succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van het verdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "deletedSuccess": "Verdunningsmiddel succesvol verwijderd",
+        "deletedFailed": "Verwijderen van het verdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Verdunningsmiddel succesvol geactiveerd",
+        "activatedFailed": "Activeren van het verdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "notFound": "Verdunningsmiddel niet gevonden. Controleer de ID van het verdunningsmiddel en probeer het opnieuw.",
+        "codeExists": "Er bestaat al een verdunningsmiddel met code {{code}}",
+        "alreadyActive": "Het verdunningsmiddel met ID {{id}} is al actief",
+        "alreadyInactive": "Het verdunningsmiddel met ID {{id}} is al inactief"
     }
 }

@@ -534,5 +534,23 @@
         "fileRequired": "Debe adjuntar el fichero a importar en el campo file",
         "fileInvalid": "El fichero no se pudo procesar. Por favor, verifique que sea un libro .xlsx con la cabecera esperada e inténtelo de nuevo.",
         "fileTooLarge": "El fichero supera el tamaño máximo permitido de 20 MB"
+    },
+    "diluentCatalog": {
+        "createdSuccess": "Diluyente creado exitosamente",
+        "createdFailed": "Error al crear el diluyente. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Diluyente obtenido exitosamente",
+        "getFailed": "Error al obtener el diluyente. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Diluyentes obtenidos exitosamente",
+        "getFailedPlural": "Error al obtener los diluyentes. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Diluyente actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el diluyente. Por favor, inténtelo de nuevo más tarde.",
+        "deletedSuccess": "Diluyente eliminado exitosamente",
+        "deletedFailed": "Error al eliminar el diluyente. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Diluyente activado exitosamente",
+        "activatedFailed": "Error al activar el diluyente. Por favor, inténtelo de nuevo más tarde.",
+        "notFound": "Diluyente no encontrado. Por favor, verifique el ID del diluyente e inténtelo de nuevo.",
+        "codeExists": "Ya existe un diluyente con el código {{code}}",
+        "alreadyActive": "El diluyente con ID {{id}} ya está activo",
+        "alreadyInactive": "El diluyente con ID {{id}} ya está inactivo"
     }
 }
