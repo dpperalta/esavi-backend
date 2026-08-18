@@ -7,6 +7,7 @@ import {
     getNotificationVaccineByIdService,
     getNotificationVaccinesByCaseIdService,
     getNotificationVaccinesByNotificationService,
+    setNotificationVaccineActivationService,
     updateNotificationVaccineService
 } from '../services/notificationVaccine.service';
 
@@ -165,8 +166,30 @@ const updateNotificationVaccine = async (req: Request, res: Response, next: Next
     }
 }
 
+// Delete Notification Vaccine Controller - Soft delete
+// Code: ESAVI-NOTIFVAC-005A
+const deleteNotificationVaccine = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setNotificationVaccineActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationVaccine.deletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFVAC-005A: Error deleting Notification Vaccine: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationVaccine.deletedFailed', req.lang), 500, 'NOTIFVAC_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createNotificationVaccine,
+    deleteNotificationVaccine,
     getAllNotificationVaccinesByNotification,
     getNotificationVaccineById,
     getNotificationVaccinesByCaseId,

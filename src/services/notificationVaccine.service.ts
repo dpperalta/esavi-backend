@@ -2,6 +2,7 @@ import { InferAttributes, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { EsaviCase, Notification, NotificationVaccine, VaccineWhodrug } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateNotificationVaccineInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -567,11 +568,58 @@ const updateNotificationVaccineService = async (
     return updated ? toNotificationVaccineResponse(updated) : null;
 }
 
+// Set Notification Vaccine Activation Service
+// Code: ESAVI-NOTIFVAC-005A / ESAVI-NOTIFVAC-005B
+// One service for the two operations, with the number computed as the rest of the repository does
+// it. Neither is a differential update: they are state writes with an intent of their own, they
+// record a fact even though no data column changes, and that is why they go through
+// setEntityActiveStatusService and never through buildDifferentialUpdate.
+//
+// The 005A seals deletedAt, which frees the sortOrder from the partial unique index. That is
+// correct and deliberate: the gap stays available for the next vaccine.
+//
+// It does not look at notificationDiluent. Deactivating a vaccine neither blocks on live diluents
+// nor touches their isActive — the inherited visibility will be resolved by their own spec, the
+// same way this table inherits it from the header
+const setNotificationVaccineActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const notificationVaccine = await setEntityActiveStatusService({
+            model: NotificationVaccine,
+            where: { vaccineId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('notificationVaccine.notFound', lang),
+            notFoundCode: `NOTIFVAC_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`notificationVaccine.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `NOTIFVAC_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-NOTIFVAC-${ op }`,
+                detail: `Notification vaccine ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return notificationVaccine;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationVaccineService,
     getAllNotificationVaccinesByNotificationService,
     getNotificationVaccineByIdService,
     getNotificationVaccinesByCaseIdService,
     getNotificationVaccinesByNotificationService,
+    setNotificationVaccineActivationService,
     updateNotificationVaccineService
 };

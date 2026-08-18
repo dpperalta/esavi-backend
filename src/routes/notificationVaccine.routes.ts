@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationVaccine,
+    deleteNotificationVaccine,
     getAllNotificationVaccinesByNotification,
     getNotificationVaccineById,
     getNotificationVaccinesByCaseId,
@@ -58,5 +59,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationVacci
 // Update Notification Vaccine
 // Code: ESAVI-NOTIFVAC-004
 router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationVaccineIdValidator, ...updateNotificationVaccineValidator, validateFields, updateNotificationVaccine);
+
+// Delete Notification Vaccine - Soft delete
+// Code: ESAVI-NOTIFVAC-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationVaccineIdValidator, validateFields, deleteNotificationVaccine);
 
 export default router;
