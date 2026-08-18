@@ -362,8 +362,23 @@ const getAllNotificationVaccinesByNotificationService = async (
     };
 }
 
+// Get Notification Vaccine By ID Service
+// Code: ESAVI-NOTIFVAC-003
+// Two filters, and the second one is the inherited visibility: the vaccine must exist and be
+// active, and its notification must be active too, unless canViewInactive says otherwise — today
+// SUPERADMIN. The three failures answer the same 404 without distinguishing, because telling them
+// apart would confirm to a USER that a vaccine exists under a notification it is not allowed to see
+const getNotificationVaccineByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const notificationVaccine = await findNotificationVaccineWithRelations(id, canViewInactive);
+    if( !notificationVaccine ) {
+        throw new AppError(getMessage('notificationVaccine.notFound', lang), 404, 'NOTIFVAC_003_NOT_FOUND');
+    }
+    return toNotificationVaccineResponse(notificationVaccine);
+}
+
 export {
     createNotificationVaccineService,
     getAllNotificationVaccinesByNotificationService,
+    getNotificationVaccineByIdService,
     getNotificationVaccinesByNotificationService
 };

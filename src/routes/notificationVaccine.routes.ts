@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationVaccine,
     getAllNotificationVaccinesByNotification,
+    getNotificationVaccineById,
     getNotificationVaccinesByNotification
 } from '../controllers/notificationVaccine.controller';
 import {
     createNotificationVaccineValidator,
+    notificationVaccineIdValidator,
     notificationVaccineListValidator,
     notificationVaccineNotificationIdValidator
 } from '../validators';
@@ -35,5 +37,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // The :id is the notificationId, not a vaccine id: the listing is entered by the foreign key.
 // Declared after /admin/notification/:id, which is the more specific literal path
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineNotificationIdValidator, ...notificationVaccineListValidator, validateFields, getNotificationVaccinesByNotification);
+
+// Get Notification Vaccine by ID
+// Code: ESAVI-NOTIFVAC-003
+// Declared after every literal path: an /:id first would swallow /case, /admin, /notification,
+// /purge and /activate, and the UUID validator would answer 400 for routes that do exist
+router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineIdValidator, validateFields, getNotificationVaccineById);
 
 export default router;

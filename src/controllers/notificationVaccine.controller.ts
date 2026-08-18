@@ -4,6 +4,7 @@ import { AuthUser } from '../types';
 import {
     createNotificationVaccineService,
     getAllNotificationVaccinesByNotificationService,
+    getNotificationVaccineByIdService,
     getNotificationVaccinesByNotificationService
 } from '../services/notificationVaccine.service';
 
@@ -85,8 +86,30 @@ const getAllNotificationVaccinesByNotification = async (req: Request, res: Respo
     }
 }
 
+// Get Notification Vaccine By ID Controller
+// Code: ESAVI-NOTIFVAC-003
+const getNotificationVaccineById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getNotificationVaccineByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationVaccine.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFVAC-003: Error fetching Notification Vaccine by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationVaccine.getFailed', req.lang), 500, 'NOTIFVAC_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationVaccine,
     getAllNotificationVaccinesByNotification,
+    getNotificationVaccineById,
     getNotificationVaccinesByNotification
 };
