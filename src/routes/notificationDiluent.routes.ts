@@ -8,6 +8,7 @@ import {
     getAllNotificationDiluentsByVaccine,
     getNotificationDiluentById,
     getNotificationDiluentsByVaccine,
+    purgeNotificationDiluent,
     updateNotificationDiluent
 } from '../controllers/notificationDiluent.controller';
 import {
@@ -41,6 +42,11 @@ router.get('/admin/vaccine/:id', tokenValidation, validateUserRole(ADMIN), ...no
 // The :id is the vaccineId, not a diluent id: the listing is entered by the foreign key. Declared
 // after /admin/vaccine/:id, which is the more specific literal path
 router.get('/vaccine/:id', tokenValidation, validateUserRole(USER), ...notificationDiluentVaccineIdValidator, ...notificationDiluentListValidator, validateFields, getNotificationDiluentsByVaccine);
+
+// Purge Notification Diluent - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFDIL-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationDiluentIdValidator, validateFields, purgeNotificationDiluent);
 
 // Activate Notification Diluent - For SuperAdmin
 // Code: ESAVI-NOTIFDIL-005B

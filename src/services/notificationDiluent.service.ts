@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { DiluentCatalog, Notification, NotificationDiluent, NotificationVaccine } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateNotificationDiluentInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -675,11 +676,46 @@ const setNotificationDiluentActivationService = async (
     }
 }
 
+// Purging Notification Diluent Service - For SuperAdmin
+// Code: ESAVI-NOTIFDIL-005C
+// notificationDiluent is outside the preventPhysicalDelete loop of esaviapp.sql:1361-1375, so the
+// row can really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification: its canonical guard — the row must have
+// been retired with a 005A first, 409 otherwise — applies over the row itself. The state of the
+// vaccine and of the notification is deliberately not checked.
+//
+// And here is the difference with the 005C of notificationVaccine: this table is a leaf of the
+// graph. Nothing references diluentId, so destroying a row drags no other one, there is no cascade
+// to count and no ids to dump. Copying the raw query of F22 would produce a SELECT that always comes
+// back empty, and the helper already writes the warn line with the destroyed row
+const purgeNotificationDiluentService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: NotificationDiluent,
+            where: { diluentId: id },
+            transaction,
+            operationCode: 'ESAVI-NOTIFDIL-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('notificationDiluent.notFound', lang),
+            notFoundCode: 'NOTIFDIL_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('notificationDiluent.stillActive', lang, { id }),
+            stillActiveCode: 'NOTIFDIL_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationDiluentService,
     getAllNotificationDiluentsByVaccineService,
     getNotificationDiluentByIdService,
     getNotificationDiluentsByVaccineService,
+    purgeNotificationDiluentService,
     setNotificationDiluentActivationService,
     updateNotificationDiluentService
 };

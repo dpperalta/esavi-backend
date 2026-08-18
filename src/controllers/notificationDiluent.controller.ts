@@ -6,6 +6,7 @@ import {
     getAllNotificationDiluentsByVaccineService,
     getNotificationDiluentByIdService,
     getNotificationDiluentsByVaccineService,
+    purgeNotificationDiluentService,
     setNotificationDiluentActivationService,
     updateNotificationDiluentService
 } from '../services/notificationDiluent.service';
@@ -136,6 +137,27 @@ const updateNotificationDiluent = async (req: Request, res: Response, next: Next
     }
 }
 
+// Purge Notification Diluent Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFDIL-005C
+// It answers 200 with no data: nothing is left to give back
+const purgeNotificationDiluent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationDiluentService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationDiluent.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFDIL-005C: Error purging Notification Diluent: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationDiluent.purgeFailed', req.lang), 500, 'NOTIFDIL_005C_PURGE_FAILED', error));
+    }
+}
+
 // Activate Notification Diluent Controller - For SuperAdmin
 // Code: ESAVI-NOTIFDIL-005B
 const activateNotificationDiluent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -185,5 +207,6 @@ export {
     getAllNotificationDiluentsByVaccine,
     getNotificationDiluentById,
     getNotificationDiluentsByVaccine,
+    purgeNotificationDiluent,
     updateNotificationDiluent
 };
