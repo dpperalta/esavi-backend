@@ -1,4 +1,18 @@
-import { body } from 'express-validator';
+import { body, query } from 'express-validator';
+
+// Query validator shared by both listings — they take exactly the same single filter. The two
+// character minimum on search is what keeps the unindexed Op.iLike from scanning the whole catalog
+// on a single letter; the table declares no index of its own, so that minimum and the ceiling of
+// 100 rows are what bound the cost
+export const diluentCatalogListValidator = [
+    query('limit').optional().isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be an integer between 1 and 100'),
+    query('offset').optional().isInt({ min: 0 })
+        .withMessage('Offset must be a non-negative integer'),
+    query('search').optional().trim()
+        .isLength({ min: 2 }).withMessage('Search must be at least 2 characters long')
+        .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long')
+];
 
 // code is required here even though esaviapp.sql:605 admits null: a diluent without a code cannot be
 // crossed against anything, which is the only thing a master exists for. An API stricter than the

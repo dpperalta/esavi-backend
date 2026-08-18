@@ -1,6 +1,8 @@
+import { Op, WhereOptions } from 'sequelize';
 import { DiluentCatalog } from '../models';
 import { AppError, getMessage, toConstantCase } from '../helpers';
-import { AppDetails, AuthUser, CreateDiluentCatalogInput } from '../types';
+import { AppDetails, AuthUser, CreateDiluentCatalogInput, DiluentCatalogListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The two nullable text columns of the entity, trimmed on write and never normalized any further.
 // undefined and null both land as null on create: an absent field and an explicitly emptied one mean
@@ -15,6 +17,18 @@ const stripSysDetails = (diluent: DiluentCatalog): Record<string, unknown> => {
     const plain = diluent.get({ plain: true }) as Record<string, unknown>;
     delete plain.sysDetails;
     return plain;
+}
+
+// Shared by both listings, which take exactly the same single filter. search is an Op.iLike over
+// name and stays confined to these two services: the real use case is the autocomplete of the
+// notification form, and an autocomplete needs prefixes and fragments. There is no other filter —
+// the table has no column that could serve as a facet
+const buildDiluentCatalogWhere = (filters: DiluentCatalogListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if (filters.search) {
+        where.name = { [Op.iLike]: `%${filters.search.trim()}%` };
+    }
+    return where;
 }
 
 // ESAVI-DILUENT-001 - Create Diluent Catalog Service
@@ -55,6 +69,23 @@ const createDiluentCatalogService = async (data: CreateDiluentCatalogInput, auth
     return stripSysDetails(newDiluentCatalog);
 }
 
+// ESAVI-DILUENT-002A - Get Active Diluent Catalogs Service
+const getActiveDiluentCatalogsService = async (filters: DiluentCatalogListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    const diluentCatalogs = await DiluentCatalog.findAndCountAll({
+        where: {
+            ...buildDiluentCatalogWhere(filters),
+            isActive: true
+        },
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        order: [['name', 'ASC']],
+        limit,
+        offset
+    });
+    return diluentCatalogs;
+}
+
 export {
-    createDiluentCatalogService
+    createDiluentCatalogService,
+    getActiveDiluentCatalogsService
 };

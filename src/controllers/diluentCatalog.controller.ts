@@ -1,6 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { createDiluentCatalogService } from '../services/diluentCatalog.service';
+import { DiluentCatalogListFilters } from '../types';
+import {
+    createDiluentCatalogService,
+    getActiveDiluentCatalogsService
+} from '../services/diluentCatalog.service';
+
+// Unwraps the single query filter, identical in both listings
+const readListFilters = (query: Request['query']): DiluentCatalogListFilters => ({
+    search: query.search ? (query.search as string).trim() : undefined
+});
 
 // Create Diluent Catalog Controller
 // Code: ESAVI-DILUENT-001
@@ -22,6 +31,29 @@ const createDiluentCatalog = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Get Active Diluent Catalogs Controller
+// Code: ESAVI-DILUENT-002A
+const getDiluentCatalogs = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getActiveDiluentCatalogsService(readListFilters(req.query), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diluentCatalog.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DILUENT-002A: Error getting Diluent Catalogs: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diluentCatalog.getFailedPlural', req.lang), 500, 'DILUENT_002A_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createDiluentCatalog
+    createDiluentCatalog,
+    getDiluentCatalogs
 };
