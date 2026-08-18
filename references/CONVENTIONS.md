@@ -281,6 +281,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | catalogType | `CATTYPE` |
 | classification | `CLASSIF` |
 | diagnosticTerm | `DIAGTERM` |
+| diluentCatalog | `DILUENT` |
 | esaviCase | `CASE` |
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
