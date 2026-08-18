@@ -187,7 +187,29 @@ const deleteNotificationVaccine = async (req: Request, res: Response, next: Next
     }
 }
 
+// Activate Notification Vaccine Controller
+// Code: ESAVI-NOTIFVAC-005B
+const activateNotificationVaccine = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setNotificationVaccineActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationVaccine.activatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFVAC-005B: Error activating Notification Vaccine: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationVaccine.activatedFailed', req.lang), 500, 'NOTIFVAC_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
+    activateNotificationVaccine,
     createNotificationVaccine,
     deleteNotificationVaccine,
     getAllNotificationVaccinesByNotification,
