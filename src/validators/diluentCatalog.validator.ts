@@ -1,4 +1,10 @@
-import { body, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
+
+export const diluentCatalogIdValidator = [
+    param('id').notEmpty().withMessage('Diluent ID is required')
+        .isUUID().withMessage('Diluent ID must be a valid UUID')
+        .trim()
+];
 
 // Query validator shared by both listings — they take exactly the same single filter. The two
 // character minimum on search is what keeps the unindexed Op.iLike from scanning the whole catalog

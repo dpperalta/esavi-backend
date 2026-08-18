@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { DiluentCatalogListFilters } from '../types';
 import {
     createDiluentCatalogService,
     getActiveDiluentCatalogsService,
-    getAllDiluentCatalogsService
+    getAllDiluentCatalogsService,
+    getDiluentCatalogByIdService
 } from '../services/diluentCatalog.service';
 
 // Unwraps the single query filter, identical in both listings
@@ -77,8 +78,33 @@ const getAllDiluentCatalogs = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Get Diluent Catalog by ID Controller
+// Code: ESAVI-DILUENT-003
+const getDiluentCatalogById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        // canViewInactive is SUPERADMIN-only, so an ADMIN gets the same 404 as a USER even though the
+        // 002B listing does show it inactive rows. The asymmetry is deliberate and is the same one
+        // healthFacility, diagnosticTerm and vaccineWhodrug already have
+        const data = await getDiluentCatalogByIdService(id, req.lang, canViewInactive(req.user));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diluentCatalog.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DILUENT-003: Error getting Diluent Catalog by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diluentCatalog.getFailed', req.lang), 500, 'DILUENT_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createDiluentCatalog,
     getDiluentCatalogs,
-    getAllDiluentCatalogs
+    getAllDiluentCatalogs,
+    getDiluentCatalogById
 };

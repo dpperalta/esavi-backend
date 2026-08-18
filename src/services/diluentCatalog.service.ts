@@ -100,8 +100,24 @@ const getAllDiluentCatalogsService = async (filters: DiluentCatalogListFilters, 
     return diluentCatalogs;
 }
 
+// ESAVI-DILUENT-003 - Get Diluent Catalog by ID Service
+const getDiluentCatalogByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const whereClause = includeInactive ? { diluentCatalogId: id } : { diluentCatalogId: id, isActive: true };
+    // No includes: the entity has no associations at all, so there is nothing to join
+    const diluentCatalog = await DiluentCatalog.findOne({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] }
+    });
+    if (!diluentCatalog) {
+        throw new AppError(getMessage('diluentCatalog.notFound', lang), 404, 'DILUENT_003_NOT_FOUND');
+    }
+    return diluentCatalog;
+}
+
 export {
     createDiluentCatalogService,
     getActiveDiluentCatalogsService,
-    getAllDiluentCatalogsService
+    getAllDiluentCatalogsService,
+    getDiluentCatalogByIdService
 };

@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createDiluentCatalog,
     getAllDiluentCatalogs,
+    getDiluentCatalogById,
     getDiluentCatalogs
 } from '../controllers/diluentCatalog.controller';
 import {
     createDiluentCatalogValidator,
+    diluentCatalogIdValidator,
     diluentCatalogListValidator
 } from '../validators';
 
@@ -32,5 +34,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...diluentCatalogListVa
 // Code: ESAVI-DILUENT-002B
 // Literal path, declared before '/:id' so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...diluentCatalogListValidator, validateFields, getAllDiluentCatalogs);
+
+// Get Diluent Catalog by ID
+// Code: ESAVI-DILUENT-003
+// Declared after the literal paths so Express does not capture 'admin' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...diluentCatalogIdValidator, validateFields, getDiluentCatalogById);
 
 export default router;
