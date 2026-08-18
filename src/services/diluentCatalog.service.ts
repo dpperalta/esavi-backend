@@ -85,7 +85,23 @@ const getActiveDiluentCatalogsService = async (filters: DiluentCatalogListFilter
     return diluentCatalogs;
 }
 
+// ESAVI-DILUENT-002B - Get All Diluent Catalogs Service (including inactive) - For Admin
+const getAllDiluentCatalogsService = async (filters: DiluentCatalogListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+    // The twin of 002A without isActive in the where, and with no filter of its own: the table has
+    // no column that could serve as a facet, so there is nothing an admin listing could add
+    const diluentCatalogs = await DiluentCatalog.findAndCountAll({
+        where: buildDiluentCatalogWhere(filters),
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        order: [['name', 'ASC']],
+        limit,
+        offset
+    });
+    return diluentCatalogs;
+}
+
 export {
     createDiluentCatalogService,
-    getActiveDiluentCatalogsService
+    getActiveDiluentCatalogsService,
+    getAllDiluentCatalogsService
 };

@@ -3,7 +3,8 @@ import { AppError, esaviLog, getMessage } from '../helpers';
 import { DiluentCatalogListFilters } from '../types';
 import {
     createDiluentCatalogService,
-    getActiveDiluentCatalogsService
+    getActiveDiluentCatalogsService,
+    getAllDiluentCatalogsService
 } from '../services/diluentCatalog.service';
 
 // Unwraps the single query filter, identical in both listings
@@ -53,7 +54,31 @@ const getDiluentCatalogs = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Get All Diluent Catalogs Controller - For Admin
+// Code: ESAVI-DILUENT-002B
+const getAllDiluentCatalogs = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        // The same single filter as the public listing: this variant adds none of its own
+        const data = await getAllDiluentCatalogsService(readListFilters(req.query), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('diluentCatalog.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DILUENT-002B: Error getting all Diluent Catalogs: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('diluentCatalog.getFailedPlural', req.lang), 500, 'DILUENT_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
     createDiluentCatalog,
-    getDiluentCatalogs
+    getDiluentCatalogs,
+    getAllDiluentCatalogs
 };

@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createDiluentCatalog,
+    getAllDiluentCatalogs,
     getDiluentCatalogs
 } from '../controllers/diluentCatalog.controller';
 import {
@@ -26,5 +27,10 @@ router.post('/', tokenValidation, validateUserRole(ADMIN), ...createDiluentCatal
 // Get Active Diluent Catalogs
 // Code: ESAVI-DILUENT-002A
 router.get('/', tokenValidation, validateUserRole(USER), ...diluentCatalogListValidator, validateFields, getDiluentCatalogs);
+
+// Get All Diluent Catalogs - For Admin
+// Code: ESAVI-DILUENT-002B
+// Literal path, declared before '/:id' so Express does not capture 'admin' as an :id
+router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...diluentCatalogListValidator, validateFields, getAllDiluentCatalogs);
 
 export default router;
