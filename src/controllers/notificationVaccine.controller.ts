@@ -217,8 +217,7 @@ const purgeNotificationVaccine = async (req: Request, res: Response, next: NextF
         await purgeNotificationVaccineService(id, req.user, req.lang);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationVaccine.purgeSuccess', req.lang),
-            data: null
+            message: getMessage('notificationVaccine.purgeSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-NOTIFVAC-005C: Error purging Notification Vaccine: ' + error, 'error');
