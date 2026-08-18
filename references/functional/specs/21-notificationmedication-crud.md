@@ -1,6 +1,6 @@
 # SPEC F21 — CRUD de `notificationMedication`
 
-> **Estado:** Borrador
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F10 (`notification` — dependencia dura de modelo: es el padre de la FK y la fuente de la visibilidad heredada)**, **SPEC F16 (`notificationEvent` — dependencia dura de precedente: aporta la solución verificada al choque entre el trigger de `sortOrder` y la reactivación, que aquí se reproduce idéntica)**, SPEC F14 (`nonSevereNotification` — aporta el patrón de validación de un `catalogItem` contra su `catalogType`), SPEC F06 (`esaviCase` — el `006` entra por el `caseId`), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa)
 > **Fecha:** 2026-08-16
 > **Objetivo:** Dar de alta `notificationMedication` —los medicamentos que el paciente tomaba cuando ocurrió el evento— como la cuarta tabla satélite de `notification`, replicando la forma que `notificationEvent` dejó probada y añadiendo la validación de dos catálogos.

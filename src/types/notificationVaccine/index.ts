@@ -1,0 +1,1 @@
+export * from './notificationVaccine.types';
