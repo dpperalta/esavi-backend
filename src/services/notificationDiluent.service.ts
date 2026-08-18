@@ -1,4 +1,4 @@
-import { InferAttributes, Transaction } from 'sequelize';
+import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiluentCatalog, Notification, NotificationDiluent, NotificationVaccine } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
@@ -558,6 +558,68 @@ const updateNotificationDiluentService = async (
     return updated ? toNotificationDiluentResponse(updated) : null;
 }
 
+// The one piece of ESAVI-NOTIFDIL-005B that is not a clean delegation, and the reason this entity
+// cannot hand its activation to setEntityActiveStatusService and be done with it. The problem and
+// its solution are the ones F16 verified and F21 and F22 reconfirmed over the very same
+// configuration, adopted here without being reasoned again.
+//
+// UQ_notificationDiluent_parent_sortOrder is a partial unique index over (vaccineId, sortOrder)
+// WHERE deletedAt IS NULL (esaviapp.sql:1341-1343). A 005A seals deletedAt, so the number leaves
+// both the index and the MAX the insert trigger computes, and a later create legitimately reuses it.
+// The moment setEntityActiveStatusService:34 clears deletedAt, the reactivated row re-enters the
+// index carrying a number another live row already holds, and the UPDATE dies with a constraint
+// violation — a 500 for an operation that should answer 200.
+//
+// The fix is to move the number before touching deletedAt: while deletedAt is still sealed the row
+// is outside the partial index, so this write is free. Inverting the two steps makes the index fail
+// inside the helper's own UPDATE — the constraint is not deferrable and there would be no way to fix
+// it afterwards.
+//
+// This is a write with an intention of its own over a field the client neither sent nor can send, so
+// it does not go through buildDifferentialUpdate: it does not come from comparing an incoming value
+// against the stored one, but from a constraint of the database.
+//
+// A missing row is left alone: the helper right after raises the 404. An already active row finds no
+// collision either — the index guarantees no other live row shares its number — so nothing is
+// written and the helper raises its 409 as usual
+const reassignSortOrderOnCollision = async (id: string, transaction: Transaction) => {
+    const notificationDiluent = await NotificationDiluent.findOne({
+        where: { diluentId: id },
+        paranoid: false,
+        transaction
+    });
+    if( !notificationDiluent || notificationDiluent.deletedAt === null ) {
+        return;
+    }
+
+    const collision = await NotificationDiluent.findOne({
+        where: {
+            vaccineId: notificationDiluent.vaccineId,
+            sortOrder: notificationDiluent.sortOrder as number,
+            deletedAt: null,
+            diluentId: { [Op.ne]: id }
+        },
+        attributes: ['diluentId'],
+        paranoid: false,
+        transaction
+    });
+    if( !collision ) {
+        return;
+    }
+
+    // The same count TRG_notificationDiluent_setSortOrder does on insert, so the reactivated diluent
+    // reappears at the end of the list
+    const highest = await NotificationDiluent.max<number, NotificationDiluent>('sortOrder', {
+        where: { vaccineId: notificationDiluent.vaccineId, deletedAt: null },
+        transaction
+    });
+
+    await notificationDiluent.update(
+        { sortOrder: ( Number(highest) || 0 ) + 1 },
+        { transaction, fields: ['sortOrder'] }
+    );
+}
+
 // Set Notification Diluent Activation Service
 // Code: ESAVI-NOTIFDIL-005A / ESAVI-NOTIFDIL-005B
 // One service for the two operations, with the number computed as the rest of the repository does
@@ -580,6 +642,15 @@ const setNotificationDiluentActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // Only on the way back: a 005A is what frees the number, so it never collides.
+        // The reactivation revalidates nothing else — not the master, not the minimum content, not
+        // the temporal coherence, not the state of the parent vaccine. Bringing a row back to life
+        // is undoing a deactivation, not rewriting it, and this operation writes none of those
+        // columns
+        if( isActive ) {
+            await reassignSortOrderOnCollision(id, transaction);
+        }
+
         const notificationDiluent = await setEntityActiveStatusService({
             model: NotificationDiluent,
             where: { diluentId: id },

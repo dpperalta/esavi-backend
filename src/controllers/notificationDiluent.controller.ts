@@ -136,6 +136,27 @@ const updateNotificationDiluent = async (req: Request, res: Response, next: Next
     }
 }
 
+// Activate Notification Diluent Controller - For SuperAdmin
+// Code: ESAVI-NOTIFDIL-005B
+const activateNotificationDiluent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setNotificationDiluentActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationDiluent.activatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFDIL-005B: Error activating Notification Diluent: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationDiluent.activatedFailed', req.lang), 500, 'NOTIFDIL_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 // Delete Notification Diluent Controller - Soft delete
 // Code: ESAVI-NOTIFDIL-005A
 const deleteNotificationDiluent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -158,6 +179,7 @@ const deleteNotificationDiluent = async (req: Request, res: Response, next: Next
 }
 
 export {
+    activateNotificationDiluent,
     createNotificationDiluent,
     deleteNotificationDiluent,
     getAllNotificationDiluentsByVaccine,

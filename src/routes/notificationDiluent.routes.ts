@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateNotificationDiluent,
     createNotificationDiluent,
     deleteNotificationDiluent,
     getAllNotificationDiluentsByVaccine,
@@ -17,7 +18,7 @@ import {
     updateNotificationDiluentValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -40,6 +41,11 @@ router.get('/admin/vaccine/:id', tokenValidation, validateUserRole(ADMIN), ...no
 // The :id is the vaccineId, not a diluent id: the listing is entered by the foreign key. Declared
 // after /admin/vaccine/:id, which is the more specific literal path
 router.get('/vaccine/:id', tokenValidation, validateUserRole(USER), ...notificationDiluentVaccineIdValidator, ...notificationDiluentListValidator, validateFields, getNotificationDiluentsByVaccine);
+
+// Activate Notification Diluent - For SuperAdmin
+// Code: ESAVI-NOTIFDIL-005B
+// Declared with the literal paths, before /:id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationDiluentIdValidator, validateFields, activateNotificationDiluent);
 
 // Get Notification Diluent by ID
 // Code: ESAVI-NOTIFDIL-003
