@@ -67,3 +67,25 @@ export const createSystemConfigValidator = [
     body('isActive').optional().isBoolean().withMessage('Is Active must be a boolean'),
     body('changeReason').optional({ nullable: true }).trim()
 ];
+
+// The create validator in its optional variant, minus what may not be changed. code, scope and
+// isEncrypted are NOT rejected here and are not listed either: §11 asks for immutable fields to be
+// ignored in silence, and a 400 would punish a client resending the whole ficha of its own GET — the
+// normal behaviour of a form — for sending something it never meant to change. The service leaves
+// them out of `candidates`, which is where the ignoring actually happens.
+// isActive is accepted and ignored for the same reason: activation belongs to 005A and 005B.
+// changeReason is NOT checked here, and that is the second declared exception to every 400 coming out
+// of validateFields. It is required when value really CHANGES, which is a question only the service
+// can answer: it is the presence of 'value' among the keys buildDifferentialUpdate returned, not the
+// presence of the key in the body. Demanding it from a validator would mean a client resending the
+// whole ficha of its own GET — which always carries value — could never get the 200 without a change
+// that §5 requires of every differential update in this repository
+export const updateSystemConfigValidator = [
+    body('name').optional().trim().notEmpty().withMessage('System config name cannot be empty')
+        .isLength({ max: 200 }).withMessage('System config name must be at most 200 characters long'),
+    body('description').optional({ nullable: true }).trim(),
+    body('valueType').optional().isIn(SYSTEM_CONFIG_VALUE_TYPES)
+        .withMessage(`Value type must be one of: ${ SYSTEM_CONFIG_VALUE_TYPES.join(', ') }`),
+    body('isEditable').optional().isBoolean().withMessage('Is Editable must be a boolean'),
+    body('changeReason').optional({ nullable: true }).trim()
+];

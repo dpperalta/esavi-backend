@@ -6,7 +6,8 @@ import {
     getActiveSystemConfigsService,
     getAllSystemConfigsService,
     getSystemConfigByIdService,
-    getSystemConfigByCodeService
+    getSystemConfigByCodeService,
+    updateSystemConfigService
 } from '../services/systemConfig.service';
 
 // Unwraps the three query filters, identical in both listings. The validator has already restricted
@@ -133,10 +134,32 @@ const getSystemConfigByCode = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Update System Config Controller
+// Code: ESAVI-SYSCONF-004
+const updateSystemConfig = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateSystemConfigService(id, req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-004: Error updating System Config: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.updatedFailed', req.lang), 500, 'SYSCONF_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createSystemConfig,
     getSystemConfigs,
     getAllSystemConfigs,
     getSystemConfigById,
-    getSystemConfigByCode
+    getSystemConfigByCode,
+    updateSystemConfig
 }

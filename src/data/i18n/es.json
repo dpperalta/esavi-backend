@@ -601,6 +601,7 @@
         "syncSuccess": "Sincronización de configuraciones iniciales completada exitosamente",
         "syncFailed": "Error al sincronizar las configuraciones iniciales. Por favor, inténtelo de nuevo más tarde.",
         "notEditable": "La configuración con ID {{id}} está protegida y no admite modificaciones",
+        "changeReasonRequired": "Debe indicar el motivo del cambio cuando se modifica el valor",
         "valueTypeMismatch": "El valor no corresponde con el tipo declarado {{valueType}}"
     }
 }

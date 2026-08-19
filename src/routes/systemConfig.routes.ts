@@ -6,13 +6,15 @@ import {
     getAllSystemConfigs,
     getSystemConfigByCode,
     getSystemConfigById,
-    getSystemConfigs
+    getSystemConfigs,
+    updateSystemConfig
 } from '../controllers/systemConfig.controller';
 import {
     createSystemConfigValidator,
     systemConfigCodeValidator,
     systemConfigIdValidator,
-    systemConfigListValidator
+    systemConfigListValidator,
+    updateSystemConfigValidator
 } from '../validators';
 
 // THE ORDER OF DECLARATION IN THIS FILE IS NOT COSMETIC. The four literal paths — '/admin',
@@ -56,5 +58,9 @@ router.get('/code/:code', tokenValidation, validateUserRole(USER), ...systemConf
 // Code: ESAVI-SYSCONF-003
 // Declared after every literal path so Express does not capture 'admin' or 'sync' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...systemConfigIdValidator, validateFields, getSystemConfigById);
+
+// Update System Config - For SuperAdmin
+// Code: ESAVI-SYSCONF-004
+router.put('/:id', tokenValidation, validateUserRole(SUPERADMIN), ...systemConfigIdValidator, ...updateSystemConfigValidator, validateFields, updateSystemConfig);
 
 export default router;

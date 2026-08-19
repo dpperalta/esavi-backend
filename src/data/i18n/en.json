@@ -601,6 +601,7 @@
         "syncSuccess": "Initial configuration sync completed successfully",
         "syncFailed": "Failed to sync the initial configurations. Please try again later.",
         "notEditable": "The configuration with ID {{id}} is protected and does not accept changes",
+        "changeReasonRequired": "A change reason is required when the value changes",
         "valueTypeMismatch": "The value does not match the declared type {{valueType}}"
     }
 }

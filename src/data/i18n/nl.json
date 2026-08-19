@@ -601,6 +601,7 @@
         "syncSuccess": "Synchronisatie van de initiële configuraties succesvol voltooid",
         "syncFailed": "Synchroniseren van de initiële configuraties mislukt. Probeer het later opnieuw.",
         "notEditable": "De configuratie met ID {{id}} is beveiligd en accepteert geen wijzigingen",
+        "changeReasonRequired": "Een reden voor de wijziging is verplicht wanneer de waarde verandert",
         "valueTypeMismatch": "De waarde komt niet overeen met het opgegeven type {{valueType}}"
     }
 }

@@ -50,10 +50,10 @@
 - **Cifrado real del `value` cuando `isEncrypted: true`**: se guarda envuelto como `{ "enc": "<ciphertext>" }` con `esaviCrypt`, el diff se hace **sobre texto plano**, y el descifrado en respuesta queda restringido a SUPERADMIN y solo en `003`, `006` y `007`. En los listados va siempre enmascarado.
 - **`isEditable: false` bloquea el `004`** con 409, antes del diff. El propio `isEditable` sí es mutable, y solo por SUPERADMIN.
 - Escritura de `systemConfigHistory` en el `001` y el `008` siempre, y en el `004` **solo cuando `value` figura entre las claves que devolvió `buildDifferentialUpdate`**. Nunca en `005A` ni en `005B`.
-- `changeReason` como campo del body que **no es columna de `systemConfig`**: no entra en `candidates` y solo viaja a la fila de historial. Opcional en el `001`, **obligatorio en el `004` cuando el body trae `value`**.
+- `changeReason` como campo del body que **no es columna de `systemConfig`**: no entra en `candidates` y solo viaja a la fila de historial. Opcional en el `001`, **obligatorio en el `004` cuando `value` cambia de verdad** — es decir, cuando `'value'` figura entre las claves que devolvió `buildDifferentialUpdate`, no cuando la clave viaja en el body.
 - Tres filtros de listado en `002A` y `002B`: `scope`, `valueType` y `search` (`Op.iLike` sobre `name` y `code`, mínimo 2 caracteres). Orden por defecto `scope ASC, code ASC`.
 - El catálogo declarativo `src/data/systemConfig.defaults.ts`, que alimenta el `008` y **tiende a crecer**: añadir un parámetro es añadir una entrada y volver a llamar al endpoint tras desplegar.
-- Un bloque `systemConfig` con **veinticinco claves i18n** en `es`, `en` y `nl`.
+- Un bloque `systemConfig` con **veintiséis claves i18n** en `es`, `en` y `nl`.
 - Diez filas nuevas en `ROUTE_RULES` de `tests/auth/roles.test.ts`, subiendo el total esperado de **177 a 187**.
 - Suite `tests/contract/systemConfig.test.ts`.
 
@@ -320,7 +320,7 @@ Todo en **una sola transacción, todo o nada**: una entrada del catálogo con un
 
 Son **cinco filas** en `candidates` sobre las ocho columnas de datos: tres son inmutables, y `isActive` y `changeReason` quedan fuera por motivos distintos.
 
-**La escritura de historial es condicional y ésa es la regla central del `004`:** se inserta una fila en `systemConfigHistory` **si y solo si `'value'` está entre las claves que devolvió `buildDifferentialUpdate`**. Un `PUT` que solo corrige el `name` actualiza `systemConfig` y **no** escribe historial — la tabla se llama `previousValue`/`newValue` y registra cambios de valor, no de metadatos. `previousValue` guarda lo que había **tal como estaba almacenado**, cifrado si lo estaba; `newValue`, lo que queda, en el mismo régimen. `changeReason` es **obligatorio cuando el body trae `value`** → 400 desde el validador si falta.
+**La escritura de historial es condicional y ésa es la regla central del `004`:** se inserta una fila en `systemConfigHistory` **si y solo si `'value'` está entre las claves que devolvió `buildDifferentialUpdate`**. Un `PUT` que solo corrige el `name` actualiza `systemConfig` y **no** escribe historial — la tabla se llama `previousValue`/`newValue` y registra cambios de valor, no de metadatos. `previousValue` guarda lo que había **tal como estaba almacenado**, cifrado si lo estaba; `newValue`, lo que queda, en el mismo régimen. `changeReason` es **obligatorio cuando `value` cambia de verdad** → 400 `SYSCONF_004_CHANGE_REASON_REQUIRED` **desde el servicio**, evaluado justo después del diff y con el mismo disparador que la escritura de historial: la presencia de `'value'` en la salida del helper, nunca la presencia de la clave en el body. Es la **segunda excepción declarada** a que los 400 salgan de `validateFields`, y por el mismo motivo que la primera: un validador no puede saber si el valor cambió. Ponerlo ahí haría que un cliente que reenvía la ficha íntegra de su `GET` —que siempre lleva `value`— jamás pudiera obtener el 200 sin escritura que §5 exige de todo update diferencial del repositorio.
 
 Cuando hay historial, las dos escrituras van en **una transacción**. Cuando no lo hay, el `UPDATE` es una sola escritura y va sin ella, como el resto del repositorio.
 
@@ -338,7 +338,7 @@ Los cinco puntos que este `004` resuelve y que son los que se olvidan:
 
 ### 3.6 Claves i18n nuevas
 
-Bloque `systemConfig` en `src/data/i18n/es.json`, `en.json` y `nl.json` — **veinticinco claves**: las dieciséis estándar más nueve propias de las tres operaciones no canónicas y de las dos reglas nuevas.
+Bloque `systemConfig` en `src/data/i18n/es.json`, `en.json` y `nl.json` — **veintiséis claves**: las dieciséis estándar más diez propias de las tres operaciones no canónicas y de las tres reglas nuevas.
 
 | Clave | Uso |
 |---|---|
@@ -357,12 +357,13 @@ Bloque `systemConfig` en `src/data/i18n/es.json`, `en.json` y `nl.json` — **ve
 | `syncSuccess` / `syncFailed` | 200 y 500 del `008` |
 | `notEditable` | 409 del `004` sobre una fila con `isEditable: false` |
 | `valueTypeMismatch` | 400 de la validación cruzada en `001`, `004` y `008`; interpola `{{valueType}}` |
+| `changeReasonRequired` | 400 del `004` cuando `value` cambia y no viaja el motivo |
 
 `codeExists` conserva el nombre canónico de §13 aunque la unicidad sea compuesta; lo que cambia es el mensaje, que nombra el par. La razón está en §6.
 
-`tests/i18n/messages.test.ts` exige paridad exacta: o las veinticinco están en los tres archivos, o la suite falla.
+`tests/i18n/messages.test.ts` exige paridad exacta: o las veintiséis están en los tres archivos, o la suite falla.
 
-**Ninguna clave nueva para los 400 de validación de entrada.** Los mensajes de `express-validator` los resuelve `validateFields` con su propio mecanismo. `valueTypeMismatch` es la excepción y por eso figura: esa validación la hace el **servicio**, no el validador, porque en el `004` necesita el `valueType` guardado.
+**Ninguna clave nueva para los 400 de validación de entrada.** Los mensajes de `express-validator` los resuelve `validateFields` con su propio mecanismo. `valueTypeMismatch` y `changeReasonRequired` son las dos excepciones y por eso figuran: las dos las hace el **servicio**, no el validador, porque en el `004` la primera necesita el `valueType` guardado y la segunda necesita saber si el valor cambió.
 
 ### 3.7 Forma de la respuesta
 
@@ -422,7 +423,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 2. **Modelos, asociaciones, tipos y barrels.** `src/models/systemConfig.model.ts` con las quince columnas de §3.1 y `src/models/systemConfigHistory.model.ts` con las once, **sin `isActive`** en la segunda. Anchos respetados: `STRING(150)` en `code`, `STRING(200)` en `name`, `STRING(50)` en `valueType`, `STRING(100)` en `scope`. `src/models/associations/systemConfig.associations.ts` con las tres asociaciones de §3.2, registrado en `initModels()`. `src/types/systemConfig/` con los dos archivos de tipos, su `index.ts` de barrel y el alta en `src/types/index.ts`. Alta de los dos modelos en `src/models/index.ts`.
    *Verificación:* `npm run build` en 0; un `SystemConfig.findAll({ include: 'history' })` en un script suelto devuelve filas sin error de columna ni de asociación inexistente.
 
-3. **Las veinticinco claves i18n** de §3.6 en `es.json`, `en.json` y `nl.json`, con los parámetros de interpolación `{{code}}`, `{{scope}}` y `{{valueType}}` donde corresponde.
+3. **Las veintiséis claves i18n** de §3.6 en `es.json`, `en.json` y `nl.json`, con los parámetros de interpolación `{{code}}`, `{{scope}}` y `{{valueType}}` donde corresponde.
    *Verificación:* `npm run i18n:check` en 0 y `npm test -- messages` pasa.
 
 4. **Helpers de dominio del `value`.** `src/helpers/systemConfigValue.helper.ts` con tres funciones, dadas de alta en el barrel `src/helpers/index.ts`: la validación cruzada de la tabla de §3.5, el cifrado a `{ "enc": "..." }` y el descifrado inverso. Las consumen seis operaciones —`001`, `003`, `004`, `006`, `007` y `008`—, así que se escriben una vez y antes que ninguna de ellas.
@@ -444,7 +445,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
    *Verificación:* `GET /code/esavi_max_upload` y `GET /code/ESAVI_MAX_UPLOAD` devuelven la misma fila; sin `?scope=` resuelve contra `GLOBAL`; un par inexistente devuelve **404**; las reglas de inactivos y de descifrado son idénticas a las del `003`.
 
 10. **`ESAVI-SYSCONF-004` — actualizar.** `updateSystemConfigService` con el orden de siete pasos de §3.5, la tabla de `candidates` completa —cinco campos— y `buildDifferentialUpdate`. Historial condicional a que `'value'` esté en la salida del helper, con transacción solo en ese caso. Preserva el historial de `appDetails` con `[...currentAppDetails, newEntry]`. Ruta `PUT /:id` con `validateUserRole(SUPERADMIN)` y validador que exige `changeReason` cuando el body trae `value`.
-    *Verificación:* un `PUT` que reenvía íntegra la respuesta del `GET` devuelve **200** sin tocar `appDetails`, `updatedAt` ni `sysDetails.version`, y sin crear fila de historial; un `PUT` sobre una fila con `isEditable: false` devuelve **409** aunque el body no cambie nada; un `PUT` que solo cambia `name` **no** crea fila de historial; un `PUT` que cambia `value` sin `changeReason` devuelve **400**; un `PUT` con `code` o `scope` distintos responde **200** y los ignora en silencio; un `PUT` sobre una fila cifrada que reenvía el valor descifrado tal cual **no escribe**.
+    *Verificación:* un `PUT` que reenvía íntegra la respuesta del `GET` devuelve **200** sin tocar `appDetails`, `updatedAt` ni `sysDetails.version`, y sin crear fila de historial; un `PUT` sobre una fila con `isEditable: false` devuelve **409** aunque el body no cambie nada; un `PUT` que solo cambia `name` **no** crea fila de historial; un `PUT` que **cambia** `value` sin `changeReason` devuelve **400**, mientras que uno que lo reenvía sin cambiarlo devuelve **200**; un `PUT` con `code` o `scope` distintos responde **200** y los ignora en silencio; un `PUT` sobre una fila cifrada que reenvía el valor descifrado tal cual **no escribe**.
 
 11. **`ESAVI-SYSCONF-005A` y `005B` — desactivar y reactivar.** `setSystemConfigActivationService(id, authUser, lang, isActive)` sobre `setEntityActiveStatusService`, con transacción. Dos controladores y dos rutas — `DELETE /:id` y `PATCH /activate/:id`, **las dos SUPERADMIN** —, ambas respondiendo sin `data`.
     *Verificación:* desactivar deja `isActive: false` y `deletedAt` con fecha; desactivar dos veces devuelve **409** `ALREADY_INACTIVE`; reactivar deja `deletedAt` en `null`; un ADMIN recibe **403** en las dos; desactivar una fila con `isEditable: false` **funciona**, porque esa bandera protege el valor y no la existencia; ninguna de las dos crea fila de historial.
@@ -490,7 +491,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] `appDetails.method` guarda `ESAVI-SYSCONF-005A` o `ESAVI-SYSCONF-005B`, sin `_ACTIVATION` pegado detrás.
 - [ ] Cada operación de escritura añade una entrada a `appDetails` sin borrar las anteriores.
 - [ ] `sysDetails` no aparece en ninguna respuesta: `grep -n "sysDetails" src/controllers/systemConfig.controller.ts` no devuelve resultados.
-- [ ] Las veinticinco claves existen en es, en y nl con los nombres de §3.6; `npm run i18n:check` sale en 0.
+- [ ] Las veintiséis claves existen en es, en y nl con los nombres de §3.6; `npm run i18n:check` sale en 0.
 - [ ] `ROUTE_RULES` tiene 187 entradas y `npm test -- roles` pasa.
 - [ ] `npm run check` sale en 0.
 
@@ -517,7 +518,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] Crear una configuración deja exactamente **una** fila en `systemConfigHistory`, con `previousValue: null`.
 - [ ] Un `PUT` que cambia **solo `name`** responde 200, escribe en `systemConfig` y **no** añade fila de historial.
 - [ ] Un `PUT` que cambia `value` añade **una** fila con el `previousValue` correcto y el `changeReason` del body.
-- [ ] Un `PUT` con `value` y sin `changeReason` responde **400**; un `PUT` sin `value` y sin `changeReason` responde 200.
+- [ ] Un `PUT` que **cambia** `value` sin `changeReason` responde **400**; un `PUT` que reenvía el mismo `value` sin `changeReason` responde **200** y no escribe; un `PUT` sin `value` y sin `changeReason` responde 200.
 - [ ] `changeReason` no aparece nunca en la fila de `systemConfig`: `grep -n "changeReason" src/models/systemConfig.model.ts` no devuelve resultados.
 - [ ] `GET /:id/history` de un id inexistente responde **404**, no una lista vacía.
 - [ ] `GET /:id/history` devuelve las filas en `createdAt DESC`, con `changedByUser.displayName` descifrado, y `changedByUser: null` cuando la FK está en `null`.
@@ -560,7 +561,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - **Sí:** validar contra el `valueType` **resultante**, no contra el que viaja en el body. Un `PUT` que solo cambia `valueType` a `'number'` sobre un `value` que es un array tiene que ser 400: la fila quedaría mintiendo sobre su propio tipo.
 - **Sí:** `null` aceptado **solo** bajo `valueType: 'json'`. Es JSON válido, pero un `valueType: 'number'` existe para que el consumidor pueda confiar en el tipo sin comprobarlo, y un `null` obliga a comprobarlo igualmente.
 - **Sí:** `valueType` **mutable**. Un parámetro puede cambiar de forma —de `string` a `array` cuando pasa de admitir un valor a admitir varios— y forzar a recrear la fila perdería su historial, que es la única memoria de cómo llegó a valer lo que vale.
-- **Sí:** `changeReason` en el body sin ser columna de `systemConfig`. Es el único campo del repositorio que viaja en un `PUT` y no describe la fila que se actualiza, así que está señalado en §3.3 y en la tabla de `candidates` de §3.5. **Sí:** obligatorio cuando el body trae `value`, opcional en el resto. Sin él, el historial guarda quién y cuándo pero nunca por qué, que es la mitad de su utilidad; exigirlo siempre, en cambio, bloquearía una corrección de `name` por una formalidad.
+- **Sí:** `changeReason` en el body sin ser columna de `systemConfig`. Es el único campo del repositorio que viaja en un `PUT` y no describe la fila que se actualiza, así que está señalado en §3.3 y en la tabla de `candidates` de §3.5. **Sí:** obligatorio cuando `value` **cambia de verdad**, opcional en el resto, y comprobado en el **servicio** después del diff. Sin él, el historial guarda quién y cuándo pero nunca por qué, que es la mitad de su utilidad; exigirlo siempre, en cambio, bloquearía una corrección de `name` por una formalidad. **No:** exigirlo desde el validador cuando la clave `value` viaja en el body, que fue la primera redacción de este spec y **colisiona de frente con §5**: la respuesta de un `GET` siempre lleva `value`, así que reenviarla íntegra —el uso normal de un formulario— daría 400 en vez del 200 sin escritura que exige el criterio canónico del update diferencial. El disparador es el mismo que el de la escritura de historial, y por la misma razón: lo que importa es el cambio real del valor, no la forma del body.
 - **Sí:** historial **condicional a que `value` cambie de verdad**, y no a que la clave `value` venga en el body. Es la regla de §11 aplicada a un efecto lateral: un formulario que reenvía la ficha completa generaría una fila de historial por cada apertura de pantalla, y un historial lleno de entradas sin cambio no es trazabilidad, es ruido que esconde las modificaciones reales. **No:** historial en cada `UPDATE`, que es lo que hace `upsertSystemConfig` y lo que este spec declara que no va a imitar.
 - **No:** historial en `005A` y `005B`. Las columnas son `previousValue`/`newValue`: la tabla registra cambios de valor. Desactivar no cambia ninguno, y el rastro de la activación ya vive en `appDetails` y en `sysDetails.auditTrail`.
 - **Sí:** `006` como operación no canónica con ruta `GET /code/:code`. Un CRUD por UUID no sirve para lo que existe la tabla: quien lee configuración conoce el nombre del parámetro, no su identificador. **No:** un query param sobre el `002A` (`GET /?code=X`), que devolvería `{ count, rows }` con una fila para una lectura que es de una sola entidad, y no podría distinguir «no existe» —que es 404— de «lista vacía» —que es 200—.
