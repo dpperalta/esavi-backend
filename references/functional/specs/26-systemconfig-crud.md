@@ -53,7 +53,7 @@
 - `changeReason` como campo del body que **no es columna de `systemConfig`**: no entra en `candidates` y solo viaja a la fila de historial. Opcional en el `001`, **obligatorio en el `004` cuando el body trae `value`**.
 - Tres filtros de listado en `002A` y `002B`: `scope`, `valueType` y `search` (`Op.iLike` sobre `name` y `code`, mínimo 2 caracteres). Orden por defecto `scope ASC, code ASC`.
 - El catálogo declarativo `src/data/systemConfig.defaults.ts`, que alimenta el `008` y **tiende a crecer**: añadir un parámetro es añadir una entrada y volver a llamar al endpoint tras desplegar.
-- Un bloque `systemConfig` con **veinticuatro claves i18n** en `es`, `en` y `nl`.
+- Un bloque `systemConfig` con **veinticinco claves i18n** en `es`, `en` y `nl`.
 - Diez filas nuevas en `ROUTE_RULES` de `tests/auth/roles.test.ts`, subiendo el total esperado de **177 a 187**.
 - Suite `tests/contract/systemConfig.test.ts`.
 
@@ -338,7 +338,7 @@ Los cinco puntos que este `004` resuelve y que son los que se olvidan:
 
 ### 3.6 Claves i18n nuevas
 
-Bloque `systemConfig` en `src/data/i18n/es.json`, `en.json` y `nl.json` — **veinticuatro claves**: las dieciséis estándar más ocho propias de las tres operaciones no canónicas y de las dos reglas nuevas.
+Bloque `systemConfig` en `src/data/i18n/es.json`, `en.json` y `nl.json` — **veinticinco claves**: las dieciséis estándar más nueve propias de las tres operaciones no canónicas y de las dos reglas nuevas.
 
 | Clave | Uso |
 |---|---|
@@ -360,7 +360,7 @@ Bloque `systemConfig` en `src/data/i18n/es.json`, `en.json` y `nl.json` — **ve
 
 `codeExists` conserva el nombre canónico de §13 aunque la unicidad sea compuesta; lo que cambia es el mensaje, que nombra el par. La razón está en §6.
 
-`tests/i18n/messages.test.ts` exige paridad exacta: o las veinticuatro están en los tres archivos, o la suite falla.
+`tests/i18n/messages.test.ts` exige paridad exacta: o las veinticinco están en los tres archivos, o la suite falla.
 
 **Ninguna clave nueva para los 400 de validación de entrada.** Los mensajes de `express-validator` los resuelve `validateFields` con su propio mecanismo. `valueTypeMismatch` es la excepción y por eso figura: esa validación la hace el **servicio**, no el validador, porque en el `004` necesita el `valueType` guardado.
 
@@ -422,7 +422,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 2. **Modelos, asociaciones, tipos y barrels.** `src/models/systemConfig.model.ts` con las quince columnas de §3.1 y `src/models/systemConfigHistory.model.ts` con las once, **sin `isActive`** en la segunda. Anchos respetados: `STRING(150)` en `code`, `STRING(200)` en `name`, `STRING(50)` en `valueType`, `STRING(100)` en `scope`. `src/models/associations/systemConfig.associations.ts` con las tres asociaciones de §3.2, registrado en `initModels()`. `src/types/systemConfig/` con los dos archivos de tipos, su `index.ts` de barrel y el alta en `src/types/index.ts`. Alta de los dos modelos en `src/models/index.ts`.
    *Verificación:* `npm run build` en 0; un `SystemConfig.findAll({ include: 'history' })` en un script suelto devuelve filas sin error de columna ni de asociación inexistente.
 
-3. **Las veinticuatro claves i18n** de §3.6 en `es.json`, `en.json` y `nl.json`, con los parámetros de interpolación `{{code}}`, `{{scope}}` y `{{valueType}}` donde corresponde.
+3. **Las veinticinco claves i18n** de §3.6 en `es.json`, `en.json` y `nl.json`, con los parámetros de interpolación `{{code}}`, `{{scope}}` y `{{valueType}}` donde corresponde.
    *Verificación:* `npm run i18n:check` en 0 y `npm test -- messages` pasa.
 
 4. **Helpers de dominio del `value`.** `src/helpers/systemConfigValue.helper.ts` con tres funciones, dadas de alta en el barrel `src/helpers/index.ts`: la validación cruzada de la tabla de §3.5, el cifrado a `{ "enc": "..." }` y el descifrado inverso. Las consumen seis operaciones —`001`, `003`, `004`, `006`, `007` y `008`—, así que se escriben una vez y antes que ninguna de ellas.
@@ -490,7 +490,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] `appDetails.method` guarda `ESAVI-SYSCONF-005A` o `ESAVI-SYSCONF-005B`, sin `_ACTIVATION` pegado detrás.
 - [ ] Cada operación de escritura añade una entrada a `appDetails` sin borrar las anteriores.
 - [ ] `sysDetails` no aparece en ninguna respuesta: `grep -n "sysDetails" src/controllers/systemConfig.controller.ts` no devuelve resultados.
-- [ ] Las veinticuatro claves existen en es, en y nl con los nombres de §3.6; `npm run i18n:check` sale en 0.
+- [ ] Las veinticinco claves existen en es, en y nl con los nombres de §3.6; `npm run i18n:check` sale en 0.
 - [ ] `ROUTE_RULES` tiene 187 entradas y `npm test -- roles` pasa.
 - [ ] `npm run check` sale en 0.
 

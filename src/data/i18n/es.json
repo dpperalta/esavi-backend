@@ -575,5 +575,32 @@
         "alreadyInactive": "El diluyente de notificación con ID {{id}} ya está inactivo",
         "purgeSuccess": "Diluyente de notificación eliminado permanentemente",
         "purgeFailed": "Error al eliminar permanentemente el diluyente de notificación. Por favor, inténtelo de nuevo más tarde."
+    },
+    "systemConfig": {
+        "createdSuccess": "Configuración creada exitosamente",
+        "createdFailed": "Error al crear la configuración. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Configuración obtenida exitosamente",
+        "getFailed": "Error al obtener la configuración. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Configuraciones obtenidas exitosamente",
+        "getFailedPlural": "Error al obtener las configuraciones. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Configuración actualizada exitosamente",
+        "updatedFailed": "Error al actualizar la configuración. Por favor, inténtelo de nuevo más tarde.",
+        "deletedSuccess": "Configuración eliminada exitosamente",
+        "deletedFailed": "Error al eliminar la configuración. Por favor, inténtelo de nuevo más tarde.",
+        "activatedSuccess": "Configuración activada exitosamente",
+        "activatedFailed": "Error al activar la configuración. Por favor, inténtelo de nuevo más tarde.",
+        "notFound": "Configuración no encontrada. Por favor, verifique el ID de la configuración e inténtelo de nuevo.",
+        "codeExists": "Ya existe una configuración con el código {{code}} en el ámbito {{scope}}",
+        "alreadyActive": "La configuración con ID {{id}} ya está activa",
+        "alreadyInactive": "La configuración con ID {{id}} ya está inactiva",
+        "getByCodeSuccess": "Configuración obtenida exitosamente por código",
+        "getByCodeFailed": "Error al obtener la configuración por código. Por favor, inténtelo de nuevo más tarde.",
+        "codeNotFound": "No existe una configuración con el código {{code}} en el ámbito {{scope}}",
+        "historySuccessPlural": "Historial de la configuración obtenido exitosamente",
+        "historyFailedPlural": "Error al obtener el historial de la configuración. Por favor, inténtelo de nuevo más tarde.",
+        "syncSuccess": "Sincronización de configuraciones iniciales completada exitosamente",
+        "syncFailed": "Error al sincronizar las configuraciones iniciales. Por favor, inténtelo de nuevo más tarde.",
+        "notEditable": "La configuración con ID {{id}} está protegida y no admite modificaciones",
+        "valueTypeMismatch": "El valor no corresponde con el tipo declarado {{valueType}}"
     }
 }

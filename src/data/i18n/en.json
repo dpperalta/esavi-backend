@@ -575,5 +575,32 @@
         "alreadyInactive": "The notification diluent with ID {{id}} is already inactive",
         "purgeSuccess": "Notification diluent deleted permanently",
         "purgeFailed": "Failed to permanently delete the notification diluent. Please try again later."
+    },
+    "systemConfig": {
+        "createdSuccess": "Configuration created successfully",
+        "createdFailed": "Failed to create the configuration. Please try again later.",
+        "getSuccess": "Configuration fetched successfully",
+        "getFailed": "Failed to fetch the configuration. Please try again later.",
+        "getSuccessPlural": "Configurations fetched successfully",
+        "getFailedPlural": "Failed to fetch the configurations. Please try again later.",
+        "updatedSuccess": "Configuration updated successfully",
+        "updatedFailed": "Failed to update the configuration. Please try again later.",
+        "deletedSuccess": "Configuration deleted successfully",
+        "deletedFailed": "Failed to delete the configuration. Please try again later.",
+        "activatedSuccess": "Configuration activated successfully",
+        "activatedFailed": "Failed to activate the configuration. Please try again later.",
+        "notFound": "Configuration not found. Please check the configuration ID and try again.",
+        "codeExists": "A configuration with code {{code}} already exists in scope {{scope}}",
+        "alreadyActive": "The configuration with ID {{id}} is already active",
+        "alreadyInactive": "The configuration with ID {{id}} is already inactive",
+        "getByCodeSuccess": "Configuration fetched successfully by code",
+        "getByCodeFailed": "Failed to fetch the configuration by code. Please try again later.",
+        "codeNotFound": "No configuration with code {{code}} exists in scope {{scope}}",
+        "historySuccessPlural": "Configuration history fetched successfully",
+        "historyFailedPlural": "Failed to fetch the configuration history. Please try again later.",
+        "syncSuccess": "Initial configuration sync completed successfully",
+        "syncFailed": "Failed to sync the initial configurations. Please try again later.",
+        "notEditable": "The configuration with ID {{id}} is protected and does not accept changes",
+        "valueTypeMismatch": "The value does not match the declared type {{valueType}}"
     }
 }
