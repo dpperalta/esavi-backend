@@ -4,12 +4,14 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationPregnancy,
     getNotificationPregnancyById,
-    getNotificationPregnancyByNotification
+    getNotificationPregnancyByNotification,
+    updateNotificationPregnancy
 } from '../controllers/notificationPregnancy.controller';
 import {
     createNotificationPregnancyValidator,
     notificationPregnancyIdValidator,
-    notificationPregnancyNotificationIdValidator
+    notificationPregnancyNotificationIdValidator,
+    updateNotificationPregnancyValidator
 } from '../validators';
 
 const { USER } = ROLES;
@@ -41,5 +43,9 @@ router.get('/notification/:notificationId', tokenValidation, validateUserRole(US
 // Declared after every literal path: an /:id first would swallow /notification, /purge and
 // /activate, and the UUID validator would answer 400 for routes that do exist
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyIdValidator, validateFields, getNotificationPregnancyById);
+
+// Update Notification Pregnancy
+// Code: ESAVI-NOTIFPRG-004
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyIdValidator, ...updateNotificationPregnancyValidator, validateFields, updateNotificationPregnancy);
 
 export default router;

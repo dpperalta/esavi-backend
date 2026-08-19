@@ -1,5 +1,5 @@
 import { CatalogItem, EsaviCase, Notification, NotificationPregnancy, Patient, SystemConfig } from '../models';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationPregnancyInput } from '../types';
 import {
     GESTATION_MAX_DAYS,
@@ -252,8 +252,8 @@ const assertGestationRangeIsCoherent = (
 
 // Create Notification Pregnancy Service
 // Code: ESAVI-NOTIFPRG-001
-// No transaction of its own: nothing is written outside this table, no field is derived and no
-// master is resolved, so the create is a single statement and the implicit transaction of Sequelize
+// No explicit atomic block of its own: nothing is written outside this table, no field is derived
+// and no master is resolved, so the create is a single statement and what Sequelize wraps around it
 // is enough.
 //
 // No explicit field list either, unlike the four one to many satellites: this table has no
@@ -390,8 +390,117 @@ const getNotificationPregnancyByNotificationService = async (
     return toNotificationPregnancyResponse(notificationPregnancy);
 }
 
+// Update Notification Pregnancy Service
+// Code: ESAVI-NOTIFPRG-004
+// No explicit atomic block of its own: a single row of a single table is written, and what Sequelize
+// wraps around it covers that. The activation pair is where this entity would have needed one, and it
+// does not need one there either.
+//
+// The female sex rule does not run here, and that is deliberate: the sex of the patient does not
+// change because of a PUT to the pregnancy, and revalidating it on every update would make editing an
+// existing record fail if someone fixed the catalog in the meantime — blocking precisely the data
+// correction the 004 exists for
+const updateNotificationPregnancyService = async (
+    id: string,
+    data: Partial<CreateNotificationPregnancyInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const notificationPregnancy = await findNotificationPregnancy(id, canViewInactive);
+    if( !notificationPregnancy ) {
+        throw new AppError(getMessage('notificationPregnancy.notFound', lang), 404, 'NOTIFPRG_004_NOT_FOUND');
+    }
+
+    // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate, and an
+    // instance read with a narrowed `attributes` reads back undefined for what it left out, so every
+    // comparison would count as a change
+    const stored = notificationPregnancy.get({ plain: true }) as Record<string, unknown>;
+
+    // Before the diff and independently of it, the gestational range is evaluated over the resulting
+    // state — what is stored merged with what arrives — and never over the body. Otherwise a PUT
+    // moving only one of the two dates would never be checked against the other one already saved,
+    // which is exactly how an incoherent pair gets in
+    const resultingLastMenstruationDate = data.lastMenstruationDate !== undefined
+        ? ( data.lastMenstruationDate ?? null )
+        : ( stored.lastMenstruationDate as string | null );
+    const resultingProbableDeliveryDate = data.probableDeliveryDate !== undefined
+        ? ( data.probableDeliveryDate ?? null )
+        : ( stored.probableDeliveryDate as string | null );
+
+    assertGestationRangeIsCoherent(
+        resultingLastMenstruationDate,
+        resultingProbableDeliveryDate,
+        '004',
+        lang
+    );
+
+    // notificationId and isActive are deliberately absent: the first is immutable and is ignored in
+    // silence — answering 400 for a key the client resends whole from its GET is hostile — and the
+    // state moves through 005A and 005B. Six fields are compared and none of them is derived:
+    // hasComplications is client data in this spec, and deriving it from the complications table is
+    // a decision left to the spec of that table.
+    //
+    // The three tri-states are compared as primitives, and null against 'NO_ANSWER' IS a change: they
+    // are different data — one is "the form did not collect it", the other a deliberate answer
+    const candidates: Record<string, unknown> = {
+        // Nullable here although it is required by the 001: the create guarantees the row is born
+        // informed, and the update exists to correct
+        wasPregnantAtVaccination: data.wasPregnantAtVaccination !== undefined
+            ? ( data.wasPregnantAtVaccination ?? null )
+            : undefined,
+        wasPregnantAtEsavi: data.wasPregnantAtEsavi !== undefined
+            ? ( data.wasPregnantAtEsavi ?? null )
+            : undefined,
+        // DATEONLY: the helper compares it with slice(0, 10)
+        lastMenstruationDate: data.lastMenstruationDate !== undefined
+            ? ( data.lastMenstruationDate ?? null )
+            : undefined,
+        probableDeliveryDate: data.probableDeliveryDate !== undefined
+            ? ( data.probableDeliveryDate ?? null )
+            : undefined,
+        hasComplications: data.hasComplications !== undefined
+            ? ( data.hasComplications ?? null )
+            : undefined,
+        // Trimmed before comparing, so a PUT resending the same text with padding writes nothing
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_notificationPregnancy_setSysDetails fires on every write
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    if( Object.keys(objectToUpdate).length > 0 ) {
+        // Written by hand so the service does not depend on a trigger for a column it owns: the
+        // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+        objectToUpdate.updatedAt = new Date();
+
+        // The history is extended, never overwritten
+        const currentAppDetails = Array.isArray(notificationPregnancy.appDetails)
+            ? notificationPregnancy.appDetails
+            : [];
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: authUser?.userId || 'undefined',
+            method: 'ESAVI-NOTIFPRG-004',
+            detail: 'Notification pregnancy updated by service'
+        };
+        await notificationPregnancy.update({
+            ...objectToUpdate,
+            appDetails: [
+                ...currentAppDetails,
+                newEntry
+            ]
+        });
+    }
+
+    const updated = await findNotificationPregnancy(id, true);
+    return updated ? toNotificationPregnancyResponse(updated) : null;
+}
+
 export {
     createNotificationPregnancyService,
     getNotificationPregnancyByIdService,
-    getNotificationPregnancyByNotificationService
+    getNotificationPregnancyByNotificationService,
+    updateNotificationPregnancyService
 };

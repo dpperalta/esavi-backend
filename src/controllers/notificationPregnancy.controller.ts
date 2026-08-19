@@ -4,7 +4,8 @@ import { AuthUser } from '../types';
 import {
     createNotificationPregnancyService,
     getNotificationPregnancyByIdService,
-    getNotificationPregnancyByNotificationService
+    getNotificationPregnancyByNotificationService,
+    updateNotificationPregnancyService
 } from '../services/notificationPregnancy.service';
 
 // Create Notification Pregnancy Controller
@@ -73,8 +74,36 @@ const getNotificationPregnancyByNotification = async (req: Request, res: Respons
     }
 }
 
+// Update Notification Pregnancy Controller
+// Code: ESAVI-NOTIFPRG-004
+const updateNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateNotificationPregnancyService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-004: Error updating Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.updatedFailed', req.lang), 500, 'NOTIFPRG_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createNotificationPregnancy,
     getNotificationPregnancyById,
-    getNotificationPregnancyByNotification
+    getNotificationPregnancyByNotification,
+    updateNotificationPregnancy
 };
