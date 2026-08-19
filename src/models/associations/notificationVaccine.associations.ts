@@ -18,6 +18,7 @@ export const initNotificationVaccineAssociations = (): void => {
     // file of its own
     NotificationVaccine.belongsTo(VaccineWhodrug, { foreignKey: 'vaccineWhodrugId', as: 'vaccineWhodrug' });
 
-    // No association towards notificationDiluent: that table has no model, and this spec does not
-    // give it one. Its only appearance is the raw SQL count the 005C dumps to the log
+    // The 'diluents' hasMany towards notificationDiluent is declared by that entity's own
+    // associations file, on the side that owns the key. The raw SQL count this entity's 005C dumps
+    // to the log stays as it is: it works, and rewriting it would buy nothing
 }

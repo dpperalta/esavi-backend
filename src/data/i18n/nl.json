@@ -552,5 +552,28 @@
         "codeExists": "Er bestaat al een verdunningsmiddel met code {{code}}",
         "alreadyActive": "Het verdunningsmiddel met ID {{id}} is al actief",
         "alreadyInactive": "Het verdunningsmiddel met ID {{id}} is al inactief"
+    },
+    "notificationDiluent": {
+        "notFound": "Meldingsverdunningsmiddel niet gevonden. Controleer de ID van het verdunningsmiddel en probeer het opnieuw.",
+        "idRequired": "De ID van het meldingsverdunningsmiddel is verplicht",
+        "vaccineNotFound": "Het opgegeven meldingsvaccin bestaat niet of is inactief",
+        "catalogNotFound": "Het opgegeven verdunningsmiddel uit de catalogus bestaat niet of is inactief",
+        "diluentRequired": "Geef het verdunningsmiddel uit de catalogus of de naam van het verdunningsmiddel op",
+        "reconstitutionAfterVaccination": "De reconstitutiedatum mag niet later zijn dan de vaccinatiedatum van het meldingsvaccin",
+        "stillActive": "Het meldingsverdunningsmiddel met ID {{id}} is nog actief. Deactiveer het voordat u het definitief verwijdert.",
+        "createdSuccess": "Meldingsverdunningsmiddel succesvol aangemaakt",
+        "createdFailed": "Aanmaken van het meldingsverdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Meldingsverdunningsmiddel succesvol opgehaald",
+        "getFailed": "Ophalen van het meldingsverdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Meldingsverdunningsmiddel succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van het meldingsverdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "deletedSuccess": "Meldingsverdunningsmiddel succesvol verwijderd",
+        "deletedFailed": "Verwijderen van het meldingsverdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Meldingsverdunningsmiddel succesvol geactiveerd",
+        "activatedFailed": "Activeren van het meldingsverdunningsmiddel mislukt. Probeer het later opnieuw.",
+        "alreadyActive": "Het meldingsverdunningsmiddel met ID {{id}} is al actief",
+        "alreadyInactive": "Het meldingsverdunningsmiddel met ID {{id}} is al inactief",
+        "purgeSuccess": "Meldingsverdunningsmiddel definitief verwijderd",
+        "purgeFailed": "Definitief verwijderen van het meldingsverdunningsmiddel mislukt. Probeer het later opnieuw."
     }
 }

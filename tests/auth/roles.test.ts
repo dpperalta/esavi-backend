@@ -296,7 +296,23 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/diluents/${ UUID }`,                                 minRole: 'USER',       code: 'ESAVI-DILUENT-003' },
     { method: 'put',    path: `/api/diluents/${ UUID }`,                                 minRole: 'ADMIN',      code: 'ESAVI-DILUENT-004' },
     { method: 'delete', path: `/api/diluents/${ UUID }`,                                 minRole: 'ADMIN',      code: 'ESAVI-DILUENT-005A' },
-    { method: 'patch',  path: `/api/diluents/activate/${ UUID }`,                        minRole: 'SUPERADMIN', code: 'ESAVI-DILUENT-005B' }
+    { method: 'patch',  path: `/api/diluents/activate/${ UUID }`,                        minRole: 'SUPERADMIN', code: 'ESAVI-DILUENT-005B' },
+
+    // notificationDiluent (SPEC F24) — the sixth satellite of notification and the first grandchild
+    // of the graph: it hangs from vaccineId, so its inherited visibility is two hops instead of one.
+    // Eight canonical operations with the role matrix of NOTIFVAC, and no 006 of any kind: flattening
+    // a two level fan out would mix rows of different vaccines under a sortOrder relative to each of
+    // them, so this is the first of the family that adds no row to the non-canonical table.
+    // The 005C exists because the table is outside the preventPhysicalDelete loop of
+    // esaviapp.sql:1361-1375. The two listings are entered by the foreign key and never by /
+    { method: 'post',   path: '/api/notification-diluents',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-001' },
+    { method: 'get',    path: `/api/notification-diluents/admin/vaccine/${ UUID }`,      minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-002B' },
+    { method: 'get',    path: `/api/notification-diluents/vaccine/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFDIL-002A' },
+    { method: 'delete', path: `/api/notification-diluents/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005C' },
+    { method: 'patch',  path: `/api/notification-diluents/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005B' },
+    { method: 'get',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-003' },
+    { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-004' },
+    { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-005A' }
 ];
 
 /**
@@ -352,7 +368,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(169);
+            expect(ROUTE_RULES).toHaveLength(177);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

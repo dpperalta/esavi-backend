@@ -22,6 +22,7 @@ import { NotificationMedication } from './notificationMedication.model';
 import { NotificationVaccine } from './notificationVaccine.model';
 import { VaccineWhodrug } from './vaccineWhodrug.model';
 import { DiluentCatalog } from './diluentCatalog.model';
+import { NotificationDiluent } from './notificationDiluent.model';
 
 export const initModels = (): void => {
     initAssociations();
@@ -50,5 +51,6 @@ export {
     NotificationMedication,
     NotificationVaccine,
     VaccineWhodrug,
-    DiluentCatalog
+    DiluentCatalog,
+    NotificationDiluent
 };
