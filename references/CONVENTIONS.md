@@ -174,6 +174,9 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | notificationVaccine | `006` | listar las vacunas de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N vacunas |
 | vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
 | catalogItem | `006` | importación masiva desde fichero `.xlsx`, con creación de `catalogType` al vuelo — SUPERADMIN, `POST /import` |
+| systemConfig | `006` | leer por el par `(code, scope)` — la aplicación conoce el nombre del parámetro, no su UUID. `GET /code/:code`, USER |
+| systemConfig | `007` | listar el historial de cambios de una configuración — `systemConfigHistory` cuelga del padre y no tiene superficie propia. `GET /:id/history`, SUPERADMIN |
+| systemConfig | `008` | siembra idempotente de las configuraciones iniciales desde el catálogo declarativo — solo-alta, transacción todo o nada. `POST /sync`, SUPERADMIN |
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
@@ -295,6 +298,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | notifier | `NOTIFIER` |
 | patient | `PATIENT` |
 | severeNotification | `SEVNOT` |
+| systemConfig | `SYSCONF` |
 | vaccineWhodrug | `WHODRUG` |
 | user | `USER` |
 | auth | `AUTH` |
@@ -428,7 +432,27 @@ return res.status(200).json({
 
 - `message` **siempre** desde `getMessage(key, req.lang)`. Nunca un literal.
 - `201` en create, `200` en el resto.
-- `delete`, `activate` y `purge` responden **sin** `data`.
+
+### Las operaciones de estado no devuelven `data`
+
+`005A` (delete lógico), `005B` (activate) y `005C` (purge) responden **solo** `{ ok, message }`. La clave `data` no aparece —ni con la fila, ni en `null`, ni vacía—:
+
+```ts
+// 005A / 005B / 005C — el servicio se llama por su efecto, no por su valor
+await setEntityActivationService(id, { userId: req.user?.userId } as AuthUser, req.lang, false);
+return res.status(200).json({
+    ok: true,
+    message: getMessage('entity.deletedSuccess', req.lang)
+});
+```
+
+Tres razones, en orden de peso:
+
+1. **La fila devuelta miente sobre su propósito.** Lo que el cliente necesita saber de un `005A` es que la operación ocurrió, y eso ya lo dice el `200` con su `message`. Devolver la fila invita al frontend a pintarla, y lo que pintaría es un registro que acaba de dejar de ser visible.
+2. **`005C` no tiene nada que devolver.** La fila se destruyó en la misma transacción. Si `005A` y `005B` devuelven `data` y `005C` no, el contrato de las tres operaciones de estado deja de ser uno solo y el cliente necesita un caso especial por letra.
+3. **El estado nuevo se lee, no se supone.** Después de un cambio de estado, quien necesite la fila la pide por `003`, que aplica las reglas de visibilidad del rol que consulta. El `data` de un `005A` las esquivaría: entregaría una fila inactiva a un rol que no puede verlas.
+
+El servicio de activación **sí** devuelve la instancia —la usan las transacciones que encadenan escrituras—; lo que no se hace es sacarla por la respuesta. En el controlador eso significa `await` a secas: asignar `const data = await set…Activation…` y no usarla deja una variable muerta que el linter marca y que el siguiente lector interpreta como un olvido.
 
 ### Error
 

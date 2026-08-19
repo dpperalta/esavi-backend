@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 import { app } from '../../src/app';
 import { closeTestDatabase } from '../setup/database';
@@ -109,6 +111,48 @@ describe('response contract', () => {
 
             responses.forEach(response => expect(response.status).toBe(200));
         });
+
+    });
+
+    /**
+     * CONVENTIONS.md §10 — `005A`, `005B` and `005C` answer `{ ok, message }`
+     * with no `data`. The two tests above prove it for `catalogType` only, which
+     * is how `notificationVaccine` came to return the row in delete and activate
+     * without a single suite turning red. This guard reads the source of every
+     * controller instead, so a new entity cannot opt out of the rule by being
+     * new.
+     */
+    describe('state operations carry no data — static guard over every controller', () => {
+
+        const controllersDir = path.join(__dirname, '..', '..', 'src', 'controllers');
+
+        // Body of each `res.status(...).json({ ... })` in the file, non-greedy so
+        // one match is one response object
+        const responseBlock = /res\.status\(\s*\d+\s*\)\.json\(\{([\s\S]*?)\}\)/g;
+        const stateMessage = /\.(deletedSuccess|activatedSuccess|purgeSuccess)'/;
+
+        const stateBlocks = fs.readdirSync(controllersDir)
+            .filter(file => file.endsWith('.controller.ts'))
+            .flatMap(file => {
+                const source = fs.readFileSync(path.join(controllersDir, file), 'utf8');
+                return [...source.matchAll(responseBlock)]
+                    .map(match => match[1])
+                    .filter(body => stateMessage.test(body))
+                    .map(body => ({ file, body }));
+            });
+
+        it('finds the state responses it is meant to police', () => {
+            // A refactor that changes the shape of the response would leave this
+            // guard matching nothing and passing in silence
+            expect(stateBlocks.length).toBeGreaterThanOrEqual(40);
+        });
+
+        it.each(stateBlocks.map(({ file, body }) => [file, body.match(stateMessage)?.[1], body]))(
+            '%s — %s responds without data',
+            (_file, _key, body) => {
+                expect(body).not.toMatch(/\bdata\b/);
+            }
+        );
 
     });
 

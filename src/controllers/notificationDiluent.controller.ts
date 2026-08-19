@@ -163,7 +163,7 @@ const purgeNotificationDiluent = async (req: Request, res: Response, next: NextF
 const activateNotificationDiluent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setNotificationDiluentActivationService(id, req.user, req.lang, true);
+        await setNotificationDiluentActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
             message: getMessage('notificationDiluent.activatedSuccess', req.lang)
@@ -183,7 +183,7 @@ const activateNotificationDiluent = async (req: Request, res: Response, next: Ne
 const deleteNotificationDiluent = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setNotificationDiluentActivationService(id, req.user, req.lang, false);
+        await setNotificationDiluentActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
             message: getMessage('notificationDiluent.deletedSuccess', req.lang)

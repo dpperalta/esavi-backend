@@ -25,6 +25,7 @@ import notificationVaccineRoutes from './notificationVaccine.routes';
 import vaccineWhodrugRoutes from './vaccineWhodrug.routes';
 import diluentCatalogRoutes from './diluentCatalog.routes';
 import notificationDiluentRoutes from './notificationDiluent.routes';
+import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
 
@@ -66,5 +67,6 @@ router.use('/diluents', diluentCatalogRoutes);
 // The full table name is kept here, unlike /diluents above: the notification- prefix is what tells
 // the two entities apart, and without it they would compete for the same namespace
 router.use('/notification-diluents', notificationDiluentRoutes);
+router.use('/system-configs', systemConfigRoutes);
 
 export default router;

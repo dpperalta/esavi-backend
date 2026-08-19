@@ -312,7 +312,31 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/notification-diluents/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005B' },
     { method: 'get',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-003' },
     { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-004' },
-    { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-005A' }
+    { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-005A' },
+
+    // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
+    // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
+    // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
+    // parameter and not its UUID; 007 lists the change history of systemConfigHistory, which has no
+    // route of its own and is always entered through the parent; and 008 seeds the initial
+    // configurations idempotently.
+    // FOUR ROWS DEVIATE FROM THE CANONICAL ROLE MATRIX, demanding SUPERADMIN where the norm puts
+    // ADMIN: 001, 004, 005A and 005B. A parameter of this table governs the behaviour of the whole
+    // application for all of its users, and isEncrypted declares that some of them may be a secret.
+    // The deviation is declared in SPEC F26 §2, §3.4 and §6 — it is deliberate, not an oversight, and
+    // it is not generalized: ADMIN stays the default write role everywhere else.
+    // No 005C: systemConfig and systemConfigHistory both sit inside the preventPhysicalDelete loop of
+    // esaviapp.sql:1361-1375, so physical deletion is not declared
+    { method: 'post',   path: '/api/system-configs',                                     minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-001' },
+    { method: 'get',    path: '/api/system-configs',                                     minRole: 'USER',       code: 'ESAVI-SYSCONF-002A' },
+    { method: 'get',    path: '/api/system-configs/admin',                               minRole: 'ADMIN',      code: 'ESAVI-SYSCONF-002B' },
+    { method: 'get',    path: '/api/system-configs/code/ESAVI_APP_DEFAULT_LIMIT',        minRole: 'USER',       code: 'ESAVI-SYSCONF-006' },
+    { method: 'post',   path: '/api/system-configs/sync',                                minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-008' },
+    { method: 'patch',  path: `/api/system-configs/activate/${ UUID }`,                  minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-005B' },
+    { method: 'get',    path: `/api/system-configs/${ UUID }/history`,                   minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-007' },
+    { method: 'get',    path: `/api/system-configs/${ UUID }`,                           minRole: 'USER',       code: 'ESAVI-SYSCONF-003' },
+    { method: 'put',    path: `/api/system-configs/${ UUID }`,                           minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-004' },
+    { method: 'delete', path: `/api/system-configs/${ UUID }`,                           minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-005A' }
 ];
 
 /**
@@ -368,7 +392,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(177);
+            expect(ROUTE_RULES).toHaveLength(187);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

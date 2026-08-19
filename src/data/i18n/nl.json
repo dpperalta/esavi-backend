@@ -575,5 +575,33 @@
         "alreadyInactive": "Het meldingsverdunningsmiddel met ID {{id}} is al inactief",
         "purgeSuccess": "Meldingsverdunningsmiddel definitief verwijderd",
         "purgeFailed": "Definitief verwijderen van het meldingsverdunningsmiddel mislukt. Probeer het later opnieuw."
+    },
+    "systemConfig": {
+        "createdSuccess": "Configuratie succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de configuratie mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Configuratie succesvol opgehaald",
+        "getFailed": "Ophalen van de configuratie mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Configuraties succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de configuraties mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Configuratie succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de configuratie mislukt. Probeer het later opnieuw.",
+        "deletedSuccess": "Configuratie succesvol verwijderd",
+        "deletedFailed": "Verwijderen van de configuratie mislukt. Probeer het later opnieuw.",
+        "activatedSuccess": "Configuratie succesvol geactiveerd",
+        "activatedFailed": "Activeren van de configuratie mislukt. Probeer het later opnieuw.",
+        "notFound": "Configuratie niet gevonden. Controleer de ID van de configuratie en probeer het opnieuw.",
+        "codeExists": "Er bestaat al een configuratie met code {{code}} in bereik {{scope}}",
+        "alreadyActive": "De configuratie met ID {{id}} is al actief",
+        "alreadyInactive": "De configuratie met ID {{id}} is al inactief",
+        "getByCodeSuccess": "Configuratie succesvol opgehaald op code",
+        "getByCodeFailed": "Ophalen van de configuratie op code mislukt. Probeer het later opnieuw.",
+        "codeNotFound": "Er bestaat geen configuratie met code {{code}} in bereik {{scope}}",
+        "historySuccessPlural": "Geschiedenis van de configuratie succesvol opgehaald",
+        "historyFailedPlural": "Ophalen van de geschiedenis van de configuratie mislukt. Probeer het later opnieuw.",
+        "syncSuccess": "Synchronisatie van de initiële configuraties succesvol voltooid",
+        "syncFailed": "Synchroniseren van de initiële configuraties mislukt. Probeer het later opnieuw.",
+        "notEditable": "De configuratie met ID {{id}} is beveiligd en accepteert geen wijzigingen",
+        "changeReasonRequired": "Een reden voor de wijziging is verplicht wanneer de waarde verandert",
+        "valueTypeMismatch": "De waarde komt niet overeen met het opgegeven type {{valueType}}"
     }
 }
