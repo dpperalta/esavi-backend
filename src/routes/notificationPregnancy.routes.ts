@@ -7,7 +7,8 @@ import {
     getNotificationPregnancyByNotification,
     updateNotificationPregnancy,
     deleteNotificationPregnancy,
-    activateNotificationPregnancy
+    activateNotificationPregnancy,
+    purgeNotificationPregnancy
 } from '../controllers/notificationPregnancy.controller';
 import {
     createNotificationPregnancyValidator,
@@ -39,6 +40,11 @@ router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationP
 // The param is the notificationId, not a pregnancy id: the one to one is entered by the foreign key.
 // Declared before /:id, which would otherwise capture 'notification' as an :id
 router.get('/notification/:notificationId', tokenValidation, validateUserRole(USER), ...notificationPregnancyNotificationIdValidator, validateFields, getNotificationPregnancyByNotification);
+
+// Purge Notification Pregnancy - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFPRG-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationPregnancyIdValidator, validateFields, purgeNotificationPregnancy);
 
 // Activate Notification Pregnancy - For SuperAdmin
 // Code: ESAVI-NOTIFPRG-005B

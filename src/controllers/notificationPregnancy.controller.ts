@@ -6,7 +6,8 @@ import {
     getNotificationPregnancyByIdService,
     getNotificationPregnancyByNotificationService,
     updateNotificationPregnancyService,
-    setNotificationPregnancyActivationService
+    setNotificationPregnancyActivationService,
+    purgeNotificationPregnancyService
 } from '../services/notificationPregnancy.service';
 
 // Create Notification Pregnancy Controller
@@ -142,11 +143,32 @@ const activateNotificationPregnancy = async (req: Request, res: Response, next: 
     }
 }
 
+// Purge Notification Pregnancy Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFPRG-005C
+const purgeNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationPregnancyService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-005C: Error purging Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.purgeFailed', req.lang), 500, 'NOTIFPRG_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createNotificationPregnancy,
     getNotificationPregnancyById,
     getNotificationPregnancyByNotification,
     updateNotificationPregnancy,
     deleteNotificationPregnancy,
-    activateNotificationPregnancy
+    activateNotificationPregnancy,
+    purgeNotificationPregnancy
 };

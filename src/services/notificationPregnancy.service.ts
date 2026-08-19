@@ -1,6 +1,9 @@
+import { QueryTypes } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Notification, NotificationPregnancy, Patient, SystemConfig } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyInput } from '../types';
 import {
     GESTATION_MAX_DAYS,
@@ -542,10 +545,60 @@ const setNotificationPregnancyActivationService = async (
     });
 }
 
+// Purging Notification Pregnancy Service - For SuperAdmin
+// Code: ESAVI-NOTIFPRG-005C
+// notificationPregnancy is outside the preventPhysicalDelete loop of esaviapp.sql, so the row can
+// really be destroyed. The guard is the canonical one of the conventions and it is over the row
+// itself: it must already be in isActive false, or the purge answers 409. Neither the state of the
+// notification nor that of the complications is checked.
+//
+// What is proper to this entity is the child cascade, and it is the reason this is not a leaf of the
+// graph like notificationDiluent was. notificationPregnancyComplication hangs from pregnancyId with
+// ON DELETE CASCADE (esaviapp.sql:920), so purging a pregnancy destroys rows of a table that has no
+// model and that this spec does not give one to. Without this line that destruction would leave no
+// trace anywhere. The ids are read with raw SQL for that very reason — exactly what F22 did with the
+// diluents before F24 modelled them — and the warn line is written only after the helper returned
+// without error, so a purge ending in 409 or 404 leaves no notice of a destruction that did not
+// happen.
+//
+// No audit entry: the row is destroyed in the same statement, so any audit written into it would be
+// destroyed with it. It is the absence CONVENTIONS.md §6 declares legitimate for this operation, and
+// the reason the operation code appears in four places here instead of five
+const purgeNotificationPregnancyService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const complications = await sequelize.query<{ complicationId: string }>(
+        'SELECT "complicationId" FROM "notificationPregnancyComplication" WHERE "pregnancyId" = :pregnancyId',
+        {
+            replacements: { pregnancyId: id },
+            type: QueryTypes.SELECT
+        }
+    );
+    const complicationIds = complications.map(complication => complication.complicationId);
+
+    await purgeEntityService({
+        model: NotificationPregnancy,
+        where: { pregnancyId: id },
+        operationCode: 'ESAVI-NOTIFPRG-005C',
+        userId: authUser?.userId || 'undefined',
+        notFoundMessage: getMessage('notificationPregnancy.notFound', lang),
+        notFoundCode: 'NOTIFPRG_005C_NOT_FOUND',
+        stillActiveMessage: getMessage('notificationPregnancy.stillActive', lang, { id }),
+        stillActiveCode: 'NOTIFPRG_005C_STILL_ACTIVE'
+    });
+
+    // A pregnancy with no complications leaves no line at all: an empty dump is noise
+    if( complicationIds.length > 0 ) {
+        esaviLog(
+            `ESAVI-NOTIFPRG-005C: ${ complicationIds.length } notificationPregnancyComplication row(s) dragged by the cascade of pregnancy ${ id }: ${ complicationIds.join(', ') }`,
+            'warn'
+        );
+    }
+}
+
 export {
     createNotificationPregnancyService,
     getNotificationPregnancyByIdService,
     getNotificationPregnancyByNotificationService,
     updateNotificationPregnancyService,
-    setNotificationPregnancyActivationService
+    setNotificationPregnancyActivationService,
+    purgeNotificationPregnancyService
 };
