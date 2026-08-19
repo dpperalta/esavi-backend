@@ -1,7 +1,16 @@
-import { EsaviCase, Notification, NotificationPregnancy, Patient } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { CatalogItem, EsaviCase, Notification, NotificationPregnancy, Patient, SystemConfig } from '../models';
+import { AppError, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationPregnancyInput } from '../types';
-import { GESTATION_MAX_DAYS, GESTATION_MIN_DAYS } from '../constants/notification.constants';
+import {
+    GESTATION_MAX_DAYS,
+    GESTATION_MIN_DAYS,
+    PREGNANCY_FEMALE_SEX_ITEM_CONFIG_CODE,
+    PREGNANCY_FEMALE_SEX_ITEM_CONFIG_SCOPE
+} from '../constants/notification.constants';
+
+// The shape systemConfig stores a UUID under: valueType 'string' keeps it as a plain JSON string in
+// the jsonb column, so what comes back from the driver is a JavaScript string and not an object
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // sysDetails is trigger metadata and never leaves the service. The parent is dropped here after
 // having done its job in the query, and nothing is resolved or nested: the only foreign key is
@@ -88,6 +97,105 @@ const assertNoExistingPregnancy = async (notificationId: string, op: string, lan
     }
 }
 
+// The 500 of the female sex rule, with a line in the log naming the actual cause. The five causes
+// share one i18n key on purpose: telling them apart is useless to the notifier, and whoever
+// diagnoses them reads this log
+const sexConfigMissing = (op: string, lang: string, cause: string) => {
+    esaviLog(
+        `ESAVI-NOTIFPRG-${ op }: The systemConfig row ${ PREGNANCY_FEMALE_SEX_ITEM_CONFIG_CODE } / ` +
+        `${ PREGNANCY_FEMALE_SEX_ITEM_CONFIG_SCOPE } is not usable: ${ cause }`,
+        'error'
+    );
+    return new AppError(
+        getMessage('notificationPregnancy.sexConfigMissing', lang),
+        500,
+        `NOTIFPRG_${ op }_SEX_CONFIG_MISSING`
+    );
+}
+
+// The female sex configuration, read straight from the model and never through the read-by-code
+// service of ESAVI-SYSCONF-006. Reusing that service looks like the right thing and is not: it masks
+// the value for anything below SUPERADMIN — and this create runs as USER — and it throws a 404
+// carrying the code of another entity, which would reach the notifier as if the pregnancy did not
+// exist. A service that exists for an HTTP read is not the way into an internal one.
+//
+// The code and the scope arrive already in constant case from the constants, which is the form
+// systemConfig stores them in after its own toConstantCase, so nothing is normalized here.
+//
+// Five deviations from the declared contract, all of them 500 and none of them 400. It is a
+// deployment configuration failure and the notifier cannot fix it: answering 400 would send them
+// looking for the error in their own form, where it is not. The row must exist, be active, declare
+// valueType 'string', not be encrypted, and hold the UUID of a catalogItem that exists.
+//
+// isEncrypted is caught explicitly, and it is the one that matters most. systemConfig stores an
+// encrypted value wrapped as { "enc": "<ciphertext>" }: such a row does not fail, it simply never
+// matches any sexItemId, so without this guard every female patient would get a 400
+// PATIENT_NOT_FEMALE — a deployment error disguised as a notifier error, and the only one of the five
+// that would produce a plausible answer instead of an error. Decrypting it is not the way out either:
+// a catalogItemId is not a secret, and accepting the encrypted row would normalize a misdeclared
+// configuration and make the rule start rejecting female patients the day the crypto key changes
+const resolveFemaleSexItemId = async (op: string, lang: string): Promise<string> => {
+    const config = await SystemConfig.findOne({
+        where: {
+            code: PREGNANCY_FEMALE_SEX_ITEM_CONFIG_CODE,
+            scope: PREGNANCY_FEMALE_SEX_ITEM_CONFIG_SCOPE,
+            isActive: true
+        },
+        attributes: ['value', 'valueType', 'isEncrypted']
+    });
+
+    // Absent and inactive collapse into one branch: the row that is not usable is not usable, and
+    // the log line says which of the two it was as far as this query can tell
+    if( !config ) throw sexConfigMissing(op, lang, 'the row is absent or inactive');
+
+    if( config.isEncrypted ) throw sexConfigMissing(op, lang, 'the row is marked isEncrypted');
+
+    if( config.valueType !== 'string' ) {
+        throw sexConfigMissing(op, lang, `valueType is '${ config.valueType }' instead of 'string'`);
+    }
+
+    const value = config.value;
+    if( typeof value !== 'string' || !UUID_PATTERN.test(value) ) {
+        throw sexConfigMissing(op, lang, 'the value is not a UUID');
+    }
+
+    // The catalogItem is not filtered by isActive: an item retired after being configured still names
+    // the sex it always named, and what this guard rules out is a value pointing at nothing
+    const catalogItem = await CatalogItem.findOne({
+        where: { catalogItemId: value },
+        attributes: ['catalogItemId']
+    });
+    if( !catalogItem ) throw sexConfigMissing(op, lang, 'the value points to a catalogItem that does not exist');
+
+    return value;
+}
+
+// The female sex rule, and it runs only in ESAVI-NOTIFPRG-001. A pregnancy registered on a male
+// patient is a capture error with clinical consequences, not a tolerable oddity.
+//
+// A null sexItemId does not block. An unknown sex is no proof that there is no pregnancy, and
+// blocking it would lose the whole case over a demographic field that can be completed later.
+//
+// The patient arrives in the include the parent guard already walked, so the rule costs no second
+// query — and there is no read of the Patient model anywhere in this service
+const assertPatientMayBePregnant = async (
+    sexItemId: string | null | undefined,
+    op: string,
+    lang: string
+) => {
+    const femaleSexItemId = await resolveFemaleSexItemId(op, lang);
+
+    if( !sexItemId ) return;
+
+    if( sexItemId !== femaleSexItemId ) {
+        throw new AppError(
+            getMessage('notificationPregnancy.patientNotFemale', lang),
+            400,
+            `NOTIFPRG_${ op }_PATIENT_NOT_FEMALE`
+        );
+    }
+}
+
 // The gestational range rule, shared by 001 and 004: Naegele with a +/- 14 day tolerance, which is
 // 38 to 42 weeks. A probable delivery date outside that window with respect to the last menstruation
 // is almost always a capture error or a date conversion gone wrong.
@@ -144,9 +252,13 @@ const createNotificationPregnancyService = async (
     authUser: AuthUser | undefined,
     lang: string
 ) => {
-    await findValidNotification(data.notificationId, '001', lang);
+    const notification = await findValidNotification(data.notificationId, '001', lang);
 
     await assertNoExistingPregnancy(data.notificationId, '001', lang);
+
+    // The sex came back in the same query that validated the parent, three hops down, so the rule
+    // costs no second read
+    await assertPatientMayBePregnant(notification.case?.patient?.sexItemId, '001', lang);
 
     // On create the body is the whole resulting state, so the rule is evaluated over it directly
     assertGestationRangeIsCoherent(data.lastMenstruationDate, data.probableDeliveryDate, '001', lang);
