@@ -8,12 +8,14 @@ import {
     getAllSystemConfigs,
     getSystemConfigByCode,
     getSystemConfigById,
+    getSystemConfigHistory,
     getSystemConfigs,
     updateSystemConfig
 } from '../controllers/systemConfig.controller';
 import {
     createSystemConfigValidator,
     systemConfigCodeValidator,
+    systemConfigHistoryListValidator,
     systemConfigIdValidator,
     systemConfigListValidator,
     updateSystemConfigValidator
@@ -60,6 +62,12 @@ router.get('/code/:code', tokenValidation, validateUserRole(USER), ...systemConf
 // Code: ESAVI-SYSCONF-005B
 // Literal path, declared before '/:id' so Express does not capture 'activate' as an :id
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...systemConfigIdValidator, validateFields, activateSystemConfig);
+
+// Get System Config History - For SuperAdmin
+// Code: ESAVI-SYSCONF-007
+// Declared before '/:id' for legibility; here Express would tell them apart by segment count anyway.
+// systemConfigHistory has no route of its own: this is its single surface, and it hangs off the parent
+router.get('/:id/history', tokenValidation, validateUserRole(SUPERADMIN), ...systemConfigIdValidator, ...systemConfigHistoryListValidator, validateFields, getSystemConfigHistory);
 
 // Get System Config by ID
 // Code: ESAVI-SYSCONF-003

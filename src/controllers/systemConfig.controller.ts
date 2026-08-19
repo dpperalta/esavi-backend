@@ -8,7 +8,8 @@ import {
     getSystemConfigByIdService,
     getSystemConfigByCodeService,
     updateSystemConfigService,
-    setSystemConfigActivationService
+    setSystemConfigActivationService,
+    getSystemConfigHistoryService
 } from '../services/systemConfig.service';
 
 // Unwraps the three query filters, identical in both listings. The validator has already restricted
@@ -198,6 +199,31 @@ const activateSystemConfig = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Get System Config History Controller - For SuperAdmin
+// Code: ESAVI-SYSCONF-007
+const getSystemConfigHistory = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        // No permission predicate travels here: the route is already SUPERADMIN-only, so the
+        // decryption of the two values needs no rule of its own
+        const data = await getSystemConfigHistoryService(id, limit, offset, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.historySuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-007: Error getting System Config history: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.historyFailedPlural', req.lang), 500, 'SYSCONF_007_FETCH_FAILED', error));
+    }
+}
+
 export {
     createSystemConfig,
     getSystemConfigs,
@@ -206,5 +232,6 @@ export {
     getSystemConfigByCode,
     updateSystemConfig,
     deleteSystemConfig,
-    activateSystemConfig
+    activateSystemConfig,
+    getSystemConfigHistory
 }

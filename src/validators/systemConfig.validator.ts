@@ -7,6 +7,16 @@ export const systemConfigIdValidator = [
         .trim()
 ];
 
+// The 007 takes no filter of its own: it reads the history of one configuration, entered by the
+// parent id, so pagination is all there is to validate. The id itself is checked by
+// systemConfigIdValidator, which the route composes before this one
+export const systemConfigHistoryListValidator = [
+    query('limit').optional().isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be an integer between 1 and 100'),
+    query('offset').optional().isInt({ min: 0 })
+        .withMessage('Offset must be a non-negative integer')
+];
+
 // The 006 enters by the name of the parameter, not by its UUID. code arrives through the path and
 // scope through the query, optional with a GLOBAL default; the service normalizes both with
 // toConstantCase before searching, so nothing here restricts their shape beyond the widths of the DDL

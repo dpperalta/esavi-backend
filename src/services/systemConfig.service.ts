@@ -1,11 +1,12 @@
 import { Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { SystemConfig, SystemConfigHistory } from '../models';
+import { AppUser, SystemConfig, SystemConfigHistory } from '../models';
 import {
     AppError,
     buildDifferentialUpdate,
     decryptSystemConfigValue,
     encryptSystemConfigValue,
+    esaviDecrypt,
     getMessage,
     isValidSystemConfigValue,
     toConstantCase
@@ -569,6 +570,73 @@ const setSystemConfigActivationService = async (
     }
 }
 
+// ESAVI-SYSCONF-007 - Get System Config History Service
+// The read of a table that has no meaning outside its configuration, which is why it hangs off the
+// parent and systemConfigHistory gets no route, no abbreviation and no CRUD of its own
+const getSystemConfigHistoryService = async (
+    id: string,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET,
+    lang: string
+) => {
+    // The existence of the PARENT is checked BEFORE querying the child, and that order is the whole
+    // point: a non-existent id answering { count: 0, rows: [] } would read as "this configuration
+    // never changed", which is a false statement about something that does not exist.
+    // isActive is not filtered — the endpoint is SUPERADMIN-only, and the history of a withdrawn
+    // configuration stays readable by design
+    const systemConfig = await SystemConfig.findByPk(id, {
+        attributes: ['systemConfigId', 'isEncrypted']
+    });
+    if( !systemConfig ) {
+        throw new AppError(getMessage('systemConfig.notFound', lang), 404, 'SYSCONF_007_NOT_FOUND');
+    }
+
+    const history = await SystemConfigHistory.findAndCountAll({
+        where: { systemConfigId: id },
+        attributes: { exclude: ['sysDetails', 'appDetails', 'updatedAt', 'deletedAt', 'changedByUserId'] },
+        include: [{
+            model: AppUser,
+            as: 'changedByUser',
+            // Only the two columns an audit screen needs. The rest of appUser is PII this view has no
+            // business carrying, and a bare UUID would force a second request per row to find out who
+            // it was — and whoever reads a history reads several rows in a row
+            attributes: ['userId', 'displayName'],
+            required: false
+        }],
+        // Exactly the order of IX_systemConfigHistory_config, and not by coincidence
+        order: [['createdAt', 'DESC']],
+        limit,
+        offset
+    });
+
+    const isEncrypted = systemConfig.isEncrypted === true;
+
+    return {
+        count: history.count,
+        rows: history.rows.map(row => {
+            const plain = row.get({ plain: true }) as Record<string, unknown>;
+            const author = plain.changedByUser as { userId: string; displayName: string } | null;
+            return {
+                systemConfigHistoryId: plain.systemConfigHistoryId,
+                systemConfigId: plain.systemConfigId,
+                // Both values are DECRYPTED here, and only here among the reads of a set, because this
+                // endpoint is already SUPERADMIN-only. previousValue is null on the first row of a
+                // configuration and decryptSystemConfigValue returns it untouched
+                previousValue: isEncrypted ? decryptSystemConfigValue(plain.previousValue) : plain.previousValue,
+                newValue: isEncrypted ? decryptSystemConfigValue(plain.newValue) : plain.newValue,
+                changeReason: plain.changeReason,
+                createdAt: plain.createdAt,
+                // null when the foreign key was left null by the ON DELETE SET NULL of the DDL: the
+                // history of a deleted user keeps its rows and loses only the author.
+                // changedByUserId is NOT repeated outside this nested object
+                changedByUser: author
+                    ? { userId: author.userId, displayName: esaviDecrypt(author.displayName) }
+                    : null
+            };
+        })
+    };
+}
+
 export {
     createSystemConfigService,
     getActiveSystemConfigsService,
@@ -576,5 +644,6 @@ export {
     getSystemConfigByIdService,
     getSystemConfigByCodeService,
     updateSystemConfigService,
-    setSystemConfigActivationService
+    setSystemConfigActivationService,
+    getSystemConfigHistoryService
 }
