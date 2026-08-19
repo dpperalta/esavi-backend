@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationDiluent, NotificationEvent, NotificationMedication, NotificationVaccine, SevereNotification } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationDiluent, NotificationEvent, NotificationMedication, NotificationPregnancy, NotificationVaccine, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -814,6 +814,50 @@ const dumpNotificationDiluentsBeforeCascade = async (
     }
 }
 
+// The dump of the seventh satellite. notificationPregnancy hangs straight from notificationId, so
+// this cascade reaches it in a single hop — unlike the diluents above — and it is walked with the
+// hasOne the associations of SPEC F25 declare, without raw SQL.
+//
+// One single warn line, and at most one: UQ_notificationPregnancy_notification makes the relation one
+// to one, so this is a snapshot like the two detail branches and not a list like the four one to many
+// sisters. A notification with no pregnancy leaves no line at all.
+//
+// What this line does NOT dump is what hangs one level further down: purging the header destroys the
+// pregnancy, and the pregnancy drags its own notificationPregnancyComplication rows with it. That
+// table has no model until its own spec, and dumping it from here would be a third hop this cascade
+// has never walked
+const dumpNotificationPregnancyBeforeCascade = async (
+    notificationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const notification = await Notification.findOne({
+            where: { notificationId },
+            attributes: ['notificationId'],
+            include: [{
+                model: NotificationPregnancy,
+                as: 'pregnancy',
+                required: true
+            }],
+            paranoid: false,
+            transaction
+        });
+        const notificationPregnancy = notification?.get('pregnancy') as NotificationPregnancy | undefined;
+        if( !notificationPregnancy ) {
+            return;
+        }
+        esaviLog(
+            `ESAVI-NOTIFCN-005C: notificationPregnancy row dragged by ON DELETE CASCADE and purged by ` +
+            `${ userId }. pregnancyId: ${ notificationPregnancy.pregnancyId }. ` +
+            `Snapshot: ${ JSON.stringify(notificationPregnancy.get({ plain: true })) }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged notificationPregnancy: ${ error }`, 'error');
+    }
+}
+
 // Purging Notification Service - For SuperAdmin
 // Code: ESAVI-NOTIFCN-005C
 // notification is outside the preventPhysicalDelete loop of esaviapp.sql:1363-1366, so the row
@@ -844,6 +888,7 @@ const purgeNotificationService = async (id: string, authUser: AuthUser | undefin
             await dumpNotificationMedicationsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationVaccinesBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationDiluentsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
+            await dumpNotificationPregnancyBeforeCascade(id, authUser?.userId || 'undefined', transaction);
         }
 
         await purgeEntityService({
