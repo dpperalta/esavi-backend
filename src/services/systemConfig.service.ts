@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { SystemConfig, SystemConfigHistory } from '../models';
 import {
     AppError,
+    decryptSystemConfigValue,
     encryptSystemConfigValue,
     getMessage,
     isValidSystemConfigValue,
@@ -254,8 +255,50 @@ const getAllSystemConfigsService = async (
     return maskEncryptedRows(systemConfigs);
 }
 
+// The single read shape of the 003 and the 006: same row, same rules, two different doors.
+// It is where the ONLY decryption of an ordinary read happens, and it is SUPERADMIN-only — canDecrypt
+// carries that decision from the controller, where the predicate lives. For USER and ADMIN an
+// encrypted row comes out masked exactly as it does in the two listings
+const shapeSingleSystemConfig = (config: SystemConfig, canDecrypt: boolean): Record<string, unknown> => {
+    const plain = config.get({ plain: true }) as Record<string, unknown>;
+    if( !plain.isEncrypted ) {
+        return plain;
+    }
+    if( !canDecrypt ) {
+        return maskEncryptedValue(plain);
+    }
+    plain.value = decryptSystemConfigValue(plain.value);
+    return plain;
+}
+
+// ESAVI-SYSCONF-003 - Get System Config by ID Service
+const getSystemConfigByIdService = async (
+    id: string,
+    lang: string,
+    includeInactive: boolean = false,
+    canDecrypt: boolean = false
+) => {
+    const whereClause = includeInactive ? { systemConfigId: id } : { systemConfigId: id, isActive: true };
+    // No include of the history: reading the change log is its own operation, the 007, and it is
+    // SUPERADMIN-only while this one is USER
+    const systemConfig = await SystemConfig.findOne({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] }
+    });
+    if( !systemConfig ) {
+        // An inactive row answers 404 unless canViewInactive is true, and that predicate is
+        // SUPERADMIN-only: an ADMIN gets the same 404 as a USER even though the 002B does list the
+        // inactive ones to them. It is the deliberate asymmetry healthFacility, diagnosticTerm,
+        // vaccineWhodrug and diluentCatalog already carry
+        throw new AppError(getMessage('systemConfig.notFound', lang), 404, 'SYSCONF_003_NOT_FOUND');
+    }
+    return shapeSingleSystemConfig(systemConfig, canDecrypt);
+}
+
 export {
     createSystemConfigService,
     getActiveSystemConfigsService,
-    getAllSystemConfigsService
+    getAllSystemConfigsService,
+    getSystemConfigByIdService
 }

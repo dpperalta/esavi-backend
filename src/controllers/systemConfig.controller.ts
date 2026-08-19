@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { SystemConfigListFilters, SystemConfigValueType } from '../types';
 import {
     createSystemConfigService,
     getActiveSystemConfigsService,
-    getAllSystemConfigsService
+    getAllSystemConfigsService,
+    getSystemConfigByIdService
 } from '../services/systemConfig.service';
 
 // Unwraps the three query filters, identical in both listings. The validator has already restricted
@@ -79,8 +80,36 @@ const getAllSystemConfigs = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+// Get System Config by ID Controller
+// Code: ESAVI-SYSCONF-003
+const getSystemConfigById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        // The same predicate travels in the last two arguments, and that is not a copy-paste: seeing
+        // an inactive row and reading a decrypted secret are two different decisions that happen to
+        // rest on the same role. canViewInactive is SUPERADMIN-only, and SUPERADMIN is exactly who
+        // may decrypt, so the two collapse into one predicate here and stay two parameters in the
+        // service — the day one of them moves, only this line changes
+        const canSeeEverything = canViewInactive(req.user);
+        const data = await getSystemConfigByIdService(id, req.lang, canSeeEverything, canSeeEverything);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-003: Error getting System Config by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.getFailed', req.lang), 500, 'SYSCONF_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createSystemConfig,
     getSystemConfigs,
-    getAllSystemConfigs
+    getAllSystemConfigs,
+    getSystemConfigById
 }

@@ -4,9 +4,14 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createSystemConfig,
     getAllSystemConfigs,
+    getSystemConfigById,
     getSystemConfigs
 } from '../controllers/systemConfig.controller';
-import { createSystemConfigValidator, systemConfigListValidator } from '../validators';
+import {
+    createSystemConfigValidator,
+    systemConfigIdValidator,
+    systemConfigListValidator
+} from '../validators';
 
 // THE ORDER OF DECLARATION IN THIS FILE IS NOT COSMETIC. The four literal paths — '/admin',
 // '/code/:code', '/sync' and '/activate/:id' — go BEFORE '/:id', or Express will capture 'admin' and
@@ -39,5 +44,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...systemConfigListVali
 // Code: ESAVI-SYSCONF-002B
 // Literal path, declared before '/:id' so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...systemConfigListValidator, validateFields, getAllSystemConfigs);
+
+// Get System Config by ID
+// Code: ESAVI-SYSCONF-003
+// Declared after every literal path so Express does not capture 'admin' or 'sync' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...systemConfigIdValidator, validateFields, getSystemConfigById);
 
 export default router;
