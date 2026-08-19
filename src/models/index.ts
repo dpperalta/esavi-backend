@@ -23,6 +23,8 @@ import { NotificationVaccine } from './notificationVaccine.model';
 import { VaccineWhodrug } from './vaccineWhodrug.model';
 import { DiluentCatalog } from './diluentCatalog.model';
 import { NotificationDiluent } from './notificationDiluent.model';
+import { SystemConfig } from './systemConfig.model';
+import { SystemConfigHistory } from './systemConfigHistory.model';
 
 export const initModels = (): void => {
     initAssociations();
@@ -52,5 +54,7 @@ export {
     NotificationVaccine,
     VaccineWhodrug,
     DiluentCatalog,
-    NotificationDiluent
+    NotificationDiluent,
+    SystemConfig,
+    SystemConfigHistory
 };

@@ -14,6 +14,7 @@ import { initNotificationEventAssociations } from './notificationEvent.associati
 import { initNotificationMedicationAssociations } from './notificationMedication.associations';
 import { initNotificationVaccineAssociations } from './notificationVaccine.associations';
 import { initNotificationDiluentAssociations } from './notificationDiluent.associations';
+import { initSystemConfigAssociations } from './systemConfig.associations';
 
 export const initAssociations = (): void => {
     initAuthAssociations();
@@ -32,4 +33,5 @@ export const initAssociations = (): void => {
     initNotificationMedicationAssociations();
     initNotificationVaccineAssociations();
     initNotificationDiluentAssociations();
+    initSystemConfigAssociations();
 }
