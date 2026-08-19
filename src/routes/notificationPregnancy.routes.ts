@@ -6,7 +6,8 @@ import {
     getNotificationPregnancyById,
     getNotificationPregnancyByNotification,
     updateNotificationPregnancy,
-    deleteNotificationPregnancy
+    deleteNotificationPregnancy,
+    activateNotificationPregnancy
 } from '../controllers/notificationPregnancy.controller';
 import {
     createNotificationPregnancyValidator,
@@ -15,7 +16,7 @@ import {
     updateNotificationPregnancyValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -38,6 +39,11 @@ router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationP
 // The param is the notificationId, not a pregnancy id: the one to one is entered by the foreign key.
 // Declared before /:id, which would otherwise capture 'notification' as an :id
 router.get('/notification/:notificationId', tokenValidation, validateUserRole(USER), ...notificationPregnancyNotificationIdValidator, validateFields, getNotificationPregnancyByNotification);
+
+// Activate Notification Pregnancy - For SuperAdmin
+// Code: ESAVI-NOTIFPRG-005B
+// Declared with the literal paths, before /:id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationPregnancyIdValidator, validateFields, activateNotificationPregnancy);
 
 // Get Notification Pregnancy by ID
 // Code: ESAVI-NOTIFPRG-003

@@ -122,10 +122,31 @@ const deleteNotificationPregnancy = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Activate Notification Pregnancy Controller - For SuperAdmin
+// Code: ESAVI-NOTIFPRG-005B
+const activateNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationPregnancyActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-005B: Error activating Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.activatedFailed', req.lang), 500, 'NOTIFPRG_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createNotificationPregnancy,
     getNotificationPregnancyById,
     getNotificationPregnancyByNotification,
     updateNotificationPregnancy,
-    deleteNotificationPregnancy
+    deleteNotificationPregnancy,
+    activateNotificationPregnancy
 };
