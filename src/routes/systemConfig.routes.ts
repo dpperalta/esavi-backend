@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createSystemConfig } from '../controllers/systemConfig.controller';
-import { createSystemConfigValidator } from '../validators';
+import { createSystemConfig, getSystemConfigs } from '../controllers/systemConfig.controller';
+import { createSystemConfigValidator, systemConfigListValidator } from '../validators';
 
 // THE ORDER OF DECLARATION IN THIS FILE IS NOT COSMETIC. The four literal paths — '/admin',
 // '/code/:code', '/sync' and '/activate/:id' — go BEFORE '/:id', or Express will capture 'admin' and
@@ -19,12 +19,16 @@ import { createSystemConfigValidator } from '../validators';
 // There is no 005C: systemConfig and systemConfigHistory are both in the preventPhysicalDelete loop
 // (esaviapp.sql:1371), so by the availability rule of CONVENTIONS §6 physical deletion is not
 // declared. The codes from 009 on stay free.
-const { SUPERADMIN } = ROLES;
+const { SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
 // Create System Config - For SuperAdmin
 // Code: ESAVI-SYSCONF-001
 router.post('/', tokenValidation, validateUserRole(SUPERADMIN), ...createSystemConfigValidator, validateFields, createSystemConfig);
+
+// Get Active System Configs
+// Code: ESAVI-SYSCONF-002A
+router.get('/', tokenValidation, validateUserRole(USER), ...systemConfigListValidator, validateFields, getSystemConfigs);
 
 export default router;

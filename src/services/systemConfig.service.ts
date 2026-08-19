@@ -1,4 +1,4 @@
-import { Transaction } from 'sequelize';
+import { Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { SystemConfig, SystemConfigHistory } from '../models';
 import {
@@ -8,7 +8,14 @@ import {
     isValidSystemConfigValue,
     toConstantCase
 } from '../helpers';
-import { AppDetails, AuthUser, CreateSystemConfigInput, SystemConfigValueType } from '../types';
+import {
+    AppDetails,
+    AuthUser,
+    CreateSystemConfigInput,
+    SystemConfigListFilters,
+    SystemConfigValueType
+} from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The default of the two columns the DDL resolves on its own. They are applied here and not left to
 // the database because the uniqueness of (code, scope) has to be checked against the value that will
@@ -56,6 +63,39 @@ const maskEncryptedValue = (row: Record<string, unknown>): Record<string, unknow
     }
     return row;
 }
+
+// Shared by both listings, which take exactly the same three filters. scope compares for equality
+// against the value normalized with toConstantCase — the column stores the normalized form, so asking
+// about the raw one would never match; valueType compares for equality and the validator has already
+// restricted it to the five literals of the CHECK; search is an Op.iLike over name AND code joined by
+// Op.or, because a parameter is looked up either by the text a human reads or by the key a program
+// resolves, and the caller does not always know which one they remember
+const buildSystemConfigWhere = (filters: SystemConfigListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( filters.scope ) {
+        where.scope = toConstantCase(filters.scope.trim());
+    }
+    if( filters.valueType ) {
+        where.valueType = filters.valueType;
+    }
+    if( filters.search ) {
+        const term = `%${ filters.search.trim() }%`;
+        where[Op.or as unknown as string] = [
+            { name: { [Op.iLike]: term } },
+            { code: { [Op.iLike]: term } }
+        ];
+    }
+    return where;
+}
+
+// The two listings mask ALWAYS, whatever the role of whoever asks — SUPERADMIN included. A listing is
+// a set read, and it would drag every secret at once into any cache, browser history or screenshot.
+// Whoever needs the value asks for it through its 003 or its 006, one at a time and leaving the trace
+// in the log of that operation
+const maskEncryptedRows = (result: { count: number; rows: SystemConfig[] }) => ({
+    count: result.count,
+    rows: result.rows.map(row => maskEncryptedValue(row.get({ plain: true }) as Record<string, unknown>))
+});
 
 // The cross validation of §3.5, shared by the 001, the 004 and the 008. It lives in the service and
 // not in a validator because the 004 needs the stored valueType when the body does not carry one,
@@ -171,6 +211,29 @@ const createSystemConfigService = async (data: CreateSystemConfigInput, authUser
     }
 }
 
+// ESAVI-SYSCONF-002A - Get Active System Configs Service
+const getActiveSystemConfigsService = async (
+    filters: SystemConfigListFilters,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const systemConfigs = await SystemConfig.findAndCountAll({
+        where: {
+            ...buildSystemConfigWhere(filters),
+            isActive: true
+        },
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        // scope first and code second: a configuration screen reads by area, and inside an area by
+        // the key. It is also the order a human scanning ESAVI_* keys expects
+        order: [['scope', 'ASC'], ['code', 'ASC']],
+        limit,
+        offset
+    });
+    return maskEncryptedRows(systemConfigs);
+}
+
 export {
-    createSystemConfigService
+    createSystemConfigService,
+    getActiveSystemConfigsService
 }

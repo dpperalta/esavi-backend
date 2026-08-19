@@ -1,10 +1,32 @@
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import { SYSTEM_CONFIG_VALUE_TYPES } from '../helpers';
 
 export const systemConfigIdValidator = [
     param('id').notEmpty().withMessage('System config ID is required')
         .isUUID().withMessage('System config ID must be a valid UUID')
         .trim()
+];
+
+// Query validator shared by both listings — they take exactly the same three filters. The two
+// character minimum on search is what keeps the Op.iLike from scanning the whole table on a single
+// letter; the only index of the table is the partial one over isActive, so that minimum and the
+// ceiling of 100 rows are what bound the cost.
+// valueType is restricted here and not in the service: unlike the cross validation against value,
+// this one needs nothing from the database, so it belongs where every other 400 of input comes from.
+// scope declares no minimum — it compares for equality, not by fragment, and the service normalizes
+// it with toConstantCase before asking
+export const systemConfigListValidator = [
+    query('limit').optional().isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be an integer between 1 and 100'),
+    query('offset').optional().isInt({ min: 0 })
+        .withMessage('Offset must be a non-negative integer'),
+    query('scope').optional().trim().notEmpty().withMessage('Scope cannot be empty')
+        .isLength({ max: 100 }).withMessage('Scope must be at most 100 characters long'),
+    query('valueType').optional().isIn(SYSTEM_CONFIG_VALUE_TYPES)
+        .withMessage(`Value type must be one of: ${ SYSTEM_CONFIG_VALUE_TYPES.join(', ') }`),
+    query('search').optional().trim()
+        .isLength({ min: 2 }).withMessage('Search must be at least 2 characters long')
+        .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long')
 ];
 
 // The eight data columns of §3.1, all writable on create. The isLength ceilings match the varchar

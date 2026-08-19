@@ -1,6 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { createSystemConfigService } from '../services/systemConfig.service';
+import { SystemConfigListFilters, SystemConfigValueType } from '../types';
+import {
+    createSystemConfigService,
+    getActiveSystemConfigsService
+} from '../services/systemConfig.service';
+
+// Unwraps the three query filters, identical in both listings. The validator has already restricted
+// valueType to the five literals of the CHECK, so the cast here is over an already checked value
+const readListFilters = (query: Request['query']): SystemConfigListFilters => ({
+    scope: query.scope ? (query.scope as string).trim() : undefined,
+    valueType: query.valueType ? (query.valueType as SystemConfigValueType) : undefined,
+    search: query.search ? (query.search as string).trim() : undefined
+});
 
 // Create System Config Controller
 // Code: ESAVI-SYSCONF-001
@@ -22,6 +34,29 @@ const createSystemConfig = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Get Active System Configs Controller
+// Code: ESAVI-SYSCONF-002A
+const getSystemConfigs = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getActiveSystemConfigsService(readListFilters(req.query), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-002A: Error getting System Configs: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.getFailedPlural', req.lang), 500, 'SYSCONF_002A_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createSystemConfig
+    createSystemConfig,
+    getSystemConfigs
 }
