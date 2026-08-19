@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { createNotificationPregnancyService } from '../services/notificationPregnancy.service';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
+import {
+    createNotificationPregnancyService,
+    getNotificationPregnancyByIdService
+} from '../services/notificationPregnancy.service';
 
 // Create Notification Pregnancy Controller
 // Code: ESAVI-NOTIFPRG-001
@@ -22,6 +26,28 @@ const createNotificationPregnancy = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Get Notification Pregnancy By ID Controller
+// Code: ESAVI-NOTIFPRG-003
+const getNotificationPregnancyById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getNotificationPregnancyByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-003: Error fetching Notification Pregnancy by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.getFailed', req.lang), 500, 'NOTIFPRG_003_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createNotificationPregnancy
+    createNotificationPregnancy,
+    getNotificationPregnancyById
 };

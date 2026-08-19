@@ -12,6 +12,17 @@ import {
 // the jsonb column, so what comes back from the driver is a JavaScript string and not an object
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// The parent, included on every read to implement the inherited visibility. A single hop and not
+// two: notificationPregnancy hangs straight from the header, so the chain notificationDiluent
+// introduced does not apply here and composing it anyway would add a join that protects nothing.
+//
+// The notification never reaches the response: whoever needs it enters through ESAVI-NOTIFCN-003
+const NOTIFICATION_INCLUDE = {
+    model: Notification,
+    as: 'notification',
+    attributes: ['notificationId', 'isActive']
+};
+
 // sysDetails is trigger metadata and never leaves the service. The parent is dropped here after
 // having done its job in the query, and nothing is resolved or nested: the only foreign key is
 // notificationId and it travels raw, which is also what lets a PUT resend the response of its GET
@@ -290,6 +301,43 @@ const createNotificationPregnancyService = async (
     return notificationPregnancy ? toNotificationPregnancyResponse(notificationPregnancy) : null;
 }
 
+// The read every operation entered by pregnancyId shares. The parent include is mandatory and not
+// decorative: with required: true and the isActive filter it is what implements the inherited
+// visibility, so a pregnancy hanging from a withdrawn notification simply does not come back.
+//
+// The two conditions — the row itself being active, and its notification being active — are
+// evaluated the same way and neither takes precedence: it is enough that one of them fails for the
+// caller to get a 404, and canViewInactive relaxes both at once
+const findNotificationPregnancy = async (id: string, includeInactive: boolean = false) => {
+    return await NotificationPregnancy.findOne({
+        where: includeInactive ? { pregnancyId: id } : { pregnancyId: id, isActive: true },
+        include: [{
+            ...NOTIFICATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// Get Notification Pregnancy By ID Service
+// Code: ESAVI-NOTIFPRG-003
+const getNotificationPregnancyByIdService = async (
+    id: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const notificationPregnancy = await findNotificationPregnancy(id, canViewInactive);
+    if( !notificationPregnancy ) {
+        throw new AppError(
+            getMessage('notificationPregnancy.notFound', lang),
+            404,
+            'NOTIFPRG_003_NOT_FOUND'
+        );
+    }
+    return toNotificationPregnancyResponse(notificationPregnancy);
+}
+
 export {
-    createNotificationPregnancyService
+    createNotificationPregnancyService,
+    getNotificationPregnancyByIdService
 };
