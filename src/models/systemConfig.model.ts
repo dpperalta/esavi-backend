@@ -21,8 +21,11 @@ export class SystemConfig extends Model<InferAttributes<SystemConfig>, InferCrea
     declare description?: CreationOptional<string | null>;
 
     // jsonb: its shape is governed by valueType, and a row with isEncrypted true stores the
-    // ciphertext wrapped as { "enc": "<ciphertext>" }
-    declare value: CreationOptional<unknown>;
+    // ciphertext wrapped as { "enc": "<ciphertext>" }.
+    // Not wrapped in CreationOptional even though the DDL declares a default: CreationOptional<unknown>
+    // collapses to the brand type alone and would reject every real value. The API always supplies it —
+    // the validator requires it — so the default of the column never comes into play
+    declare value: unknown;
 
     // Bounded by CK_systemConfig_valueType to the five lowercase literals mirrored by
     // SystemConfigValueType. Mutable: a parameter may change shape over time

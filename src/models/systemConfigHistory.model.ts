@@ -20,7 +20,9 @@ export class SystemConfigHistory extends Model<InferAttributes<SystemConfigHisto
     // null on the first row of a configuration — the one the 001 and the 008 write. Both values are
     // stored exactly as the column held them, encrypted if the configuration is, and the 007 decrypts
     // them because that endpoint is already SUPERADMIN-only
-    declare previousValue?: CreationOptional<unknown>;
+    // Optional through the `?` and not through CreationOptional: CreationOptional<unknown> collapses
+    // to the brand type alone and would reject both the null of the first row and every real value
+    declare previousValue?: unknown;
     declare newValue: unknown;
 
     // FK -> appUser.userId, ON UPDATE CASCADE ON DELETE SET NULL: the history of a deleted user keeps
