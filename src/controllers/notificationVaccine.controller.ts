@@ -172,11 +172,10 @@ const updateNotificationVaccine = async (req: Request, res: Response, next: Next
 const deleteNotificationVaccine = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setNotificationVaccineActivationService(id, req.user, req.lang, false);
+        await setNotificationVaccineActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationVaccine.deletedSuccess', req.lang),
-            data
+            message: getMessage('notificationVaccine.deletedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-NOTIFVAC-005A: Error deleting Notification Vaccine: ' + error, 'error');
@@ -193,11 +192,10 @@ const deleteNotificationVaccine = async (req: Request, res: Response, next: Next
 const activateNotificationVaccine = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setNotificationVaccineActivationService(id, req.user, req.lang, true);
+        await setNotificationVaccineActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationVaccine.activatedSuccess', req.lang),
-            data
+            message: getMessage('notificationVaccine.activatedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-NOTIFVAC-005B: Error activating Notification Vaccine: ' + error, 'error');
