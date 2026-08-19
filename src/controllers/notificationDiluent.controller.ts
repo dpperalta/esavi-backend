@@ -166,8 +166,7 @@ const activateNotificationDiluent = async (req: Request, res: Response, next: Ne
         const data = await setNotificationDiluentActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationDiluent.activatedSuccess', req.lang),
-            data
+            message: getMessage('notificationDiluent.activatedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-NOTIFDIL-005B: Error activating Notification Diluent: ' + error, 'error');
@@ -187,8 +186,7 @@ const deleteNotificationDiluent = async (req: Request, res: Response, next: Next
         const data = await setNotificationDiluentActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationDiluent.deletedSuccess', req.lang),
-            data
+            message: getMessage('notificationDiluent.deletedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-NOTIFDIL-005A: Error deleting Notification Diluent: ' + error, 'error');
