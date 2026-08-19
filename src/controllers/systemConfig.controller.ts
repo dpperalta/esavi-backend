@@ -5,7 +5,8 @@ import {
     createSystemConfigService,
     getActiveSystemConfigsService,
     getAllSystemConfigsService,
-    getSystemConfigByIdService
+    getSystemConfigByIdService,
+    getSystemConfigByCodeService
 } from '../services/systemConfig.service';
 
 // Unwraps the three query filters, identical in both listings. The validator has already restricted
@@ -107,9 +108,35 @@ const getSystemConfigById = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+// Get System Config by code and scope Controller
+// Code: ESAVI-SYSCONF-006
+const getSystemConfigByCode = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const code = (req.params.code).toString().trim();
+    const scope = req.query.scope ? (req.query.scope as string).trim() : undefined;
+    try {
+        // The same two decisions as the 003, resting on the same predicate: this endpoint is the
+        // other door to the same row
+        const canSeeEverything = canViewInactive(req.user);
+        const data = await getSystemConfigByCodeService(code, scope, req.lang, canSeeEverything, canSeeEverything);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.getByCodeSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-006: Error getting System Config by code: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.getByCodeFailed', req.lang), 500, 'SYSCONF_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createSystemConfig,
     getSystemConfigs,
     getAllSystemConfigs,
-    getSystemConfigById
+    getSystemConfigById,
+    getSystemConfigByCode
 }

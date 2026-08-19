@@ -7,6 +7,16 @@ export const systemConfigIdValidator = [
         .trim()
 ];
 
+// The 006 enters by the name of the parameter, not by its UUID. code arrives through the path and
+// scope through the query, optional with a GLOBAL default; the service normalizes both with
+// toConstantCase before searching, so nothing here restricts their shape beyond the widths of the DDL
+export const systemConfigCodeValidator = [
+    param('code').trim().notEmpty().withMessage('System config code is required')
+        .isLength({ max: 150 }).withMessage('System config code must be at most 150 characters long'),
+    query('scope').optional().trim().notEmpty().withMessage('Scope cannot be empty')
+        .isLength({ max: 100 }).withMessage('Scope must be at most 100 characters long')
+];
+
 // Query validator shared by both listings — they take exactly the same three filters. The two
 // character minimum on search is what keeps the Op.iLike from scanning the whole table on a single
 // letter; the only index of the table is the partial one over isActive, so that minimum and the

@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createSystemConfig,
     getAllSystemConfigs,
+    getSystemConfigByCode,
     getSystemConfigById,
     getSystemConfigs
 } from '../controllers/systemConfig.controller';
 import {
     createSystemConfigValidator,
+    systemConfigCodeValidator,
     systemConfigIdValidator,
     systemConfigListValidator
 } from '../validators';
@@ -44,6 +46,11 @@ router.get('/', tokenValidation, validateUserRole(USER), ...systemConfigListVali
 // Code: ESAVI-SYSCONF-002B
 // Literal path, declared before '/:id' so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...systemConfigListValidator, validateFields, getAllSystemConfigs);
+
+// Get System Config by code and scope
+// Code: ESAVI-SYSCONF-006
+// Literal prefix, declared before '/:id' so Express does not capture 'code' as an :id
+router.get('/code/:code', tokenValidation, validateUserRole(USER), ...systemConfigCodeValidator, validateFields, getSystemConfigByCode);
 
 // Get System Config by ID
 // Code: ESAVI-SYSCONF-003

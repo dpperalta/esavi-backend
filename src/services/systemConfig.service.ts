@@ -296,9 +296,49 @@ const getSystemConfigByIdService = async (
     return shapeSingleSystemConfig(systemConfig, canDecrypt);
 }
 
+// ESAVI-SYSCONF-006 - Get System Config by (code, scope) Service
+// The operation the table exists for. A CRUD by UUID is no use to whoever reads configuration: the
+// application knows the name of its parameter, never its identifier — which is also why this is not a
+// query param over the 002A, that would answer { count, rows } for a single-entity read and could not
+// tell "does not exist", a 404, from "empty list", a 200
+const getSystemConfigByCodeService = async (
+    rawCode: string,
+    rawScope: string | undefined,
+    lang: string,
+    includeInactive: boolean = false,
+    canDecrypt: boolean = false
+) => {
+    // BOTH normalized before searching, with the same function the 001 writes them with. Without this
+    // the endpoint that exists to read by name would answer differently depending on the case the URL
+    // was typed in, and GET /code/esavi_max_upload would miss the row GET /code/ESAVI_MAX_UPLOAD finds.
+    // The scope default is resolved BEFORE normalizing, exactly as in the 001
+    const code = toConstantCase(rawCode.trim());
+    const scope = toConstantCase(( rawScope ?? DEFAULT_SCOPE ).trim());
+
+    const whereClause = includeInactive
+        ? { code, scope }
+        : { code, scope, isActive: true };
+
+    const systemConfig = await SystemConfig.findOne({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] }
+    });
+    if( !systemConfig ) {
+        // The message names the pair, not just the code: the uniqueness is composite, and a 404
+        // saying only the code would read as "this parameter does not exist" when what does not exist
+        // is that parameter in that scope
+        throw new AppError(getMessage('systemConfig.codeNotFound', lang, { code, scope }), 404, 'SYSCONF_006_NOT_FOUND');
+    }
+    // The rules of inactive rows and of decryption are EXACTLY those of the 003 — same answer, another
+    // door in — so the shaping is the same function and not a copy of it
+    return shapeSingleSystemConfig(systemConfig, canDecrypt);
+}
+
 export {
     createSystemConfigService,
     getActiveSystemConfigsService,
     getAllSystemConfigsService,
-    getSystemConfigByIdService
+    getSystemConfigByIdService,
+    getSystemConfigByCodeService
 }
