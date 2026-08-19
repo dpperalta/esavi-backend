@@ -11,3 +11,18 @@ export const NOTIFICATION_TYPES = ['SEVERE', 'NON_SEVERE'] as const;
 // ANSWER_OPTIONS and AnswerOption from there — do not redeclare them here.
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// Naegele's rule with a +/- 14 day tolerance: 38 to 42 weeks between the last menstruation date and
+// the probable delivery date. notificationPregnancy rejects any pair of dates outside that window,
+// both bounds inclusive. They live here, named, because they are clinical values someone will want to
+// adjust, and grepping the service for 294 is worse than reading them from this file.
+export const GESTATION_MIN_DAYS = 266;
+export const GESTATION_MAX_DAYS = 294;
+
+// The systemConfig row that holds the catalogItemId of the female sex, read by ESAVI-NOTIFPRG-001 to
+// reject a pregnancy registered on a patient whose sex is recorded as something else. The value is a
+// UUID that changes per installation, so it is seeded by ESAVI-SYSCONF-001 on every deployment and
+// deliberately absent from src/data/systemConfig.defaults.ts. Both constants are already in the
+// constant-case form systemConfig stores after its own toConstantCase, so the service normalizes nothing.
+export const PREGNANCY_FEMALE_SEX_ITEM_CONFIG_CODE = 'PREGNANCY_FEMALE_SEX_ITEM';
+export const PREGNANCY_FEMALE_SEX_ITEM_CONFIG_SCOPE = 'GLOBAL';
