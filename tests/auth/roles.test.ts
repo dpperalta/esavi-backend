@@ -314,6 +314,26 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-004' },
     { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-005A' },
 
+    // notificationPregnancy (SPEC F25) — the seventh satellite of notification, and a shape none of
+    // the six before it had: one to one *and* with its own state. severeNotification and
+    // nonSevereNotification are one to one but share the primary key and carry no isActive, so they
+    // have no activation pair; the four one to many sisters have state but drag an ordering column.
+    // This one has its own pregnancyId, a plain UNIQUE over the foreign key and an isActive, which is
+    // where its surface comes from: SEVEN rows, with the full activation pair and NO 002 in any form —
+    // a listing of at most one row has no reader, so the 006 enters by notificationId and returns a
+    // single object.
+    // 001, 003, 004 and 006 run as USER, the deviation the clinical detail entities fixed: the
+    // pregnancy section is captured in the same operational flow as the notification.
+    // The 005C exists because the table is outside the preventPhysicalDelete loop of
+    // esaviapp.sql:1361-1375, and purging drags notificationPregnancyComplication with it
+    { method: 'post',   path: '/api/notification-pregnancies',                            minRole: 'USER',       code: 'ESAVI-NOTIFPRG-001' },
+    { method: 'get',    path: `/api/notification-pregnancies/notification/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-NOTIFPRG-006' },
+    { method: 'delete', path: `/api/notification-pregnancies/purge/${ UUID }`,            minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFPRG-005C' },
+    { method: 'patch',  path: `/api/notification-pregnancies/activate/${ UUID }`,         minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFPRG-005B' },
+    { method: 'get',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-003' },
+    { method: 'put',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-004' },
+    { method: 'delete', path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'ADMIN',      code: 'ESAVI-NOTIFPRG-005A' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -392,7 +412,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(187);
+            expect(ROUTE_RULES).toHaveLength(194);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

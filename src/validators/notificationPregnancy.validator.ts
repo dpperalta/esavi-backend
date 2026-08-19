@@ -18,7 +18,8 @@ export const notificationPregnancyNotificationIdValidator = [
 ];
 
 // No listing validator exists in this file, and that is not an omission: the relation is one to one,
-// there is no ESAVI-NOTIFPRG-002 in any form, and the 006 returns a single object with no pagination.
+// this entity declares no listing operation in any form, and the 006 returns a single object with no
+// pagination.
 //
 // wasPregnantAtVaccination is the only field demanded here, and it is demanded with exists() plus
 // isIn(): the answer is required, not a particular content. NO, UNKNOWN and NO_ANSWER are all valid,
