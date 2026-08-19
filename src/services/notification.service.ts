@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationEvent, NotificationMedication, NotificationVaccine, SevereNotification } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationDiluent, NotificationEvent, NotificationMedication, NotificationVaccine, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -742,9 +742,8 @@ const dumpNotificationMedicationsBeforeCascade = async (
 // A notification with no vaccines leaves no line at all.
 //
 // The notificationDiluent rows that fall in the second hop — they hang from vaccineId, not from
-// notificationId — are deliberately not dumped here: reaching them would need a raw query over a
-// table this service does not model. Their own spec will add that line, the same way SPEC F22 added
-// the one the 005C of the vaccine already writes
+// notificationId — get their own dump right below, which SPEC F24 added when that table finally
+// received a model
 const dumpNotificationVaccinesBeforeCascade = async (
     notificationId: string,
     userId: string,
@@ -768,6 +767,50 @@ const dumpNotificationVaccinesBeforeCascade = async (
         );
     } catch (error) {
         esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged notificationVaccines: ${ error }`, 'error');
+    }
+}
+
+// The dump of the sixth satellite, and the only one this cascade reaches in two hops:
+// notificationDiluent hangs from vaccineId and not from notificationId, so destroying the header
+// drags it through notification -> notificationVaccine -> notificationDiluent. It is walked with the
+// hasMany the associations of SPEC F24 declare, without raw SQL: the table has a model now, which is
+// the very reason SPEC F22 could not write this line and left it promised instead.
+//
+// One single warn line with the count and the list of diluentId, as its five sisters. A notification
+// whose vaccines carry no diluents leaves no line at all
+const dumpNotificationDiluentsBeforeCascade = async (
+    notificationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const notificationVaccines = await NotificationVaccine.findAll({
+            where: { notificationId },
+            attributes: ['vaccineId'],
+            include: [{
+                model: NotificationDiluent,
+                as: 'diluents',
+                attributes: ['diluentId'],
+                required: true
+            }],
+            paranoid: false,
+            transaction
+        });
+        const diluentIds = notificationVaccines.flatMap(( notificationVaccine ) =>
+            ( ( notificationVaccine.get('diluents') as NotificationDiluent[] | undefined ) ?? [] )
+                .map(( notificationDiluent ) => notificationDiluent.diluentId)
+        );
+        if( diluentIds.length === 0 ) {
+            return;
+        }
+        esaviLog(
+            `ESAVI-NOTIFCN-005C: ${ diluentIds.length } notificationDiluent row(s) dragged by ` +
+            `ON DELETE CASCADE in the second hop and purged by ${ userId }. diluentId: ` +
+            `${ diluentIds.join(', ') }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged notificationDiluents: ${ error }`, 'error');
     }
 }
 
@@ -800,6 +843,7 @@ const purgeNotificationService = async (id: string, authUser: AuthUser | undefin
             await dumpNotificationEventsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationMedicationsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationVaccinesBeforeCascade(id, authUser?.userId || 'undefined', transaction);
+            await dumpNotificationDiluentsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
         }
 
         await purgeEntityService({
