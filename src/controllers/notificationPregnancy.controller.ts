@@ -5,7 +5,8 @@ import {
     createNotificationPregnancyService,
     getNotificationPregnancyByIdService,
     getNotificationPregnancyByNotificationService,
-    updateNotificationPregnancyService
+    updateNotificationPregnancyService,
+    setNotificationPregnancyActivationService
 } from '../services/notificationPregnancy.service';
 
 // Create Notification Pregnancy Controller
@@ -101,9 +102,30 @@ const updateNotificationPregnancy = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Delete Notification Pregnancy Controller - Soft delete
+// Code: ESAVI-NOTIFPRG-005A
+const deleteNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationPregnancyActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-005A: Error deleting Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.deletedFailed', req.lang), 500, 'NOTIFPRG_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createNotificationPregnancy,
     getNotificationPregnancyById,
     getNotificationPregnancyByNotification,
-    updateNotificationPregnancy
+    updateNotificationPregnancy,
+    deleteNotificationPregnancy
 };

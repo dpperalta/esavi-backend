@@ -5,7 +5,8 @@ import {
     createNotificationPregnancy,
     getNotificationPregnancyById,
     getNotificationPregnancyByNotification,
-    updateNotificationPregnancy
+    updateNotificationPregnancy,
+    deleteNotificationPregnancy
 } from '../controllers/notificationPregnancy.controller';
 import {
     createNotificationPregnancyValidator,
@@ -14,7 +15,7 @@ import {
     updateNotificationPregnancyValidator
 } from '../validators';
 
-const { USER } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -47,5 +48,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationPregn
 // Update Notification Pregnancy
 // Code: ESAVI-NOTIFPRG-004
 router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyIdValidator, ...updateNotificationPregnancyValidator, validateFields, updateNotificationPregnancy);
+
+// Delete Notification Pregnancy - Soft delete
+// Code: ESAVI-NOTIFPRG-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationPregnancyIdValidator, validateFields, deleteNotificationPregnancy);
 
 export default router;

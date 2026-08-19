@@ -1,5 +1,6 @@
 import { CatalogItem, EsaviCase, Notification, NotificationPregnancy, Patient, SystemConfig } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyInput } from '../types';
 import {
     GESTATION_MAX_DAYS,
@@ -498,9 +499,53 @@ const updateNotificationPregnancyService = async (
     return updated ? toNotificationPregnancyResponse(updated) : null;
 }
 
+// Set Notification Pregnancy Activation Service
+// Codes: ESAVI-NOTIFPRG-005A (deactivate) and ESAVI-NOTIFPRG-005B (reactivate)
+// A clean delegation in both directions, and the first one of the stateful family that can be. The
+// table has no ordering column, does not appear in the setSortOrderByParent list of esaviapp.sql and
+// has no partial unique index, so the collision F16 discovered — and F21, F22 and F24 dragged along —
+// simply does not exist here. Copying their solution would produce an atomic block and a query that
+// correct nothing.
+//
+// The 005A blocks on nothing: deactivating a pregnancy with live complications answers 200, and the
+// inherited visibility the spec of the child table declares will resolve its reading. It seals
+// deletedAt, which does NOT free the slot of UQ_notificationPregnancy_notification, because that
+// constraint is not conditioned by deletedAt — so a later create still answers 409.
+//
+// The 005B revalidates nothing — not the sex, not the gestational range, not the state of the
+// notification. Reactivating is undoing a deactivation, not rewriting the row.
+//
+// The where filters by the primary key only: the generic service is the one that tells 'does not
+// exist' (404) from 'already in that state' (409)
+const setNotificationPregnancyActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+
+    await setEntityActiveStatusService({
+        model: NotificationPregnancy,
+        where: { pregnancyId: id },
+        isActive,
+        notFoundMessage: getMessage('notificationPregnancy.notFound', lang),
+        notFoundCode: `NOTIFPRG_${ op }_NOT_FOUND`,
+        alreadyInStateMessage: getMessage(`notificationPregnancy.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+        alreadyInStateCode: `NOTIFPRG_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+        appDetail: {
+            createdAt: new Date(),
+            user: authUser?.userId || 'undefined',
+            method: `ESAVI-NOTIFPRG-${ op }`,
+            detail: `Notification pregnancy ${ isActive ? 'activated' : 'deactivated' } by service`
+        }
+    });
+}
+
 export {
     createNotificationPregnancyService,
     getNotificationPregnancyByIdService,
     getNotificationPregnancyByNotificationService,
-    updateNotificationPregnancyService
+    updateNotificationPregnancyService,
+    setNotificationPregnancyActivationService
 };
