@@ -233,7 +233,29 @@ const getActiveSystemConfigsService = async (
     return maskEncryptedRows(systemConfigs);
 }
 
+// ESAVI-SYSCONF-002B - Get All System Configs Service (including inactive) - For Admin
+const getAllSystemConfigsService = async (
+    filters: SystemConfigListFilters,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    // The twin of 002A without isActive in the where, with the same three filters, the same order and
+    // the SAME masking: this listing is ADMIN and it does not decrypt either. Being able to see the
+    // deactivated rows is not the same as being able to read a secret, and the only role that reads
+    // one is SUPERADMIN, through the 003 or the 006
+    const systemConfigs = await SystemConfig.findAndCountAll({
+        where: buildSystemConfigWhere(filters),
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        order: [['scope', 'ASC'], ['code', 'ASC']],
+        limit,
+        offset
+    });
+    return maskEncryptedRows(systemConfigs);
+}
+
 export {
     createSystemConfigService,
-    getActiveSystemConfigsService
+    getActiveSystemConfigsService,
+    getAllSystemConfigsService
 }

@@ -3,7 +3,8 @@ import { AppError, esaviLog, getMessage } from '../helpers';
 import { SystemConfigListFilters, SystemConfigValueType } from '../types';
 import {
     createSystemConfigService,
-    getActiveSystemConfigsService
+    getActiveSystemConfigsService,
+    getAllSystemConfigsService
 } from '../services/systemConfig.service';
 
 // Unwraps the three query filters, identical in both listings. The validator has already restricted
@@ -56,7 +57,30 @@ const getSystemConfigs = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
+// Get All System Configs Controller - For Admin
+// Code: ESAVI-SYSCONF-002B
+const getAllSystemConfigs = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllSystemConfigsService(readListFilters(req.query), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-002B: Error getting all System Configs: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.getFailedPlural', req.lang), 500, 'SYSCONF_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
     createSystemConfig,
-    getSystemConfigs
+    getSystemConfigs,
+    getAllSystemConfigs
 }

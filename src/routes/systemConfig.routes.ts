@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createSystemConfig, getSystemConfigs } from '../controllers/systemConfig.controller';
+import {
+    createSystemConfig,
+    getAllSystemConfigs,
+    getSystemConfigs
+} from '../controllers/systemConfig.controller';
 import { createSystemConfigValidator, systemConfigListValidator } from '../validators';
 
 // THE ORDER OF DECLARATION IN THIS FILE IS NOT COSMETIC. The four literal paths — '/admin',
@@ -19,7 +23,7 @@ import { createSystemConfigValidator, systemConfigListValidator } from '../valid
 // There is no 005C: systemConfig and systemConfigHistory are both in the preventPhysicalDelete loop
 // (esaviapp.sql:1371), so by the availability rule of CONVENTIONS §6 physical deletion is not
 // declared. The codes from 009 on stay free.
-const { SUPERADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -30,5 +34,10 @@ router.post('/', tokenValidation, validateUserRole(SUPERADMIN), ...createSystemC
 // Get Active System Configs
 // Code: ESAVI-SYSCONF-002A
 router.get('/', tokenValidation, validateUserRole(USER), ...systemConfigListValidator, validateFields, getSystemConfigs);
+
+// Get All System Configs - For Admin
+// Code: ESAVI-SYSCONF-002B
+// Literal path, declared before '/:id' so Express does not capture 'admin' as an :id
+router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...systemConfigListValidator, validateFields, getAllSystemConfigs);
 
 export default router;
