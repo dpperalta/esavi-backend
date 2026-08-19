@@ -10,6 +10,7 @@ import {
     getSystemConfigById,
     getSystemConfigHistory,
     getSystemConfigs,
+    syncSystemConfigDefaults,
     updateSystemConfig
 } from '../controllers/systemConfig.controller';
 import {
@@ -57,6 +58,12 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...systemConfigLi
 // Code: ESAVI-SYSCONF-006
 // Literal prefix, declared before '/:id' so Express does not capture 'code' as an :id
 router.get('/code/:code', tokenValidation, validateUserRole(USER), ...systemConfigCodeValidator, validateFields, getSystemConfigByCode);
+
+// Sync System Config Defaults - For SuperAdmin
+// Code: ESAVI-SYSCONF-008
+// Literal path, declared before '/:id' so Express does not capture 'sync' as an :id. No body and
+// therefore no body validator: what is seeded is a code file
+router.post('/sync', tokenValidation, validateUserRole(SUPERADMIN), syncSystemConfigDefaults);
 
 // Activate System Config - For SuperAdmin
 // Code: ESAVI-SYSCONF-005B

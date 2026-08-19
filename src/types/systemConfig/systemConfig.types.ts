@@ -26,6 +26,22 @@ export interface CreateSystemConfigInput {
     changeReason?: string | null;        // NOT a column of systemConfig: it travels to systemConfigHistory
 }
 
+// One entry of the declarative catalogue the 008 seeds from, which lives in
+// src/data/systemConfig.defaults.ts and TENDS TO GROW: adding a parameter is adding an entry here and
+// calling the endpoint again after deploying.
+// Every field is declared explicitly, without leaning on the DEFAULTs of the DDL: a catalogue that is
+// read to know what SHOULD exist cannot have holes only the database resolves
+export interface SystemConfigDefault {
+    code: string;
+    name: string;
+    description?: string | null;
+    value: unknown;
+    valueType: SystemConfigValueType;
+    scope: string;
+    isEncrypted?: boolean;
+    isEditable?: boolean;
+}
+
 // Query filters of the two listings, identical in both. scope compares for equality against the value
 // normalized with toConstantCase, valueType against the five literals of the CHECK, and search runs
 // as Op.iLike over name AND code joined by Op.or, with a minimum of 2 characters

@@ -9,7 +9,8 @@ import {
     getSystemConfigByCodeService,
     updateSystemConfigService,
     setSystemConfigActivationService,
-    getSystemConfigHistoryService
+    getSystemConfigHistoryService,
+    syncSystemConfigDefaultsService
 } from '../services/systemConfig.service';
 
 // Unwraps the three query filters, identical in both listings. The validator has already restricted
@@ -224,6 +225,28 @@ const getSystemConfigHistory = async (req: Request, res: Response, next: NextFun
     }
 }
 
+// Sync System Config Defaults Controller - For SuperAdmin
+// Code: ESAVI-SYSCONF-008
+// Takes NO body: what is seeded is the catalogue of src/data/systemConfig.defaults.ts, which is a code
+// file, so there is nothing for a client to send and nothing for a validator to check
+const syncSystemConfigDefaults = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await syncSystemConfigDefaultsService(req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.syncSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-008: Error syncing System Config defaults: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.syncFailed', req.lang), 500, 'SYSCONF_008_SYNC_FAILED', error));
+    }
+}
+
 export {
     createSystemConfig,
     getSystemConfigs,
@@ -233,5 +256,6 @@ export {
     updateSystemConfig,
     deleteSystemConfig,
     activateSystemConfig,
-    getSystemConfigHistory
+    getSystemConfigHistory,
+    syncSystemConfigDefaults
 }

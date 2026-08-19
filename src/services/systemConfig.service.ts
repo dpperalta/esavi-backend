@@ -18,6 +18,7 @@ import {
     SystemConfigListFilters,
     SystemConfigValueType
 } from '../types';
+import { SYSTEM_CONFIG_DEFAULTS } from '../data/systemConfig.defaults';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -637,6 +638,92 @@ const getSystemConfigHistoryService = async (
     };
 }
 
+// ESAVI-SYSCONF-008 - Sync System Config Defaults Service
+// Idempotent seeding of the initial configurations. ONLY-INSERT by design: it creates what is missing
+// and touches nothing that already exists — not the value, not the name, not the state.
+//
+// AN INACTIVE ROW COUNTS AS EXISTING and is not reactivated: somebody deactivated it on purpose, and
+// a POST /sync cannot undo a deliberate decision of somebody else. That is also why the existence
+// query does not filter by isActive.
+//
+// ONE TRANSACTION, ALL OR NOTHING. An entry of the catalogue with a badly declared valueType aborts
+// the whole seeding with a 400 instead of leaving half a configuration created: a half-seeded set is
+// a state nobody knows how to resume from, and the catalogue is a code file whose error is fixed and
+// deployed again
+const syncSystemConfigDefaultsService = async (authUser: AuthUser | undefined, lang: string) => {
+    const created: { code: string; scope: string }[] = [];
+    const skipped: { code: string; scope: string }[] = [];
+
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-SYSCONF-008',
+        detail: 'System configuration seeded by sync service'
+    };
+
+    const transaction = await sequelize.transaction();
+    try {
+        for( const entry of SYSTEM_CONFIG_DEFAULTS ) {
+            const code = toConstantCase(entry.code.trim());
+            const scope = toConstantCase(( entry.scope ?? DEFAULT_SCOPE ).trim());
+
+            // The same cross validation as the 001 and the 004, and it runs on every entry — including
+            // the ones that will be skipped: a catalogue that declares an impossible value is broken
+            // whether or not that row happens to exist in this database already, and the deploy that
+            // fixes it should fail the same way everywhere
+            assertValueMatchesType(entry.value, entry.valueType, lang, '008');
+
+            const existingConfig = await SystemConfig.findOne({
+                where: { code, scope },
+                attributes: ['systemConfigId'],
+                transaction
+            });
+            if( existingConfig ) {
+                skipped.push({ code, scope });
+                continue;
+            }
+
+            const isEncrypted = entry.isEncrypted === true;
+            const storedValue = isEncrypted ? encryptSystemConfigValue(entry.value) : entry.value;
+
+            const newSystemConfig = await SystemConfig.create({
+                code,
+                name: entry.name.trim(),
+                description: trimOrNull(entry.description),
+                value: toStorableValue(storedValue),
+                valueType: entry.valueType,
+                scope,
+                isEncrypted,
+                isEditable: entry.isEditable !== undefined ? entry.isEditable : true,
+                isActive: true,
+                appDetails: [newEntry]
+            }, { transaction });
+
+            // Every row the sync creates leaves its history row, exactly as the 001 does: a
+            // configuration that appeared without a trace of who put it there would be the one gap in
+            // the audit this table exists for
+            await SystemConfigHistory.create({
+                systemConfigId: newSystemConfig.systemConfigId,
+                previousValue: null,
+                newValue: toStorableValue(storedValue),
+                changedByUserId: authUser?.userId ?? null,
+                changeReason: 'Seeded by ESAVI-SYSCONF-008',
+                appDetails: [newEntry]
+            }, { transaction });
+
+            created.push({ code, scope });
+        }
+
+        await transaction.commit();
+        // Without the full rows: what matters about a sync is what was missing, not the content of
+        // what was already there
+        return { created, skipped };
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createSystemConfigService,
     getActiveSystemConfigsService,
@@ -645,5 +732,6 @@ export {
     getSystemConfigByCodeService,
     updateSystemConfigService,
     setSystemConfigActivationService,
-    getSystemConfigHistoryService
+    getSystemConfigHistoryService,
+    syncSystemConfigDefaultsService
 }
