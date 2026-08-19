@@ -1,6 +1,6 @@
 # SPEC F26 — CRUD de `systemConfig` con historial de cambios
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F04 (`appUser` — el `007` incluye al autor del cambio y lo descifra con `esaviDecrypt`), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa), SPEC F23 (precedente directo: el último CRUD plano sin `005C`)
 > **Fecha:** 2026-08-19
 > **Objetivo:** Dar de alta `systemConfig` como almacén de parámetros de la aplicación, con historial de cambios en `systemConfigHistory`, lectura por clave y siembra idempotente de configuraciones iniciales.
