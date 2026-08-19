@@ -337,7 +337,61 @@ const getNotificationPregnancyByIdService = async (
     return toNotificationPregnancyResponse(notificationPregnancy);
 }
 
+// The inherited visibility applied to the entry by notificationId, where the parent is not the
+// target of the write but the gate to the row. A withdrawn notification answers 404 for USER and
+// ADMIN, and comes back for whoever may see inactive rows, today SUPERADMIN.
+//
+// It does not walk down to the patient: the female sex rule runs only in the create, and composing
+// the three hop include here would join two tables nothing reads
+const assertNotificationIsVisible = async (
+    notificationId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const notification = await Notification.findOne({
+        where: canViewInactive ? { notificationId } : { notificationId, isActive: true },
+        attributes: ['notificationId']
+    });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationPregnancy.notificationNotFound', lang),
+            404,
+            `NOTIFPRG_${ op }_NOTIFICATION_NOT_FOUND`
+        );
+    }
+}
+
+// Get Notification Pregnancy By Notification Service
+// Code: ESAVI-NOTIFPRG-006
+// It returns a single object and not a { count, rows }: the relation is one to one, so there is no
+// counted read here, no pagination and no order. A listing of at most one row has no reader.
+//
+// The two 404 carry distinct codes on purpose. "the notification does not exist or is withdrawn" and
+// "this notification has no pregnancy" are different answers for the client: the first one is a dead
+// end, the second one is an invitation to create the row
+const getNotificationPregnancyByNotificationService = async (
+    notificationId: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    await assertNotificationIsVisible(notificationId, '006', lang, canViewInactive);
+
+    const notificationPregnancy = await NotificationPregnancy.findOne({
+        where: canViewInactive ? { notificationId } : { notificationId, isActive: true }
+    });
+    if( !notificationPregnancy ) {
+        throw new AppError(
+            getMessage('notificationPregnancy.notFound', lang),
+            404,
+            'NOTIFPRG_006_NOT_FOUND'
+        );
+    }
+    return toNotificationPregnancyResponse(notificationPregnancy);
+}
+
 export {
     createNotificationPregnancyService,
-    getNotificationPregnancyByIdService
+    getNotificationPregnancyByIdService,
+    getNotificationPregnancyByNotificationService
 };

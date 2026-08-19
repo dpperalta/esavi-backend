@@ -3,11 +3,13 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationPregnancy,
-    getNotificationPregnancyById
+    getNotificationPregnancyById,
+    getNotificationPregnancyByNotification
 } from '../controllers/notificationPregnancy.controller';
 import {
     createNotificationPregnancyValidator,
-    notificationPregnancyIdValidator
+    notificationPregnancyIdValidator,
+    notificationPregnancyNotificationIdValidator
 } from '../validators';
 
 const { USER } = ROLES;
@@ -27,6 +29,12 @@ const router = Router();
 // section is captured in the same operational flow as the notification, and splitting it across two
 // roles would break the form in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationPregnancyValidator, validateFields, createNotificationPregnancy);
+
+// Get Notification Pregnancy by Notification
+// Code: ESAVI-NOTIFPRG-006
+// The param is the notificationId, not a pregnancy id: the one to one is entered by the foreign key.
+// Declared before /:id, which would otherwise capture 'notification' as an :id
+router.get('/notification/:notificationId', tokenValidation, validateUserRole(USER), ...notificationPregnancyNotificationIdValidator, validateFields, getNotificationPregnancyByNotification);
 
 // Get Notification Pregnancy by ID
 // Code: ESAVI-NOTIFPRG-003

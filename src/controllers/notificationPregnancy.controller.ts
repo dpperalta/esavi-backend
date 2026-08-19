@@ -3,7 +3,8 @@ import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createNotificationPregnancyService,
-    getNotificationPregnancyByIdService
+    getNotificationPregnancyByIdService,
+    getNotificationPregnancyByNotificationService
 } from '../services/notificationPregnancy.service';
 
 // Create Notification Pregnancy Controller
@@ -47,7 +48,33 @@ const getNotificationPregnancyById = async (req: Request, res: Response, next: N
     }
 }
 
+// Get Notification Pregnancy By Notification Controller
+// Code: ESAVI-NOTIFPRG-006
+const getNotificationPregnancyByNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const notificationId = (req.params.notificationId).toString().trim();
+    try {
+        const data = await getNotificationPregnancyByNotificationService(
+            notificationId,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-006: Error fetching Notification Pregnancy by Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.getFailed', req.lang), 500, 'NOTIFPRG_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationPregnancy,
-    getNotificationPregnancyById
+    getNotificationPregnancyById,
+    getNotificationPregnancyByNotification
 };
