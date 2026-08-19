@@ -17,6 +17,7 @@ import {
     SystemConfigListFilters,
     SystemConfigValueType
 } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The default of the two columns the DDL resolves on its own. They are applied here and not left to
@@ -520,11 +521,60 @@ const updateSystemConfigService = async (
     );
 }
 
+// ESAVI-SYSCONF-005A / ESAVI-SYSCONF-005B - Set System Config Activation Service
+// Not a differential update: these are writes with an intention of their own. They record a state
+// fact, so they go through setEntityActiveStatusService and never through buildDifferentialUpdate.
+//
+// NEITHER OF THE TWO WRITES HISTORY. The columns of systemConfigHistory are previousValue/newValue:
+// the table records changes of value, and deactivating changes none. The trace of the activation
+// already lives in appDetails and in sysDetails.auditTrail.
+//
+// NEITHER OF THE TWO LOOKS AT isEditable. That flag protects the content of the row, not its
+// existence, so deactivating a protected configuration works — it is the 004 that answers 409.
+//
+// The where filters by the primary key alone. The incoming foreign key from systemConfigHistory is
+// not checked: this is a logical delete, the ON DELETE RESTRICT never fires, and the history of a
+// withdrawn configuration stays readable through the 007
+const setSystemConfigActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const systemConfig = await setEntityActiveStatusService({
+            model: SystemConfig,
+            where: { systemConfigId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('systemConfig.notFound', lang),
+            notFoundCode: `SYSCONF_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`systemConfig.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `SYSCONF_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                // Only the computed operation code, with no _ACTIVATION stuck behind it
+                method: `ESAVI-SYSCONF-${ op }`,
+                detail: `SystemConfig ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return systemConfig;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createSystemConfigService,
     getActiveSystemConfigsService,
     getAllSystemConfigsService,
     getSystemConfigByIdService,
     getSystemConfigByCodeService,
-    updateSystemConfigService
+    updateSystemConfigService,
+    setSystemConfigActivationService
 }

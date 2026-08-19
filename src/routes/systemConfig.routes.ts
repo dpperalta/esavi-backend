@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateSystemConfig,
     createSystemConfig,
+    deleteSystemConfig,
     getAllSystemConfigs,
     getSystemConfigByCode,
     getSystemConfigById,
@@ -54,6 +56,11 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...systemConfigLi
 // Literal prefix, declared before '/:id' so Express does not capture 'code' as an :id
 router.get('/code/:code', tokenValidation, validateUserRole(USER), ...systemConfigCodeValidator, validateFields, getSystemConfigByCode);
 
+// Activate System Config - For SuperAdmin
+// Code: ESAVI-SYSCONF-005B
+// Literal path, declared before '/:id' so Express does not capture 'activate' as an :id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...systemConfigIdValidator, validateFields, activateSystemConfig);
+
 // Get System Config by ID
 // Code: ESAVI-SYSCONF-003
 // Declared after every literal path so Express does not capture 'admin' or 'sync' as an :id
@@ -62,5 +69,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...systemConfigIdVal
 // Update System Config - For SuperAdmin
 // Code: ESAVI-SYSCONF-004
 router.put('/:id', tokenValidation, validateUserRole(SUPERADMIN), ...systemConfigIdValidator, ...updateSystemConfigValidator, validateFields, updateSystemConfig);
+
+// Soft delete System Config - For SuperAdmin
+// Code: ESAVI-SYSCONF-005A
+router.delete('/:id', tokenValidation, validateUserRole(SUPERADMIN), ...systemConfigIdValidator, validateFields, deleteSystemConfig);
 
 export default router;

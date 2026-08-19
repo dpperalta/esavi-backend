@@ -7,7 +7,8 @@ import {
     getAllSystemConfigsService,
     getSystemConfigByIdService,
     getSystemConfigByCodeService,
-    updateSystemConfigService
+    updateSystemConfigService,
+    setSystemConfigActivationService
 } from '../services/systemConfig.service';
 
 // Unwraps the three query filters, identical in both listings. The validator has already restricted
@@ -155,11 +156,55 @@ const updateSystemConfig = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Soft delete System Config Controller - For SuperAdmin
+// Code: ESAVI-SYSCONF-005A
+// Answers without `data`: what the client needs to know is that the state changed, and the row it
+// would get back is the one it just withdrew
+const deleteSystemConfig = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setSystemConfigActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-005A: Error deleting System Config: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.deletedFailed', req.lang), 500, 'SYSCONF_005A_DELETION_FAILED', error));
+    }
+}
+
+// Activate System Config Controller - For SuperAdmin
+// Code: ESAVI-SYSCONF-005B
+const activateSystemConfig = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setSystemConfigActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('systemConfig.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-SYSCONF-005B: Error activating System Config: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('systemConfig.activatedFailed', req.lang), 500, 'SYSCONF_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createSystemConfig,
     getSystemConfigs,
     getAllSystemConfigs,
     getSystemConfigById,
     getSystemConfigByCode,
-    updateSystemConfig
+    updateSystemConfig,
+    deleteSystemConfig,
+    activateSystemConfig
 }
