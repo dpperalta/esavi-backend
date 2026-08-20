@@ -26,6 +26,7 @@ import vaccineWhodrugRoutes from './vaccineWhodrug.routes';
 import diluentCatalogRoutes from './diluentCatalog.routes';
 import notificationDiluentRoutes from './notificationDiluent.routes';
 import notificationPregnancyRoutes from './notificationPregnancy.routes';
+import notificationPregnancyComplicationRoutes from './notificationPregnancyComplication.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -69,6 +70,9 @@ router.use('/diluents', diluentCatalogRoutes);
 // the two entities apart, and without it they would compete for the same namespace
 router.use('/notification-diluents', notificationDiluentRoutes);
 router.use('/notification-pregnancies', notificationPregnancyRoutes);
+// The notification- prefix tells it apart from investigationPregnancyCondition, which is the
+// pregnancy table of the investigation branch
+router.use('/notification-pregnancy-complications', notificationPregnancyComplicationRoutes);
 router.use('/system-configs', systemConfigRoutes);
 
 export default router;
