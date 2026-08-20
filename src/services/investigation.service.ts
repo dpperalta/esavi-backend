@@ -99,6 +99,17 @@ const findInvestigationWithRelations = async (id: string, includeInactive: boole
     });
 }
 
+// The same read as above, entered through the foreign key instead of the primary one. It needs no
+// LIMIT beyond findOne because UQ_investigation_case guarantees there is at most one row
+const findInvestigationByCaseId = async (caseId: string, includeInactive: boolean = false) => {
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    return await Investigation.findOne({
+        where,
+        attributes: DETAIL_EXCLUDE,
+        include: DETAIL_INCLUDES
+    });
+}
+
 // The case must exist and be active: FK_investigation_case declares ON DELETE CASCADE, but
 // TRG_esaviCase_preventPhysicalDelete forbids every physical delete of esaviCase, so that cascade
 // never fires and nothing in the DDL stops an investigation from pointing at a retired case
@@ -333,9 +344,27 @@ const getInvestigationByIdService = async (id: string, lang: string, includeInac
     return toInvestigationResponse(investigation);
 }
 
+// Get Investigation By Case ID Service
+// Code: ESAVI-INVESTGN-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It returns
+// the object and not { count, rows } — the relation is one to one, and wrapping a single file in
+// a collection would force the client to unpack an array of one element.
+// The two 404 are distinct on purpose, and the difference matters to the client: one says the
+// case is not there, the other that the case has no visible investigation
+const getInvestigationByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+    await assertCaseIsValid(caseId, '006', lang);
+
+    const investigation = await findInvestigationByCaseId(caseId, includeInactive);
+    if( !investigation ) {
+        throw new AppError(getMessage('investigation.notFound', lang), 404, 'INVESTGN_006_NOT_FOUND');
+    }
+    return toInvestigationResponse(investigation);
+}
+
 export {
     createInvestigationService,
     getInvestigationsService,
     getAllInvestigationsService,
-    getInvestigationByIdService
+    getInvestigationByIdService,
+    getInvestigationByCaseIdService
 }

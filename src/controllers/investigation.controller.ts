@@ -4,6 +4,7 @@ import { AuthUser, InvestigationListFilters } from '../types';
 import {
     createInvestigationService,
     getAllInvestigationsService,
+    getInvestigationByCaseIdService,
     getInvestigationByIdService,
     getInvestigationsService
 } from '../services/investigation.service';
@@ -106,9 +107,35 @@ const getInvestigationById = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Get Investigation by Case Controller
+// Code: ESAVI-INVESTGN-006
+const getInvestigationByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigation.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVESTGN-006: Error fetching Investigation by Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigation.getFailed', req.lang), 500, 'INVESTGN_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigation,
     getInvestigations,
     getAllInvestigations,
-    getInvestigationById
+    getInvestigationById,
+    getInvestigationByCaseId
 }

@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigation,
     getAllInvestigations,
+    getInvestigationByCaseId,
     getInvestigationById,
     getInvestigations
 } from '../controllers/investigation.controller';
 import {
     createInvestigationValidator,
+    investigationCaseIdValidator,
     investigationIdValidator,
     investigationListValidator
 } from '../validators';
@@ -30,6 +32,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationListVal
 // Get All Investigations - For Admin
 // Code: ESAVI-INVESTGN-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationListValidator, validateFields, getAllInvestigations);
+
+// Get Investigation by Case
+// Code: ESAVI-INVESTGN-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared
+// before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationCaseIdValidator, validateFields, getInvestigationByCaseId);
 
 // Get Investigation by ID
 // Code: ESAVI-INVESTGN-003
