@@ -23,4 +23,5 @@ export * from './vaccineWhodrug.validator';
 export * from './diluentCatalog.validator';
 export * from './notificationDiluent.validator';
 export * from './notificationPregnancy.validator';
+export * from './notificationPregnancyComplication.validator';
 export * from './systemConfig.validator';
