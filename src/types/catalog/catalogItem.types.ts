@@ -1,7 +1,10 @@
-// There is no code: it is minted from the name with toCodeFromName, both in the 001 and in the 004,
-// so a code travelling in the body would be accepted and discarded
+// code is optional: when it travels it is normalized into camelCase with toCodeFromInput, and only
+// when it is absent does the 001 mint it from the name with toCodeFromName. The 004 writes it
+// exactly when it travels and never re-mints it from a name that changed, so an item whose code was
+// chosen by hand keeps it across a rename
 export interface CreateCatalogItemInput {
     catalogTypeId: string;
+    code?: string;
     name: string;
     value: string;
     description?: string | null;

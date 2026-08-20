@@ -541,14 +541,24 @@ Es lo que garantizan de verdad las `UNIQUE` del DDL, que tampoco filtran por `is
 
 `toConstantCase` para `code`, `toTitleCase` para `name`, `.trim()` para el resto (`src/helpers/stringHandling.helper.ts`). **La comprobación de unicidad se hace sobre el valor ya normalizado**, nunca sobre el crudo.
 
-**Dos entidades acuñan el `code` en vez de recibirlo, y son la excepción declarada:**
+**Dos entidades llevan el `code` en camelCase en vez de en `CONSTANT_CASE`, y son la excepción declarada:** `catalogType` y `catalogItem`. En las dos el `code` es **opcional en el body** y la regla es la misma:
 
-| Entidad | Regla | De dónde sale |
+| Puerta | De dónde sale el `code` | Regla |
 |---|---|---|
-| `catalogType` | `toCamelCase` | de la clave `code` del body |
-| `catalogItem` | `toCodeFromName` — `toTitleCase` y después `toCamelCase` | **del `name`**; el `code` no viaja en el body ni en el fichero de importación, y uno que viaje se ignora |
+| `001` con `code` en el body | de la clave `code` | `toCodeFromInput` |
+| `001` sin `code` en el body | **del `name`** | `toCodeFromName` — `toTitleCase` y después `toCamelCase` |
+| `004` con `code` en el body | de la clave `code` | `toCodeFromInput`; se escribe **siempre que viaja** |
+| `004` sin `code` en el body | de ningún sitio: **se conserva el guardado** | — |
+| `catalogItem` `006` (importación) | **del `name`** | `toCodeFromName`; el fichero no tiene columna `code` |
 
-En `catalogItem` eso vale para las tres puertas de escritura —`001`, `004` y `006`— y hace del `name` la identidad de la fila dentro de su tipo: si el `name` cambia, el `code` cambia con él. `toTitleCase` va primero para que la función sea idempotente y `PHARMACEUTICAL FORM` y `Pharmaceutical form` acuñen el mismo `pharmaceuticalForm`; sin eso, un update diferencial vería un cambio donde no lo hay. Un `name` que no acuñe entre 1 y 100 caracteres es **400**, no un `code` inventado. Las filas cargadas antes de esta regla conservan su `code` en `CONSTANT_CASE`: no hubo migración.
+Las dos normalizaciones dan camelCase pero no son la misma función y no son intercambiables:
+
+- **`toCodeFromName`** acuña un `code` a partir de un `name`. `toTitleCase` va primero para que sea idempotente sobre el `name` y `PHARMACEUTICAL FORM` y `Pharmaceutical form` acuñen el mismo `pharmaceuticalForm`; sin eso, un update diferencial vería un cambio donde no lo hay.
+- **`toCodeFromInput`** normaliza un `code` que manda el cliente. Parte por separadores **y por las jorobas camel**, que es lo que la hace idempotente **sobre el `code`**: `pharmaceuticalForm`, `Pharmaceutical Form` y `PHARMACEUTICAL_FORM` acuñan los tres `pharmaceuticalForm`. Las otras dos funciones aplanan un camelCase ya normalizado a `pharmaceuticalform`, así que un cliente que reenvía la ficha que acaba de leer renombraría la fila.
+
+**El `code` no lo mueve un rename.** En el `004`, cambiar el `name` no toca el `code`: lo que resuelve contra ese `code` —otras tablas, el importador, la configuración— sigue resolviendo. Cambiarlo exige mandarlo.
+
+Un `code` recibido —o un `name` del que hay que acuñarlo— que no produzca entre 1 y 100 caracteres es **400**, nunca un `code` inventado: `CATITEM_<op>_CODE_NOT_VALID` / `CATTYPE_<op>_CODE_NOT_VALID` cuando venía en el body, `..._CODE_NOT_DERIVABLE` cuando se acuñaba del `name`. Las filas cargadas antes de esta regla conservan su `code` en `CONSTANT_CASE`: no hubo migración.
 
 ### Update diferencial — solo se escribe lo que cambió
 

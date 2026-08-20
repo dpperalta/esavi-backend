@@ -18,6 +18,32 @@ export const toCodeFromName = (text: string): string => {
     return toCamelCase(toTitleCase(text.trim()));
 }
 
+// Normalize a code the client sends into camelCase. Unlike toCodeFromName it also splits on the
+// camel humps of the input, which is what makes it idempotent over an already normalized code:
+// toCamelCase and toCodeFromName both flatten 'pharmaceuticalForm' into 'pharmaceuticalform',
+// so resending the stored code would stop matching its own row. Here 'pharmaceuticalForm',
+// 'Pharmaceutical Form' and 'PHARMACEUTICAL_FORM' all mint 'pharmaceuticalForm'.
+// An all-caps word is left as one word on purpose: splitting 'FORM' hump by hump would mint
+// 'fORM'. Any character that is not a letter or a digit acts as a separator
+export const toCodeFromInput = (text: string): string => {
+    const words = text
+        .trim()
+        // A lower-to-upper boundary is a hump. A digit-to-letter one is not, so 'tipoEvento2'
+        // keeps its digits attached to the word they belong to
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        // The end of a run of capitals is a hump too, when a capitalized word starts right after:
+        // without this, 'tipoAMano' would fold into 'tipoAmano' and the function would stop being
+        // idempotent over the very codes it mints
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+        .split(/[^a-zA-Z0-9]+/)
+        .filter((word) => word.length > 0);
+
+    return words.map((word, index) => {
+        const lower = word.toLowerCase();
+        return index === 0 ? lower : lower.charAt(0).toUpperCase() + lower.slice(1);
+    }).join('');
+}
+
 // Convert text to snake_case
 export const toSnakeCase = (text: string): string => {
     return text.replace(/([A-Z])/g, (match) => {
