@@ -14,6 +14,19 @@
 > - En el `001` y el `004` el `code` desaparece del body y de `CreateCatalogItemInput`; uno que viaje se ignora. Un `name` que no acuñe un código de entre 1 y 100 caracteres es **400** `CATITEM_00X_CODE_NOT_DERIVABLE`, con la clave i18n `catalogItem.codeNotDerivable`.
 > - **No hay migración de datos.** Las filas ya cargadas conservan su `code` en `CONSTANT_CASE`; el criterio nuevo rige de aquí en adelante. Reimportar un fichero cargado antes de la enmienda **inserta** los ítems otra vez, ahora en camelCase, junto a los viejos.
 > - Queda resuelto el punto de §8 «unificar la normalización de `code` entre `catalogType` y `catalogItem`»: las dos tablas acuñan ahora en camelCase, `catalogType` desde su celda `code` y `catalogItem` desde su `name`.
+>
+> ---
+>
+> **Enmienda del 2026-08-20 — el `code` vuelve a viajar en el body del `001` y del `004`, y el `006` no cambia.** Posterior a la enmienda anterior y aplicada sobre ella. Acuñar el `code` del `name` en todas las puertas dejaba sin salida dos casos reales: fijar a mano el código con el que otras tablas resuelven, y renombrar un ítem sin que su código se moviera debajo. La regla nueva, idéntica en `catalogItem` y en `catalogType` y normativa en `references/CONVENTIONS.md` §Normalización:
+>
+> - `code` es **opcional** en el body del `001` y del `004`, y vuelve a `CreateCatalogItemInput` y a los validadores.
+> - Cuando viaja se normaliza con **`toCodeFromInput`**, una función nueva que parte por separadores y también por las jorobas camel. Es la única de las tres que es idempotente sobre un `code` ya normalizado: `toCamelCase` y `toCodeFromName` aplanan `pharmaceuticalForm` a `pharmaceuticalform`, así que un cliente que reenvía lo que acaba de leer renombraría la fila.
+> - En el `001`, si **no** viaja, se acuña del `name` con `toCodeFromName` — exactamente como antes de esta enmienda.
+> - En el `004` se escribe **siempre que viaja** y **nunca se acuña del `name`**: un rename ya no mueve el `code`. Un body sin `code` conserva el guardado.
+> - Un `code` recibido que no produzca entre 1 y 100 caracteres es **400** `CATITEM_00X_CODE_NOT_VALID` / `CATTYPE_00X_CODE_NOT_VALID`, con las claves i18n `catalogItem.codeNotValid` y `catalogType.codeNotValid`. El 400 del `name` sigue siendo `..._CODE_NOT_DERIVABLE`.
+> - **El `006` no cambia**: el fichero sigue sin columna `code` y el importador lo acuña del `name`. La consecuencia hay que conocerla: un ítem cuyo `code` se fijó a mano ya no se resuelve por el `code` que su `name` acuña, así que reimportarlo **inserta** en vez de actualizar. El importador es para carga inicial; el `code` a mano es para lo que se administra por el `004`.
+> - `catalogType.code`, que era obligatorio en el body del `001`, pasa a opcional con la misma caída al `name`.
+> - **No hay migración de datos.**
 
 ---
 

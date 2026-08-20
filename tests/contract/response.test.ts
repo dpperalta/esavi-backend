@@ -227,7 +227,9 @@ describe('response contract', () => {
             const response = await request(app)
                 .post('/api/catalog-types')
                 .set(authHeader('ADMIN'))
-                .send({ name: 'Missing its code' });
+                // The code is optional and falls back to the name; what the validator rejects
+                // is the missing name and the negative sortOrder
+                .send({ sortOrder: -1 });
 
             expect(response.status).toBe(400);
             expect(response.body.ok).toBe(false);

@@ -109,6 +109,8 @@
     },
     "catalogType": {
         "codeExists": "A catalog type with code {{code}} already exists",
+        "codeNotDerivable": "No code can be derived from the name {{name}}. The name must produce an identifier between 1 and 100 characters long.",
+        "codeNotValid": "The code {{code}} is not valid. It must produce an identifier between 1 and 100 characters long.",
         "notFound": "Catalog type not found. Please check the catalog type ID and try again.",
         "notFoundPlural": "One or more catalog types not found. Please check the catalog type IDs and try again.",
         "createdSuccess": "Catalog type created successfully",
@@ -132,6 +134,7 @@
     "catalogItem": {
         "codeExists": "A catalog item with code {{code}} already exists for catalog type ID {{catalogTypeId}}",
         "codeNotDerivable": "No code can be derived from the name {{name}}. The name must produce an identifier between 1 and 100 characters long.",
+        "codeNotValid": "The code {{code}} is not valid. It must produce an identifier between 1 and 100 characters long.",
         "notFound": "Catalog item not found. Please check the catalog item ID and try again.",
         "notFoundPlural": "One or more catalog items not found. Please check the catalog item IDs and try again.",
         "createdSuccess": "Catalog item created successfully",

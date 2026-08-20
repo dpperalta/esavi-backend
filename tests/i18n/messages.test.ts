@@ -150,7 +150,9 @@ describe('i18n', () => {
                 const response = await request(app)
                     .post(`/api/catalog-types?lang=${ lang }`)
                     .set(authHeader('ADMIN'))
-                    .send({ name: 'No code at all' });
+                    // The code is optional and falls back to the name; what the validator rejects
+                    // is the missing name and the negative sortOrder
+                    .send({ sortOrder: -1 });
 
                 expect(response.status).toBe(400);
                 expectResolvedMessage(response.body);

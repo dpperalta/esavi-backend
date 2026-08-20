@@ -1,5 +1,5 @@
 import { CreationAttributes, Op, Transaction } from "sequelize";
-import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromName, toTitleCase } from "../helpers";
+import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toTitleCase } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
 import {
@@ -28,30 +28,44 @@ const MAX_REPORTED_IMPORT_ERRORS = 20;
 // inserted instead of as an error
 const DRY_RUN_TYPE_ID_PREFIX = 'dry-run:';
 
-// varchar(100) of catalogItem.code against varchar(250) of catalogItem.name. Now that the code is
-// minted from the name, a legal name can mint an illegal code, and that has to end in a 400 and not
+// varchar(100) of catalogItem.code against varchar(250) of catalogItem.name. A legal name — or a
+// legal code sent by the client — can produce an illegal code, and that has to end in a 400 and not
 // in the 500 the column would raise
 const MAX_CODE_LENGTH = 100;
 
 /**
- * The code of a catalogItem, minted from its name. It is never taken from the client nor from the
- * import file: the same name has to produce the same code whichever door it comes through — the 001,
- * the 004 or the 006 — or the uniqueness of the pair would stop detecting the duplicate.
- * Two names mint nothing usable and both end in a 400: one made only of separators, which mints an
- * empty code, and one long enough for the code to overflow its own column.
+ * The code of a catalogItem. It comes from the body when the client sends one — normalized into
+ * camelCase with toCodeFromInput, which is idempotent, so resending the stored code writes the same
+ * value — and only when it is absent is it minted from the name with toCodeFromName. The import
+ * (006) has no code column and therefore always mints from the name.
+ * Either source can fail to produce a usable code: text made only of separators mints an empty one,
+ * and text long enough overflows its own column. Both end in a 400, with a message that names the
+ * source the operator actually sent.
  */
-const mintCatalogItemCode = ( name: string, operation: string, lang: string ): string => {
-    const code = toCodeFromName(name);
+const resolveCatalogItemCode = ( source: string, fromBody: boolean, operation: string, lang: string ): string => {
+    const code = fromBody ? toCodeFromInput(source) : toCodeFromName(source);
 
     if( code.length === 0 || code.length > MAX_CODE_LENGTH ) {
         throw new AppError(
-            getMessage('catalogItem.codeNotDerivable', lang, { name: name.trim() }),
+            getMessage(fromBody ? 'catalogItem.codeNotValid' : 'catalogItem.codeNotDerivable', lang, {
+                code: source.trim(),
+                name: source.trim()
+            }),
             400,
-            `CATITEM_${ operation }_CODE_NOT_DERIVABLE`
+            `CATITEM_${ operation }_CODE_NOT_${ fromBody ? 'VALID' : 'DERIVABLE' }`
         );
     }
 
     return code;
+}
+
+// The code of a body that may or may not carry one. Null means the body brought no code: the 001
+// falls back to the name and the 004 leaves the stored code untouched
+const codeFromBody = ( data: Partial<CreateCatalogItemInput>, operation: string, lang: string ): string | null => {
+    if( typeof data.code !== 'string' || data.code.trim().length === 0 ) {
+        return null;
+    }
+    return resolveCatalogItemCode(data.code, true, operation, lang);
 }
 
 // ESAVI-CATITEM-001 - Create Catalog Item Service
@@ -67,9 +81,9 @@ const createCatalogItemService = async (data: CreateCatalogItemInput, authUser: 
         throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATITEM_001_CATTYPE_NOT_FOUND');
     }
     const catalogTypeId = data.catalogTypeId;
-    // Minted from the name and not taken from the body, so it is never absent and the item never
-    // ends up with a placeholder code
-    const code = mintCatalogItemCode(data.name, '001', lang);
+    // Taken from the body when it travels there, and minted from the name only when it does not, so
+    // the item never ends up with a placeholder code
+    const code = codeFromBody(data, '001', lang) ?? resolveCatalogItemCode(data.name, false, '001', lang);
     // The code must be unique within its Catalog Type: the UNIQUE of the DDL is of the pair
     const existingItem = await CatalogItem.findOne({
         where: {
@@ -183,9 +197,11 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
         }
         targetCatalogTypeId = data.catalogTypeId;
     }
-    // The code is minted again from the name, so a renamed item changes its code with it and a body
-    // that does not bring the name keeps the stored one. A code travelling in the body is ignored
-    const targetCode = data.name ? mintCatalogItemCode(data.name, '004', lang) : catalogItem.code;
+    // The code is written exactly when it travels in the body, and it is never re-minted from a name
+    // that changed: renaming an item does not move its code, so a code chosen by hand survives the
+    // rename and whatever resolves against it keeps resolving
+    const sentCode = codeFromBody(data, '004', lang);
+    const targetCode = sentCode ?? catalogItem.code;
     // The code must be unique within the target Catalog Type, which may differ from the current one
     if( targetCode && ( targetCode !== catalogItem.code || targetCatalogTypeId !== catalogItem.catalogTypeId ) ) {
         const existingItem = await CatalogItem.findOne({
@@ -206,9 +222,9 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
     const stored = catalogItem.get({ plain: true }) as Record<string, unknown>;
     const objectToUpdate = buildDifferentialUpdate(stored, {
         catalogTypeId: targetCatalogTypeId,
-        // Both come from the same body key: the code is not a field of its own any more, so it
-        // enters the diff exactly when the name does — and reaches the UPDATE only if it changed
-        code: data.name ? targetCode : undefined,
+        // A field of its own again: it enters the diff exactly when the body carries it, and
+        // reaches the UPDATE only if it changed
+        code: sentCode ?? undefined,
         name: data.name ? toTitleCase(data.name.trim()) : undefined,
         value: data.value ? data.value.trim() : undefined,
         description: data.description ? data.description.trim() : undefined,

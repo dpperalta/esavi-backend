@@ -63,10 +63,12 @@ describe('catalogItem contract', () => {
     });
 
     /**
-     * The code is minted from the name and never sent by the client, so the same name produces the
-     * same code whichever door it comes through — the 001, the 004 or the 006.
+     * The code travels in the body when the client sends one, normalized into camelCase, and is
+     * minted from the name only when it does not. On an update it is written exactly when it
+     * travels and never re-minted from a name that changed. The import (006) has no code column, so
+     * there the code still comes from the name.
      */
-    describe('code minted from the name', () => {
+    describe('code sent in the body or minted from the name', () => {
 
         // Digits only: toTitleCase lowercases everything after the first letter of each word, so a
         // suffix carrying letters would come back mangled and the expectations would read as noise.
@@ -84,13 +86,12 @@ describe('catalogItem contract', () => {
             consoleError.mockRestore();
         });
 
-        it('mints the code in camelCase and ignores a code travelling in the body', async () => {
+        it('mints the code from the name when the body brings none', async () => {
             const created = await request(app)
                 .post('/api/catalog-items')
                 .set(authHeader('SUPERADMIN'))
                 .send({
                     catalogTypeId,
-                    code: 'OTRA_COSA',
                     name: `Pharmaceutical form ${ tag }`,
                     value: 'PF'
                 });
@@ -98,6 +99,49 @@ describe('catalogItem contract', () => {
             expect(created.status).toBe(201);
             expect(created.body.data.code).toBe(`pharmaceuticalForm${ tag }`);
             expect(created.body.data.name).toBe(`Pharmaceutical Form ${ tag }`);
+        });
+
+        it('takes the code from the body and normalizes it into camelCase', async () => {
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({
+                    catalogTypeId,
+                    code: `OTRA_COSA_${ tag }`,
+                    name: `Nombre Distinto ${ tag }`,
+                    value: 'OC'
+                });
+
+            expect(created.status).toBe(201);
+            // The code comes from its own key and not from the name, which mints another one
+            expect(created.body.data.code).toBe(`otraCosa${ tag }`);
+        });
+
+        it('leaves an already camelCase code untouched', async () => {
+            // The normalization is idempotent: resending the stored code has to write the same
+            // value, or a client echoing back what it read would rename the row
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({
+                    catalogTypeId,
+                    code: `yaEnCamelCase${ tag }`,
+                    name: `Ya En Camel Case ${ tag }`,
+                    value: 'YC'
+                });
+
+            expect(created.status).toBe(201);
+            expect(created.body.data.code).toBe(`yaEnCamelCase${ tag }`);
+        });
+
+        it('returns 400 when the code sent produces no usable identifier', async () => {
+            const response = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, code: '---', name: `Codigo Invalido ${ tag }`, value: 'X' });
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('CATITEM_001_CODE_NOT_VALID');
         });
 
         it('returns 409 for a name that mints a code already taken inside the same type', async () => {
@@ -125,7 +169,7 @@ describe('catalogItem contract', () => {
             expect(response.body.code).toBe('CATITEM_001_CODE_NOT_DERIVABLE');
         });
 
-        it('mints the code again when the name changes on an update', async () => {
+        it('keeps the code when only the name changes on an update', async () => {
             const created = await request(app)
                 .post('/api/catalog-items')
                 .set(authHeader('SUPERADMIN'))
@@ -140,7 +184,45 @@ describe('catalogItem contract', () => {
                 .send({ name: `Renamed item ${ tag } bis` });
 
             expect(updated.status).toBe(200);
-            expect(updated.body.data.code).toBe(`renamedItem${ tag }Bis`);
+            expect(updated.body.data.name).toBe(`Renamed Item ${ tag } Bis`);
+            // The rename does not move the code: whatever resolves against it keeps resolving
+            expect(updated.body.data.code).toBe(`renamedItem${ tag }`);
+        });
+
+        it('writes the code sent on an update, normalized and without reading the name', async () => {
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: `Recoded item ${ tag }`, value: 'RC' });
+
+            expect(created.status).toBe(201);
+            expect(created.body.data.code).toBe(`recodedItem${ tag }`);
+
+            const updated = await request(app)
+                .put(`/api/catalog-items/${ created.body.data.catalogItemId }`)
+                .set(authHeader('SUPERADMIN'))
+                .send({ code: `CODIGO-A-MANO-${ tag }` });
+
+            expect(updated.status).toBe(200);
+            expect(updated.body.data.code).toBe(`codigoAMano${ tag }`);
+            expect(updated.body.data.name).toBe(`Recoded Item ${ tag }`);
+        });
+
+        it('returns 409 when the code sent on an update is taken inside the same type', async () => {
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: `Colliding item ${ tag }`, value: 'CI' });
+
+            expect(created.status).toBe(201);
+
+            const response = await request(app)
+                .put(`/api/catalog-items/${ created.body.data.catalogItemId }`)
+                .set(authHeader('SUPERADMIN'))
+                .send({ code: `renamedItem${ tag }` });
+
+            expect(response.status).toBe(409);
+            expect(response.body.code).toBe('CATITEM_004_CODE_EXISTS');
         });
 
     });

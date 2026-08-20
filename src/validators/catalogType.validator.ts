@@ -13,8 +13,10 @@ export const catalogTypeListValidator = [
         .withMessage('Offset must be a non-negative integer')
 ];
 
+// code is optional: absent, it is minted from the name. A code — or a name — that produces no usable
+// identifier is a 400 of the service and not of this validator, which cannot see the rule
 export const createCatalogTypeValidator = [
-    body('code').trim().notEmpty().withMessage('Code is required').isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
+    body('code').optional().trim().notEmpty().withMessage('Code cannot be empty').isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
     body('name').trim().notEmpty().withMessage('Name is required').isLength({ max: 200 }).withMessage('Name must be at most 200 characters long'),
     body('description').optional().isString().withMessage('Description must be a string'),
     body('sortOrder').optional().isInt({ min: 0 }).withMessage('Sort Order must be a non-negative integer')
