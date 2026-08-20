@@ -146,11 +146,10 @@ const updateNotificationPregnancyComplication = async (req: Request, res: Respon
 const deleteNotificationPregnancyComplication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setNotificationPregnancyComplicationActivationService(id, req.user, req.lang, false);
+        await setNotificationPregnancyComplicationActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationPregnancyComplication.deletedSuccess', req.lang),
-            data
+            message: getMessage('notificationPregnancyComplication.deletedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-PREGCOMP-005A: Error deleting Notification Pregnancy Complication: ' + error, 'error');
@@ -167,11 +166,10 @@ const deleteNotificationPregnancyComplication = async (req: Request, res: Respon
 const activateNotificationPregnancyComplication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setNotificationPregnancyComplicationActivationService(id, req.user, req.lang, true);
+        await setNotificationPregnancyComplicationActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationPregnancyComplication.activatedSuccess', req.lang),
-            data
+            message: getMessage('notificationPregnancyComplication.activatedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-PREGCOMP-005B: Error activating Notification Pregnancy Complication: ' + error, 'error');

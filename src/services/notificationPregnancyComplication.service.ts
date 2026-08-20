@@ -14,10 +14,11 @@ import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants
 const LOCAL_SOURCE: TermSource = 'LOCAL';
 
 // Code of the catalogType that groups the pregnancy complication types. Without this check any
-// active catalogItem of the system would enter as a complication type. The three items the domain
-// handles today — congenital anomalies, fetal or neonatal complications, complications of labour —
-// are data of a particular installation and are deliberately not wired anywhere: what is validated
-// is the membership of the catalogType, never the content.
+// active catalogItem of the system would enter as a complication type. The items the domain handles
+// are data of a particular installation — they can grow, and another country may model different
+// ones — so they are deliberately named nowhere in src/: what is validated is the membership of the
+// catalogType, never the content. Wiring them as constants or as a CHECK would condemn the
+// deployment to the first catalog that was modelled.
 // catalogType codes are stored in camelCase — catalogType.service.ts:12
 const PREGNANCY_COMPLICATION_TYPE_CATALOG_CODE = 'pregnancyComplicationType';
 

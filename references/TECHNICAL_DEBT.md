@@ -63,6 +63,7 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-041](#deuda-041) | 🟠 | ✅ Seis servicios de update escriben aunque no cambie ningún dato |
 | [DEUDA-042](#deuda-042) | 🟠 | Tres endpoints rechazan con 400 la respuesta de su propio `GET` |
 | [DEUDA-043](#deuda-043) | 🟡 | `sortOrder: 0` no se puede guardar en tres servicios |
+| [DEUDA-044](#deuda-044) | 🟠 | `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla |
 
 ## Mapa de resolución
 
@@ -869,3 +870,32 @@ Un `sortOrder: 0` es falsy, así que se descarta como si no hubiera viajado. El 
 Es la primera de las cuatro precisiones de la sección 11 de [CONVENTIONS.md](./CONVENTIONS.md) incumplida: un `0` es un valor legítimo, como lo son el `false` y la cadena vacía.
 
 **Aceptación**: los tres pasan a `data.sortOrder !== undefined ? data.sortOrder : undefined`; un `PUT` con `sortOrder: 0` sobre un registro con otro orden lo guarda y añade su entrada en `appDetails`.
+
+---
+
+<a id="deuda-044"></a>
+## DEUDA-044 🟠 `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla
+
+**Archivos**: `src/services/esaviCase.service.ts`, `tests/contract/esaviCase.test.ts`
+
+Detectada el 2026-08-19 al correr `npm run check` durante la implementación del [SPEC F27](./functional/specs/27-notificationpregnancycomplication-crud.md). **No la introdujo ese spec**: se reprodujo en el commit `76a34e5`, anterior a su primera línea de código, montando un worktree sobre esa base.
+
+El servicio normaliza el campo a mayúsculas:
+
+```ts
+const normalizeOrganization = (value: string): string => value.trim().toUpperCase();
+```
+
+y el caso de contrato del propio SPEC F06 espera Title Case:
+
+```ts
+expect(data.notificationOrganization).toBe('Ministerio De Salud');
+```
+
+El resultado es `MINISTERIO DE SALUD`, así que `tests/contract/esaviCase.test.ts` falla en el test «creates a case and returns the full shape with the patient decrypted». Es el único test rojo de la suite completa.
+
+Las dos mitades entraron en el mismo spec y con días de diferencia —el servicio en `9485318`, el test en `e479788`—, de modo que la divergencia nació dentro de F06 y nadie la vio porque el test se escribió después.
+
+Hay que decidir cuál de los dos manda. La sección de Normalización de [CONVENTIONS.md](./CONVENTIONS.md) reserva `toConstantCase` para los campos `code` y `toTitleCase` para los `name`, y el nombre de una organización es un nombre propio, no un código: el canon apunta a `toTitleCase`, que es además lo que el test ya afirma. `countryIsoCode` sí es correcto en mayúsculas — un ISO 3166-1 alfa-2 lo es por definición — y su `normalizeCountryIsoCode` se queda como está.
+
+**Aceptación**: `normalizeOrganization` pasa a `toTitleCase`, o el caso de contrato se corrige a mayúsculas si el dominio prefiere ese criterio. `npm run check` sale en 0 sin tocar ningún otro archivo.
