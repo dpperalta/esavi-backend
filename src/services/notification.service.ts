@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationDiluent, NotificationEvent, NotificationMedication, NotificationPregnancy, NotificationVaccine, SevereNotification } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationDiluent, NotificationEvent, NotificationMedication, NotificationPregnancy, NotificationPregnancyComplication, NotificationVaccine, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -823,9 +823,8 @@ const dumpNotificationDiluentsBeforeCascade = async (
 // sisters. A notification with no pregnancy leaves no line at all.
 //
 // What this line does NOT dump is what hangs one level further down: purging the header destroys the
-// pregnancy, and the pregnancy drags its own notificationPregnancyComplication rows with it. That
-// table has no model until its own spec, and dumping it from here would be a third hop this cascade
-// has never walked
+// pregnancy, and the pregnancy drags its own notificationPregnancyComplication rows with it. That is
+// the third hop, and it has its own dump right below since SPEC F27 gave that table a model
 const dumpNotificationPregnancyBeforeCascade = async (
     notificationId: string,
     userId: string,
@@ -855,6 +854,57 @@ const dumpNotificationPregnancyBeforeCascade = async (
         );
     } catch (error) {
         esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged notificationPregnancy: ${ error }`, 'error');
+    }
+}
+
+// The dump of the eighth and last satellite, and the deepest one this cascade reaches: purging the
+// header drags it through notification -> notificationPregnancy -> notificationPregnancyComplication.
+// It is the second dump of a third hop — the first was the diluents' second hop — and it is walked
+// with the hasOne of SPEC F25 plus the hasMany of SPEC F27, without raw SQL.
+//
+// Without this line, purging a notification destroyed complications in a third hop leaving no trace
+// anywhere, which is exactly what F22 avoided for the vaccines and F24 for the diluents.
+//
+// One single warn line with the count and the list of complicationId. A notification with a pregnancy
+// that carries no complications leaves no line at all, and neither does one with no pregnancy
+const dumpNotificationPregnancyComplicationsBeforeCascade = async (
+    notificationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const notification = await Notification.findOne({
+            where: { notificationId },
+            attributes: ['notificationId'],
+            include: [{
+                model: NotificationPregnancy,
+                as: 'pregnancy',
+                attributes: ['pregnancyId'],
+                required: true,
+                include: [{
+                    model: NotificationPregnancyComplication,
+                    as: 'complications',
+                    attributes: ['complicationId'],
+                    required: true
+                }]
+            }],
+            paranoid: false,
+            transaction
+        });
+        const notificationPregnancy = notification?.get('pregnancy') as NotificationPregnancy | undefined;
+        const complicationIds = ( ( notificationPregnancy?.get('complications') as NotificationPregnancyComplication[] | undefined ) ?? [] )
+            .map(( complication ) => complication.complicationId);
+        if( complicationIds.length === 0 ) {
+            return;
+        }
+        esaviLog(
+            `ESAVI-NOTIFCN-005C: ${ complicationIds.length } notificationPregnancyComplication row(s) dragged by ` +
+            `ON DELETE CASCADE in the third hop and purged by ${ userId }. complicationId: ` +
+            `${ complicationIds.join(', ') }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged notificationPregnancyComplications: ${ error }`, 'error');
     }
 }
 
@@ -889,6 +939,7 @@ const purgeNotificationService = async (id: string, authUser: AuthUser | undefin
             await dumpNotificationVaccinesBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationDiluentsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationPregnancyBeforeCascade(id, authUser?.userId || 'undefined', transaction);
+            await dumpNotificationPregnancyComplicationsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
         }
 
         await purgeEntityService({
