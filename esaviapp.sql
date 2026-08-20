@@ -1583,9 +1583,12 @@ CALL "upsertCatalogItem"('userStatus', 'User status', 'ACTIVE', 'Active', 'ACTIV
 CALL "upsertCatalogItem"('userStatus', 'User status', 'INACTIVE', 'Inactive', 'INACTIVE', 2);
 CALL "upsertCatalogItem"('userStatus', 'User status', 'LOCKED', 'Locked', 'LOCKED', 3);
 CALL "upsertCatalogItem"('userStatus', 'User status', 'PENDING_ACTIVATION', 'Pending activation', 'PENDING_ACTIVATION', 4);
-CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', 'NOT_STARTED', 'Not started', 'NOT_STARTED', 1);
-CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', 'IN_PROGRESS', 'In progress', 'IN_PROGRESS', 2);
-CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', 'CLOSED', 'Closed', 'CLOSED', 3);
+CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '0', 'Desconocido', '0', 0);
+CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '1', 'En Recuperación/resolviendo', '1', 1);
+CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '2', 'Recuperado/resuelto', '2', 2);
+CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '3', 'No Recuperado/no Resuelto', '3', 3);
+CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '4', 'Recuperado/resuelto Con Secuelas', '4', 4);
+CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '5', 'Fallecido', '5', 5);
 CALL "upsertCatalogItem"('outcome', 'Outcome', 'RECOVERED', 'Recovered', 'RECOVERED', 1);
 CALL "upsertCatalogItem"('outcome', 'Outcome', 'RECOVERING', 'Recovering', 'RECOVERING', 2);
 CALL "upsertCatalogItem"('outcome', 'Outcome', 'NOT_RECOVERED', 'Not recovered', 'NOT_RECOVERED', 3);

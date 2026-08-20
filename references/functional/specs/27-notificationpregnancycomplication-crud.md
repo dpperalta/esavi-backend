@@ -1,6 +1,6 @@
 # SPEC F27 — CRUD de `notificationPregnancyComplication`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F25 (`notificationPregnancy` — dependencia dura de modelo: es el padre de la FK, la fuente de la visibilidad heredada y quien dejó abierta la pregunta que §6 responde)**, **SPEC F15 (`diagnosticTerm` — dependencia dura de implementación: aporta `resolveDiagnosticTermService`)**, SPEC F16 (`notificationEvent` — precedente de la resolución contra el maestro y del hallazgo del `005B`), SPEC F24 (`notificationDiluent` — precedente de la nieta y de la visibilidad heredada en cadena), SPEC F10 (`notification` — la cascada de su `005C` gana una línea), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa, y gobierna cuándo se re-dispara la resolución contra el maestro)
 > **Fecha:** 2026-08-19
 > **Objetivo:** Dar de alta `notificationPregnancyComplication` —las complicaciones de la sección de embarazo— como la **octava y última** tabla satélite de `notification`, cerrando el mapa que F10 abrió.
