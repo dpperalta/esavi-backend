@@ -291,6 +291,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
 | healthFacility | `HFAC` |
+| investigation | `INVESTGN` |
 | nonSevereNotification | `NSEVNOT` |
 | notification | `NOTIFCN` |
 | notificationDiluent | `NOTIFDIL` |
