@@ -15,6 +15,7 @@ import { initNotificationMedicationAssociations } from './notificationMedication
 import { initNotificationVaccineAssociations } from './notificationVaccine.associations';
 import { initNotificationDiluentAssociations } from './notificationDiluent.associations';
 import { initNotificationPregnancyAssociations } from './notificationPregnancy.associations';
+import { initNotificationPregnancyComplicationAssociations } from './notificationPregnancyComplication.associations';
 import { initSystemConfigAssociations } from './systemConfig.associations';
 
 export const initAssociations = (): void => {
@@ -35,5 +36,6 @@ export const initAssociations = (): void => {
     initNotificationVaccineAssociations();
     initNotificationDiluentAssociations();
     initNotificationPregnancyAssociations();
+    initNotificationPregnancyComplicationAssociations();
     initSystemConfigAssociations();
 }
