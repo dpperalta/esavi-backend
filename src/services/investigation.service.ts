@@ -1,6 +1,8 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation } from '../models';
 import { AppError, getMessage } from '../helpers';
-import { AppDetails, AuthUser, CreateInvestigationInput } from '../types';
+import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import {
     DEFAULT_INVESTIGATION_STATUS_CODE,
     INVESTIGATION_STATUS_CATALOG_CODE,
@@ -60,6 +62,21 @@ const DETAIL_EXCLUDE = {
         'vaccinationGeoLocationId'
     ]
 };
+
+// The reduced shape of the listings drops notes — free text with no length limit, which would
+// make the response size unpredictable — appDetails and the three timestamps. The two coordinates
+// do travel: they are what lets the client paint the listing on a map without opening every file
+const LIST_ATTRIBUTES = [
+    'investigationId',
+    'hospitalizationDate',
+    'investigationStartDate',
+    'vaccinationLatitude',
+    'vaccinationLongitude',
+    'isActive'
+];
+
+// Newest first, the same order as classification, notifier and esaviCase
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
 
 const toInvestigationResponse = (investigation: Investigation) => {
     const plain = investigation.toJSON() as Record<string, unknown>;
@@ -255,6 +272,59 @@ const createInvestigationService = async (data: CreateInvestigationInput, authUs
     return createdInvestigation ? toInvestigationResponse(createdInvestigation) : null;
 }
 
+// The four filters are accumulated with AND and compared by equality, and each one is optional.
+// A filter pointing at a row that does not exist yields an empty page, never a 404: searching for
+// something absent is an empty search, not a missing resource
+const buildListWhere = (filters: InvestigationListFilters = {}): WhereOptions => {
+    const where: Record<string, unknown> = {};
+
+    if( filters.caseId ) where.caseId = filters.caseId;
+    if( filters.statusItemId ) where.statusItemId = filters.statusItemId;
+    if( filters.vaccinationHealthFacilityId ) where.vaccinationHealthFacilityId = filters.vaccinationHealthFacilityId;
+    if( filters.vaccinationGeoLocationId ) where.vaccinationGeoLocationId = filters.vaccinationGeoLocationId;
+
+    return where as WhereOptions;
+}
+
+// Get Active Investigations Service
+// Code: ESAVI-INVESTGN-002A
+// The where filters by the isActive of the investigation, not by the one of its case: with the
+// cascade of ESAVI-CASE-005A the investigation of a retired case is already inactive, so the
+// result is the same without conditioning the include with a required: true
+const getInvestigationsService = async (
+    filters: InvestigationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    return await Investigation.findAndCountAll({
+        where: { ...buildListWhere(filters), isActive: true },
+        attributes: LIST_ATTRIBUTES,
+        include: DETAIL_INCLUDES,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
+// Get All Investigations Service - For Admin
+// Code: ESAVI-INVESTGN-002B
+const getAllInvestigationsService = async (
+    filters: InvestigationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    return await Investigation.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: LIST_ATTRIBUTES,
+        include: DETAIL_INCLUDES,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
 export {
-    createInvestigationService
+    createInvestigationService,
+    getInvestigationsService,
+    getAllInvestigationsService
 }
