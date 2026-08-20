@@ -5,6 +5,7 @@ import { AppError, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyComplicationInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -136,6 +137,43 @@ const findValidPregnancy = async (pregnancyId: string, op: string, lang: string)
         );
     }
     return pregnancy;
+}
+
+// The same check as findValidPregnancy, relaxed by canViewInactive: the inherited visibility
+// applied to the listings, where the parent is not the target of the write but the gate to the
+// collection. A retired pregnancy — or one whose notification was retired — answers 404 for USER
+// and ADMIN, and comes back for whoever may see inactive rows, today SUPERADMIN.
+//
+// The two levels are checked here too. Settling for the pregnancy alone would be cheaper by one
+// join and would leave visible the complications of a notification that was withdrawn whole,
+// breaking the transitivity of the rule exactly where the graph gets deep.
+//
+// A retired pregnancy answers 404 instead of an empty page, because an empty page would say "this
+// pregnancy has no complications" to somebody who is simply not allowed to see them
+const assertPregnancyIsVisible = async (
+    pregnancyId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const pregnancy = await NotificationPregnancy.findOne({
+        where: canViewInactive ? { pregnancyId } : { pregnancyId, isActive: true },
+        attributes: ['pregnancyId'],
+        include: [{
+            model: Notification,
+            as: 'notification',
+            attributes: ['notificationId'],
+            required: true,
+            where: canViewInactive ? {} : { isActive: true }
+        }]
+    });
+    if( !pregnancy ) {
+        throw new AppError(
+            getMessage('notificationPregnancyComplication.pregnancyNotFound', lang),
+            404,
+            `PREGCOMP_${ op }_PREGNANCY_NOT_FOUND`
+        );
+    }
 }
 
 // The free texts are normalized on write with trim, and a text that is blank after trimming is no
@@ -401,6 +439,78 @@ const createNotificationPregnancyComplicationService = async (
     return complication ? toNotificationPregnancyComplicationResponse(complication) : null;
 }
 
+// Get Active Notification Pregnancy Complications By Pregnancy Service
+// Code: ESAVI-PREGCOMP-002A
+// The listing is entered by the foreign key and never by /: a notified complication does not exist
+// without its pregnancy, and a global listing has no reader. It is not entered by the notification
+// or by the case either — those would add a hop the client has already walked, since whoever
+// reaches the complications got the pregnancyId from ESAVI-NOTIFPRG-006.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// complicationTypeItemId, diagnosticTermId or text — those are out of the scope of this spec
+const getNotificationPregnancyComplicationsByPregnancyService = async (
+    pregnancyId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertPregnancyIsVisible(pregnancyId, '002A', lang, canViewInactive);
+
+    const complications = await NotificationPregnancyComplication.findAndCountAll({
+        where: { pregnancyId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE, COMPLICATION_TYPE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: complications.count,
+        rows: complications.rows.map(toNotificationPregnancyComplicationResponse)
+    };
+}
+
+// Get All Notification Pregnancy Complications By Pregnancy Service - For Admin
+// Code: ESAVI-PREGCOMP-002B
+// The same listing as 002A without the isActive filter: it is the only door to a complication that
+// was retired, and therefore the entry point of whoever is going to reactivate or purge it.
+// paranoid: false is declarative here — the model is not paranoid, so deletedAt is a plain column
+// and no scope would hide the sealed rows — and it is written for the same reason
+// entityActivation.service.ts:21 writes it: the intent is to see everything, including what a 005A
+// sealed. Those are exactly the rows IX_notificationPregnancyComplication_pregnancy exists for: the
+// partial unique index of esaviapp.sql:1346-1347 leaves them out.
+//
+// The parent guard still applies: an ADMIN sees inactive complications, not the complications of an
+// inactive pregnancy
+const getAllNotificationPregnancyComplicationsByPregnancyService = async (
+    pregnancyId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertPregnancyIsVisible(pregnancyId, '002B', lang, canViewInactive);
+
+    const complications = await NotificationPregnancyComplication.findAndCountAll({
+        where: { pregnancyId },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE, COMPLICATION_TYPE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: complications.count,
+        rows: complications.rows.map(toNotificationPregnancyComplicationResponse)
+    };
+}
+
 export {
-    createNotificationPregnancyComplicationService
+    createNotificationPregnancyComplicationService,
+    getAllNotificationPregnancyComplicationsByPregnancyService,
+    getNotificationPregnancyComplicationsByPregnancyService
 };

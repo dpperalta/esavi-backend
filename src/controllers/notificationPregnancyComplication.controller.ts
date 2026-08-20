@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
 import {
-    createNotificationPregnancyComplicationService
+    createNotificationPregnancyComplicationService,
+    getAllNotificationPregnancyComplicationsByPregnancyService,
+    getNotificationPregnancyComplicationsByPregnancyService
 } from '../services/notificationPregnancyComplication.service';
 
 // Create Notification Pregnancy Complication Controller
@@ -24,6 +27,66 @@ const createNotificationPregnancyComplication = async (req: Request, res: Respon
     }
 }
 
+// Get Active Notification Pregnancy Complications By Pregnancy Controller
+// Code: ESAVI-PREGCOMP-002A
+const getNotificationPregnancyComplicationsByPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getNotificationPregnancyComplicationsByPregnancyService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancyComplication.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PREGCOMP-002A: Error fetching Notification Pregnancy Complications by Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancyComplication.getFailed', req.lang), 500, 'PREGCOMP_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Notification Pregnancy Complications By Pregnancy Controller - For Admin
+// Code: ESAVI-PREGCOMP-002B
+const getAllNotificationPregnancyComplicationsByPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllNotificationPregnancyComplicationsByPregnancyService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancyComplication.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PREGCOMP-002B: Error fetching all Notification Pregnancy Complications by Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancyComplication.getFailed', req.lang), 500, 'PREGCOMP_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createNotificationPregnancyComplication
+    createNotificationPregnancyComplication,
+    getAllNotificationPregnancyComplicationsByPregnancy,
+    getNotificationPregnancyComplicationsByPregnancy
 };
