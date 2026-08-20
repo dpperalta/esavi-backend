@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateNotificationPregnancyComplication,
     createNotificationPregnancyComplication,
     deleteNotificationPregnancyComplication,
     getAllNotificationPregnancyComplicationsByPregnancy,
@@ -17,7 +18,7 @@ import {
     updateNotificationPregnancyComplicationValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -43,6 +44,11 @@ router.get('/admin/pregnancy/:id', tokenValidation, validateUserRole(ADMIN), ...
 // The :id is the pregnancyId, not a complication id: the listing is entered by the foreign key.
 // Declared after /admin/pregnancy/:id, which is the more specific literal path
 router.get('/pregnancy/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationPregnancyIdValidator, ...notificationPregnancyComplicationListValidator, validateFields, getNotificationPregnancyComplicationsByPregnancy);
+
+// Activate Notification Pregnancy Complication - For SuperAdmin
+// Code: ESAVI-PREGCOMP-005B
+// Declared with the literal paths, before /:id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationPregnancyComplicationIdValidator, validateFields, activateNotificationPregnancyComplication);
 
 // Get Notification Pregnancy Complication by ID
 // Code: ESAVI-PREGCOMP-003

@@ -161,7 +161,29 @@ const deleteNotificationPregnancyComplication = async (req: Request, res: Respon
     }
 }
 
+// Activate Notification Pregnancy Complication Controller - For SuperAdmin
+// Code: ESAVI-PREGCOMP-005B
+const activateNotificationPregnancyComplication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setNotificationPregnancyComplicationActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancyComplication.activatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PREGCOMP-005B: Error activating Notification Pregnancy Complication: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancyComplication.activatedFailed', req.lang), 500, 'PREGCOMP_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
+    activateNotificationPregnancyComplication,
     createNotificationPregnancyComplication,
     deleteNotificationPregnancyComplication,
     getAllNotificationPregnancyComplicationsByPregnancy,
