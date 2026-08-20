@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateInvestigation,
     createInvestigation,
+    deleteInvestigation,
     getAllInvestigations,
     getInvestigationByCaseId,
     getInvestigationById,
@@ -17,7 +19,7 @@ import {
     updateInvestigationValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -35,6 +37,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationListVal
 // Code: ESAVI-INVESTGN-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationListValidator, validateFields, getAllInvestigations);
 
+// Activate Investigation - For SuperAdmin
+// Code: ESAVI-INVESTGN-005B
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationIdValidator, validateFields, activateInvestigation);
+
 // Get Investigation by Case
 // Code: ESAVI-INVESTGN-006
 // The real query of the domain, and the only non-canonical operation of the entity. Declared
@@ -50,5 +56,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationIdVa
 // Code: ESAVI-INVESTGN-004
 // USER for the same reason as 001: completing the investigation is part of the same clinical flow
 router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationIdValidator, ...updateInvestigationValidator, validateFields, updateInvestigation);
+
+// Soft delete Investigation
+// Code: ESAVI-INVESTGN-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...investigationIdValidator, validateFields, deleteInvestigation);
 
 export default router;

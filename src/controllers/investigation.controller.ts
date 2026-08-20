@@ -7,6 +7,7 @@ import {
     getInvestigationByCaseIdService,
     getInvestigationByIdService,
     getInvestigationsService,
+    setInvestigationActivationService,
     updateInvestigationService
 } from '../services/investigation.service';
 
@@ -154,11 +155,53 @@ const updateInvestigation = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+// Soft delete Investigation Controller
+// Code: ESAVI-INVESTGN-005A
+const deleteInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setInvestigationActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigation.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVESTGN-005A: Error deleting Investigation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigation.deletedFailed', req.lang), 500, 'INVESTGN_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Investigation Controller - For SuperAdmin
+// Code: ESAVI-INVESTGN-005B
+const activateInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setInvestigationActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigation.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVESTGN-005B: Error activating Investigation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigation.activatedFailed', req.lang), 500, 'INVESTGN_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createInvestigation,
     getInvestigations,
     getAllInvestigations,
     getInvestigationById,
     getInvestigationByCaseId,
-    updateInvestigation
+    updateInvestigation,
+    deleteInvestigation,
+    activateInvestigation
 }

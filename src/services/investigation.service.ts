@@ -1,4 +1,5 @@
 import { WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
@@ -8,6 +9,7 @@ import {
     INVESTIGATION_STATUS_CATALOG_CODE,
     VACCINATION_SITE_CATALOG_CODE
 } from '../constants/investigation.constants';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 const CASE_INCLUDE = {
     model: EsaviCase,
@@ -456,11 +458,55 @@ const updateInvestigationService = async (
     return updatedInvestigation ? toInvestigationResponse(updatedInvestigation) : null;
 }
 
+// Setting Investigation Active/Inactive Service
+// Code: ESAVI-INVESTGN-005A / ESAVI-INVESTGN-005B
+// It does NOT go through buildDifferentialUpdate, and that is deliberate: these are writes with an
+// intention of their own. They record the act of retiring or returning the row even when no data
+// field changes, and that record in appDetails is precisely what is worth keeping.
+// Reactivating does NOT require the case to be active, for the same reason as in notifier,
+// classification and notification: the cascade only goes down, and whoever reactivates is
+// SUPERADMIN. There can be no conflict with UQ_investigation_case either, because the caseId was
+// never released — only 005C releases it
+const setInvestigationActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // The where filters by the primary key only: the generic service is the one that tells
+        // 'does not exist' (404) from 'already in that state' (409)
+        await setEntityActiveStatusService({
+            model: Investigation,
+            where: { investigationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('investigation.notFound', lang),
+            notFoundCode: `INVESTGN_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`investigation.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `INVESTGN_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-INVESTGN-${ op }`,
+                detail: `Investigation ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationService,
     getInvestigationsService,
     getAllInvestigationsService,
     getInvestigationByIdService,
     getInvestigationByCaseIdService,
-    updateInvestigationService
+    updateInvestigationService,
+    setInvestigationActivationService
 }
