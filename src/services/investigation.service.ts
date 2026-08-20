@@ -323,8 +323,19 @@ const getAllInvestigationsService = async (
     });
 }
 
+// Get Investigation By ID Service
+// Code: ESAVI-INVESTGN-003
+const getInvestigationByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const investigation = await findInvestigationWithRelations(id, includeInactive);
+    if( !investigation ) {
+        throw new AppError(getMessage('investigation.notFound', lang), 404, 'INVESTGN_003_NOT_FOUND');
+    }
+    return toInvestigationResponse(investigation);
+}
+
 export {
     createInvestigationService,
     getInvestigationsService,
-    getAllInvestigationsService
+    getAllInvestigationsService,
+    getInvestigationByIdService
 }

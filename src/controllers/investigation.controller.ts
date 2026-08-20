@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationListFilters } from '../types';
 import {
     createInvestigationService,
     getAllInvestigationsService,
+    getInvestigationByIdService,
     getInvestigationsService
 } from '../services/investigation.service';
 
@@ -80,8 +81,34 @@ const getAllInvestigations = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+// Get Investigation by ID Controller
+// Code: ESAVI-INVESTGN-003
+const getInvestigationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigation.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVESTGN-003: Error fetching Investigation by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigation.getFailed', req.lang), 500, 'INVESTGN_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigation,
     getInvestigations,
-    getAllInvestigations
+    getAllInvestigations,
+    getInvestigationById
 }

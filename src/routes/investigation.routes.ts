@@ -4,9 +4,14 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigation,
     getAllInvestigations,
+    getInvestigationById,
     getInvestigations
 } from '../controllers/investigation.controller';
-import { createInvestigationValidator, investigationListValidator } from '../validators';
+import {
+    createInvestigationValidator,
+    investigationIdValidator,
+    investigationListValidator
+} from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -25,5 +30,10 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationListVal
 // Get All Investigations - For Admin
 // Code: ESAVI-INVESTGN-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationListValidator, validateFields, getAllInvestigations);
+
+// Get Investigation by ID
+// Code: ESAVI-INVESTGN-003
+// Declared after the literal paths so Express does not capture 'admin' as an :id
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationIdValidator, validateFields, getInvestigationById);
 
 export default router;
