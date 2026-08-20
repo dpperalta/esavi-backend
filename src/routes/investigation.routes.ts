@@ -6,13 +6,15 @@ import {
     getAllInvestigations,
     getInvestigationByCaseId,
     getInvestigationById,
-    getInvestigations
+    getInvestigations,
+    updateInvestigation
 } from '../controllers/investigation.controller';
 import {
     createInvestigationValidator,
     investigationCaseIdValidator,
     investigationIdValidator,
-    investigationListValidator
+    investigationListValidator,
+    updateInvestigationValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -43,5 +45,10 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // Code: ESAVI-INVESTGN-003
 // Declared after the literal paths so Express does not capture 'admin' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationIdValidator, validateFields, getInvestigationById);
+
+// Update Investigation
+// Code: ESAVI-INVESTGN-004
+// USER for the same reason as 001: completing the investigation is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationIdValidator, ...updateInvestigationValidator, validateFields, updateInvestigation);
 
 export default router;

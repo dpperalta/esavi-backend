@@ -6,7 +6,8 @@ import {
     getAllInvestigationsService,
     getInvestigationByCaseIdService,
     getInvestigationByIdService,
-    getInvestigationsService
+    getInvestigationsService,
+    updateInvestigationService
 } from '../services/investigation.service';
 
 // The four query filters of 002A and 002B. Only what actually arrives travels to the service, so
@@ -132,10 +133,32 @@ const getInvestigationByCaseId = async (req: Request, res: Response, next: NextF
     }
 }
 
+// Update Investigation Controller
+// Code: ESAVI-INVESTGN-004
+const updateInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationService(id.toString().trim(), req.body, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigation.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVESTGN-004: Error updating Investigation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigation.updatedFailed', req.lang), 500, 'INVESTGN_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigation,
     getInvestigations,
     getAllInvestigations,
     getInvestigationById,
-    getInvestigationByCaseId
+    getInvestigationByCaseId,
+    updateInvestigation
 }

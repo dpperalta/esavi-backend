@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import {
@@ -361,10 +361,106 @@ const getInvestigationByCaseIdService = async (caseId: string, lang: string, inc
     return toInvestigationResponse(investigation);
 }
 
+// Update Investigation Service
+// Code: ESAVI-INVESTGN-004
+// All the data columns of the table are nullable, so this is the main operation of the entity and
+// not an accessory: an investigation is opened almost empty and filled in over time. `caseId` is
+// ignored in silence, without a 400: an investigation is not moved between cases, because its
+// fourteen future satellites hang from investigationId and the move would leave the clinical
+// detail under another patient
+const updateInvestigationService = async (
+    id: string,
+    data: Partial<CreateInvestigationInput>,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const investigation = await Investigation.findByPk(id);
+    if( !investigation ) {
+        throw new AppError(getMessage('investigation.notFound', lang), 404, 'INVESTGN_004_NOT_FOUND');
+    }
+
+    // Resolved and validated before the diff and independently of it: a foreign key arriving with
+    // a UUID is checked even when it matches what is stored.
+    // The status is resolved only when the key travels, which is where this operation departs from
+    // the letter of the spec and keeps its acceptance criteria: the response of the GET carries the
+    // resolved `status` object, never the raw statusItemId, so a client resending that response
+    // whole — the normal use of a form — sends no statusItemId at all. Resolving it there anyway
+    // would fall back to the item '0' and silently downgrade the status of every investigation on
+    // every save. An absent key keeps what is stored; an explicit null still resolves to '0', so
+    // the column is never left empty
+    const statusItemId = data.statusItemId !== undefined
+        ? await resolveStatusItemId(data.statusItemId, '004', lang)
+        : undefined;
+    await assertOptionalForeignKeys(data, '004', lang);
+
+    // Differential update: only what really changed reaches the UPDATE. Resending whole the
+    // record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The whole row, without narrowed attributes: a column left out reads back as undefined and
+    // every comparison against undefined counts as a change
+    const stored = investigation.get({ plain: true }) as Record<string, unknown>;
+
+    // No field goes under an `if( data.x )`: that would silently discard the 0 of a coordinate
+    // and the empty string of notes, and would leave the nullable fields with no way to be
+    // cleared. Every candidate is compared against undefined, statusItemId included
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        statusItemId,
+        vaccinationSiteItemId: data.vaccinationSiteItemId !== undefined
+            ? ( data.vaccinationSiteItemId ?? null ) : undefined,
+        vaccinationHealthFacilityId: data.vaccinationHealthFacilityId !== undefined
+            ? ( data.vaccinationHealthFacilityId ?? null ) : undefined,
+        vaccinationGeoLocationId: data.vaccinationGeoLocationId !== undefined
+            ? ( data.vaccinationGeoLocationId ?? null ) : undefined,
+        // Written as a plain YYYY-MM-DD string, which is what a DATEONLY column reads back as
+        hospitalizationDate: data.hospitalizationDate !== undefined
+            ? ( data.hospitalizationDate ? String(data.hospitalizationDate).slice(0, 10) : null )
+            : undefined,
+        investigationStartDate: data.investigationStartDate !== undefined
+            ? ( data.investigationStartDate ? String(data.investigationStartDate).slice(0, 10) : null )
+            : undefined,
+        // DECIMAL: pg reads them back as strings and the body sends numbers. The numeric rule of
+        // the helper resolves it, so resending the same coordinate is not a change
+        vaccinationLatitude: data.vaccinationLatitude !== undefined
+            ? ( data.vaccinationLatitude ?? null ) : undefined,
+        vaccinationLongitude: data.vaccinationLongitude !== undefined
+            ? ( data.vaccinationLongitude ?? null ) : undefined,
+        notes: data.notes !== undefined ? ( data.notes ? data.notes.trim() : null ) : undefined
+    });
+
+    // Nothing changed: no UPDATE, no updatedAt, no appDetails entry and no sysDetails event
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationWithRelations(id, true);
+        return unchanged ? toInvestigationResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the
+    // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    const currentAppDetails = Array.isArray(investigation.appDetails) ? investigation.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVESTGN-004',
+        detail: 'Investigation updated by service'
+    };
+    await investigation.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updatedInvestigation = await findInvestigationWithRelations(id, true);
+    return updatedInvestigation ? toInvestigationResponse(updatedInvestigation) : null;
+}
+
 export {
     createInvestigationService,
     getInvestigationsService,
     getAllInvestigationsService,
     getInvestigationByIdService,
-    getInvestigationByCaseIdService
+    getInvestigationByCaseIdService,
+    updateInvestigationService
 }
