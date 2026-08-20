@@ -8,6 +8,7 @@ import {
     getAllNotificationPregnancyComplicationsByPregnancy,
     getNotificationPregnancyComplicationById,
     getNotificationPregnancyComplicationsByPregnancy,
+    purgeNotificationPregnancyComplication,
     updateNotificationPregnancyComplication
 } from '../controllers/notificationPregnancyComplication.controller';
 import {
@@ -44,6 +45,11 @@ router.get('/admin/pregnancy/:id', tokenValidation, validateUserRole(ADMIN), ...
 // The :id is the pregnancyId, not a complication id: the listing is entered by the foreign key.
 // Declared after /admin/pregnancy/:id, which is the more specific literal path
 router.get('/pregnancy/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationPregnancyIdValidator, ...notificationPregnancyComplicationListValidator, validateFields, getNotificationPregnancyComplicationsByPregnancy);
+
+// Purge Notification Pregnancy Complication - Physical delete, for SuperAdmin
+// Code: ESAVI-PREGCOMP-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationPregnancyComplicationIdValidator, validateFields, purgeNotificationPregnancyComplication);
 
 // Activate Notification Pregnancy Complication - For SuperAdmin
 // Code: ESAVI-PREGCOMP-005B

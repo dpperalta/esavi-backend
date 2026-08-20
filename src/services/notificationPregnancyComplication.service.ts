@@ -4,6 +4,7 @@ import { CatalogItem, CatalogType, DiagnosticTerm, Notification, NotificationPre
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyComplicationInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -843,11 +844,54 @@ const setNotificationPregnancyComplicationActivationService = async (
     }
 }
 
+// Purging Notification Pregnancy Complication Service - For SuperAdmin
+// Code: ESAVI-PREGCOMP-005C
+// notificationPregnancyComplication is outside the preventPhysicalDelete loop of
+// esaviapp.sql:1367-1370, so the row can really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification: its canonical guard — the row must have
+// been retired with a 005A first, 409 otherwise — applies over the row itself. The state of the
+// pregnancy and of the notification is deliberately not checked.
+//
+// And here is the difference with the 005C of its parent: this table is a leaf of the graph.
+// Nothing references complicationId, so destroying a row drags no other one, there is no cascade to
+// count and no ids to dump. The two foreign keys it cites are ON DELETE RESTRICT in the other
+// direction — a complication keeps a term and a catalog item from being physically deleted, never
+// the other way round — and both of those tables are in preventPhysicalDelete anyway.
+//
+// No appDetails entry either: the row is destroyed in the same transaction, which is the absence
+// CONVENTIONS.md §6 declares legitimate
+const purgeNotificationPregnancyComplicationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: NotificationPregnancyComplication,
+            where: { complicationId: id },
+            transaction,
+            operationCode: 'ESAVI-PREGCOMP-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('notificationPregnancyComplication.notFound', lang),
+            notFoundCode: 'PREGCOMP_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('notificationPregnancyComplication.stillActive', lang, { id }),
+            stillActiveCode: 'PREGCOMP_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationPregnancyComplicationService,
     getAllNotificationPregnancyComplicationsByPregnancyService,
     getNotificationPregnancyComplicationByIdService,
     getNotificationPregnancyComplicationsByPregnancyService,
+    purgeNotificationPregnancyComplicationService,
     setNotificationPregnancyComplicationActivationService,
     updateNotificationPregnancyComplicationService
 };

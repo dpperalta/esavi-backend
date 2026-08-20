@@ -6,6 +6,7 @@ import {
     getAllNotificationPregnancyComplicationsByPregnancyService,
     getNotificationPregnancyComplicationByIdService,
     getNotificationPregnancyComplicationsByPregnancyService,
+    purgeNotificationPregnancyComplicationService,
     setNotificationPregnancyComplicationActivationService,
     updateNotificationPregnancyComplicationService
 } from '../services/notificationPregnancyComplication.service';
@@ -182,6 +183,26 @@ const activateNotificationPregnancyComplication = async (req: Request, res: Resp
     }
 }
 
+// Purge Notification Pregnancy Complication Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-PREGCOMP-005C
+const purgeNotificationPregnancyComplication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationPregnancyComplicationService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancyComplication.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PREGCOMP-005C: Error purging Notification Pregnancy Complication: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancyComplication.purgeFailed', req.lang), 500, 'PREGCOMP_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     activateNotificationPregnancyComplication,
     createNotificationPregnancyComplication,
@@ -189,5 +210,6 @@ export {
     getAllNotificationPregnancyComplicationsByPregnancy,
     getNotificationPregnancyComplicationById,
     getNotificationPregnancyComplicationsByPregnancy,
+    purgeNotificationPregnancyComplication,
     updateNotificationPregnancyComplication
 };
