@@ -1,8 +1,14 @@
-import { InferAttributes } from 'sequelize';
+import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, DiagnosticTerm, Notification, NotificationPregnancy, NotificationPregnancyComplication } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, getMessage, toConstantCase } from '../helpers';
+import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyComplicationInput } from '../types';
+import { TermSource } from '../constants/enums.constants';
+
+// The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
+// client cannot coin a MedDRA or WHODrug term by typing one into a form
+const LOCAL_SOURCE: TermSource = 'LOCAL';
 
 // Code of the catalogType that groups the pregnancy complication types. Without this check any
 // active catalogItem of the system would enter as a complication type. The three items the domain
@@ -30,7 +36,7 @@ const CREATE_FIELDS: (keyof InferAttributes<NotificationPregnancyComplication>)[
 ];
 
 // The columns every response carries, listed one by one instead of dropped afterwards. sysDetails
-// is trigger metadata and never leaves the service, and the jsonb column this spec left out of
+// is trigger bookkeeping and never leaves the service, and the jsonb column this spec left out of
 // scope is not named anywhere in this file — an explicit list is what keeps both out without having
 // to mention them
 const RESPONSE_ATTRIBUTES: (keyof InferAttributes<NotificationPregnancyComplication>)[] = [
@@ -67,9 +73,9 @@ const PREGNANCY_INCLUDE = {
     }]
 };
 
-// The resolved master term, with six fields and without metadata: that column carries the internal
-// markers of the implicit resolution — autoCreated, reviewStatus — which are governance of the
-// catalog and not data of the notification. It is the decision of F16, literal.
+// The resolved master term, with six fields. The jsonb column of the master stays out: it carries
+// the internal markers of the implicit resolution — autoCreated, reviewStatus — which are
+// governance of the catalog and not data of the notification. It is the decision of F16, literal.
 //
 // The include does not filter by isActive, deliberately: a term retired after the record was written
 // still says what the complication was coded as
@@ -133,9 +139,10 @@ const findValidPregnancy = async (pregnancyId: string, op: string, lang: string)
 }
 
 // The free texts are normalized on write with trim, and a text that is blank after trimming is no
-// text at all. Neither goes through toTitleCase or toConstantCase: complicationName is the copy of
-// what the notifier wrote and its only value is reproducing it, and the toConstantCase of the code
-// is applied by resolveDiagnosticTermService, never by this service.
+// text at all. Neither goes through toTitleCase or toConstantCase: complicationName and notes are
+// the copy of what the notifier wrote and their only value is reproducing it. The one value that
+// does get constant cased is the code, and only inside the resolution — where it is the key of the
+// master lookup and never a column of this table.
 //
 // This is the eighth copy of this helper in the repository. Extracting it is overdue since F24 §7
 // and has its own spec pending, because doing it here would drag seven foreign services into a CRUD
@@ -168,6 +175,130 @@ const assertComplicationTypeIsValid = async (complicationTypeItemId: string, op:
             getMessage('notificationPregnancyComplication.complicationTypeNotFound', lang),
             404,
             `PREGCOMP_${ op }_COMPLICATION_TYPE_NOT_FOUND`
+        );
+    }
+}
+
+// What the resolution against the clinical master leaves behind: two derived values and not the
+// three of F16. This table has a single text column, so there is nowhere to denormalize the
+// canonical name or the code — both are read from diagnosticTerm through the include, and that is
+// the simplification the DDL imposes
+interface ResolvedComplicationTerm {
+    diagnosticTermId: string | null;
+    complicationRawName: string | null;
+}
+
+// The resolution of ESAVI-PREGCOMP-001 and 004, in three branches.
+//
+// Without a code there is no term: the name is the free text of the notifier and there is nothing
+// to diverge from, so complicationRawName keeps it as it is. With a code and LOCAL — or no source
+// at all — the resolver of F15 answers, creating the term when it does not exist yet, which is the
+// whole point of the implicit resolution. With a code and an external source the pair
+// (source, code) is looked up and nothing is ever created: a client cannot coin a MedDRA term by
+// writing one in a form.
+//
+// The external lookup does not filter by isActive, for the same reason
+// diagnosticTermResolution.service.ts:37-38 does not: a retired term is still referenceable, and
+// resolving away from it would silently undo an administrator's decision.
+//
+// Whatever the branch, the master rules over the name and the divergence is preserved:
+// complicationRawName holds what the notifier wrote and only when it differs from what the catalog
+// says. When it comes back null the notifier wrote exactly the name of the master
+const resolveComplicationTerm = async (
+    complicationCode: string | null | undefined,
+    complicationName: string,
+    source: TermSource | null | undefined,
+    op: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    transaction: Transaction
+): Promise<ResolvedComplicationTerm> => {
+    const rawName = complicationName.trim();
+    const trimmedCode = normalizeText(complicationCode);
+
+    if( !trimmedCode ) {
+        return { diagnosticTermId: null, complicationRawName: rawName };
+    }
+
+    // Same normalization as ESAVI-DIAGTERM-001, 006 and 007, or neither branch would find what the
+    // catalog saved. It is applied to the code and never to the name: the toConstantCase belongs to
+    // the resolver's contract, and the name is the notifier's text
+    const code = toConstantCase(trimmedCode);
+    let term: DiagnosticTerm | null;
+
+    if( !source || source === LOCAL_SOURCE ) {
+        term = await resolveDiagnosticTermService(
+            { code, name: rawName, operationCode: `ESAVI-PREGCOMP-${ op }` },
+            authUser,
+            lang,
+            transaction
+        );
+    } else {
+        term = await DiagnosticTerm.findOne({
+            where: { source, code },
+            transaction
+        });
+        if( !term ) {
+            throw new AppError(
+                getMessage('notificationPregnancyComplication.diagnosticTermNotFound', lang, { code, source }),
+                404,
+                `PREGCOMP_${ op }_DIAGTERM_NOT_FOUND`
+            );
+        }
+    }
+
+    return {
+        diagnosticTermId: term.diagnosticTermId,
+        complicationRawName: term.name === rawName ? null : rawName
+    };
+}
+
+// The duplicate guard of 001 and 004: the pair (diagnosticTermId, complicationTypeItemId) may not
+// repeat among the ACTIVE complications of the same pregnancy. Recording the same complication
+// twice with the same typing adds no information and does distort any count.
+//
+// No UNIQUE and no index backs it — it is a business rule of the service — and that is precisely
+// why it only looks at active rows. The 001 of F25 answers 409 over an INACTIVE row because there
+// a real constraint (esaviapp.sql:902) was going to reject the insert anyway, and saying 201 would
+// have been lying to the client about what the database was about to do. Here there is no such
+// constraint, and an invented rule must not be stricter than the ones the database imposes:
+// deactivating a complication and loading it again is the natural correction path, and blocking it
+// would force a SUPERADMIN 005B to undo a USER's capture mistake.
+//
+// It only runs when the term has a value. Two free text complications of the same type are
+// distinct records by definition: there is no identity to compare, and comparing null against null
+// would turn the second free text into a 409 for no reason.
+//
+// It runs AFTER the resolution, never before: what is compared is the resolved term and not the
+// code that arrived, because two different codes can resolve to the same term and comparing codes
+// would let through the very duplicate the rule exists to prevent
+const assertNoDuplicateComplication = async (
+    pregnancyId: string,
+    diagnosticTermId: string | null,
+    complicationTypeItemId: string | null | undefined,
+    op: string,
+    lang: string,
+    transaction: Transaction,
+    excludedComplicationId?: string
+) => {
+    if( !diagnosticTermId ) return;
+
+    const duplicate = await NotificationPregnancyComplication.findOne({
+        where: {
+            pregnancyId,
+            diagnosticTermId,
+            complicationTypeItemId: complicationTypeItemId ?? null,
+            isActive: true,
+            ...( excludedComplicationId ? { complicationId: { [Op.ne]: excludedComplicationId } } : {} )
+        },
+        attributes: ['complicationId'],
+        transaction
+    });
+    if( duplicate ) {
+        throw new AppError(
+            getMessage('notificationPregnancyComplication.alreadyExists', lang),
+            409,
+            `PREGCOMP_${ op }_ALREADY_EXISTS`
         );
     }
 }
@@ -214,6 +345,27 @@ const createNotificationPregnancyComplicationService = async (
 
         await assertComplicationTypeIsValid(data.complicationTypeItemId, '001', lang);
 
+        const resolved = await resolveComplicationTerm(
+            data.complicationCode,
+            data.complicationName,
+            data.source,
+            '001',
+            authUser,
+            lang,
+            transaction
+        );
+
+        // After the resolution and never before: what is compared is the resolved term, not the
+        // code that arrived. With no term nothing is checked
+        await assertNoDuplicateComplication(
+            data.pregnancyId,
+            resolved.diagnosticTermId,
+            data.complicationTypeItemId,
+            '001',
+            lang,
+            transaction
+        );
+
         const newEntry: AppDetails = {
             createdAt: new Date(),
             user: authUser?.userId || 'undefined',
@@ -227,9 +379,9 @@ const createNotificationPregnancyComplicationService = async (
         // accident, not by contract
         const created = await NotificationPregnancyComplication.create({
             pregnancyId: data.pregnancyId,
-            diagnosticTermId: null,
+            diagnosticTermId: resolved.diagnosticTermId,
             complicationTypeItemId: data.complicationTypeItemId,
-            complicationRawName: normalizeText(data.complicationName),
+            complicationRawName: resolved.complicationRawName,
             notes: normalizeText(data.notes),
             isActive: data.isActive ?? true,
             appDetails: [newEntry]

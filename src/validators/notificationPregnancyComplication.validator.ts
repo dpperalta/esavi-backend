@@ -29,8 +29,8 @@ export const notificationPregnancyComplicationListValidator = [
 // field a client may be resending whole from a GET is hostile, and the type does not carry it
 // anyway. diagnosticTermId is never chosen by the client: it is what the resolution returns, and
 // admitting it would open a second door to point at a term without going through complicationCode.
-// complicationRawName is derived, computed by the service against the master's name. And metadata
-// is out of scope in SPEC F27.
+// complicationRawName is derived, computed by the service against the master's name. And the jsonb
+// column of the table is out of scope in SPEC F27, so no key of this file names it either.
 //
 // complicationCode and source are the two accepted fields that are not columns of this table. They
 // govern which branch of the resolution against the clinical master is taken and are discarded
