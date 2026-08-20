@@ -9,6 +9,7 @@ import {
     getInvestigationByCaseId,
     getInvestigationById,
     getInvestigations,
+    purgeInvestigation,
     updateInvestigation
 } from '../controllers/investigation.controller';
 import {
@@ -40,6 +41,10 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationL
 // Activate Investigation - For SuperAdmin
 // Code: ESAVI-INVESTGN-005B
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationIdValidator, validateFields, activateInvestigation);
+
+// Purge Investigation - Physical delete, for SuperAdmin
+// Code: ESAVI-INVESTGN-005C
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationIdValidator, validateFields, purgeInvestigation);
 
 // Get Investigation by Case
 // Code: ESAVI-INVESTGN-006

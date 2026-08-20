@@ -10,6 +10,7 @@ import {
     VACCINATION_SITE_CATALOG_CODE
 } from '../constants/investigation.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 
 const CASE_INCLUDE = {
     model: EsaviCase,
@@ -501,6 +502,37 @@ const setInvestigationActivationService = async (
     }
 }
 
+// Purging Investigation Service - For SuperAdmin
+// Code: ESAVI-INVESTGN-005C
+// investigation is outside the preventPhysicalDelete loop of esaviapp.sql:1369-1373, so the row
+// can really be destroyed. This is the only path that releases the caseId: once the row is gone
+// UQ_investigation_case is free and the case admits a new investigation. It does not touch the
+// case — the foreign key runs from the investigation to the case and not the other way round.
+// WARNING for when the satellites land: the fourteen detail tables of investigation declare
+// ON DELETE CASCADE on investigationId, so a 005C will drag the whole detailed investigation with
+// it without asking for confirmation. Today there is nothing to drag, and the spec that creates
+// the first satellite must revisit this operation
+const purgeInvestigationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: Investigation,
+            where: { investigationId: id },
+            transaction,
+            operationCode: 'ESAVI-INVESTGN-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('investigation.notFound', lang),
+            notFoundCode: 'INVESTGN_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('investigation.stillActive', lang, { id }),
+            stillActiveCode: 'INVESTGN_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationService,
     getInvestigationsService,
@@ -508,5 +540,6 @@ export {
     getInvestigationByIdService,
     getInvestigationByCaseIdService,
     updateInvestigationService,
-    setInvestigationActivationService
+    setInvestigationActivationService,
+    purgeInvestigationService
 }

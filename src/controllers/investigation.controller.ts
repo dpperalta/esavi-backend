@@ -7,6 +7,7 @@ import {
     getInvestigationByCaseIdService,
     getInvestigationByIdService,
     getInvestigationsService,
+    purgeInvestigationService,
     setInvestigationActivationService,
     updateInvestigationService
 } from '../services/investigation.service';
@@ -195,6 +196,26 @@ const activateInvestigation = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// Purge Investigation Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-INVESTGN-005C
+const purgeInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeInvestigationService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigation.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVESTGN-005C: Error purging Investigation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigation.purgeFailed', req.lang), 500, 'INVESTGN_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigation,
     getInvestigations,
@@ -203,5 +224,6 @@ export {
     getInvestigationByCaseId,
     updateInvestigation,
     deleteInvestigation,
-    activateInvestigation
+    activateInvestigation,
+    purgeInvestigation
 }
