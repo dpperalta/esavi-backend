@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, DiagnosticTerm, Notification, NotificationPregnancy, NotificationPregnancyComplication } from '../models';
-import { AppError, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyComplicationInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
@@ -366,6 +366,35 @@ const findComplicationWithRelations = async (id: string, includeInactive: boolea
     });
 }
 
+// The read ESAVI-PREGCOMP-004 works from. Two differences with the one above, and both are
+// deliberate. It does not narrow the attributes: buildDifferentialUpdate compares the whole stored
+// row, and an instance read with a narrowed `attributes` reads back undefined for what it left out,
+// so every comparison would count as a change. And it keeps the diagnosticTerm include, because the
+// update needs the master's name to compute the effective name and its code and source to decide
+// whether the resolution has to run again.
+//
+// The parent chain stays, so the inherited visibility is checked in the same query the update
+// instance comes from
+const findComplicationRow = async (id: string, includeInactive: boolean = false, transaction?: Transaction) => {
+    return await NotificationPregnancyComplication.findOne({
+        where: includeInactive ? { complicationId: id } : { complicationId: id, isActive: true },
+        include: [
+            {
+                ...PREGNANCY_INCLUDE,
+                required: true,
+                where: includeInactive ? {} : { isActive: true },
+                include: [{
+                    ...PREGNANCY_INCLUDE.include[0],
+                    required: true,
+                    where: includeInactive ? {} : { isActive: true }
+                }]
+            },
+            DIAGNOSTIC_TERM_INCLUDE
+        ],
+        transaction
+    });
+}
+
 // Create Notification Pregnancy Complication Service
 // Code: ESAVI-PREGCOMP-001
 // Everything inside a single transaction, because the resolution against the clinical master may
@@ -535,9 +564,165 @@ const getNotificationPregnancyComplicationByIdService = async (
     return toNotificationPregnancyComplicationResponse(complication);
 }
 
+// Update Notification Pregnancy Complication Service
+// Code: ESAVI-PREGCOMP-004
+// Inside a transaction, for the same reason as the 001: the resolution against the clinical master
+// may write in diagnosticTerm.
+//
+// pregnancyId and sortOrder are ignored whether or not they arrive in the body, and neither answers
+// 400: the first one is immutable — moving a complication to another pregnancy is not updating it,
+// it is creating a different one — and the second one is governed by the database
+const updateNotificationPregnancyComplicationService = async (
+    id: string,
+    data: Partial<CreateNotificationPregnancyComplicationInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const complication = await findComplicationRow(id, canViewInactive, transaction);
+        if( !complication ) {
+            throw new AppError(
+                getMessage('notificationPregnancyComplication.notFound', lang),
+                404,
+                'PREGCOMP_004_NOT_FOUND'
+            );
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
+        const stored = complication.get({ plain: true }) as Record<string, unknown>;
+        const storedTerm = stored.diagnosticTerm as { code: string | null, name: string, source: TermSource } | null;
+
+        // What the GET shows as the name of the complication, and the only thing an incoming
+        // complicationName can be compared against: this table has a single text column, so
+        // storedEffectiveName is unambiguous where F16 had to choose between esaviName and
+        // esaviRawName
+        const storedEffectiveName = ( stored.complicationRawName as string | null ) ?? storedTerm?.name ?? null;
+
+        // The second condition is the trap F16 documented and paid for. Without it a PUT resending
+        // the whole response of its GET would rewrite complicationRawName on every row with a
+        // divergence, and the text the notifier wrote would disappear with nobody noticing. A
+        // complicationName arriving EQUAL to what the GET displayed is not a rewrite, so it falls
+        // through to the fallback exactly like an absent key
+        const incomingName = data.complicationName !== undefined
+                && normalizeText(data.complicationName) !== storedEffectiveName
+            ? normalizeText(data.complicationName)
+            : storedEffectiveName;
+
+        // The resolution is re-fired by the change of value, never by the presence of the key
+        // (SPEC F12). The stored code and source are the ones of the term that was resolved, read
+        // from the include: a PUT resending them consults nothing and writes nothing
+        const storedCode = storedTerm?.code ?? null;
+        const storedSource = storedTerm?.source ?? null;
+
+        const codeArrived = data.complicationCode !== undefined;
+        const trimmedIncomingCode = normalizeText(data.complicationCode);
+        const incomingCode = codeArrived
+            ? ( trimmedIncomingCode ? toConstantCase(trimmedIncomingCode) : null )
+            : storedCode;
+        const sourceArrived = data.source !== undefined && data.source !== null;
+        const incomingSource = sourceArrived ? ( data.source as TermSource ) : storedSource;
+
+        const mustResolveAgain = incomingCode !== storedCode
+            || ( sourceArrived && incomingSource !== storedSource )
+            || incomingName !== storedEffectiveName;
+
+        const resolved: ResolvedComplicationTerm = mustResolveAgain
+            ? await resolveComplicationTerm(
+                incomingCode,
+                incomingName ?? '',
+                incomingSource,
+                '004',
+                authUser,
+                lang,
+                transaction
+            )
+            : {
+                diagnosticTermId: stored.diagnosticTermId as string | null,
+                complicationRawName: stored.complicationRawName as string | null
+            };
+
+        // Before the diff and independently of it: a PUT carrying a retired type answers 404 even
+        // when no other field changes. The key is not nullable — an explicit null is a 400 of the
+        // validator — so only its presence is checked here
+        if( data.complicationTypeItemId !== undefined ) {
+            await assertComplicationTypeIsValid(data.complicationTypeItemId, '004', lang);
+        }
+
+        // The guard runs over the RESULTING pair and excludes the row itself, so re-sending its own
+        // pair is a 200 that writes nothing while landing on another live sister is a 409
+        const resultingTypeItemId = data.complicationTypeItemId !== undefined
+            ? data.complicationTypeItemId
+            : ( stored.complicationTypeItemId as string | null );
+        await assertNoDuplicateComplication(
+            stored.pregnancyId as string,
+            resolved.diagnosticTermId,
+            resultingTypeItemId,
+            '004',
+            lang,
+            transaction,
+            id
+        );
+
+        // pregnancyId, sortOrder and isActive are deliberately absent: the first two are immutable
+        // and the state moves through 005A and 005B. The two derived fields enter ALWAYS — with the
+        // resolved value or with the stored one — so a resolution that did not change anything
+        // produces no diff and therefore no write
+        const candidates: Record<string, unknown> = {
+            diagnosticTermId: resolved.diagnosticTermId,
+            complicationRawName: resolved.complicationRawName,
+            complicationTypeItemId: data.complicationTypeItemId !== undefined
+                ? data.complicationTypeItemId
+                : undefined,
+            // Trimmed and never title cased, or a PUT resending the GET would rewrite what the
+            // notifier wrote
+            notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_notificationPregnancyComplication_setSysDetails fires on
+        // every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(complication.appDetails)
+                ? complication.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-PREGCOMP-004',
+                detail: 'Notification pregnancy complication updated by service'
+            };
+            await complication.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    const updated = await findComplicationWithRelations(id, true);
+    return updated ? toNotificationPregnancyComplicationResponse(updated) : null;
+}
+
 export {
     createNotificationPregnancyComplicationService,
     getAllNotificationPregnancyComplicationsByPregnancyService,
     getNotificationPregnancyComplicationByIdService,
-    getNotificationPregnancyComplicationsByPregnancyService
+    getNotificationPregnancyComplicationsByPregnancyService,
+    updateNotificationPregnancyComplicationService
 };

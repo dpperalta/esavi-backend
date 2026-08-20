@@ -5,7 +5,8 @@ import {
     createNotificationPregnancyComplicationService,
     getAllNotificationPregnancyComplicationsByPregnancyService,
     getNotificationPregnancyComplicationByIdService,
-    getNotificationPregnancyComplicationsByPregnancyService
+    getNotificationPregnancyComplicationsByPregnancyService,
+    updateNotificationPregnancyComplicationService
 } from '../services/notificationPregnancyComplication.service';
 
 // Create Notification Pregnancy Complication Controller
@@ -111,9 +112,37 @@ const getNotificationPregnancyComplicationById = async (req: Request, res: Respo
     }
 }
 
+// Update Notification Pregnancy Complication Controller
+// Code: ESAVI-PREGCOMP-004
+const updateNotificationPregnancyComplication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateNotificationPregnancyComplicationService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancyComplication.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PREGCOMP-004: Error updating Notification Pregnancy Complication: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancyComplication.updatedFailed', req.lang), 500, 'PREGCOMP_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createNotificationPregnancyComplication,
     getAllNotificationPregnancyComplicationsByPregnancy,
     getNotificationPregnancyComplicationById,
-    getNotificationPregnancyComplicationsByPregnancy
+    getNotificationPregnancyComplicationsByPregnancy,
+    updateNotificationPregnancyComplication
 };

@@ -5,13 +5,15 @@ import {
     createNotificationPregnancyComplication,
     getAllNotificationPregnancyComplicationsByPregnancy,
     getNotificationPregnancyComplicationById,
-    getNotificationPregnancyComplicationsByPregnancy
+    getNotificationPregnancyComplicationsByPregnancy,
+    updateNotificationPregnancyComplication
 } from '../controllers/notificationPregnancyComplication.controller';
 import {
     createNotificationPregnancyComplicationValidator,
     notificationPregnancyComplicationIdValidator,
     notificationPregnancyComplicationListValidator,
-    notificationPregnancyComplicationPregnancyIdValidator
+    notificationPregnancyComplicationPregnancyIdValidator,
+    updateNotificationPregnancyComplicationValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -46,5 +48,9 @@ router.get('/pregnancy/:id', tokenValidation, validateUserRole(USER), ...notific
 // Declared after every literal path: an /:id first would swallow /admin, /pregnancy, /purge and
 // /activate, and the UUID validator would answer 400 for routes that do exist
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationIdValidator, validateFields, getNotificationPregnancyComplicationById);
+
+// Update Notification Pregnancy Complication
+// Code: ESAVI-PREGCOMP-004
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationIdValidator, ...updateNotificationPregnancyComplicationValidator, validateFields, updateNotificationPregnancyComplication);
 
 export default router;
