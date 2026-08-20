@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, DiagnosticTerm, Notification, NotificationPregnancy, NotificationPregnancyComplication } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyComplicationInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -719,10 +720,57 @@ const updateNotificationPregnancyComplicationService = async (
     return updated ? toNotificationPregnancyComplicationResponse(updated) : null;
 }
 
+// Set Notification Pregnancy Complication Activation Service
+// Code: ESAVI-PREGCOMP-005A / ESAVI-PREGCOMP-005B
+// One service for the two operations, as the rest of the repository does it. Neither is a
+// differential update: they are state writes with an intent of their own, they record a fact even
+// though no data column changes, and that is why they go through setEntityActiveStatusService and
+// never through buildDifferentialUpdate.
+//
+// The 005A seals deletedAt, which frees the sortOrder from the partial unique index. That is
+// correct and deliberate: the gap stays available for the next complication.
+//
+// The 005A is blocked by nothing. notificationPregnancyComplication is a leaf of the graph: there
+// are no children to query and no state to drag, so deactivating a complication touches nothing
+// else — least of all its parent, whose hasComplications stays client data
+const setNotificationPregnancyComplicationActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const complication = await setEntityActiveStatusService({
+            model: NotificationPregnancyComplication,
+            where: { complicationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('notificationPregnancyComplication.notFound', lang),
+            notFoundCode: `PREGCOMP_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`notificationPregnancyComplication.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `PREGCOMP_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-PREGCOMP-${ op }`,
+                detail: `Notification pregnancy complication ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return complication;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationPregnancyComplicationService,
     getAllNotificationPregnancyComplicationsByPregnancyService,
     getNotificationPregnancyComplicationByIdService,
     getNotificationPregnancyComplicationsByPregnancyService,
+    setNotificationPregnancyComplicationActivationService,
     updateNotificationPregnancyComplicationService
 };

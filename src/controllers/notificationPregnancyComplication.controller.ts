@@ -6,6 +6,7 @@ import {
     getAllNotificationPregnancyComplicationsByPregnancyService,
     getNotificationPregnancyComplicationByIdService,
     getNotificationPregnancyComplicationsByPregnancyService,
+    setNotificationPregnancyComplicationActivationService,
     updateNotificationPregnancyComplicationService
 } from '../services/notificationPregnancyComplication.service';
 
@@ -139,8 +140,30 @@ const updateNotificationPregnancyComplication = async (req: Request, res: Respon
     }
 }
 
+// Delete Notification Pregnancy Complication Controller - Soft delete
+// Code: ESAVI-PREGCOMP-005A
+const deleteNotificationPregnancyComplication = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setNotificationPregnancyComplicationActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancyComplication.deletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PREGCOMP-005A: Error deleting Notification Pregnancy Complication: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancyComplication.deletedFailed', req.lang), 500, 'PREGCOMP_005A_DELETION_FAILED', error));
+    }
+}
+
 export {
     createNotificationPregnancyComplication,
+    deleteNotificationPregnancyComplication,
     getAllNotificationPregnancyComplicationsByPregnancy,
     getNotificationPregnancyComplicationById,
     getNotificationPregnancyComplicationsByPregnancy,

@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationPregnancyComplication,
+    deleteNotificationPregnancyComplication,
     getAllNotificationPregnancyComplicationsByPregnancy,
     getNotificationPregnancyComplicationById,
     getNotificationPregnancyComplicationsByPregnancy,
@@ -52,5 +53,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationPregn
 // Update Notification Pregnancy Complication
 // Code: ESAVI-PREGCOMP-004
 router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationIdValidator, ...updateNotificationPregnancyComplicationValidator, validateFields, updateNotificationPregnancyComplication);
+
+// Delete Notification Pregnancy Complication - Soft delete
+// Code: ESAVI-PREGCOMP-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationPregnancyComplicationIdValidator, validateFields, deleteNotificationPregnancyComplication);
 
 export default router;
