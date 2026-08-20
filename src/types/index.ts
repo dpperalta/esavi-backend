@@ -19,4 +19,5 @@ export * from './diluentCatalog/index';
 export * from './notificationDiluent/index';
 export * from './notificationPregnancy/index';
 export * from './notificationPregnancyComplication/index';
+export * from './investigation/index';
 export * from './systemConfig/index';

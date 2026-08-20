@@ -25,6 +25,7 @@ import { DiluentCatalog } from './diluentCatalog.model';
 import { NotificationDiluent } from './notificationDiluent.model';
 import { NotificationPregnancy } from './notificationPregnancy.model';
 import { NotificationPregnancyComplication } from './notificationPregnancyComplication.model';
+import { Investigation } from './investigation.model';
 import { SystemConfig } from './systemConfig.model';
 import { SystemConfigHistory } from './systemConfigHistory.model';
 
@@ -59,6 +60,7 @@ export {
     NotificationDiluent,
     NotificationPregnancy,
     NotificationPregnancyComplication,
+    Investigation,
     SystemConfig,
     SystemConfigHistory
 };
