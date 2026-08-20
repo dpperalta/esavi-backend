@@ -921,6 +921,7 @@ CREATE TABLE IF NOT EXISTS "notificationPregnancyComplication" (
   CONSTRAINT "FK_notificationPregnancyComplication_term" FOREIGN KEY ("diagnosticTermId") REFERENCES "diagnosticTerm" ("diagnosticTermId") ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT "FK_notificationPregnancyComplication_type" FOREIGN KEY ("complicationTypeItemId") REFERENCES "catalogItem" ("catalogItemId") ON UPDATE CASCADE ON DELETE RESTRICT
 );
+CREATE INDEX IF NOT EXISTS "IX_notificationPregnancyComplication_pregnancy" ON "notificationPregnancyComplication" ("pregnancyId");
 
 -- -----------------------------------------------------------------------------
 -- Investigation split model
