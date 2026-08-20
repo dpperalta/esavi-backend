@@ -509,8 +509,35 @@ const getAllNotificationPregnancyComplicationsByPregnancyService = async (
     };
 }
 
+// Get Notification Pregnancy Complication By ID Service
+// Code: ESAVI-PREGCOMP-003
+// Three filters, and two of them are the inherited visibility in chain: the complication must exist
+// and be active, its pregnancy must be active, and the notification that pregnancy hangs from must
+// be active too — unless canViewInactive says otherwise, today SUPERADMIN.
+//
+// The three conditions are evaluated the same way, with no priority among them: it is enough that
+// one fails, so there is nothing to decide when two of them fail at once. The three failures answer
+// the same 404 without distinguishing, because telling them apart would confirm to a USER that a
+// complication exists under a pregnancy it is not allowed to see
+const getNotificationPregnancyComplicationByIdService = async (
+    id: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const complication = await findComplicationWithRelations(id, canViewInactive);
+    if( !complication ) {
+        throw new AppError(
+            getMessage('notificationPregnancyComplication.notFound', lang),
+            404,
+            'PREGCOMP_003_NOT_FOUND'
+        );
+    }
+    return toNotificationPregnancyComplicationResponse(complication);
+}
+
 export {
     createNotificationPregnancyComplicationService,
     getAllNotificationPregnancyComplicationsByPregnancyService,
+    getNotificationPregnancyComplicationByIdService,
     getNotificationPregnancyComplicationsByPregnancyService
 };

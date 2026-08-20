@@ -4,6 +4,7 @@ import { AuthUser } from '../types';
 import {
     createNotificationPregnancyComplicationService,
     getAllNotificationPregnancyComplicationsByPregnancyService,
+    getNotificationPregnancyComplicationByIdService,
     getNotificationPregnancyComplicationsByPregnancyService
 } from '../services/notificationPregnancyComplication.service';
 
@@ -85,8 +86,34 @@ const getAllNotificationPregnancyComplicationsByPregnancy = async (req: Request,
     }
 }
 
+// Get Notification Pregnancy Complication By ID Controller
+// Code: ESAVI-PREGCOMP-003
+const getNotificationPregnancyComplicationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getNotificationPregnancyComplicationByIdService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancyComplication.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PREGCOMP-003: Error fetching Notification Pregnancy Complication by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancyComplication.getFailed', req.lang), 500, 'PREGCOMP_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationPregnancyComplication,
     getAllNotificationPregnancyComplicationsByPregnancy,
+    getNotificationPregnancyComplicationById,
     getNotificationPregnancyComplicationsByPregnancy
 };

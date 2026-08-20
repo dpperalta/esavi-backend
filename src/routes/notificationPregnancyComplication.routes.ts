@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationPregnancyComplication,
     getAllNotificationPregnancyComplicationsByPregnancy,
+    getNotificationPregnancyComplicationById,
     getNotificationPregnancyComplicationsByPregnancy
 } from '../controllers/notificationPregnancyComplication.controller';
 import {
     createNotificationPregnancyComplicationValidator,
+    notificationPregnancyComplicationIdValidator,
     notificationPregnancyComplicationListValidator,
     notificationPregnancyComplicationPregnancyIdValidator
 } from '../validators';
@@ -38,5 +40,11 @@ router.get('/admin/pregnancy/:id', tokenValidation, validateUserRole(ADMIN), ...
 // The :id is the pregnancyId, not a complication id: the listing is entered by the foreign key.
 // Declared after /admin/pregnancy/:id, which is the more specific literal path
 router.get('/pregnancy/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationPregnancyIdValidator, ...notificationPregnancyComplicationListValidator, validateFields, getNotificationPregnancyComplicationsByPregnancy);
+
+// Get Notification Pregnancy Complication by ID
+// Code: ESAVI-PREGCOMP-003
+// Declared after every literal path: an /:id first would swallow /admin, /pregnancy, /purge and
+// /activate, and the UUID validator would answer 400 for routes that do exist
+router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationIdValidator, validateFields, getNotificationPregnancyComplicationById);
 
 export default router;
