@@ -23,6 +23,7 @@ import { NotificationVaccine } from './notificationVaccine.model';
 import { VaccineWhodrug } from './vaccineWhodrug.model';
 import { DiluentCatalog } from './diluentCatalog.model';
 import { NotificationDiluent } from './notificationDiluent.model';
+import { NotificationPregnancy } from './notificationPregnancy.model';
 import { SystemConfig } from './systemConfig.model';
 import { SystemConfigHistory } from './systemConfigHistory.model';
 
@@ -55,6 +56,7 @@ export {
     VaccineWhodrug,
     DiluentCatalog,
     NotificationDiluent,
+    NotificationPregnancy,
     SystemConfig,
     SystemConfigHistory
 };

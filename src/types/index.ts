@@ -17,4 +17,5 @@ export * from './notificationVaccine/index';
 export * from './vaccineWhodrug/index';
 export * from './diluentCatalog/index';
 export * from './notificationDiluent/index';
+export * from './notificationPregnancy/index';
 export * from './systemConfig/index';

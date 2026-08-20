@@ -1,0 +1,174 @@
+import { Request, Response, NextFunction } from 'express';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
+import {
+    createNotificationPregnancyService,
+    getNotificationPregnancyByIdService,
+    getNotificationPregnancyByNotificationService,
+    updateNotificationPregnancyService,
+    setNotificationPregnancyActivationService,
+    purgeNotificationPregnancyService
+} from '../services/notificationPregnancy.service';
+
+// Create Notification Pregnancy Controller
+// Code: ESAVI-NOTIFPRG-001
+const createNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await createNotificationPregnancyService(req.body, req.user, req.lang);
+        return res.status(201).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.createdSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-001: Error creating Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.createdFailed', req.lang), 500, 'NOTIFPRG_001_CREATION_FAILED', error));
+    }
+}
+
+// Get Notification Pregnancy By ID Controller
+// Code: ESAVI-NOTIFPRG-003
+const getNotificationPregnancyById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getNotificationPregnancyByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-003: Error fetching Notification Pregnancy by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.getFailed', req.lang), 500, 'NOTIFPRG_003_FETCH_FAILED', error));
+    }
+}
+
+// Get Notification Pregnancy By Notification Controller
+// Code: ESAVI-NOTIFPRG-006
+const getNotificationPregnancyByNotification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const notificationId = (req.params.notificationId).toString().trim();
+    try {
+        const data = await getNotificationPregnancyByNotificationService(
+            notificationId,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-006: Error fetching Notification Pregnancy by Notification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.getFailed', req.lang), 500, 'NOTIFPRG_006_FETCH_FAILED', error));
+    }
+}
+
+// Update Notification Pregnancy Controller
+// Code: ESAVI-NOTIFPRG-004
+const updateNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateNotificationPregnancyService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-004: Error updating Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.updatedFailed', req.lang), 500, 'NOTIFPRG_004_UPDATE_FAILED', error));
+    }
+}
+
+// Delete Notification Pregnancy Controller - Soft delete
+// Code: ESAVI-NOTIFPRG-005A
+const deleteNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationPregnancyActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-005A: Error deleting Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.deletedFailed', req.lang), 500, 'NOTIFPRG_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Notification Pregnancy Controller - For SuperAdmin
+// Code: ESAVI-NOTIFPRG-005B
+const activateNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setNotificationPregnancyActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-005B: Error activating Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.activatedFailed', req.lang), 500, 'NOTIFPRG_005B_ACTIVATION_FAILED', error));
+    }
+}
+
+// Purge Notification Pregnancy Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-NOTIFPRG-005C
+const purgeNotificationPregnancy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationPregnancyService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationPregnancy.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-NOTIFPRG-005C: Error purging Notification Pregnancy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationPregnancy.purgeFailed', req.lang), 500, 'NOTIFPRG_005C_PURGE_FAILED', error));
+    }
+}
+
+export {
+    createNotificationPregnancy,
+    getNotificationPregnancyById,
+    getNotificationPregnancyByNotification,
+    updateNotificationPregnancy,
+    deleteNotificationPregnancy,
+    activateNotificationPregnancy,
+    purgeNotificationPregnancy
+};

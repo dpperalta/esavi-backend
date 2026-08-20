@@ -27,7 +27,7 @@ const todayIsoDate = (): string => {
 }
 
 const normalizeCountryIsoCode = (value: string): string => value.trim().toUpperCase();
-const normalizeOrganization = (value: string): string => toTitleCase(value.trim());
+const normalizeOrganization = (value: string): string => value.trim().toUpperCase();
 
 const PATIENT_INCLUDE = {
     model: Patient,
