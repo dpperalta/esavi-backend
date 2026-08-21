@@ -6,7 +6,8 @@ import {
     getAllInvestigationAutopsiesService,
     getInvestigationAutopsiesService,
     getInvestigationAutopsyByCaseIdService,
-    getInvestigationAutopsyByIdService
+    getInvestigationAutopsyByIdService,
+    updateInvestigationAutopsyService
 } from '../services/investigationAutopsy.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so
@@ -130,10 +131,38 @@ const getInvestigationAutopsyByCaseId = async (req: Request, res: Response, next
     }
 }
 
+// Update Investigation Autopsy Controller
+// Code: ESAVI-INVAUT-004
+const updateInvestigationAutopsy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationAutopsyService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAutopsy.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVAUT-004: Error updating Investigation Autopsy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAutopsy.updatedFailed', req.lang), 500, 'INVAUT_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationAutopsy,
     getInvestigationAutopsies,
     getAllInvestigationAutopsies,
     getInvestigationAutopsyById,
-    getInvestigationAutopsyByCaseId
+    getInvestigationAutopsyByCaseId,
+    updateInvestigationAutopsy
 };

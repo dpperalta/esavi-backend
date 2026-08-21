@@ -6,13 +6,15 @@ import {
     getAllInvestigationAutopsies,
     getInvestigationAutopsies,
     getInvestigationAutopsyByCaseId,
-    getInvestigationAutopsyById
+    getInvestigationAutopsyById,
+    updateInvestigationAutopsy
 } from '../controllers/investigationAutopsy.controller';
 import {
     createInvestigationAutopsyValidator,
     investigationAutopsyCaseIdValidator,
     investigationAutopsyIdValidator,
-    investigationAutopsyListValidator
+    investigationAutopsyListValidator,
+    updateInvestigationAutopsyValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -50,5 +52,11 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // The :id is the investigationId: this entity has no identifier of its own, so this is already
 // the access by investigation
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationAutopsyIdValidator, validateFields, getInvestigationAutopsyById);
+
+// Update Investigation Autopsy
+// Code: ESAVI-INVAUT-004
+// USER for the same reason as 001: correcting the autopsy is part of the same operational flow.
+// It is the main operation of the entity — the row is opened with two fields and filled in over time
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationAutopsyIdValidator, ...updateInvestigationAutopsyValidator, validateFields, updateInvestigationAutopsy);
 
 export default router;

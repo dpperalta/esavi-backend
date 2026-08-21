@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { CatalogItem, EsaviCase, Investigation, InvestigationAutopsy } from '../models';
-import { AppError, getMessage, toTimeString } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toTimeString } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationAutopsyInput, InvestigationAutopsyListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -56,6 +56,22 @@ const findInvestigationAutopsyWithRelations = async (id: string, includeInactive
     return await InvestigationAutopsy.findOne({
         where: { investigationId: id },
         attributes: AUTOPSY_EXCLUDE,
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// The same read as above without narrowing the attributes of the autopsy, which is the precondition
+// of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads back undefined
+// for the columns it left out, and every comparison against undefined would count as a change. It
+// still carries the investigation include, so the inherited visibility is checked in the same
+// query the update instance comes from
+const findInvestigationAutopsyRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationAutopsy.findOne({
+        where: { investigationId: id },
         include: [{
             ...INVESTIGATION_INCLUDE,
             required: true,
@@ -368,10 +384,167 @@ const getInvestigationAutopsyByCaseIdService = async (caseId: string, lang: stri
     return toInvestigationAutopsyResponse(investigationAutopsy);
 }
 
+// Rules 2 and 3 in their update variant, evaluated over the RESULTING state and not over the body:
+// a PUT that only switches a flag on over a row that already carries its date is coherent, and
+// rejecting it would force the client to resend a value that is not changing — exactly what the
+// differential update exists to avoid.
+//
+// The asymmetry with the create is declared and is not an inconsistency: they are two different
+// situations. When the flag is switched off, the 004 resolves an orphan it did not create — the
+// date was stored by an earlier request — so it clears it without asking. The 001 has no orphan to
+// resolve, which is why it stays strict.
+//
+// What is NOT silenced is a body that switches the flag off and dates the autopsy at the same time:
+// that contradicts itself, and swallowing it would lose the datum without a word while the client
+// believes it was saved. Sending it as null is not an error — that is the same destination the
+// forcing reaches on its own
+const assertAutopsyDatesOnUpdate = (
+    resultingPerformed: boolean | null,
+    resultingScheduled: boolean | null,
+    data: Partial<CreateInvestigationAutopsyInput>,
+    lang: string
+) => {
+    if( resultingPerformed !== true && data.autopsyDate ) {
+        throw new AppError(
+            getMessage('investigationAutopsy.autopsyDateNotAllowed', lang),
+            400,
+            'INVAUT_004_AUTOPSY_DATE_NOT_ALLOWED'
+        );
+    }
+
+    if( resultingScheduled !== true && data.scheduledAutopsyDate ) {
+        throw new AppError(
+            getMessage('investigationAutopsy.scheduledAutopsyDateNotAllowed', lang),
+            400,
+            'INVAUT_004_SCHEDULED_AUTOPSY_DATE_NOT_ALLOWED'
+        );
+    }
+}
+
+// Update Investigation Autopsy Service
+// Code: ESAVI-INVAUT-004
+// The main operation of the entity: the row is opened with two fields and completed over time, so
+// this is where the form is actually filled in. investigationId and isDeath are ignored whether or
+// not they arrive in the body. The first is the primary key of the row and the foreign key to its
+// investigation at the same time — an autopsy is the record of the death of *that* patient, and
+// moving it would take a death to another patient's file. The second is ignored because a row that
+// exists presupposes the death: isDeath: false does not turn it into something else, it contradicts
+// it. Neither returns 400, which is what keeps working the PUT that resends the response of its own
+// GET — the normal use of a form
+const updateInvestigationAutopsyService = async (
+    id: string,
+    data: Partial<CreateInvestigationAutopsyInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const investigationAutopsy = await findInvestigationAutopsyRow(id, canViewInactive);
+    if( !investigationAutopsy ) {
+        throw new AppError(getMessage('investigationAutopsy.notFound', lang), 404, 'INVAUT_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // Every field is compared against undefined and NEVER by truthiness: an `if( data.x )` would
+    // make it impossible to store a false in the two flags — which is exactly the answer "no
+    // autopsy was performed", half the domain of those two columns
+    const stored = investigationAutopsy.get({ plain: true }) as Record<string, unknown>;
+
+    // The resulting state governs the four coherence rules and is computed once, before anything
+    // else. The checks run BEFORE the diff and independently of it
+    const resultingDeathDate = data.deathDate !== undefined
+        ? data.deathDate
+        : ( stored.deathDate as string | null );
+
+    const resultingPerformed = data.isAutopsyPerformed !== undefined
+        ? ( data.isAutopsyPerformed ?? null )
+        : ( ( stored.isAutopsyPerformed as boolean | null ) ?? null );
+
+    const resultingScheduled = data.isAutopsyScheduled !== undefined
+        ? ( data.isAutopsyScheduled ?? null )
+        : ( ( stored.isAutopsyScheduled as boolean | null ) ?? null );
+
+    // With the flag not true the date is forced to null further down, so the resulting autopsyDate
+    // is that null and not the stored value: evaluating rule 4 against a date this very request is
+    // about to erase would answer 400 over a state that never comes to exist
+    const resultingAutopsyDate = resultingPerformed === true
+        ? ( data.autopsyDate !== undefined ? ( data.autopsyDate ?? null ) : ( stored.autopsyDate as string | null ) )
+        : null;
+
+    assertFlagsAreExclusive(resultingPerformed, resultingScheduled, '004', lang);
+    assertAutopsyDatesOnUpdate(resultingPerformed, resultingScheduled, data, lang);
+    assertAutopsyDateIsNotBeforeDeath(resultingAutopsyDate, resultingDeathDate, '004', lang);
+
+    const candidates: Record<string, unknown> = {
+        // Modifiable but not erasable, and the only field of the update without the `?? null` of
+        // the nullable ones: the validator already rejected an explicit null, so what arrives here
+        // is always a date
+        deathDate: data.deathDate !== undefined ? data.deathDate : undefined,
+        // Normalized to HH:mm:ss before comparing, or a client sending '14:30' over a stored
+        // '14:30:00' would count as a change on every open of the form
+        deathTime: data.deathTime !== undefined
+            ? ( data.deathTime ? toTimeString(data.deathTime) : null )
+            : undefined,
+        // Tri-state: false is a value and not an absence, and null is what lets the client erase an
+        // answer already given instead of only changing it
+        isAutopsyPerformed: data.isAutopsyPerformed !== undefined ? ( data.isAutopsyPerformed ?? null ) : undefined,
+        isAutopsyScheduled: data.isAutopsyScheduled !== undefined ? ( data.isAutopsyScheduled ?? null ) : undefined,
+        // Conditional derivatives, not a cleanup afterwards: when the resulting flag is not true
+        // the null enters candidates ALWAYS, with no presence check, and it is
+        // buildDifferentialUpdate who decides whether it differs. A second UPDATE after the diff
+        // would write even when nothing changed, and switching off a flag that was already off
+        // must not grow appDetails
+        autopsyDate: resultingPerformed === true
+            ? ( data.autopsyDate !== undefined ? ( data.autopsyDate ?? null ) : undefined )
+            : null,
+        scheduledAutopsyDate: resultingScheduled === true
+            ? ( data.scheduledAutopsyDate !== undefined ? ( data.scheduledAutopsyDate ?? null ) : undefined )
+            : null,
+        // Normalized before comparing, or a body differing only in surrounding blanks would count
+        // as a change
+        autopsyComments: data.autopsyComments !== undefined ? normalizeText(data.autopsyComments) : undefined,
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationAutopsy_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationAutopsyWithRelations(id, true);
+        return unchanged ? toInvestigationAutopsyResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the
+    // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(investigationAutopsy.appDetails) ? investigationAutopsy.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVAUT-004',
+        detail: 'Investigation autopsy updated by service'
+    };
+    await investigationAutopsy.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationAutopsyWithRelations(id, true);
+    return updated ? toInvestigationAutopsyResponse(updated) : null;
+}
+
 export {
     createInvestigationAutopsyService,
     getInvestigationAutopsiesService,
     getAllInvestigationAutopsiesService,
     getInvestigationAutopsyByIdService,
-    getInvestigationAutopsyByCaseIdService
+    getInvestigationAutopsyByCaseIdService,
+    updateInvestigationAutopsyService
 };
