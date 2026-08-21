@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationSource,
     getAllInvestigationSources,
+    getInvestigationSourceById,
     getInvestigationSources
 } from '../controllers/investigationSource.controller';
 import {
     createInvestigationSourceValidator,
+    investigationSourceIdValidator,
     investigationSourceListValidator
 } from '../validators';
 
@@ -33,5 +35,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationSourceL
 // Declared with the literal paths, before /:id. This is the variant F13 and F14 did not have: an
 // ADMIN needs some way of reaching the source of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationSourceListValidator, validateFields, getAllInvestigationSources);
+
+// Get Investigation Source by ID
+// Code: ESAVI-INVSRC-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the investigationId: this entity has no identifier of its own, so this is already
+// the access by investigation
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationSourceIdValidator, validateFields, getInvestigationSourceById);
 
 export default router;

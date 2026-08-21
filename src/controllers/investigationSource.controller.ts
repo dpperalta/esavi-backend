@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationSourceListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationSourceListFilters } from '../types';
 import {
     createInvestigationSourceService,
     getAllInvestigationSourcesService,
+    getInvestigationSourceByIdService,
     getInvestigationSourcesService
 } from '../services/investigationSource.service';
 
@@ -78,8 +79,34 @@ const getAllInvestigationSources = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Get Investigation Source By ID Controller
+// Code: ESAVI-INVSRC-003
+const getInvestigationSourceById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationSourceByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationSource.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVSRC-003: Error fetching Investigation Source by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationSource.getFailed', req.lang), 500, 'INVSRC_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationSource,
     getInvestigationSources,
-    getAllInvestigationSources
+    getAllInvestigationSources,
+    getInvestigationSourceById
 };
