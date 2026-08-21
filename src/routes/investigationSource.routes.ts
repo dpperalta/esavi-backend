@@ -6,13 +6,15 @@ import {
     getAllInvestigationSources,
     getInvestigationSourceByCaseId,
     getInvestigationSourceById,
-    getInvestigationSources
+    getInvestigationSources,
+    updateInvestigationSource
 } from '../controllers/investigationSource.controller';
 import {
     createInvestigationSourceValidator,
     investigationSourceCaseIdValidator,
     investigationSourceIdValidator,
-    investigationSourceListValidator
+    investigationSourceListValidator,
+    updateInvestigationSourceValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -50,5 +52,11 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // The :id is the investigationId: this entity has no identifier of its own, so this is already
 // the access by investigation
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationSourceIdValidator, validateFields, getInvestigationSourceById);
+
+// Update Investigation Source
+// Code: ESAVI-INVSRC-004
+// USER for the same reason as 001: correcting the source is part of the same operational flow.
+// It is the main operation of the entity — the row is opened empty and filled in over time
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationSourceIdValidator, ...updateInvestigationSourceValidator, validateFields, updateInvestigationSource);
 
 export default router;

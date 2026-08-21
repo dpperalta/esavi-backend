@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { CatalogItem, EsaviCase, Investigation, InvestigationSource } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationSourceInput, InvestigationSourceListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -54,6 +54,22 @@ const findInvestigationSourceWithRelations = async (id: string, includeInactive:
     return await InvestigationSource.findOne({
         where: { investigationId: id },
         attributes: SOURCE_EXCLUDE,
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// The same read as above without narrowing the attributes of the source, which is the precondition
+// of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads back undefined
+// for the columns it left out, and every comparison against undefined would count as a change. It
+// still carries the investigation include, so the inherited visibility is checked in the same
+// query the update instance comes from
+const findInvestigationSourceRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationSource.findOne({
+        where: { investigationId: id },
         include: [{
             ...INVESTIGATION_INCLUDE,
             required: true,
@@ -136,6 +152,49 @@ const assertOtherRuleOnCreate = (
             getMessage('investigationSource.otherDescriptionNotAllowed', lang),
             400,
             'INVSRC_001_OTHER_DESCRIPTION_NOT_ALLOWED'
+        );
+    }
+}
+
+// The other source rule in its update variant, evaluated over the RESULTING state and not over the
+// body: a PUT that only switches `other` on over a row that already carries a description is
+// coherent, and rejecting it would force the client to resend a value that is not changing —
+// exactly what the differential update exists to avoid.
+//
+// The asymmetry with the create is declared and is not an inconsistency: they are two different
+// situations. When the source is switched off, the 004 resolves an orphan it did not create — the
+// description was stored by an earlier request — so it clears it without asking. The 001 has no
+// orphan to resolve, which is why it stays strict.
+//
+// What is NOT silenced is a body that switches the source off and describes it at the same time:
+// that contradicts itself, and swallowing it would lose the text without a word while the client
+// believes it was saved. Sending it as null or as an empty string is not an error — that is the
+// same destination the forcing reaches on its own
+const assertOtherRuleOnUpdate = (
+    resultingOther: boolean | null,
+    resultingDescription: string | null,
+    descriptionTravels: boolean,
+    bodyDescription: string | null | undefined,
+    lang: string
+) => {
+    if( resultingOther === true ) {
+        if( !resultingDescription ) {
+            throw new AppError(
+                getMessage('investigationSource.otherDescriptionRequired', lang),
+                400,
+                'INVSRC_004_OTHER_DESCRIPTION_REQUIRED'
+            );
+        }
+        return;
+    }
+
+    // Only when it travels WITH content. An absent description is forced to null further down
+    // without error, and a null or blank one is already heading there
+    if( descriptionTravels && normalizeText(bodyDescription) ) {
+        throw new AppError(
+            getMessage('investigationSource.otherDescriptionNotAllowed', lang),
+            400,
+            'INVSRC_004_OTHER_DESCRIPTION_NOT_ALLOWED'
         );
     }
 }
@@ -316,10 +375,114 @@ const getInvestigationSourceByCaseIdService = async (caseId: string, lang: strin
     return toInvestigationSourceResponse(investigationSource);
 }
 
+// Update Investigation Source Service
+// Code: ESAVI-INVSRC-004
+// The main operation of the entity: the ten data columns are nullable and the row is opened empty,
+// so this is where the form is actually filled in. investigationId is ignored whether or not it
+// arrives in the body. It is the primary key of the row and the foreign key to its investigation at
+// the same time: a source is the record of how *that* investigation was carried out, and moving it
+// would take the provenance of the information to another patient's file
+const updateInvestigationSourceService = async (
+    id: string,
+    data: Partial<CreateInvestigationSourceInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const investigationSource = await findInvestigationSourceRow(id, canViewInactive);
+    if( !investigationSource ) {
+        throw new AppError(getMessage('investigationSource.notFound', lang), 404, 'INVSRC_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The ten fields are compared against undefined and NEVER by truthiness, and in this entity
+    // that rule matters more than anywhere else in the repository: eight of the ten columns are
+    // booleans, and an `if( data.x )` would make it impossible to store a false — which is exactly
+    // the answer "this source was not used", half the domain of the entity
+    const stored = investigationSource.get({ plain: true }) as Record<string, unknown>;
+
+    // The resulting state of `other` governs the coherence rule and is computed before anything
+    // else. The check runs BEFORE the diff and independently of it
+    const resultingOther = data.other !== undefined
+        ? ( data.other ?? null )
+        : ( ( stored.other as boolean | null ) ?? null );
+
+    const descriptionTravels = data.otherDescription !== undefined;
+    const resultingDescription = descriptionTravels
+        ? normalizeText(data.otherDescription)
+        : ( ( stored.otherDescription as string | null ) ?? null );
+
+    assertOtherRuleOnUpdate(resultingOther, resultingDescription, descriptionTravels, data.otherDescription, lang);
+
+    const candidates: Record<string, unknown> = {
+        // The eight sources, tri-state: false is a value and not an absence, and null is what lets
+        // the client erase an answer already given instead of only changing it
+        history: data.history !== undefined ? ( data.history ?? null ) : undefined,
+        interviewVaccinatedPerson: data.interviewVaccinatedPerson !== undefined
+            ? ( data.interviewVaccinatedPerson ?? null ) : undefined,
+        interviewHealthWorker: data.interviewHealthWorker !== undefined
+            ? ( data.interviewHealthWorker ?? null ) : undefined,
+        vaccinationRecord: data.vaccinationRecord !== undefined
+            ? ( data.vaccinationRecord ?? null ) : undefined,
+        autopsyRecord: data.autopsyRecord !== undefined ? ( data.autopsyRecord ?? null ) : undefined,
+        verbalAutopsyRecord: data.verbalAutopsyRecord !== undefined
+            ? ( data.verbalAutopsyRecord ?? null ) : undefined,
+        investigationReport: data.investigationReport !== undefined
+            ? ( data.investigationReport ?? null ) : undefined,
+        other: data.other !== undefined ? ( data.other ?? null ) : undefined,
+        // Conditional derivative, not a cleanup afterwards: when the resulting source is not true
+        // the null enters candidates ALWAYS, with no presence check, and it is
+        // buildDifferentialUpdate who decides whether it differs. A second UPDATE after the diff
+        // would write even when nothing changed, and switching off a source that was already off
+        // must not grow appDetails
+        otherDescription: resultingOther === true
+            ? ( descriptionTravels ? normalizeText(data.otherDescription) : undefined )
+            : null,
+        // Normalized before comparing, or a body differing only in surrounding blanks would count
+        // as a change
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationSource_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationSourceWithRelations(id, true);
+        return unchanged ? toInvestigationSourceResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the
+    // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(investigationSource.appDetails) ? investigationSource.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVSRC-004',
+        detail: 'Investigation source updated by service'
+    };
+    await investigationSource.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationSourceWithRelations(id, true);
+    return updated ? toInvestigationSourceResponse(updated) : null;
+}
+
 export {
     createInvestigationSourceService,
     getInvestigationSourcesService,
     getAllInvestigationSourcesService,
     getInvestigationSourceByIdService,
-    getInvestigationSourceByCaseIdService
+    getInvestigationSourceByCaseIdService,
+    updateInvestigationSourceService
 };

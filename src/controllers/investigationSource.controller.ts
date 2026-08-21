@@ -6,7 +6,8 @@ import {
     getAllInvestigationSourcesService,
     getInvestigationSourceByCaseIdService,
     getInvestigationSourceByIdService,
-    getInvestigationSourcesService
+    getInvestigationSourcesService,
+    updateInvestigationSourceService
 } from '../services/investigationSource.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so
@@ -130,10 +131,38 @@ const getInvestigationSourceByCaseId = async (req: Request, res: Response, next:
     }
 }
 
+// Update Investigation Source Controller
+// Code: ESAVI-INVSRC-004
+const updateInvestigationSource = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationSourceService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationSource.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVSRC-004: Error updating Investigation Source: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationSource.updatedFailed', req.lang), 500, 'INVSRC_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationSource,
     getInvestigationSources,
     getAllInvestigationSources,
     getInvestigationSourceById,
-    getInvestigationSourceByCaseId
+    getInvestigationSourceByCaseId,
+    updateInvestigationSource
 };
