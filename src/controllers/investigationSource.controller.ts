@@ -4,6 +4,7 @@ import { AuthUser, InvestigationSourceListFilters } from '../types';
 import {
     createInvestigationSourceService,
     getAllInvestigationSourcesService,
+    getInvestigationSourceByCaseIdService,
     getInvestigationSourceByIdService,
     getInvestigationSourcesService
 } from '../services/investigationSource.service';
@@ -104,9 +105,35 @@ const getInvestigationSourceById = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Get Investigation Source By Case ID Controller
+// Code: ESAVI-INVSRC-006
+const getInvestigationSourceByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationSourceByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationSource.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVSRC-006: Error fetching Investigation Source by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationSource.getFailed', req.lang), 500, 'INVSRC_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationSource,
     getInvestigationSources,
     getAllInvestigationSources,
-    getInvestigationSourceById
+    getInvestigationSourceById,
+    getInvestigationSourceByCaseId
 };

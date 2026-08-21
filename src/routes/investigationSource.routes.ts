@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationSource,
     getAllInvestigationSources,
+    getInvestigationSourceByCaseId,
     getInvestigationSourceById,
     getInvestigationSources
 } from '../controllers/investigationSource.controller';
 import {
     createInvestigationSourceValidator,
+    investigationSourceCaseIdValidator,
     investigationSourceIdValidator,
     investigationSourceListValidator
 } from '../validators';
@@ -35,6 +37,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationSourceL
 // Declared with the literal paths, before /:id. This is the variant F13 and F14 did not have: an
 // ADMIN needs some way of reaching the source of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationSourceListValidator, validateFields, getAllInvestigationSources);
+
+// Get Investigation Source by Case
+// Code: ESAVI-INVSRC-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared
+// before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationSourceCaseIdValidator, validateFields, getInvestigationSourceByCaseId);
 
 // Get Investigation Source by ID
 // Code: ESAVI-INVSRC-003
