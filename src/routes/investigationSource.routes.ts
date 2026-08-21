@@ -7,6 +7,7 @@ import {
     getInvestigationSourceByCaseId,
     getInvestigationSourceById,
     getInvestigationSources,
+    purgeInvestigationSource,
     updateInvestigationSource
 } from '../controllers/investigationSource.controller';
 import {
@@ -17,7 +18,7 @@ import {
     updateInvestigationSourceValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -39,6 +40,13 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationSourceL
 // Declared with the literal paths, before /:id. This is the variant F13 and F14 did not have: an
 // ADMIN needs some way of reaching the source of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationSourceListValidator, validateFields, getAllInvestigationSources);
+
+// Purge Investigation Source - Physical delete, for SuperAdmin
+// Code: ESAVI-INVSRC-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not have
+// an activity flag and does not manage its own state — its investigation does. This is also the
+// only operation that releases the investigationId
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationSourceIdValidator, validateFields, purgeInvestigationSource);
 
 // Get Investigation Source by Case
 // Code: ESAVI-INVSRC-006

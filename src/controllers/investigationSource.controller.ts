@@ -7,6 +7,7 @@ import {
     getInvestigationSourceByCaseIdService,
     getInvestigationSourceByIdService,
     getInvestigationSourcesService,
+    purgeInvestigationSourceService,
     updateInvestigationSourceService
 } from '../services/investigationSource.service';
 
@@ -158,11 +159,33 @@ const updateInvestigationSource = async (req: Request, res: Response, next: Next
     }
 }
 
+// Purge Investigation Source Controller - For SuperAdmin
+// Code: ESAVI-INVSRC-005C
+// Answers { ok, message } without data: the row no longer exists, so there is nothing to return
+const purgeInvestigationSource = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeInvestigationSourceService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationSource.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVSRC-005C: Error purging Investigation Source: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationSource.purgeFailed', req.lang), 500, 'INVSRC_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationSource,
     getInvestigationSources,
     getAllInvestigationSources,
     getInvestigationSourceById,
     getInvestigationSourceByCaseId,
-    updateInvestigationSource
+    updateInvestigationSource,
+    purgeInvestigationSource
 };

@@ -1,8 +1,10 @@
 import { WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationSource } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationSourceInput, InvestigationSourceListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { purgeEntityService } from './common/entityPurge.service';
 
 // The investigation travels in every response: it is what governs the visibility of the source,
 // and hiding it would leave the client unable to explain why a record it read yesterday now
@@ -478,11 +480,60 @@ const updateInvestigationSourceService = async (
     return updated ? toInvestigationSourceResponse(updated) : null;
 }
 
+// Purging Investigation Source Service - For SuperAdmin
+// Code: ESAVI-INVSRC-005C
+// investigationSource is outside the preventPhysicalDelete loop of esaviapp.sql:1369-1373, so the
+// row can really be destroyed. This is also the only path that releases the investigationId: the
+// logical seal of deletedAt does NOT free the slot of the primary key, so after a 005C a POST over
+// that same investigation answers 201 again.
+// The existence check runs WITHOUT the inherited visibility, on purpose: whoever purges is
+// SUPERADMIN and the row may well hang from a retired investigation — which is precisely the
+// normal state of something about to be purged.
+// The guard by deletedAt is assertRowIsSealed, shared with the two notification satellites: it
+// lives in a helper and not in purgeEntityService, whose isActive check is inert on this table —
+// `undefined !== true`, so every row would be purgable immediately and the safety net that
+// CONVENTIONS.md §6 calls for would be gone. The helper is consumed without modifying it: it
+// derives the i18n key investigationSource.notDeleted from the table name and the id from the
+// primaryKeyAttribute of the model, so this entity registers nothing anywhere
+const purgeInvestigationSourceService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const investigationSource = await InvestigationSource.findByPk(id, {
+            attributes: ['investigationId', 'deletedAt'],
+            transaction
+        });
+        if( !investigationSource ) {
+            throw new AppError(getMessage('investigationSource.notFound', lang), 404, 'INVSRC_005C_NOT_FOUND');
+        }
+
+        assertRowIsSealed(investigationSource, 'INVSRC_005C_NOT_DELETED', lang);
+
+        await purgeEntityService({
+            model: InvestigationSource,
+            where: { investigationId: id },
+            transaction,
+            operationCode: 'ESAVI-INVSRC-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('investigationSource.notFound', lang),
+            notFoundCode: 'INVSRC_005C_NOT_FOUND',
+            // Unreachable on this table: the generic guard compares isActive, a column
+            // investigationSource does not have. The real guard is the one above
+            stillActiveMessage: getMessage('investigationSource.notDeleted', lang, { id }),
+            stillActiveCode: 'INVSRC_005C_NOT_DELETED'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationSourceService,
     getInvestigationSourcesService,
     getAllInvestigationSourcesService,
     getInvestigationSourceByIdService,
     getInvestigationSourceByCaseIdService,
-    updateInvestigationSourceService
+    updateInvestigationSourceService,
+    purgeInvestigationSourceService
 };
