@@ -7,6 +7,7 @@ import {
     getInvestigationAutopsies,
     getInvestigationAutopsyByCaseId,
     getInvestigationAutopsyById,
+    purgeInvestigationAutopsy,
     updateInvestigationAutopsy
 } from '../controllers/investigationAutopsy.controller';
 import {
@@ -17,7 +18,7 @@ import {
     updateInvestigationAutopsyValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -39,6 +40,13 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationAutopsy
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the autopsy of
 // a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationAutopsyListValidator, validateFields, getAllInvestigationAutopsies);
+
+// Purge Investigation Autopsy - Physical delete, for SuperAdmin
+// Code: ESAVI-INVAUT-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not have
+// an activity flag and does not manage its own state — its investigation does. This is also the
+// only operation that releases the investigationId
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationAutopsyIdValidator, validateFields, purgeInvestigationAutopsy);
 
 // Get Investigation Autopsy by Case
 // Code: ESAVI-INVAUT-006

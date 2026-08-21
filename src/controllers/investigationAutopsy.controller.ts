@@ -7,6 +7,7 @@ import {
     getInvestigationAutopsiesService,
     getInvestigationAutopsyByCaseIdService,
     getInvestigationAutopsyByIdService,
+    purgeInvestigationAutopsyService,
     updateInvestigationAutopsyService
 } from '../services/investigationAutopsy.service';
 
@@ -158,11 +159,33 @@ const updateInvestigationAutopsy = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Purge Investigation Autopsy Controller
+// Code: ESAVI-INVAUT-005C
+// Answers { ok, message } without data: the row no longer exists, so there is nothing to return
+const purgeInvestigationAutopsy = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeInvestigationAutopsyService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAutopsy.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVAUT-005C: Error purging Investigation Autopsy: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAutopsy.purgeFailed', req.lang), 500, 'INVAUT_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationAutopsy,
     getInvestigationAutopsies,
     getAllInvestigationAutopsies,
     getInvestigationAutopsyById,
     getInvestigationAutopsyByCaseId,
-    updateInvestigationAutopsy
+    updateInvestigationAutopsy,
+    purgeInvestigationAutopsy
 };
