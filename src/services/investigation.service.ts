@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationSource } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -517,6 +517,54 @@ const cascadeClearInvestigationSource = async (investigationId: string, authUser
     );
 }
 
+// The second of the fourteen satellites joins the cascade of 005A. It is the exact twin of the one
+// above: investigationAutopsy has no isActive column either, so what moves is its deletedAt, and
+// rows already sealed are left alone by the where — they keep their original date and receive no
+// new entry. An investigation with no autopsy updates zero rows and does not fail.
+// SPEC F30 adds this satellite to the mechanism. This is the SECOND copy of the same drag: if the
+// third satellite duplicates it again, that is the moment to extract a common service
+const cascadeSealInvestigationAutopsy = async (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    // The method is the code of the operation that dragged it, not ESAVI-INVAUT-005*: the audit
+    // says who did it, not which row it landed on
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVESTGN-005A',
+        detail: 'Investigation autopsy sealed by cascade from its investigation'
+    };
+    await InvestigationAutopsy.update(
+        {
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        { where: { investigationId, deletedAt: null }, transaction }
+    );
+}
+
+// The upward cascade of 005B, legitimate for the same reason as the one of the source: the
+// deletedAt of the autopsy does not mean "somebody retired this row", it means "its investigation
+// was retired". Reactivating the investigation therefore returns it without asking.
+// ESAVI-CASE-005B clears nothing, coherent with F07 and F29
+const cascadeClearInvestigationAutopsy = async (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVESTGN-005B',
+        detail: 'Investigation autopsy returned by cascade from its investigation'
+    };
+    await InvestigationAutopsy.update(
+        {
+            deletedAt: null,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        { where: { investigationId }, transaction }
+    );
+}
+
 // Setting Investigation Active/Inactive Service
 // Code: ESAVI-INVESTGN-005A / ESAVI-INVESTGN-005B
 // It does NOT go through buildDifferentialUpdate, and that is deliberate: these are writes with an
@@ -555,12 +603,15 @@ const setInvestigationActivationService = async (
         });
 
         // Only after the investigation itself moved: if it was already in that state, the generic
-        // service threw a 409 above and the cascade is never reached. The source has no state of
-        // its own, so retiring it is retiring its investigation and returning it is returning it
+        // service threw a 409 above and the cascade is never reached. Neither satellite has state
+        // of its own, so retiring them is retiring their investigation and returning them is
+        // returning it. Both travel in the same transaction the service already opened
         if( isActive ) {
             await cascadeClearInvestigationSource(id, authUser, transaction);
+            await cascadeClearInvestigationAutopsy(id, authUser, transaction);
         } else {
             await cascadeSealInvestigationSource(id, authUser, transaction);
+            await cascadeSealInvestigationAutopsy(id, authUser, transaction);
         }
 
         await transaction.commit();
@@ -593,6 +644,15 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( investigationSource ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: Investigation source dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(investigationSource.get({ plain: true })) }`,
+                'warn'
+            );
+        }
+
+        // The second satellite, dumped next to the first one and by the same criterion. SPEC F30
+        const investigationAutopsy = await InvestigationAutopsy.findByPk(id, { transaction });
+        if( investigationAutopsy ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: Investigation autopsy dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(investigationAutopsy.get({ plain: true })) }`,
                 'warn'
             );
         }
