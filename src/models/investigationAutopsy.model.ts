@@ -27,8 +27,8 @@ export class InvestigationAutopsy extends Model<InferAttributes<InvestigationAut
 
     // The two autopsy flags. Nullable booleans and therefore tri-state: null means "the form did
     // not collect it", which is not false — that one is a deliberate "no" from the investigator.
-    // Unlike what SPEC F29 §6 claims, this entity does not consume answerOption: the DDL declares
-    // them plain boolean (esaviapp.sql:981-982). They are mutually exclusive in true, and each one
+    // Unlike what SPEC F29 §6 claims, this entity consumes no ENUM at all: the DDL declares them
+    // plain boolean (esaviapp.sql:981-982). They are mutually exclusive in true, and each one
     // governs its own date, both rules enforced by the service over the resulting state
     declare isAutopsyPerformed?: CreationOptional<boolean | null>;
     declare isAutopsyScheduled?: CreationOptional<boolean | null>;
