@@ -293,6 +293,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | geoLocation | `GEOLOC` |
 | healthFacility | `HFAC` |
 | investigation | `INVESTGN` |
+| investigationSource | `INVSRC` |
 | nonSevereNotification | `NSEVNOT` |
 | notification | `NOTIFCN` |
 | notificationDiluent | `NOTIFDIL` |
