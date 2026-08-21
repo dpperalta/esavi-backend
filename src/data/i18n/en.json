@@ -677,6 +677,28 @@
         "purgeSuccess": "Investigation sources permanently deleted",
         "purgeFailed": "Failed to permanently delete the investigation sources. Please try again later."
     },
+    "investigationAutopsy": {
+        "notFound": "Autopsy not found. Please check the investigation ID and try again.",
+        "idRequired": "The investigation ID is required",
+        "investigationNotFound": "The given investigation does not exist or is inactive",
+        "alreadyExists": "The investigation with ID {{investigationId}} already has an autopsy recorded",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "autopsyFlagsExclusive": "The autopsy cannot have been performed and be scheduled at the same time",
+        "autopsyDateNotAllowed": "The autopsy date is only admitted when the autopsy is declared as performed",
+        "scheduledAutopsyDateNotAllowed": "The scheduled autopsy date is only admitted when the autopsy is declared as scheduled",
+        "autopsyDateBeforeDeath": "The autopsy date {{autopsyDate}} cannot be earlier than the date of death {{deathDate}}",
+        "notDeleted": "The autopsy with ID {{id}} has not been withdrawn. Deactivate its investigation before deleting it permanently.",
+        "createdSuccess": "Autopsy created successfully",
+        "createdFailed": "Failed to create the autopsy. Please try again later.",
+        "getSuccess": "Autopsy fetched successfully",
+        "getFailed": "Failed to fetch the autopsy. Please try again later.",
+        "getSuccessPlural": "Autopsy list fetched successfully",
+        "getFailedPlural": "Failed to fetch the autopsy list. Please try again later.",
+        "updatedSuccess": "Autopsy updated successfully",
+        "updatedFailed": "Failed to update the autopsy. Please try again later.",
+        "purgeSuccess": "Autopsy permanently deleted",
+        "purgeFailed": "Failed to permanently delete the autopsy. Please try again later."
+    },
     "systemConfig": {
         "createdSuccess": "Configuration created successfully",
         "createdFailed": "Failed to create the configuration. Please try again later.",

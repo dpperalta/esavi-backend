@@ -677,6 +677,28 @@
         "purgeSuccess": "Fuentes de investigación eliminadas permanentemente",
         "purgeFailed": "Error al eliminar permanentemente las fuentes de investigación. Por favor, inténtelo de nuevo más tarde."
     },
+    "investigationAutopsy": {
+        "notFound": "Autopsia no encontrada. Por favor, verifique el ID de la investigación e inténtelo de nuevo.",
+        "idRequired": "El ID de la investigación es obligatorio",
+        "investigationNotFound": "La investigación indicada no existe o está inactiva",
+        "alreadyExists": "La investigación con ID {{investigationId}} ya tiene una autopsia registrada",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "autopsyFlagsExclusive": "No se puede haber practicado la autopsia y tenerla programada al mismo tiempo",
+        "autopsyDateNotAllowed": "La fecha de la autopsia solo se admite cuando se declara que la autopsia fue practicada",
+        "scheduledAutopsyDateNotAllowed": "La fecha programada de la autopsia solo se admite cuando se declara que la autopsia está programada",
+        "autopsyDateBeforeDeath": "La fecha de la autopsia {{autopsyDate}} no puede ser anterior a la fecha del fallecimiento {{deathDate}}",
+        "notDeleted": "La autopsia con ID {{id}} no ha sido retirada. Desactive su investigación antes de eliminarla permanentemente.",
+        "createdSuccess": "Autopsia creada exitosamente",
+        "createdFailed": "Error al crear la autopsia. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Autopsia obtenida exitosamente",
+        "getFailed": "Error al obtener la autopsia. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Listado de autopsias obtenido exitosamente",
+        "getFailedPlural": "Error al obtener el listado de autopsias. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Autopsia actualizada exitosamente",
+        "updatedFailed": "Error al actualizar la autopsia. Por favor, inténtelo de nuevo más tarde.",
+        "purgeSuccess": "Autopsia eliminada permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente la autopsia. Por favor, inténtelo de nuevo más tarde."
+    },
     "systemConfig": {
         "createdSuccess": "Configuración creada exitosamente",
         "createdFailed": "Error al crear la configuración. Por favor, inténtelo de nuevo más tarde.",

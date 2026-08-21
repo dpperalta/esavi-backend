@@ -677,6 +677,28 @@
         "purgeSuccess": "Onderzoeksbronnen permanent verwijderd",
         "purgeFailed": "Definitief verwijderen van de onderzoeksbronnen mislukt. Probeer het later opnieuw."
     },
+    "investigationAutopsy": {
+        "notFound": "Autopsie niet gevonden. Controleer de ID van het onderzoek en probeer het opnieuw.",
+        "idRequired": "De ID van het onderzoek is verplicht",
+        "investigationNotFound": "Het opgegeven onderzoek bestaat niet of is inactief",
+        "alreadyExists": "Het onderzoek met ID {{investigationId}} heeft al een autopsie geregistreerd",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "autopsyFlagsExclusive": "De autopsie kan niet tegelijkertijd uitgevoerd en gepland zijn",
+        "autopsyDateNotAllowed": "De datum van de autopsie is alleen toegestaan wanneer de autopsie als uitgevoerd is opgegeven",
+        "scheduledAutopsyDateNotAllowed": "De geplande datum van de autopsie is alleen toegestaan wanneer de autopsie als gepland is opgegeven",
+        "autopsyDateBeforeDeath": "De datum van de autopsie {{autopsyDate}} mag niet vóór de datum van overlijden {{deathDate}} liggen",
+        "notDeleted": "De autopsie met ID {{id}} is niet ingetrokken. Deactiveer het onderzoek voordat u deze permanent verwijdert.",
+        "createdSuccess": "Autopsie succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de autopsie mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Autopsie succesvol opgehaald",
+        "getFailed": "Ophalen van de autopsie mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Lijst met autopsieën succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de lijst met autopsieën mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Autopsie succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de autopsie mislukt. Probeer het later opnieuw.",
+        "purgeSuccess": "Autopsie permanent verwijderd",
+        "purgeFailed": "Definitief verwijderen van de autopsie mislukt. Probeer het later opnieuw."
+    },
     "systemConfig": {
         "createdSuccess": "Configuratie succesvol aangemaakt",
         "createdFailed": "Aanmaken van de configuratie mislukt. Probeer het later opnieuw.",
