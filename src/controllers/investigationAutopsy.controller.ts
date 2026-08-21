@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationAutopsyListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationAutopsyListFilters } from '../types';
 import {
     createInvestigationAutopsyService,
     getAllInvestigationAutopsiesService,
-    getInvestigationAutopsiesService
+    getInvestigationAutopsiesService,
+    getInvestigationAutopsyByIdService
 } from '../services/investigationAutopsy.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so
@@ -78,8 +79,34 @@ const getAllInvestigationAutopsies = async (req: Request, res: Response, next: N
     }
 }
 
+// Get Investigation Autopsy By ID Controller
+// Code: ESAVI-INVAUT-003
+const getInvestigationAutopsyById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationAutopsyByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAutopsy.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVAUT-003: Error fetching Investigation Autopsy by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAutopsy.getFailed', req.lang), 500, 'INVAUT_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationAutopsy,
     getInvestigationAutopsies,
-    getAllInvestigationAutopsies
+    getAllInvestigationAutopsies,
+    getInvestigationAutopsyById
 };

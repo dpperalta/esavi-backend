@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationAutopsy,
     getAllInvestigationAutopsies,
-    getInvestigationAutopsies
+    getInvestigationAutopsies,
+    getInvestigationAutopsyById
 } from '../controllers/investigationAutopsy.controller';
 import {
     createInvestigationAutopsyValidator,
+    investigationAutopsyIdValidator,
     investigationAutopsyListValidator
 } from '../validators';
 
@@ -33,5 +35,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationAutopsy
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the autopsy of
 // a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationAutopsyListValidator, validateFields, getAllInvestigationAutopsies);
+
+// Get Investigation Autopsy by ID
+// Code: ESAVI-INVAUT-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the investigationId: this entity has no identifier of its own, so this is already
+// the access by investigation
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationAutopsyIdValidator, validateFields, getInvestigationAutopsyById);
 
 export default router;
