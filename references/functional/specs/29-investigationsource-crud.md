@@ -1,6 +1,6 @@
 # SPEC F29 — CRUD de `investigationSource`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — dependencia dura de modelo: la PK de esta tabla *es* su FK)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), **SPEC F13 (`severeNotification` — aporta el patrón de satélite sin `isActive` y las funciones de arrastre)**, **SPEC F14 (`nonSevereNotification` — aporta `assertRowIsSealed` en `src/helpers/rowSeal.helper.ts`, que este spec reutiliza sin tocarlo)**, SPEC F08 (operación `005C` de borrado físico), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-20
 > **Objetivo:** Dar de alta `investigationSource` —las ocho fuentes de información con que se investigó un caso— como la **primera** de las catorce tablas satélite de `investigation` y la tercera del repositorio sin columna `isActive`.

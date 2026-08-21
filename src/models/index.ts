@@ -27,6 +27,7 @@ import { NotificationPregnancy } from './notificationPregnancy.model';
 import { NotificationPregnancyComplication } from './notificationPregnancyComplication.model';
 import { Investigation } from './investigation.model';
 import { InvestigationSource } from './investigationSource.model';
+import { InvestigationAutopsy } from './investigationAutopsy.model';
 import { SystemConfig } from './systemConfig.model';
 import { SystemConfigHistory } from './systemConfigHistory.model';
 
@@ -63,6 +64,7 @@ export {
     NotificationPregnancyComplication,
     Investigation,
     InvestigationSource,
+    InvestigationAutopsy,
     SystemConfig,
     SystemConfigHistory
 };

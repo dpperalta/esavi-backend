@@ -29,6 +29,7 @@ import notificationPregnancyRoutes from './notificationPregnancy.routes';
 import notificationPregnancyComplicationRoutes from './notificationPregnancyComplication.routes';
 import investigationRoutes from './investigation.routes';
 import investigationSourceRoutes from './investigationSource.routes';
+import investigationAutopsyRoutes from './investigationAutopsy.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -79,6 +80,9 @@ router.use('/investigations', investigationRoutes);
 // The first of the fourteen satellites of investigation. The investigation- prefix is what tells
 // it apart from the notification branch, which has its own sources of verification
 router.use('/investigation-sources', investigationSourceRoutes);
+// The second of the fourteen satellites of investigation: the death and the autopsy of an
+// investigated case. Plural in the path like the rest, even though the relation is one to one
+router.use('/investigation-autopsies', investigationAutopsyRoutes);
 router.use('/system-configs', systemConfigRoutes);
 
 export default router;

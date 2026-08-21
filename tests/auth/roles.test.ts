@@ -386,6 +386,21 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/investigation-sources/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVSRC-004' },
     { method: 'delete', path: `/api/investigation-sources/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVSRC-005C' },
 
+    // investigationAutopsy (SPEC F30) — the second of the fourteen satellites of investigation, and
+    // the fourth table of the repository with no isActive column. The same seven operations as its
+    // sister and for the same reasons: no 005A and no 005B, the dual listing kept because the
+    // visibility is inherited from investigation.isActive, and 001 and 004 on USER. The :id of
+    // 003, 004 and 005C is the investigationId — the primary key of the row is the foreign key to
+    // its investigation — so the 003 is already the access by investigation and the 006 exists to
+    // walk case -> investigation -> autopsy, one to one on both hops
+    { method: 'post',   path: '/api/investigation-autopsies',                 minRole: 'USER',       code: 'ESAVI-INVAUT-001' },
+    { method: 'get',    path: '/api/investigation-autopsies',                 minRole: 'USER',       code: 'ESAVI-INVAUT-002A' },
+    { method: 'get',    path: '/api/investigation-autopsies/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVAUT-002B' },
+    { method: 'get',    path: `/api/investigation-autopsies/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVAUT-006' },
+    { method: 'get',    path: `/api/investigation-autopsies/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVAUT-003' },
+    { method: 'put',    path: `/api/investigation-autopsies/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVAUT-004' },
+    { method: 'delete', path: `/api/investigation-autopsies/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVAUT-005C' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -464,7 +479,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(218);
+            expect(ROUTE_RULES).toHaveLength(225);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

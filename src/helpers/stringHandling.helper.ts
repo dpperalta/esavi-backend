@@ -107,3 +107,20 @@ export const removeNumbers = (text: string): string => {
 export const extractNumbers = (text: string): string => {
     return text.replace(/[^0-9]/g, '');
 }
+
+// Normalize a time of day into the 'HH:mm:ss' form Postgres returns for a `time` column.
+// Accepts 'HH:mm' and 'HH:mm:ss' and is idempotent over its own output, which is what makes it
+// usable inside a differential update: without it a client sending '14:30' over a stored
+// '14:30:00' would produce an invented difference on every open of the form. Any input that is
+// not a time is returned trimmed and untouched — the shape is the validator's job, not this one's
+export const toTimeString = (text: string): string => {
+    const trimmed = text.trim();
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+
+    if (!match) {
+        return trimmed;
+    }
+
+    const [, hours, minutes, seconds] = match;
+    return `${hours.padStart(2, '0')}:${minutes}:${seconds ?? '00'}`;
+}

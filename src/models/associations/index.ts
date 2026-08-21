@@ -18,6 +18,7 @@ import { initNotificationPregnancyAssociations } from './notificationPregnancy.a
 import { initNotificationPregnancyComplicationAssociations } from './notificationPregnancyComplication.associations';
 import { initInvestigationAssociations } from './investigation.associations';
 import { initInvestigationSourceAssociations } from './investigationSource.associations';
+import { initInvestigationAutopsyAssociations } from './investigationAutopsy.associations';
 import { initSystemConfigAssociations } from './systemConfig.associations';
 
 export const initAssociations = (): void => {
@@ -41,5 +42,6 @@ export const initAssociations = (): void => {
     initNotificationPregnancyComplicationAssociations();
     initInvestigationAssociations();
     initInvestigationSourceAssociations();
+    initInvestigationAutopsyAssociations();
     initSystemConfigAssociations();
 }

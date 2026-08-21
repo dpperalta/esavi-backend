@@ -975,11 +975,11 @@ CREATE TABLE IF NOT EXISTS "investigationSource" (
 
 CREATE TABLE IF NOT EXISTS "investigationAutopsy" (
   "investigationId" uuid PRIMARY KEY,
-  "isDeath" "answerOption",
+  "isDeath" boolean NOT NULL DEFAULT true,
   "deathDate" date,
   "deathTime" time,
-  "isAutopsyPerformed" "answerOption",
-  "isAutopsyScheduled" "answerOption",
+  "isAutopsyPerformed" boolean,
+  "isAutopsyScheduled" boolean,
   "autopsyDate" date,
   "scheduledAutopsyDate" date,
   "autopsyComments" text,
