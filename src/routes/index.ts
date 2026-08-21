@@ -27,6 +27,7 @@ import diluentCatalogRoutes from './diluentCatalog.routes';
 import notificationDiluentRoutes from './notificationDiluent.routes';
 import notificationPregnancyRoutes from './notificationPregnancy.routes';
 import notificationPregnancyComplicationRoutes from './notificationPregnancyComplication.routes';
+import investigationRoutes from './investigation.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -73,6 +74,7 @@ router.use('/notification-pregnancies', notificationPregnancyRoutes);
 // The notification- prefix tells it apart from investigationPregnancyCondition, which is the
 // pregnancy table of the investigation branch
 router.use('/notification-pregnancy-complications', notificationPregnancyComplicationRoutes);
+router.use('/investigations', investigationRoutes);
 router.use('/system-configs', systemConfigRoutes);
 
 export default router;

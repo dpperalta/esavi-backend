@@ -354,6 +354,23 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-004' },
     { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'ADMIN',      code: 'ESAVI-PREGCOMP-005A' },
 
+    // investigation (SPEC F28) — the root of the investigation block and the fourth satellite of
+    // esaviCase, one to one with it through UQ_investigation_case. Seven canonical operations plus
+    // 006, which reads by the caseId because that is what the client holds, and 005C, which the
+    // entity gets for sitting outside the preventPhysicalDelete loop of esaviapp.sql.
+    // 001 and 004 deviate from the canonical matrix and stay in USER, the same deviation as F05,
+    // F06, F07, F09 and F10 and for the same reason: the investigation is captured in the same
+    // operational flow as the case. Its fourteen satellite tables are out of scope of F28
+    { method: 'post',   path: '/api/investigations',                    minRole: 'USER',       code: 'ESAVI-INVESTGN-001' },
+    { method: 'get',    path: '/api/investigations',                    minRole: 'USER',       code: 'ESAVI-INVESTGN-002A' },
+    { method: 'get',    path: '/api/investigations/admin',              minRole: 'ADMIN',      code: 'ESAVI-INVESTGN-002B' },
+    { method: 'get',    path: `/api/investigations/case/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-INVESTGN-006' },
+    { method: 'get',    path: `/api/investigations/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-INVESTGN-003' },
+    { method: 'put',    path: `/api/investigations/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-INVESTGN-004' },
+    { method: 'delete', path: `/api/investigations/${ UUID }`,          minRole: 'ADMIN',      code: 'ESAVI-INVESTGN-005A' },
+    { method: 'patch',  path: `/api/investigations/activate/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVESTGN-005B' },
+    { method: 'delete', path: `/api/investigations/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-INVESTGN-005C' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -432,7 +449,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(202);
+            expect(ROUTE_RULES).toHaveLength(211);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

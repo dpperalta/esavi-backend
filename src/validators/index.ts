@@ -24,4 +24,5 @@ export * from './diluentCatalog.validator';
 export * from './notificationDiluent.validator';
 export * from './notificationPregnancy.validator';
 export * from './notificationPregnancyComplication.validator';
+export * from './investigation.validator';
 export * from './systemConfig.validator';

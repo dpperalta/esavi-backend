@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, HealthFacility, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
+import { Classification, EsaviCase, HealthFacility, Investigation, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -468,6 +468,32 @@ const cascadeDeactivateNotification = async (caseId: string, authUser: AuthUser 
     );
 }
 
+// The investigation of the case joins the same cascade, on the same terms and for the same reason
+// as the classification and the notification: UQ_investigation_case makes it at most one row, but
+// the update is still a mass one filtered by caseId — it takes no decision per row, and a case
+// with no investigation updates zero rows and does not fail. Rows already inactive are left alone
+// by the where, so they keep their original deletedAt and receive no new entry. SPEC F28 adds this
+// satellite to the mechanism SPEC F07 left in place. Its fourteen detail tables are out of scope:
+// nothing walks down from here to them
+const cascadeDeactivateInvestigation = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CASE-005A',
+        detail: 'Investigation deactivated by cascade from its ESAVI Case'
+    };
+    await Investigation.update(
+        {
+            isActive: false,
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        { where: { caseId, isActive: true }, transaction }
+    );
+}
+
 // The severe detail of that notification joins the cascade too, and it is the only satellite
 // reached in two hops. The chain case -> notification -> detail has to be walked explicitly:
 // the mass Notification.update above does not go through notification.service.ts, so the
@@ -590,6 +616,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
             await cascadeDeactivateNotifiers(id, authUser, transaction);
             await cascadeDeactivateClassification(id, authUser, transaction);
             await cascadeDeactivateNotification(id, authUser, transaction);
+            await cascadeDeactivateInvestigation(id, authUser, transaction);
             await cascadeSealSevereNotifications(id, authUser, transaction);
             await cascadeSealNonSevereNotifications(id, authUser, transaction);
         }
