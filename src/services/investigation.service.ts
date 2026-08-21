@@ -1,7 +1,7 @@
-import { WhereOptions } from 'sequelize';
+import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationSource } from '../models';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import {
@@ -459,6 +459,64 @@ const updateInvestigationService = async (
     return updatedInvestigation ? toInvestigationResponse(updatedInvestigation) : null;
 }
 
+// The same literal the six sibling cascades of esaviCase.service.ts use: appDetails is extended
+// in SQL, never overwritten, so a mass update preserves the history of every row it touches
+const appendedAppDetails = (entry: AppDetails) => sequelize.literal(
+    `CASE WHEN jsonb_typeof("appDetails") = 'array' THEN "appDetails" ELSE '[]'::jsonb END || jsonb_build_array(${ sequelize.escape(JSON.stringify(entry)) }::jsonb)`
+) as unknown as AppDetails[];
+
+// The first of the fourteen satellites joins the cascade of 005A. investigationSource has no
+// isActive column, so what moves is its deletedAt, and rows already sealed are left alone by the
+// where: they keep their original date and receive no new entry.
+// It is a mass update and not a read followed by a per-row write: the cascade takes no decision
+// per row, and an investigation with no source updates zero rows and does not fail.
+// It does NOT go through buildDifferentialUpdate, and that is deliberate: this is a write with an
+// intention of its own, and the record of the act of sealing is precisely what is worth keeping.
+// SPEC F29 adds this satellite to the mechanism
+const cascadeSealInvestigationSource = async (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    // The method is the code of the operation that dragged it, not ESAVI-INVSRC-005*: the audit
+    // says who did it, not which row it landed on
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVESTGN-005A',
+        detail: 'Investigation source sealed by cascade from its investigation'
+    };
+    await InvestigationSource.update(
+        {
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        { where: { investigationId, deletedAt: null }, transaction }
+    );
+}
+
+// The upward cascade of 005B, the exception SPEC F13 reasoned and the one SPEC F07 does not admit
+// for esaviCase. It is legitimate here because the source has no state of its own to resurrect:
+// its deletedAt does not mean "somebody retired this row", it means "its investigation was
+// retired". Reactivating the investigation therefore returns it without asking.
+// ESAVI-CASE-005B clears nothing, coherent with F07: reactivating the case does not reactivate the
+// investigation, so it cannot touch its source either
+const cascadeClearInvestigationSource = async (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVESTGN-005B',
+        detail: 'Investigation source returned by cascade from its investigation'
+    };
+    await InvestigationSource.update(
+        {
+            deletedAt: null,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        { where: { investigationId }, transaction }
+    );
+}
+
 // Setting Investigation Active/Inactive Service
 // Code: ESAVI-INVESTGN-005A / ESAVI-INVESTGN-005B
 // It does NOT go through buildDifferentialUpdate, and that is deliberate: these are writes with an
@@ -495,6 +553,16 @@ const setInvestigationActivationService = async (
                 detail: `Investigation ${ isActive ? 'activated' : 'deactivated' } by service`
             }
         });
+
+        // Only after the investigation itself moved: if it was already in that state, the generic
+        // service threw a 409 above and the cascade is never reached. The source has no state of
+        // its own, so retiring it is retiring its investigation and returning it is returning it
+        if( isActive ) {
+            await cascadeClearInvestigationSource(id, authUser, transaction);
+        } else {
+            await cascadeSealInvestigationSource(id, authUser, transaction);
+        }
+
         await transaction.commit();
     } catch (error) {
         await transaction.rollback();
@@ -508,13 +576,27 @@ const setInvestigationActivationService = async (
 // can really be destroyed. This is the only path that releases the caseId: once the row is gone
 // UQ_investigation_case is free and the case admits a new investigation. It does not touch the
 // case — the foreign key runs from the investigation to the case and not the other way round.
-// WARNING for when the satellites land: the fourteen detail tables of investigation declare
-// ON DELETE CASCADE on investigationId, so a 005C will drag the whole detailed investigation with
-// it without asking for confirmation. Today there is nothing to drag, and the spec that creates
-// the first satellite must revisit this operation
+// WARNING: the fourteen detail tables of investigation declare ON DELETE CASCADE on
+// investigationId, so a 005C drags the whole detailed investigation with it without asking for
+// confirmation — outside of any service, so with no audit, no appDetails and no way back.
+// SPEC F29 is the spec that revisited this operation, and its decision was NOT to block the purge:
+// whoever runs it is SUPERADMIN over an already retired investigation, and a block would force
+// purging in two steps with the only advantage of a warning the log already gives. The dump below
+// is that warning, and the only mitigation there is. It is the same decision F13 took for
+// notification. The remaining thirteen satellites must be added to the dump as they land
 const purgeInvestigationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
     const transaction = await sequelize.transaction();
     try {
+        // Written before the destroy and inside the same transaction, so what the cascade is about
+        // to erase leaves a trace. It does not stop the purge
+        const investigationSource = await InvestigationSource.findByPk(id, { transaction });
+        if( investigationSource ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: Investigation source dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(investigationSource.get({ plain: true })) }`,
+                'warn'
+            );
+        }
+
         await purgeEntityService({
             model: Investigation,
             where: { investigationId: id },
