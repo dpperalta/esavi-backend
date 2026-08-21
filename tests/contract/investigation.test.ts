@@ -1,6 +1,6 @@
 import fs from 'fs';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationSource, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -890,6 +890,66 @@ describe('investigation contract', () => {
             const again = await purge(id);
             expect(again.status).toBe(404);
             expect(again.body.code).toBe('INVESTGN_005C_NOT_FOUND');
+        });
+    });
+
+    // SPEC F29 hangs the first of the fourteen satellites off these three operations. What is
+    // checked here is the effect on the source, seen from the side of the investigation: the
+    // detailed behaviour of the entity lives in tests/contract/investigationSource.test.ts.
+    // investigationSource has no isActive column, so what the cascades move is its deletedAt
+    describe('the cascade over investigationSource', () => {
+
+        // The source is created through its own endpoint, which is the only way it is ever born
+        const createSource = (investigationId: string, payload: Record<string, unknown> = {}) =>
+            request(app).post('/api/investigation-sources')
+                .set(authHeader('USER')).send({ investigationId, ...payload });
+
+        const readSource = async (id: string) =>
+            await InvestigationSource.findByPk(id, { paranoid: false });
+
+        const sourceMethods = async (id: string): Promise<string[]> =>
+            (((await readSource(id))!.getDataValue('appDetails') as { method: string }[]) ?? [])
+                .map(entry => entry.method);
+
+        it('deactivating the investigation seals its source', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            expect((await createSource(id, { history: true })).status).toBe(201);
+
+            expect((await deactivate(id)).status).toBe(200);
+
+            expect((await readSource(id))!.getDataValue('deletedAt')).not.toBeNull();
+            expect(await sourceMethods(id)).toEqual(['ESAVI-INVSRC-001', 'ESAVI-INVESTGN-005A']);
+        });
+
+        it('reactivating it returns the source, keeping the previous history', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createSource(id, { history: true });
+            await deactivate(id);
+
+            expect((await activate(id)).status).toBe(200);
+
+            const source = (await readSource(id))!;
+            expect(source.getDataValue('deletedAt')).toBeNull();
+            expect(source.getDataValue('history')).toBe(true);
+            expect(await sourceMethods(id)).toEqual([
+                'ESAVI-INVSRC-001', 'ESAVI-INVESTGN-005A', 'ESAVI-INVESTGN-005B'
+            ]);
+        });
+
+        it('purging the investigation destroys the source by Postgres cascade without erroring', async () => {
+            // The purge is not blocked when the investigation has a satellite: it is the decision
+            // F29 declared, with the warn dump in the log as the only mitigation
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createSource(id);
+            await deactivate(id);
+
+            expect((await purge(id)).status).toBe(200);
+
+            expect(await readSource(id)).toBeNull();
+            expect(await Investigation.findByPk(id, { paranoid: false })).toBeNull();
         });
     });
 });

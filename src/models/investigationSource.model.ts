@@ -31,7 +31,8 @@ export class InvestigationSource extends Model<InferAttributes<InvestigationSour
     // No activity flag is declared, and this is the third model of the repository without one —
     // the first outside the notification block: the DDL does not have that column
     // (esaviapp.sql:956-974) and this entity does not manage its own state. Its visibility is
-    // inherited from investigation.isActive, and deletedAt is the only status mark the row carries
+    // inherited from the activity flag of its investigation, and deletedAt is the only status mark
+    // the row carries
     declare readonly createdAt?: CreationOptional<Date>;
     declare readonly updatedAt?: CreationOptional<Date>;
     declare deletedAt?: CreationOptional<Date | null>;
