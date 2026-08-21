@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -1296,6 +1296,136 @@ describe('esaviCase contract', () => {
 
             expect(purged.status).toBe(200);
             expect(await InvestigationSource.findByPk(investigationId)).toBeNull();
+        });
+
+    });
+
+    /**
+     * SPEC F30 adds the investigation autopsy as the seventh satellite reached from here,
+     * and the third one walked in two hops. It is necessary for the exact reason the block
+     * above documents: the mass Investigation.update never goes through
+     * setInvestigationActivationService, so the cascade SPEC F30 installed there does not
+     * fire from this side, and without this one the autopsy would stay unsealed.
+     * The last case is the one that matters most across the two specs: both satellites are
+     * sealed in the same transaction, so neither may have broken the other.
+     */
+    describe('005A — the cascade over the investigation autopsy', () => {
+
+        // Unlike the source, the autopsy cannot be opened empty: isDeath and deathDate are required
+        const createAutopsyChain = async ( caseId: string ): Promise<string> => {
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+                .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
+            return investigationId;
+        };
+
+        const readAutopsy = async ( id: string ) => {
+            const row = await InvestigationAutopsy.findByPk(id);
+            return {
+                deletedAt: row!.getDataValue('deletedAt') as Date | null,
+                appDetails: row!.getDataValue('appDetails') as { method: string }[]
+            };
+        };
+
+        it('seals the autopsy transitively, in the same transaction that deactivates the investigation', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createAutopsyChain(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const autopsy = await readAutopsy(investigationId);
+            expect(autopsy.deletedAt).not.toBeNull();
+            // The method is the code of the operation that dragged it, never an ESAVI-INVAUT one.
+            // It is also what proves this cascade fired and not the one of ESAVI-INVESTGN-005A
+            expect(autopsy.appDetails.map(entry => entry.method)).toEqual([
+                'ESAVI-INVAUT-001', 'ESAVI-CASE-005A'
+            ]);
+            expect(( await Investigation.findByPk(investigationId) )?.getDataValue('isActive')).toBe(false);
+        });
+
+        it('does not undo it when the case is reactivated', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createAutopsyChain(caseId);
+            await deleteCase(caseId);
+            const sealed = await readAutopsy(investigationId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const after = await readAutopsy(investigationId);
+            expect(after.deletedAt).toEqual(sealed.deletedAt);
+            expect(after.appDetails).toHaveLength(sealed.appDetails.length);
+        });
+
+        it('leaves an autopsy sealed beforehand with its own deletedAt and no new entry', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createAutopsyChain(caseId);
+            // Sealed through its investigation, which is the other path of the drag
+            await request(app).delete(`/api/investigations/${ investigationId }`).set(authHeader('ADMIN'));
+
+            const before = await readAutopsy(investigationId);
+            expect(before.appDetails[1].method).toBe('ESAVI-INVESTGN-005A');
+
+            // A second apart, so a deletedAt rewritten by the cascade would show
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            await deleteCase(caseId);
+
+            const after = await readAutopsy(investigationId);
+            expect(( after.deletedAt as Date ).getTime()).toBe(( before.deletedAt as Date ).getTime());
+            expect(after.appDetails).toHaveLength(before.appDetails.length);
+        });
+
+        it('does not fail on a case whose investigation has no autopsy', async () => {
+            const withoutAutopsy = await createCase();
+            const caseId = withoutAutopsy.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+            expect(await InvestigationAutopsy.findByPk(investigation.body.data.investigationId)).toBeNull();
+        });
+
+        it('makes the dragged autopsy purgable, which is the point of sealing it', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createAutopsyChain(caseId);
+            await deleteCase(caseId);
+
+            const purged = await request(app)
+                .delete(`/api/investigation-autopsies/purge/${ investigationId }`)
+                .set(authHeader('SUPERADMIN'));
+
+            expect(purged.status).toBe(200);
+            expect(await InvestigationAutopsy.findByPk(investigationId)).toBeNull();
+        });
+
+        it('seals source AND autopsy together: the seventh sibling did not break the sixth', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+                .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+
+            expect(( await InvestigationSource.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
+            expect(( await InvestigationAutopsy.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
         });
 
     });

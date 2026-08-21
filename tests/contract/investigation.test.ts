@@ -1,6 +1,6 @@
 import fs from 'fs';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationSource, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -950,6 +950,110 @@ describe('investigation contract', () => {
 
             expect(await readSource(id)).toBeNull();
             expect(await Investigation.findByPk(id, { paranoid: false })).toBeNull();
+        });
+    });
+
+    // SPEC F30 hangs the second of the fourteen satellites off the same three operations. What is
+    // checked here is the effect on the autopsy, seen from the side of the investigation: the
+    // detailed behaviour of the entity lives in tests/contract/investigationAutopsy.test.ts.
+    // investigationAutopsy has no isActive column either, so what the cascades move is its
+    // deletedAt. The last case is the one that matters most: the two satellites travel in the same
+    // transaction, so neither spec may have broken the other
+    describe('the cascade over investigationAutopsy', () => {
+
+        // The autopsy is created through its own endpoint, which is the only way it is ever born.
+        // Unlike the source it cannot be opened empty: isDeath and deathDate are required
+        const createAutopsy = (investigationId: string, payload: Record<string, unknown> = {}) =>
+            request(app).post('/api/investigation-autopsies')
+                .set(authHeader('USER'))
+                .send({ investigationId, isDeath: true, deathDate: '2024-06-01', ...payload });
+
+        const createSourceFor = (investigationId: string) =>
+            request(app).post('/api/investigation-sources')
+                .set(authHeader('USER')).send({ investigationId });
+
+        const readAutopsy = async (id: string) =>
+            await InvestigationAutopsy.findByPk(id, { paranoid: false });
+
+        // The source is read here too, for the last case: the sibling helper of the block above
+        // is scoped to that describe
+        const readSourceRow = async (id: string) =>
+            await InvestigationSource.findByPk(id, { paranoid: false });
+
+        const autopsyMethods = async (id: string): Promise<string[]> =>
+            (((await readAutopsy(id))!.getDataValue('appDetails') as { method: string }[]) ?? [])
+                .map(entry => entry.method);
+
+        it('deactivating the investigation seals its autopsy', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            expect((await createAutopsy(id, { notes: 'a note' })).status).toBe(201);
+
+            expect((await deactivate(id)).status).toBe(200);
+
+            expect((await readAutopsy(id))!.getDataValue('deletedAt')).not.toBeNull();
+            expect(await autopsyMethods(id)).toEqual(['ESAVI-INVAUT-001', 'ESAVI-INVESTGN-005A']);
+        });
+
+        it('reactivating it returns the autopsy, keeping the previous history', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createAutopsy(id, { notes: 'a note' });
+            await deactivate(id);
+
+            expect((await activate(id)).status).toBe(200);
+
+            const autopsy = (await readAutopsy(id))!;
+            expect(autopsy.getDataValue('deletedAt')).toBeNull();
+            expect(autopsy.getDataValue('notes')).toBe('a note');
+            expect(await autopsyMethods(id)).toEqual([
+                'ESAVI-INVAUT-001', 'ESAVI-INVESTGN-005A', 'ESAVI-INVESTGN-005B'
+            ]);
+        });
+
+        it('an autopsy sealed by hand keeps its date and receives no new entry', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createAutopsy(id);
+
+            const sealedAt = new Date('2024-01-01T00:00:00.000Z');
+            await InvestigationAutopsy.update({ deletedAt: sealedAt }, { where: { investigationId: id } });
+            const methodsBefore = await autopsyMethods(id);
+
+            await deactivate(id);
+
+            expect((await readAutopsy(id))!.getDataValue('deletedAt')).toEqual(sealedAt);
+            expect(await autopsyMethods(id)).toEqual(methodsBefore);
+        });
+
+        it('purging the investigation destroys the autopsy by Postgres cascade without erroring', async () => {
+            // The purge is not blocked when the investigation has a satellite: it is the decision
+            // F13 and F29 declared and F30 inherited, with the warn dump in the log as the only
+            // mitigation — two lines now, one per satellite
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createAutopsy(id);
+            await deactivate(id);
+
+            expect((await purge(id)).status).toBe(200);
+
+            expect(await readAutopsy(id)).toBeNull();
+            expect(await Investigation.findByPk(id, { paranoid: false })).toBeNull();
+        });
+
+        it('an investigation with source AND autopsy seals and clears both in the same transaction', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createSourceFor(id);
+            await createAutopsy(id);
+
+            await deactivate(id);
+            expect((await readSourceRow(id))!.getDataValue('deletedAt')).not.toBeNull();
+            expect((await readAutopsy(id))!.getDataValue('deletedAt')).not.toBeNull();
+
+            await activate(id);
+            expect((await readSourceRow(id))!.getDataValue('deletedAt')).toBeNull();
+            expect((await readAutopsy(id))!.getDataValue('deletedAt')).toBeNull();
         });
     });
 });
