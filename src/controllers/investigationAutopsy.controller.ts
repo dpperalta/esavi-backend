@@ -5,6 +5,7 @@ import {
     createInvestigationAutopsyService,
     getAllInvestigationAutopsiesService,
     getInvestigationAutopsiesService,
+    getInvestigationAutopsyByCaseIdService,
     getInvestigationAutopsyByIdService
 } from '../services/investigationAutopsy.service';
 
@@ -104,9 +105,35 @@ const getInvestigationAutopsyById = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Get Investigation Autopsy By Case ID Controller
+// Code: ESAVI-INVAUT-006
+const getInvestigationAutopsyByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationAutopsyByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAutopsy.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVAUT-006: Error fetching Investigation Autopsy by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAutopsy.getFailed', req.lang), 500, 'INVAUT_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationAutopsy,
     getInvestigationAutopsies,
     getAllInvestigationAutopsies,
-    getInvestigationAutopsyById
+    getInvestigationAutopsyById,
+    getInvestigationAutopsyByCaseId
 };

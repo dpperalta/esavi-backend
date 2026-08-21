@@ -5,10 +5,12 @@ import {
     createInvestigationAutopsy,
     getAllInvestigationAutopsies,
     getInvestigationAutopsies,
+    getInvestigationAutopsyByCaseId,
     getInvestigationAutopsyById
 } from '../controllers/investigationAutopsy.controller';
 import {
     createInvestigationAutopsyValidator,
+    investigationAutopsyCaseIdValidator,
     investigationAutopsyIdValidator,
     investigationAutopsyListValidator
 } from '../validators';
@@ -35,6 +37,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationAutopsy
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the autopsy of
 // a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationAutopsyListValidator, validateFields, getAllInvestigationAutopsies);
+
+// Get Investigation Autopsy by Case
+// Code: ESAVI-INVAUT-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared
+// before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationAutopsyCaseIdValidator, validateFields, getInvestigationAutopsyByCaseId);
 
 // Get Investigation Autopsy by ID
 // Code: ESAVI-INVAUT-003

@@ -331,9 +331,47 @@ const getInvestigationAutopsyByIdService = async (id: string, lang: string, incl
     return toInvestigationAutopsyResponse(investigationAutopsy);
 }
 
+// Get Investigation Autopsy By Case ID Service
+// Code: ESAVI-INVAUT-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It returns
+// the record itself and not { count, rows } — the chain case -> investigation -> autopsy is one to
+// one on both hops, and wrapping a single record in a collection would force unwrapping a
+// one-element array on every screen.
+// The three 404 are deliberately distinct, and the asymmetry with 003 is intentional: there the
+// client already holds the primary key of the autopsy, here it enters through a caseId and needs to
+// know which link of the chain broke — whether the case is not there, whether it has no visible
+// investigation, or whether the investigation has no autopsy recorded yet. Those are three
+// different actions on the user's side, and one generic message would make them indistinguishable
+const getInvestigationAutopsyByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('investigationAutopsy.caseNotFound', lang), 404, 'INVAUT_006_CASE_NOT_FOUND');
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationAutopsy.investigationNotFound', lang),
+            404,
+            'INVAUT_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    const investigationAutopsy = await findInvestigationAutopsyWithRelations(investigation.investigationId, includeInactive);
+    if( !investigationAutopsy ) {
+        throw new AppError(getMessage('investigationAutopsy.notFound', lang), 404, 'INVAUT_006_NOT_FOUND');
+    }
+    return toInvestigationAutopsyResponse(investigationAutopsy);
+}
+
 export {
     createInvestigationAutopsyService,
     getInvestigationAutopsiesService,
     getAllInvestigationAutopsiesService,
-    getInvestigationAutopsyByIdService
+    getInvestigationAutopsyByIdService,
+    getInvestigationAutopsyByCaseIdService
 };
