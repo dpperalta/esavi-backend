@@ -371,6 +371,21 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/investigations/activate/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVESTGN-005B' },
     { method: 'delete', path: `/api/investigations/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-INVESTGN-005C' },
 
+    // investigationSource (SPEC F29) — the first of the fourteen satellites of investigation, and
+    // the third table of the repository with no isActive column. Seven operations and not nine:
+    // there is no 005A and no 005B, because without an activity flag there is no state of its own
+    // to activate — retiring a source is retiring its investigation. It does keep the dual listing
+    // its two elder sisters gave up, since the visibility is inherited from investigation.isActive
+    // and the two variants therefore return different rows. 001 and 004 stay on USER, the same
+    // deviation as above and for the same reason
+    { method: 'post',   path: '/api/investigation-sources',                 minRole: 'USER',       code: 'ESAVI-INVSRC-001' },
+    { method: 'get',    path: '/api/investigation-sources',                 minRole: 'USER',       code: 'ESAVI-INVSRC-002A' },
+    { method: 'get',    path: '/api/investigation-sources/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVSRC-002B' },
+    { method: 'get',    path: `/api/investigation-sources/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVSRC-006' },
+    { method: 'get',    path: `/api/investigation-sources/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVSRC-003' },
+    { method: 'put',    path: `/api/investigation-sources/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVSRC-004' },
+    { method: 'delete', path: `/api/investigation-sources/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVSRC-005C' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -449,7 +464,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(211);
+            expect(ROUTE_RULES).toHaveLength(218);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

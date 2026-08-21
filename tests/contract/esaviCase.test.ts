@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -1183,6 +1183,119 @@ describe('esaviCase contract', () => {
             expect(( await deleteCase(caseId) ).status).toBe(200);
             expect(await NonSevereNotification.findByPk(notificationId)).toBeNull();
             expect(( await SevereNotification.findByPk(notificationId) )?.getDataValue('deletedAt')).not.toBeNull();
+        });
+
+    });
+
+    /**
+     * SPEC F29 adds the investigation source as the sixth satellite reached from here,
+     * and the second one walked in two hops: the chain case -> investigation -> source
+     * has to be traversed explicitly, because the mass Investigation.update above does
+     * not go through setInvestigationActivationService and the cascade installed there
+     * never fires from this side. Without it the source of an investigation dragged by
+     * its case would be invisible but unsealed, and therefore never purgable.
+     * investigationSource has no isActive column either, so what moves is its deletedAt.
+     */
+    describe('005A — the cascade over the investigation source', () => {
+
+        const createSourceChain = async ( caseId: string ): Promise<string> => {
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+                .send({ investigationId, history: true });
+            return investigationId;
+        };
+
+        const readSource = async ( id: string ) => {
+            const row = await InvestigationSource.findByPk(id);
+            return {
+                deletedAt: row!.getDataValue('deletedAt') as Date | null,
+                appDetails: row!.getDataValue('appDetails') as { method: string }[]
+            };
+        };
+
+        it('seals the source transitively, in the same transaction that deactivates the investigation', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createSourceChain(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const source = await readSource(investigationId);
+            expect(source.deletedAt).not.toBeNull();
+            // The method is the code of the operation that dragged it, never an ESAVI-INVSRC one.
+            // It is also what proves this cascade fired and not the one of ESAVI-INVESTGN-005A
+            expect(source.appDetails.map(entry => entry.method)).toEqual([
+                'ESAVI-INVSRC-001', 'ESAVI-CASE-005A'
+            ]);
+            expect(( await Investigation.findByPk(investigationId) )?.getDataValue('isActive')).toBe(false);
+        });
+
+        it('does not undo it when the case is reactivated', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createSourceChain(caseId);
+            await deleteCase(caseId);
+            const sealed = await readSource(investigationId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const after = await readSource(investigationId);
+            expect(after.deletedAt).toEqual(sealed.deletedAt);
+            expect(after.appDetails).toHaveLength(sealed.appDetails.length);
+        });
+
+        it('leaves a source sealed beforehand with its own deletedAt and no new entry', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createSourceChain(caseId);
+            // Sealed through its investigation, which is the other path of the drag
+            await request(app).delete(`/api/investigations/${ investigationId }`).set(authHeader('ADMIN'));
+
+            const before = await readSource(investigationId);
+            expect(before.appDetails[1].method).toBe('ESAVI-INVESTGN-005A');
+
+            // A second apart, so a deletedAt rewritten by the cascade would show
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            await deleteCase(caseId);
+
+            const after = await readSource(investigationId);
+            expect(( after.deletedAt as Date ).getTime()).toBe(( before.deletedAt as Date ).getTime());
+            expect(after.appDetails).toHaveLength(before.appDetails.length);
+        });
+
+        it('does not fail on a case with no investigation, nor on one whose investigation has no source', async () => {
+            const bare = await createCase();
+            expect(( await deleteCase(bare.body.data.caseId) ).status).toBe(200);
+
+            const withoutSource = await createCase();
+            const caseId = withoutSource.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+            expect(await InvestigationSource.findByPk(investigation.body.data.investigationId)).toBeNull();
+        });
+
+        it('makes the dragged source purgable, which is the point of sealing it', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createSourceChain(caseId);
+            await deleteCase(caseId);
+
+            const purged = await request(app)
+                .delete(`/api/investigation-sources/purge/${ investigationId }`)
+                .set(authHeader('SUPERADMIN'));
+
+            expect(purged.status).toBe(200);
+            expect(await InvestigationSource.findByPk(investigationId)).toBeNull();
         });
 
     });

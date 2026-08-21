@@ -657,6 +657,26 @@
         "purgeSuccess": "Onderzoek permanent verwijderd",
         "purgeFailed": "Definitief verwijderen van het onderzoek mislukt. Probeer het later opnieuw."
     },
+    "investigationSource": {
+        "notFound": "Onderzoeksbronnen niet gevonden. Controleer de ID van het onderzoek en probeer het opnieuw.",
+        "idRequired": "De ID van het onderzoek is verplicht",
+        "investigationNotFound": "Het opgegeven onderzoek bestaat niet of is inactief",
+        "alreadyExists": "Het onderzoek met ID {{investigationId}} heeft al onderzoeksbronnen geregistreerd",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "otherDescriptionRequired": "Er is een andere informatiebron opgegeven: de beschrijving van de andere bron is verplicht",
+        "otherDescriptionNotAllowed": "De beschrijving van de andere bron is alleen toegestaan wanneer een andere informatiebron is opgegeven",
+        "notDeleted": "De onderzoeksbronnen met ID {{id}} zijn niet ingetrokken. Deactiveer het onderzoek voordat u ze permanent verwijdert.",
+        "createdSuccess": "Onderzoeksbronnen succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de onderzoeksbronnen mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Onderzoeksbronnen succesvol opgehaald",
+        "getFailed": "Ophalen van de onderzoeksbronnen mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Lijst met onderzoeksbronnen succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de lijst met onderzoeksbronnen mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Onderzoeksbronnen succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de onderzoeksbronnen mislukt. Probeer het later opnieuw.",
+        "purgeSuccess": "Onderzoeksbronnen permanent verwijderd",
+        "purgeFailed": "Definitief verwijderen van de onderzoeksbronnen mislukt. Probeer het later opnieuw."
+    },
     "systemConfig": {
         "createdSuccess": "Configuratie succesvol aangemaakt",
         "createdFailed": "Aanmaken van de configuratie mislukt. Probeer het later opnieuw.",

@@ -657,6 +657,26 @@
         "purgeSuccess": "Investigation permanently deleted",
         "purgeFailed": "Failed to permanently delete the investigation. Please try again later."
     },
+    "investigationSource": {
+        "notFound": "Investigation sources not found. Please check the investigation ID and try again.",
+        "idRequired": "The investigation ID is required",
+        "investigationNotFound": "The given investigation does not exist or is inactive",
+        "alreadyExists": "The investigation with ID {{investigationId}} already has investigation sources recorded",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "otherDescriptionRequired": "Another information source was declared: the description of the other source is required",
+        "otherDescriptionNotAllowed": "The description of the other source is only admitted when another information source is declared",
+        "notDeleted": "The investigation sources with ID {{id}} have not been withdrawn. Deactivate their investigation before deleting them permanently.",
+        "createdSuccess": "Investigation sources created successfully",
+        "createdFailed": "Failed to create the investigation sources. Please try again later.",
+        "getSuccess": "Investigation sources fetched successfully",
+        "getFailed": "Failed to fetch the investigation sources. Please try again later.",
+        "getSuccessPlural": "Investigation source list fetched successfully",
+        "getFailedPlural": "Failed to fetch the investigation source list. Please try again later.",
+        "updatedSuccess": "Investigation sources updated successfully",
+        "updatedFailed": "Failed to update the investigation sources. Please try again later.",
+        "purgeSuccess": "Investigation sources permanently deleted",
+        "purgeFailed": "Failed to permanently delete the investigation sources. Please try again later."
+    },
     "systemConfig": {
         "createdSuccess": "Configuration created successfully",
         "createdFailed": "Failed to create the configuration. Please try again later.",
