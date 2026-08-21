@@ -1,6 +1,8 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, EsaviCase, Investigation, InvestigationAutopsy } from '../models';
 import { AppError, getMessage, toTimeString } from '../helpers';
-import { AppDetails, AuthUser, CreateInvestigationAutopsyInput } from '../types';
+import { AppDetails, AuthUser, CreateInvestigationAutopsyInput, InvestigationAutopsyListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The investigation travels in every response: it is what governs the visibility of the autopsy,
 // and hiding it would leave the client unable to explain why a record it read yesterday now
@@ -235,6 +237,84 @@ const createInvestigationAutopsyService = async (
     return created ? toInvestigationAutopsyResponse(created) : null;
 }
 
+// The order of the two listings, and it departs from the createdAt DESC of F29 on purpose:
+// deathDate is the datum the domain orders by, and unlike there it is guaranteed to exist in every
+// row — it is required. createdAt stays as the tie-breaker, and it never moves after the insert,
+// unlike updatedAt, which would shuffle the list on every save. autopsyDate is not used: it is
+// null in most rows
+const LIST_ORDER: [string, string][] = [['deathDate', 'DESC'], ['createdAt', 'DESC']];
+
+// Only the filter that lands on the autopsy itself. caseId does not belong here: it is a column of
+// the investigation, so it travels in the where of the include instead — the same include that
+// already implements the inherited visibility, so filtering by case costs no extra join
+const buildListWhere = (filters: InvestigationAutopsyListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( filters.investigationId ) where.investigationId = filters.investigationId;
+    return where as WhereOptions;
+}
+
+// The where of the investigation include, which carries two things at once: the visibility — the
+// isActive that separates 002A from 002B — and the caseId filter when it arrives. Both conditions
+// live in the same object, so they accumulate with AND
+const buildInvestigationWhere = (filters: InvestigationAutopsyListFilters, includeInactive: boolean): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( !includeInactive ) where.isActive = true;
+    if( filters.caseId ) where.caseId = filters.caseId;
+    return where as WhereOptions;
+}
+
+// The include shared by the two listings. required: true keeps it an INNER JOIN, which is what
+// makes the filters above bite and what keeps an autopsy hanging from a retired investigation out
+// of 002A
+const listInclude = (filters: InvestigationAutopsyListFilters, includeInactive: boolean) => [{
+    ...INVESTIGATION_INCLUDE,
+    required: true,
+    where: buildInvestigationWhere(filters, includeInactive)
+}];
+
+// Get Active Investigation Autopsies Service
+// Code: ESAVI-INVAUT-002A
+// The dual listing inherited from F29: the visibility is not a column of its own, it is inherited
+// from investigation.isActive, so the two variants return different sets. Without a 002B an ADMIN
+// would have no way of seeing the autopsy of a retired investigation
+const getInvestigationAutopsiesService = async (
+    filters: InvestigationAutopsyListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationAutopsy.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: AUTOPSY_EXCLUDE,
+        include: listInclude(filters, false),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    // The rows carry the same full shape as the 003: there is no reduced shape. The entity has nine
+    // data columns and trimming them would leave a listing with no content
+    return { count, rows: rows.map(toInvestigationAutopsyResponse) };
+}
+
+// Get All Investigation Autopsies Service - For Admin
+// Code: ESAVI-INVAUT-002B
+const getAllInvestigationAutopsiesService = async (
+    filters: InvestigationAutopsyListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationAutopsy.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: AUTOPSY_EXCLUDE,
+        include: listInclude(filters, true),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toInvestigationAutopsyResponse) };
+}
+
 export {
-    createInvestigationAutopsyService
+    createInvestigationAutopsyService,
+    getInvestigationAutopsiesService,
+    getAllInvestigationAutopsiesService
 };
