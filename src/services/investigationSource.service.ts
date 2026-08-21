@@ -1,6 +1,8 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, EsaviCase, Investigation, InvestigationSource } from '../models';
 import { AppError, getMessage } from '../helpers';
-import { AppDetails, AuthUser, CreateInvestigationSourceInput } from '../types';
+import { AppDetails, AuthUser, CreateInvestigationSourceInput, InvestigationSourceListFilters } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The investigation travels in every response: it is what governs the visibility of the source,
 // and hiding it would leave the client unable to explain why a record it read yesterday now
@@ -184,6 +186,83 @@ const createInvestigationSourceService = async (
     return created ? toInvestigationSourceResponse(created) : null;
 }
 
+// The order of the two listings. createdAt is the only chronological column every row carries, and
+// it never moves after the insert — unlike updatedAt, which would shuffle the list on every save
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
+
+// Only the filter that lands on the source itself. caseId does not belong here: it is a column of
+// the investigation, so it travels in the where of the include instead — the same include that
+// already implements the inherited visibility, so filtering by case costs no extra join
+const buildListWhere = (filters: InvestigationSourceListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( filters.investigationId ) where.investigationId = filters.investigationId;
+    return where as WhereOptions;
+}
+
+// The where of the investigation include, which carries two things at once: the visibility — the
+// isActive that separates 002A from 002B — and the caseId filter when it arrives. Both conditions
+// live in the same object, so they accumulate with AND
+const buildInvestigationWhere = (filters: InvestigationSourceListFilters, includeInactive: boolean): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( !includeInactive ) where.isActive = true;
+    if( filters.caseId ) where.caseId = filters.caseId;
+    return where as WhereOptions;
+}
+
+// The include shared by the two listings. required: true keeps it an INNER JOIN, which is what
+// makes the filters above bite and what keeps a source hanging from a retired investigation out
+// of 002A
+const listInclude = (filters: InvestigationSourceListFilters, includeInactive: boolean) => [{
+    ...INVESTIGATION_INCLUDE,
+    required: true,
+    where: buildInvestigationWhere(filters, includeInactive)
+}];
+
+// Get Active Investigation Sources Service
+// Code: ESAVI-INVSRC-002A
+// The dual listing this entity does have, unlike its two elder sisters. F13 and F14 argued that
+// without isActive there are no two variants returning different rows; that is wrong here — the
+// visibility is not a column of its own, it is inherited from investigation.isActive. Without a
+// 002B an ADMIN would have no way of seeing the source of a retired investigation
+const getInvestigationSourcesService = async (
+    filters: InvestigationSourceListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationSource.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: SOURCE_EXCLUDE,
+        include: listInclude(filters, false),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    // The rows carry the same full shape as the 003: there is no reduced shape. The entity has ten
+    // data columns and eight of them are the answer itself, so trimming them would leave a listing
+    // with no content
+    return { count, rows: rows.map(toInvestigationSourceResponse) };
+}
+
+// Get All Investigation Sources Service - For Admin
+// Code: ESAVI-INVSRC-002B
+const getAllInvestigationSourcesService = async (
+    filters: InvestigationSourceListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationSource.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: SOURCE_EXCLUDE,
+        include: listInclude(filters, true),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toInvestigationSourceResponse) };
+}
+
 export {
-    createInvestigationSourceService
+    createInvestigationSourceService,
+    getInvestigationSourcesService,
+    getAllInvestigationSourcesService
 };

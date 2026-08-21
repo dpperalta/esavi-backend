@@ -21,3 +21,11 @@ export interface CreateInvestigationSourceInput {
     otherDescription?: string | null;
     notes?: string | null;
 }
+
+// The two filters of 002A and 002B, accumulative with AND and by equality. investigationId lands
+// on the primary key itself; caseId lands on the where of the investigation include, which travels
+// in the query anyway to implement the inherited visibility
+export interface InvestigationSourceListFilters {
+    investigationId?: string;
+    caseId?: string;
+}
