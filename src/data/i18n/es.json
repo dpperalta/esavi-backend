@@ -657,6 +657,26 @@
         "purgeSuccess": "Investigación eliminada permanentemente",
         "purgeFailed": "Error al eliminar permanentemente la investigación. Por favor, inténtelo de nuevo más tarde."
     },
+    "investigationSource": {
+        "notFound": "Fuentes de investigación no encontradas. Por favor, verifique el ID de la investigación e inténtelo de nuevo.",
+        "idRequired": "El ID de la investigación es obligatorio",
+        "investigationNotFound": "La investigación indicada no existe o está inactiva",
+        "alreadyExists": "La investigación con ID {{investigationId}} ya tiene fuentes de investigación registradas",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "otherDescriptionRequired": "Se declaró otra fuente de información: la descripción de la otra fuente es obligatoria",
+        "otherDescriptionNotAllowed": "La descripción de la otra fuente solo se admite cuando se declara otra fuente de información",
+        "notDeleted": "Las fuentes de investigación con ID {{id}} no han sido retiradas. Desactive su investigación antes de eliminarlas permanentemente.",
+        "createdSuccess": "Fuentes de investigación creadas exitosamente",
+        "createdFailed": "Error al crear las fuentes de investigación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Fuentes de investigación obtenidas exitosamente",
+        "getFailed": "Error al obtener las fuentes de investigación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Listado de fuentes de investigación obtenido exitosamente",
+        "getFailedPlural": "Error al obtener el listado de fuentes de investigación. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Fuentes de investigación actualizadas exitosamente",
+        "updatedFailed": "Error al actualizar las fuentes de investigación. Por favor, inténtelo de nuevo más tarde.",
+        "purgeSuccess": "Fuentes de investigación eliminadas permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente las fuentes de investigación. Por favor, inténtelo de nuevo más tarde."
+    },
     "systemConfig": {
         "createdSuccess": "Configuración creada exitosamente",
         "createdFailed": "Error al crear la configuración. Por favor, inténtelo de nuevo más tarde.",
