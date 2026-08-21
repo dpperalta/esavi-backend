@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -834,6 +834,86 @@ describe('esaviCase contract', () => {
             const after = await Notification.findByPk(notificationId);
             expect(( after?.getDataValue('deletedAt') as Date ).getTime()).toBe(ownDeletedAt.getTime());
             expect(after?.getDataValue('appDetails') as unknown[]).toHaveLength(entriesBefore);
+        });
+
+    });
+
+    /**
+     * SPEC F28 adds the investigation to the same cascade, at the same point and
+     * inside the same transaction. It is one to one with the case through
+     * UQ_investigation_case, so it is at most one row, and the asymmetry is
+     * unchanged: 005B reactivates nothing. Its fourteen detail tables are out of
+     * scope — nothing walks down from here to them.
+     */
+    describe('005A — the cascade over investigation', () => {
+
+        const createInvestigation = async ( caseId: string ): Promise<string> => {
+            const response = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            return response.body.data.investigationId;
+        };
+
+        it('drags the active investigation of the case, sealing deletedAt', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createInvestigation(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const investigation = await Investigation.findByPk(investigationId);
+            expect(investigation?.getDataValue('isActive')).toBe(false);
+            expect(investigation?.getDataValue('deletedAt')).not.toBeNull();
+            // The method is the code of the operation that deactivated it, not 005A of investigation
+            const appDetails = investigation?.getDataValue('appDetails') as { method: string }[];
+            expect(appDetails.map(entry => entry.method)).toEqual([
+                'ESAVI-INVESTGN-001', 'ESAVI-CASE-005A'
+            ]);
+        });
+
+        it('brings the investigation back on no account when the case is reactivated', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createInvestigation(caseId);
+            await deleteCase(caseId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const investigation = await Investigation.findByPk(investigationId);
+            expect(investigation?.getDataValue('isActive')).toBe(false);
+            expect(investigation?.getDataValue('deletedAt')).not.toBeNull();
+        });
+
+        it('leaves an investigation retired beforehand with its own deletedAt and no new entry', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createInvestigation(caseId);
+            await request(app).delete(`/api/investigations/${ investigationId }`).set(authHeader('ADMIN'));
+
+            const before = await Investigation.findByPk(investigationId);
+            const ownDeletedAt = before?.getDataValue('deletedAt') as Date;
+            const entriesBefore = ( before?.getDataValue('appDetails') as unknown[] ).length;
+
+            // A second apart, so a deletedAt rewritten by the cascade would show
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            await deleteCase(caseId);
+
+            const after = await Investigation.findByPk(investigationId);
+            expect(( after?.getDataValue('deletedAt') as Date ).getTime()).toBe(ownDeletedAt.getTime());
+            expect(after?.getDataValue('appDetails') as unknown[]).toHaveLength(entriesBefore);
+        });
+
+        it('a case with no investigation deactivates zero rows and does not fail', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            expect(await Investigation.findOne({ where: { caseId } })).toBeNull();
         });
 
     });

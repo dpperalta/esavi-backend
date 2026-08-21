@@ -131,8 +131,13 @@ describe('nonSevereNotification contract', () => {
         await seedTestUsers();
 
         // The vaccinationSite catalog. Without it every vaccinationSiteItemId falls in a 404,
-        // which is the deployment precondition of the spec
-        const siteType = await CatalogType.create({ code: 'vaccinationSite', name: `Vaccination Site ${ suffix }` });
+        // which is the deployment precondition of the spec.
+        // Reused if it is already there: esaviapp.sql does not seed this catalogType, and since
+        // SPEC F28 the investigation suite is a second consumer of the same precondition. Its code
+        // is unique in catalogType, so two suites creating it blindly is a 23505 for whichever
+        // runs second
+        const siteType = await CatalogType.findOne({ where: { code: 'vaccinationSite' } })
+            ?? await CatalogType.create({ code: 'vaccinationSite', name: `Vaccination Site ${ suffix }` });
         const siteItem = await CatalogItem.create({
             catalogTypeId: siteType.getDataValue('catalogTypeId'),
             code: `FIXED_POST_${ suffix }`,
