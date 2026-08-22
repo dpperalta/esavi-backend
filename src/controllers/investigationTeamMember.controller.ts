@@ -4,6 +4,7 @@ import {
     createInvestigationTeamMemberService,
     getAllInvestigationTeamMembersByInvestigationService,
     getInvestigationTeamMemberByIdService,
+    getInvestigationTeamMembersByCaseIdService,
     getInvestigationTeamMembersByInvestigationService
 } from '../services/investigationTeamMember.service';
 
@@ -99,9 +100,32 @@ const getInvestigationTeamMemberById = async (req: Request, res: Response, next:
     }
 }
 
+// Get Investigation Team Members By Case Controller
+// Code: ESAVI-INVTEAM-006
+const getInvestigationTeamMembersByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const caseId = (req.params.caseId).toString().trim();
+    const { limit, offset } = pagination(req);
+    try {
+        const data = await getInvestigationTeamMembersByCaseIdService(caseId, req.lang, canViewInactive(req.user), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationTeamMember.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVTEAM-006: Error fetching Investigation Team Members by case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationTeamMember.getFailedPlural', req.lang), 500, 'INVTEAM_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationTeamMember,
     getInvestigationTeamMemberById,
+    getInvestigationTeamMembersByCaseId,
     getInvestigationTeamMembersByInvestigation,
     getAllInvestigationTeamMembersByInvestigation
 };

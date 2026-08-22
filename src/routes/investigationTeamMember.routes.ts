@@ -5,10 +5,12 @@ import {
     createInvestigationTeamMember,
     getAllInvestigationTeamMembersByInvestigation,
     getInvestigationTeamMemberById,
+    getInvestigationTeamMembersByCaseId,
     getInvestigationTeamMembersByInvestigation
 } from '../controllers/investigationTeamMember.controller';
 import {
     createInvestigationTeamMemberValidator,
+    investigationTeamMemberCaseIdValidator,
     investigationTeamMemberIdValidator,
     investigationTeamMemberInvestigationIdValidator
 } from '../validators';
@@ -38,6 +40,12 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // members only make sense read together and in their order. It is entered by the investigationId,
 // so /:id is the access by member and never the access by investigation
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationTeamMemberInvestigationIdValidator, validateFields, getInvestigationTeamMembersByInvestigation);
+
+// Get Investigation Team Members by Case
+// Code: ESAVI-INVTEAM-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared
+// before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationTeamMemberCaseIdValidator, validateFields, getInvestigationTeamMembersByCaseId);
 
 // Get Investigation Team Member by ID
 // Code: ESAVI-INVTEAM-003

@@ -75,6 +75,13 @@ describe('investigationTeamMember contract', () => {
     const retireInvestigation = (investigationId: string) =>
         Investigation.update({ isActive: false }, { where: { investigationId } });
 
+    const getByCase = (caseId: string, role: TestRole = 'USER') =>
+        request(app).get(`/api/investigation-team-members/case/${ caseId }`).set(authHeader(role));
+
+    const createInvestigationForCase = async (caseId: string, isActive: boolean = true): Promise<string> =>
+        (await Investigation.create({ caseId, statusItemId: statusZeroItemId, isActive }))
+            .getDataValue('investigationId');
+
     const getById = (id: string, role: TestRole = 'USER') =>
         request(app).get(`/api/investigation-team-members/${ id }`).set(authHeader(role));
 
@@ -442,6 +449,96 @@ describe('investigationTeamMember contract', () => {
 
             expect(activate.status).not.toBe(200);
             expect(notUuid.status).toBe(400);
+        });
+    });
+
+    describe('006 — list by case', () => {
+
+        it('returns { count, rows } for a case with investigation and members', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            await create({ investigationId, fullName: 'Ana Uno' });
+            await create({ investigationId, fullName: 'Ana Dos' });
+
+            const res = await getByCase(caseId);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.count).toBe(2);
+            expect(res.body.data.rows.map((r: { sortOrder: number }) => r.sortOrder)).toEqual([1, 2]);
+        });
+
+        it('answers 404 CASE_NOT_FOUND over a caseId that does not exist', async () => {
+            const res = await getByCase(unknownUuid);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_006_CASE_NOT_FOUND');
+        });
+
+        it('answers 404 CASE_NOT_FOUND over an inactive case', async () => {
+            const caseId = await createCaseFixture(false);
+            await createInvestigationForCase(caseId);
+
+            const res = await getByCase(caseId);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_006_CASE_NOT_FOUND');
+        });
+
+        it('answers 404 INVESTIGATION_NOT_FOUND over a case with no investigation', async () => {
+            const caseId = await createCaseFixture();
+
+            const res = await getByCase(caseId);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_006_INVESTIGATION_NOT_FOUND');
+        });
+
+        // The two codes have to be distinct: they are two different actions on the user's side
+        it('the two 404 codes are different from each other', async () => {
+            const missingCase = await getByCase(unknownUuid);
+            const caseWithoutInvestigation = await getByCase(await createCaseFixture());
+
+            expect(missingCase.body.code).not.toBe(caseWithoutInvestigation.body.code);
+        });
+
+        it('a retired investigation answers 404 for USER and 200 for SUPERADMIN', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            await create({ investigationId, fullName: 'Ana Uno' });
+            await retireInvestigation(investigationId);
+
+            expect((await getByCase(caseId, 'USER')).status).toBe(404);
+            expect((await getByCase(caseId, 'ADMIN')).status).toBe(404);
+            expect((await getByCase(caseId, 'SUPERADMIN')).status).toBe(200);
+        });
+
+        it('an investigation with no members returns 200 with count 0, not 404', async () => {
+            const caseId = await createCaseFixture();
+            await createInvestigationForCase(caseId);
+
+            const res = await getByCase(caseId);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toEqual({ count: 0, rows: [] });
+        });
+
+        it('does not return a retired member', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            const { data } = (await create({ investigationId, fullName: 'Ana Uno' })).body;
+            await create({ investigationId, fullName: 'Ana Dos' });
+            await retire(data.investigationTeamMemberId);
+
+            const res = await getByCase(caseId);
+
+            expect(res.body.data.count).toBe(1);
+            expect(res.body.data.rows[0].fullName).toBe('Ana Dos');
+        });
+
+        it('rejects a non-UUID caseId with 400', async () => {
+            const res = await getByCase('no-es-uuid');
+
+            expect(res.status).toBe(400);
         });
     });
 });

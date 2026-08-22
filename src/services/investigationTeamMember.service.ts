@@ -332,8 +332,69 @@ const getInvestigationTeamMemberByIdService = async (
     return toInvestigationTeamMemberResponse(member);
 }
 
+// Get Investigation Team Members By Case Service
+// Code: ESAVI-INVTEAM-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It crosses
+// the one to one hop up to the investigation, from which N members hang, and returns { count, rows }
+// like the two listings — unlike F29 and F30, where the whole chain was one to one and the 006
+// answered with a single record.
+//
+// The two 404 are deliberately distinct, and the difference matters to the client: it needs to know
+// which link of the chain broke — whether the case is not there, or whether it has no visible
+// investigation. Those are two different actions on the user's side, and one generic message would
+// make them indistinguishable.
+//
+// Only the active members come back, with the same criterion as 002A: whoever needs the retired
+// ones enters through 002B, which is the admin door
+const getInvestigationTeamMembersByCaseIdService = async (
+    caseId: string,
+    lang: string,
+    includeInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(
+            getMessage('investigationTeamMember.caseNotFound', lang),
+            404,
+            'INVTEAM_006_CASE_NOT_FOUND'
+        );
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationTeamMember.investigationNotFound', lang),
+            404,
+            'INVTEAM_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    // An investigation with no team answers 200 with an empty page and never 404: the chain is
+    // whole, there is simply nobody recorded yet
+    const members = await InvestigationTeamMember.findAndCountAll({
+        where: { investigationId: investigation.investigationId, isActive: true },
+        attributes: MEMBER_EXCLUDE,
+        include: listInclude(includeInactive),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+
+    return {
+        count: members.count,
+        rows: members.rows.map(toInvestigationTeamMemberResponse)
+    };
+}
+
 export {
     createInvestigationTeamMemberService,
+    getInvestigationTeamMembersByCaseIdService,
     getInvestigationTeamMemberByIdService,
     getInvestigationTeamMembersByInvestigationService,
     getAllInvestigationTeamMembersByInvestigationService
