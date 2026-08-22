@@ -151,11 +151,13 @@ const updateInvestigationTeamMember = async (req: Request, res: Response, next: 
 const deleteInvestigationTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setInvestigationTeamMemberActivationService(id, req.user, req.lang, false);
+        await setInvestigationTeamMemberActivationService(id, req.user, req.lang, false);
+        // No data, by CONVENTIONS.md §10: the state operations answer { ok, message }. SPEC F31
+        // §3.7 reads otherwise, and the norm prevails — the static guard of
+        // tests/contract/response.test.ts polices every controller for exactly this
         return res.status(200).json({
             ok: true,
-            message: getMessage('investigationTeamMember.deletedSuccess', req.lang),
-            data
+            message: getMessage('investigationTeamMember.deletedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-INVTEAM-005A: Error deleting Investigation Team Member: ' + error, 'error');
@@ -172,11 +174,11 @@ const deleteInvestigationTeamMember = async (req: Request, res: Response, next: 
 const activateInvestigationTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setInvestigationTeamMemberActivationService(id, req.user, req.lang, true);
+        await setInvestigationTeamMemberActivationService(id, req.user, req.lang, true);
+        // No data, by CONVENTIONS.md §10 — same reason as the 005A above
         return res.status(200).json({
             ok: true,
-            message: getMessage('investigationTeamMember.activatedSuccess', req.lang),
-            data
+            message: getMessage('investigationTeamMember.activatedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-INVTEAM-005B: Error activating Investigation Team Member: ' + error, 'error');

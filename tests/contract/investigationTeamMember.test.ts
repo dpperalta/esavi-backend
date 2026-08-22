@@ -9,9 +9,26 @@ import type { TestRole } from '../setup/auth';
 
 /**
  * Contract suite for the nine investigationTeamMember operations of SPEC F31. It walks the
- * entity end to end and covers what cannot be checked by hand reliably: the inherited
- * visibility of the parent, the sortOrder the trigger assigns and the 005B reassigns, the
- * duplicate guard over free text, and the absence of any cascade from investigation.
+ * entity end to end and covers what cannot be checked by hand reliably.
+ *
+ * Four things separate this entity from its sisters F29 and F30 and get deliberate coverage:
+ *
+ *  - It is the FIRST satellite of investigation that is a collection with state of its own.
+ *    It has its own primary key, so 003 is the access by member and the access by
+ *    investigation is the pair of listings; and it has an isActive column, so 005A and 005B
+ *    come back — and no cascade from investigation or from esaviCase ever writes it. That
+ *    absence is checked explicitly, so nobody adds a cascadeSeal* by analogy.
+ *  - It carries the sortOrder finding of F16 for the sixth time. The trigger is BEFORE
+ *    INSERT only and the partial unique index is conditioned by deletedAt, not by isActive,
+ *    so reactivating a member whose number another live sibling took would break the index.
+ *    Both variants of that scenario are here — the one that collides and the one that does
+ *    not, because MAX + 1 never fills gaps.
+ *  - Its duplicate guard rests on free text. fullName is compared already passed through
+ *    toTitleCase and only against ACTIVE rows, which is what lets a mistaken create be
+ *    undone by registering the person again. The consequence — a 005B can leave two active
+ *    rows with the same name — is asserted on purpose so nobody "fixes" it by accident.
+ *  - institutionName is stored exactly as typed. MINSAL must not become Minsal, and that is
+ *    a deliberate deviation from the normalization convention, checked here.
  */
 describe('investigationTeamMember contract', () => {
 
@@ -129,6 +146,110 @@ describe('investigationTeamMember contract', () => {
     afterAll(async () => {
         consoleError.mockRestore();
         await closeTestDatabase();
+    });
+
+    // The whole entity in one pass, in the order the domain uses it: the nine operations
+    // chained over the same investigation, each one reading what the previous one left
+    describe('full walkthrough — the nine operations in order', () => {
+
+        it('create -> list -> list admin -> get -> by case -> update -> delete -> activate -> purge', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+
+            // 001
+            const created = await create({
+                investigationId, fullName: 'ana pérez', institutionName: 'MINSAL', email: 'Ana@X.CL'
+            });
+            expect(created.status).toBe(201);
+            const id = created.body.data.investigationTeamMemberId;
+            expect(created.body.data.fullName).toBe('Ana Pérez');
+            expect(created.body.data.institutionName).toBe('MINSAL');
+            expect(created.body.data.email).toBe('ana@x.cl');
+            expect(created.body.data.sortOrder).toBe(1);
+
+            // 002A
+            const active = await listByInvestigation(investigationId);
+            expect(active.status).toBe(200);
+            expect(active.body.data.count).toBe(1);
+
+            // 002B
+            const all = await listAdminByInvestigation(investigationId);
+            expect(all.status).toBe(200);
+            expect(all.body.data.count).toBe(1);
+
+            // 003
+            const fetched = await getById(id);
+            expect(fetched.status).toBe(200);
+            expect(fetched.body.data.investigation.case.caseId).toBe(caseId);
+
+            // 006
+            const byCase = await getByCase(caseId);
+            expect(byCase.status).toBe(200);
+            expect(byCase.body.data.rows[0].investigationTeamMemberId).toBe(id);
+
+            // 004
+            const updated = await update(id, { phone: '+56 9 1234 5678' });
+            expect(updated.status).toBe(200);
+            expect(updated.body.data.phone).toBe('+56 9 1234 5678');
+            expect(updated.body.data.appDetails).toHaveLength(2);
+
+            // 005A — { ok, message } with no data, by CONVENTIONS.md §10
+            const deleted = await remove(id);
+            expect(deleted.status).toBe(200);
+            expect(deleted.body.data).toBeUndefined();
+            expect((await listByInvestigation(investigationId)).body.data.count).toBe(0);
+            expect((await listAdminByInvestigation(investigationId)).body.data.count).toBe(1);
+
+            // 005B — no data either
+            const activated = await activate(id);
+            expect(activated.status).toBe(200);
+            expect(activated.body.data).toBeUndefined();
+            expect((await listByInvestigation(investigationId)).body.data.count).toBe(1);
+
+            // 005C — needs the row retired again, which is the two-step safety net
+            expect((await purge(id)).status).toBe(409);
+            await remove(id);
+            const purged = await purge(id);
+            expect(purged.status).toBe(200);
+            expect(purged.body.data).toBeUndefined();
+            expect(await readRow(id)).toBeNull();
+        });
+
+        it('every success response carries the { ok, message, data } envelope', async () => {
+            const investigationId = await createInvestigationFixture();
+            const created = await create({ investigationId, fullName: 'Ana Pérez' });
+            const id = created.body.data.investigationTeamMemberId;
+
+            for( const res of [created, await getById(id), await listByInvestigation(investigationId)] ) {
+                expect(res.body.ok).toBe(true);
+                expect(typeof res.body.message).toBe('string');
+                expect(res.body.message.length).toBeGreaterThan(0);
+                expect(res.body.data).toBeDefined();
+            }
+        });
+
+        it('every error response carries the { ok, message, code } envelope', async () => {
+            const res = await getById(unknownUuid);
+
+            expect(res.body.ok).toBe(false);
+            expect(typeof res.body.message).toBe('string');
+            expect(res.body.code).toBe('INVTEAM_003_NOT_FOUND');
+        });
+
+        // The message comes from getMessage(key, req.lang), so ?lang= changes it
+        it('honours the lang query parameter', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+
+            const es = await request(app)
+                .get(`/api/investigation-team-members/${ data.investigationTeamMemberId }?lang=es`)
+                .set(authHeader('USER'));
+            const en = await request(app)
+                .get(`/api/investigation-team-members/${ data.investigationTeamMemberId }?lang=en`)
+                .set(authHeader('USER'));
+
+            expect(es.body.message).not.toBe(en.body.message);
+        });
     });
 
     describe('001 — create', () => {
