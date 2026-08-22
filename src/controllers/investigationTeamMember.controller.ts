@@ -3,6 +3,7 @@ import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import {
     createInvestigationTeamMemberService,
     getAllInvestigationTeamMembersByInvestigationService,
+    getInvestigationTeamMemberByIdService,
     getInvestigationTeamMembersByInvestigationService
 } from '../services/investigationTeamMember.service';
 
@@ -77,8 +78,30 @@ const getAllInvestigationTeamMembersByInvestigation = async (req: Request, res: 
     }
 }
 
+// Get Investigation Team Member By ID Controller
+// Code: ESAVI-INVTEAM-003
+const getInvestigationTeamMemberById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getInvestigationTeamMemberByIdService(id, req.lang, canViewInactive(req.user));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationTeamMember.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVTEAM-003: Error fetching Investigation Team Member: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationTeamMember.getFailed', req.lang), 500, 'INVTEAM_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationTeamMember,
+    getInvestigationTeamMemberById,
     getInvestigationTeamMembersByInvestigation,
     getAllInvestigationTeamMembersByInvestigation
 };

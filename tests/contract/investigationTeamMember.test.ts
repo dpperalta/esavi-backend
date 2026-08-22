@@ -75,6 +75,9 @@ describe('investigationTeamMember contract', () => {
     const retireInvestigation = (investigationId: string) =>
         Investigation.update({ isActive: false }, { where: { investigationId } });
 
+    const getById = (id: string, role: TestRole = 'USER') =>
+        request(app).get(`/api/investigation-team-members/${ id }`).set(authHeader(role));
+
     // Mints an investigation with three members and hands back both, so the listings have
     // something ordered to read
     const seedTeam = async (): Promise<{ investigationId: string, ids: string[] }> => {
@@ -367,6 +370,78 @@ describe('investigationTeamMember contract', () => {
 
             expect(res.status).toBe(404);
             expect(res.body.code).toBe('INVTEAM_002A_INVESTIGATION_NOT_FOUND');
+        });
+    });
+
+    describe('003 — get by ID', () => {
+
+        it('returns the full shape of §3.7 with the investigation resolved', async () => {
+            const { ids, investigationId } = await seedTeam();
+            const res = await getById(ids[0]);
+
+            expect(res.status).toBe(200);
+            const { data } = res.body;
+            expect(data.investigationTeamMemberId).toBe(ids[0]);
+            expect(data.fullName).toBe('Ana Uno');
+            expect(data.sortOrder).toBe(1);
+            expect(data.isActive).toBe(true);
+            expect(data.investigation.investigationId).toBe(investigationId);
+            expect(data.investigation.status).not.toBeNull();
+            expect(data.investigation.case.caseCode).toBeDefined();
+        });
+
+        it('never returns sysDetails, neither of the member nor of the investigation', async () => {
+            const { ids } = await seedTeam();
+            const { data } = (await getById(ids[0])).body;
+
+            expect(data.sysDetails).toBeUndefined();
+            expect(data.investigation.sysDetails).toBeUndefined();
+        });
+
+        it('answers 404 over an ID that does not exist', async () => {
+            const res = await getById(unknownUuid);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_003_NOT_FOUND');
+        });
+
+        // The two conditions the same flag relaxes: the isActive of the row and the isActive
+        // of its investigation. A USER and an ADMIN see neither, a SUPERADMIN sees both
+        it.each([
+            ['USER' as TestRole, 404],
+            ['ADMIN' as TestRole, 404],
+            ['SUPERADMIN' as TestRole, 200]
+        ])('a member of a retired investigation answers %s -> %i', async (role, status) => {
+            const { ids, investigationId } = await seedTeam();
+            await retireInvestigation(investigationId);
+
+            const res = await getById(ids[0], role);
+
+            expect(res.status).toBe(status);
+        });
+
+        it.each([
+            ['USER' as TestRole, 404],
+            ['ADMIN' as TestRole, 404],
+            ['SUPERADMIN' as TestRole, 200]
+        ])('a retired member answers %s -> %i', async (role, status) => {
+            const { ids } = await seedTeam();
+            await retire(ids[0]);
+
+            const res = await getById(ids[0], role);
+
+            expect(res.status).toBe(status);
+        });
+
+        // The route order of §3.4: /:id is declared after every literal path, so the validator
+        // of the literal route answers and this one never sees the request
+        it('does not capture the literal paths as an :id', async () => {
+            const activate = await request(app)
+                .get('/api/investigation-team-members/activate/algo').set(authHeader('USER'));
+            const notUuid = await getById('no-es-uuid');
+
+            expect(activate.status).not.toBe(200);
+            expect(notUuid.status).toBe(400);
         });
     });
 });

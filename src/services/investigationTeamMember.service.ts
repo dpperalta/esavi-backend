@@ -305,8 +305,36 @@ const getAllInvestigationTeamMembersByInvestigationService = async (
     };
 }
 
+// Get Investigation Team Member By ID Service
+// Code: ESAVI-INVTEAM-003
+// The :id is the investigationTeamMemberId, and this is where the entity parts company with F29 and
+// F30: there the primary key was the investigationId, so 003 was already the access by
+// investigation. Here that access is 002A, and this operation reads one person.
+//
+// Two conditions are relaxed by the same flag, and both live inside the shared read: the isActive of
+// the row itself and the isActive of its investigation. A member retired by a 005A and a member
+// whose investigation was retired answer the same 404 to a USER, and both come back for whoever may
+// see inactive rows
+const getInvestigationTeamMemberByIdService = async (
+    id: string,
+    lang: string,
+    includeInactive: boolean = false
+) => {
+    const member = await findInvestigationTeamMemberWithRelations(id, includeInactive);
+    if( !member ) {
+        throw new AppError(
+            getMessage('investigationTeamMember.notFound', lang),
+            404,
+            'INVTEAM_003_NOT_FOUND'
+        );
+    }
+
+    return toInvestigationTeamMemberResponse(member);
+}
+
 export {
     createInvestigationTeamMemberService,
+    getInvestigationTeamMemberByIdService,
     getInvestigationTeamMembersByInvestigationService,
     getAllInvestigationTeamMembersByInvestigationService
 };

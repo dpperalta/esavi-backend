@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationTeamMember,
     getAllInvestigationTeamMembersByInvestigation,
+    getInvestigationTeamMemberById,
     getInvestigationTeamMembersByInvestigation
 } from '../controllers/investigationTeamMember.controller';
 import {
     createInvestigationTeamMemberValidator,
+    investigationTeamMemberIdValidator,
     investigationTeamMemberInvestigationIdValidator
 } from '../validators';
 
@@ -36,5 +38,12 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // members only make sense read together and in their order. It is entered by the investigationId,
 // so /:id is the access by member and never the access by investigation
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationTeamMemberInvestigationIdValidator, validateFields, getInvestigationTeamMembersByInvestigation);
+
+// Get Investigation Team Member by ID
+// Code: ESAVI-INVTEAM-003
+// Declared after every literal path so Express does not capture them as an :id.
+// The :id is the investigationTeamMemberId and not the investigationId: unlike F29 and F30, this
+// entity has an identifier of its own, and the access by investigation is 002A
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationTeamMemberIdValidator, validateFields, getInvestigationTeamMemberById);
 
 export default router;
