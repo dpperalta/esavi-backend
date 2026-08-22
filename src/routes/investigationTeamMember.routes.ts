@@ -9,6 +9,7 @@ import {
     getInvestigationTeamMemberById,
     getInvestigationTeamMembersByCaseId,
     getInvestigationTeamMembersByInvestigation,
+    purgeInvestigationTeamMember,
     updateInvestigationTeamMember
 } from '../controllers/investigationTeamMember.controller';
 import {
@@ -19,7 +20,7 @@ import {
     updateInvestigationTeamMemberValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -50,6 +51,12 @@ router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...inv
 // The real query of the domain, and the only non-canonical operation of the entity. Declared
 // before /:id so Express does not capture 'case' as an :id
 router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationTeamMemberCaseIdValidator, validateFields, getInvestigationTeamMembersByCaseId);
+
+// Purge Investigation Team Member - Physical delete, for SuperAdmin
+// Code: ESAVI-INVTEAM-005C
+// Declared with the literal paths, before /:id. The row must have been retired with a 005A first:
+// the isActive guard purgeEntityService carries inside is effective here, unlike in F29 and F30
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationTeamMemberIdValidator, validateFields, purgeInvestigationTeamMember);
 
 // Activate Investigation Team Member
 // Code: ESAVI-INVTEAM-005B

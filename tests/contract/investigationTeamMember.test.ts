@@ -82,6 +82,9 @@ describe('investigationTeamMember contract', () => {
     const activate = (id: string, role: TestRole = 'ADMIN') =>
         request(app).patch(`/api/investigation-team-members/activate/${ id }`).set(authHeader(role));
 
+    const purge = (id: string, role: TestRole = 'SUPERADMIN') =>
+        request(app).delete(`/api/investigation-team-members/purge/${ id }`).set(authHeader(role));
+
     const remove = (id: string, role: TestRole = 'ADMIN') =>
         request(app).delete(`/api/investigation-team-members/${ id }`).set(authHeader(role));
 
@@ -942,6 +945,91 @@ describe('investigationTeamMember contract', () => {
             const live = await listByInvestigation(investigationId);
             expect(live.body.data.rows.filter((r: { fullName: string }) => r.fullName === 'Ana Pérez'))
                 .toHaveLength(2);
+        });
+    });
+
+    describe('005C — purge', () => {
+
+        // THE check that separates this entity from F29 and F30: there the table had no isActive
+        // column, so the guard purgeEntityService carries inside was inert and both had to reach
+        // for assertRowIsSealed. Here the column exists and the guard bites on its own
+        it('purging an ACTIVE row answers 409 and the row survives', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+
+            const res = await purge(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(409);
+            expect(res.body.code).toBe('INVTEAM_005C_STILL_ACTIVE');
+            expect(await readRow(data.investigationTeamMemberId)).not.toBeNull();
+        });
+
+        it('deactivating and purging answers 200 with no data, and the row is gone', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+
+            const res = await purge(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toBeUndefined();
+            expect(await readRow(data.investigationTeamMemberId)).toBeNull();
+        });
+
+        it('purging twice answers 404', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+            await purge(data.investigationTeamMemberId);
+
+            const res = await purge(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_005C_NOT_FOUND');
+        });
+
+        it('rejects an ADMIN with 403', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+
+            const res = await purge(data.investigationTeamMemberId, 'ADMIN');
+
+            expect(res.status).toBe(403);
+        });
+
+        it('leaves the investigation and the other members untouched', async () => {
+            const { investigationId, ids } = await seedTeam();
+            await remove(ids[2]);
+
+            await purge(ids[2]);
+
+            expect(await Investigation.findByPk(investigationId)).not.toBeNull();
+            const survivors = await listByInvestigation(investigationId);
+            expect(survivors.body.data.count).toBe(2);
+        });
+
+        // The purge operates over the state of the row, not over the visibility of the parent
+        it('purges the member of a retired investigation', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+            await retireInvestigation(investigationId);
+
+            const res = await purge(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+        });
+
+        it('the purged sortOrder is available again', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Uno' })).body;
+            await remove(data.investigationTeamMemberId);
+            await purge(data.investigationTeamMemberId);
+
+            const next = (await create({ investigationId, fullName: 'Ana Dos' })).body.data;
+
+            expect(next.sortOrder).toBe(1);
         });
     });
 });

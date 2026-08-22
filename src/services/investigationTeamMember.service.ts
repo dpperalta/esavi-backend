@@ -2,6 +2,7 @@ import { InferAttributes, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationTeamMember } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationTeamMemberInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -621,8 +622,51 @@ const setInvestigationTeamMemberActivationService = async (
     }
 }
 
+// Purging Investigation Team Member Service - For SuperAdmin
+// Code: ESAVI-INVTEAM-005C
+// investigationTeamMember is outside the preventPhysicalDelete loop of esaviapp.sql:1364-1377, so
+// the row can really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification, and here is the difference with F29 and
+// F30: those two tables have no isActive column, so the canonical guard the helper carries inside —
+// the row must have been retired with a 005A first, 409 otherwise — was inert over them
+// (undefined !== true lets every row through) and both had to reach for assertRowIsSealed. This
+// entity has the column, so the guard bites on its own and the helper of rowSeal.helper.ts is
+// neither consumed nor needed.
+//
+// The inherited visibility is not applied either: purging is an operation over the state of the
+// row, and a member of a retired investigation is still purgeable.
+//
+// No appDetails entry: the row is destroyed in the same transaction, which is the absence
+// CONVENTIONS.md §6 declares legitimate. The only trace is the warn snapshot the helper writes
+const purgeInvestigationTeamMemberService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: InvestigationTeamMember,
+            where: { investigationTeamMemberId: id },
+            transaction,
+            operationCode: 'ESAVI-INVTEAM-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('investigationTeamMember.notFound', lang),
+            notFoundCode: 'INVTEAM_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('investigationTeamMember.alreadyActive', lang, { id }),
+            stillActiveCode: 'INVTEAM_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationTeamMemberService,
+    purgeInvestigationTeamMemberService,
     setInvestigationTeamMemberActivationService,
     updateInvestigationTeamMemberService,
     getInvestigationTeamMembersByCaseIdService,

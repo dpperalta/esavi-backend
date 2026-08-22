@@ -6,6 +6,7 @@ import {
     getInvestigationTeamMemberByIdService,
     getInvestigationTeamMembersByCaseIdService,
     getInvestigationTeamMembersByInvestigationService,
+    purgeInvestigationTeamMemberService,
     setInvestigationTeamMemberActivationService,
     updateInvestigationTeamMemberService
 } from '../services/investigationTeamMember.service';
@@ -187,6 +188,27 @@ const activateInvestigationTeamMember = async (req: Request, res: Response, next
     }
 }
 
+// Purge Investigation Team Member Controller - Physical delete
+// Code: ESAVI-INVTEAM-005C
+// Answers { ok, message } with no data: the row no longer exists, so there is nothing to return
+const purgeInvestigationTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeInvestigationTeamMemberService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationTeamMember.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVTEAM-005C: Error purging Investigation Team Member: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationTeamMember.purgeFailed', req.lang), 500, 'INVTEAM_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     activateInvestigationTeamMember,
     createInvestigationTeamMember,
@@ -194,6 +216,7 @@ export {
     updateInvestigationTeamMember,
     getInvestigationTeamMemberById,
     getInvestigationTeamMembersByCaseId,
+    purgeInvestigationTeamMember,
     getInvestigationTeamMembersByInvestigation,
     getAllInvestigationTeamMembersByInvestigation
 };
