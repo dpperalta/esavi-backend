@@ -2,6 +2,14 @@ import { InferAttributes, Op, WhereOptions } from 'sequelize';
 import { CatalogItem, EsaviCase, Investigation, InvestigationTeamMember } from '../models';
 import { AppError, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationTeamMemberInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// The order of the three listings, and there is no createdAt DESC here: sortOrder is what the
+// domain orders the investigating team by, and the whole reason the column exists. createdAt is
+// the tie-breaker, and it only bites in 002B: the partial unique index keeps the live rows of one
+// investigation from sharing a number, but two rows sealed by a 005A can. It never moves after the
+// insert, unlike updatedAt, which would shuffle the list on every save
+const LIST_ORDER: [string, string][] = [['sortOrder', 'ASC'], ['createdAt', 'ASC']];
 
 // The columns the INSERT of ESAVI-INVTEAM-001 writes, listed one by one so sortOrder stays out of
 // it. Omitting the value is not enough: the column is allowNull: false and Sequelize runs its own
@@ -92,6 +100,41 @@ const assertInvestigationIsValid = async (investigationId: string, op: string, l
         );
     }
 }
+
+// The same check as assertInvestigationIsValid, relaxed by canViewInactive: the inherited
+// visibility applied to the listings, where the parent is not the target of the write but the gate
+// to the collection. A retired investigation answers 404 for USER and ADMIN, and comes back for
+// whoever may see inactive rows, today SUPERADMIN.
+//
+// A retired investigation answers 404 instead of an empty page, because an empty page would say
+// "this investigation has no team" to somebody who is simply not allowed to see it
+const assertInvestigationIsVisible = async (
+    investigationId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const investigation = await Investigation.findOne({
+        where: canViewInactive ? { investigationId } : { investigationId, isActive: true },
+        attributes: ['investigationId']
+    });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationTeamMember.investigationNotFound', lang),
+            404,
+            `INVTEAM_${ op }_INVESTIGATION_NOT_FOUND`
+        );
+    }
+}
+
+// The include shared by the three listings. required: true keeps it an INNER JOIN, and its where
+// carries the inherited visibility — the same criterion the parent guard already applied over the
+// :id of the route, kept here so a row cannot come back through a join the guard did not cover
+const listInclude = (includeInactive: boolean) => [{
+    ...INVESTIGATION_INCLUDE,
+    required: true,
+    where: includeInactive ? {} : { isActive: true }
+}];
 
 // The free texts are normalized on write with trim, and a text that is blank after trimming is no
 // text at all. institutionName goes through here and NOT through toTitleCase, against the general
@@ -193,6 +236,77 @@ const createInvestigationTeamMemberService = async (
     return member ? toInvestigationTeamMemberResponse(member) : null;
 }
 
+// Get Investigation Team Members By Investigation Service
+// Code: ESAVI-INVTEAM-002A
+// The listing is entered by the foreign key and never by /: the members of an investigation only
+// make sense read together and in their order, and a global listing would return a jumble of people
+// from different investigations paginated by createdAt, which answers no question of the domain.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with NO filter by
+// query: institutionName, email and free text search are out of the scope of this spec
+const getInvestigationTeamMembersByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertInvestigationIsVisible(investigationId, '002A', lang, canViewInactive);
+
+    const members = await InvestigationTeamMember.findAndCountAll({
+        where: { investigationId, isActive: true },
+        attributes: MEMBER_EXCLUDE,
+        include: listInclude(canViewInactive),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+
+    return {
+        count: members.count,
+        rows: members.rows.map(toInvestigationTeamMemberResponse)
+    };
+}
+
+// Get All Investigation Team Members By Investigation Service - For Admin
+// Code: ESAVI-INVTEAM-002B
+// The same listing as 002A without the isActive filter: it is the only door to a member that was
+// retired, and therefore the entry point of whoever is going to reactivate or purge it.
+// paranoid: false is declarative here — the model is not paranoid, so deletedAt is a plain column
+// and no scope would hide the sealed rows — and it is written for the same reason
+// entityActivation.service.ts writes it: the intent is to see everything, including what a 005A
+// sealed. Those are exactly the rows IX_investigationTeamMember_investigation exists for: the
+// partial unique index of esaviapp.sql:1350-1352 leaves them out.
+//
+// The parent guard still applies: an ADMIN sees inactive members, not the members of an inactive
+// investigation
+const getAllInvestigationTeamMembersByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertInvestigationIsVisible(investigationId, '002B', lang, canViewInactive);
+
+    const members = await InvestigationTeamMember.findAndCountAll({
+        where: { investigationId },
+        attributes: MEMBER_EXCLUDE,
+        include: listInclude(canViewInactive),
+        order: LIST_ORDER,
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: members.count,
+        rows: members.rows.map(toInvestigationTeamMemberResponse)
+    };
+}
+
 export {
-    createInvestigationTeamMemberService
+    createInvestigationTeamMemberService,
+    getInvestigationTeamMembersByInvestigationService,
+    getAllInvestigationTeamMembersByInvestigationService
 };

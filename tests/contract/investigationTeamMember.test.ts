@@ -63,6 +63,30 @@ describe('investigationTeamMember contract', () => {
 
     const readRow = async (id: string) => await InvestigationTeamMember.findByPk(id, { paranoid: false });
 
+    const listByInvestigation = (investigationId: string, role: TestRole = 'USER', query: string = '') =>
+        request(app).get(`/api/investigation-team-members/investigation/${ investigationId }${ query }`).set(authHeader(role));
+
+    const listAdminByInvestigation = (investigationId: string, role: TestRole = 'ADMIN', query: string = '') =>
+        request(app).get(`/api/investigation-team-members/admin/investigation/${ investigationId }${ query }`).set(authHeader(role));
+
+    const retire = (id: string) =>
+        InvestigationTeamMember.update({ isActive: false, deletedAt: new Date() }, { where: { investigationTeamMemberId: id } });
+
+    const retireInvestigation = (investigationId: string) =>
+        Investigation.update({ isActive: false }, { where: { investigationId } });
+
+    // Mints an investigation with three members and hands back both, so the listings have
+    // something ordered to read
+    const seedTeam = async (): Promise<{ investigationId: string, ids: string[] }> => {
+        const investigationId = await createInvestigationFixture();
+        const ids: string[] = [];
+        for( const fullName of ['Ana Uno', 'Ana Dos', 'Ana Tres'] ) {
+            const res = await create({ investigationId, fullName });
+            ids.push(res.body.data.investigationTeamMemberId);
+        }
+        return { investigationId, ids };
+    };
+
     beforeAll(async () => {
         consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
         await seedTestUsers();
@@ -231,6 +255,118 @@ describe('investigationTeamMember contract', () => {
             const row = await readRow(data.investigationTeamMemberId);
             const sysDetails = row!.getDataValue('sysDetails') as { version?: number } | null;
             expect(sysDetails?.version).toBe(1);
+        });
+    });
+
+    describe('002A and 002B — the two listings by investigation', () => {
+
+        it('002A returns { count, rows } ordered by sortOrder ascending', async () => {
+            const { investigationId } = await seedTeam();
+            const res = await listByInvestigation(investigationId);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.count).toBe(3);
+            expect(res.body.data.rows.map((r: { sortOrder: number }) => r.sortOrder)).toEqual([1, 2, 3]);
+            expect(res.body.data.rows.map((r: { fullName: string }) => r.fullName))
+                .toEqual(['Ana Uno', 'Ana Dos', 'Ana Tres']);
+        });
+
+        // The difference between the two listings, and the reason the new index exists: 002B
+        // reads precisely the rows the partial unique index of sortOrder leaves out
+        it('002A hides a retired member and 002B returns it', async () => {
+            const { investigationId, ids } = await seedTeam();
+            await retire(ids[1]);
+
+            const active = await listByInvestigation(investigationId);
+            const all = await listAdminByInvestigation(investigationId);
+
+            expect(active.body.data.count).toBe(2);
+            expect(active.body.data.rows.map((r: { fullName: string }) => r.fullName))
+                .toEqual(['Ana Uno', 'Ana Tres']);
+            expect(all.body.data.count).toBe(3);
+            expect(all.body.data.rows.map((r: { sortOrder: number }) => r.sortOrder)).toEqual([1, 2, 3]);
+        });
+
+        it('an investigation with no members returns 200 with count 0, not 404', async () => {
+            const investigationId = await createInvestigationFixture();
+
+            const active = await listByInvestigation(investigationId);
+            const all = await listAdminByInvestigation(investigationId);
+
+            expect(active.status).toBe(200);
+            expect(active.body.data).toEqual({ count: 0, rows: [] });
+            expect(all.status).toBe(200);
+            expect(all.body.data.count).toBe(0);
+        });
+
+        it('rejects a USER on 002B with 403', async () => {
+            const { investigationId } = await seedTeam();
+            const res = await listAdminByInvestigation(investigationId, 'USER');
+
+            expect(res.status).toBe(403);
+        });
+
+        // The inherited visibility over the :id of the route, applied before reading anything
+        it.each([
+            ['USER' as TestRole, 404],
+            ['ADMIN' as TestRole, 404],
+            ['SUPERADMIN' as TestRole, 200]
+        ])('002A over a retired investigation answers %s -> %i', async (role, status) => {
+            const { investigationId } = await seedTeam();
+            await retireInvestigation(investigationId);
+
+            const res = await listByInvestigation(investigationId, role);
+
+            expect(res.status).toBe(status);
+            if( status === 404 ) expect(res.body.code).toBe('INVTEAM_002A_INVESTIGATION_NOT_FOUND');
+        });
+
+        it.each([
+            ['ADMIN' as TestRole, 404],
+            ['SUPERADMIN' as TestRole, 200]
+        ])('002B over a retired investigation answers %s -> %i', async (role, status) => {
+            const { investigationId } = await seedTeam();
+            await retireInvestigation(investigationId);
+
+            const res = await listAdminByInvestigation(investigationId, role);
+
+            expect(res.status).toBe(status);
+            if( status === 404 ) expect(res.body.code).toBe('INVTEAM_002B_INVESTIGATION_NOT_FOUND');
+        });
+
+        it('every row carries the investigation with its status and case, and no sysDetails', async () => {
+            const { investigationId } = await seedTeam();
+            const { data } = (await listByInvestigation(investigationId)).body;
+
+            for( const row of data.rows ) {
+                expect(row.sysDetails).toBeUndefined();
+                expect(row.investigation.investigationId).toBe(investigationId);
+                expect(row.investigation.status).not.toBeNull();
+                expect(row.investigation.case.caseCode).toBeDefined();
+                expect(row.investigation.sysDetails).toBeUndefined();
+            }
+        });
+
+        it('paginates with limit and offset', async () => {
+            const { investigationId } = await seedTeam();
+            const res = await listByInvestigation(investigationId, 'USER', '?limit=2&offset=1');
+
+            expect(res.body.data.count).toBe(3);
+            expect(res.body.data.rows).toHaveLength(2);
+            expect(res.body.data.rows.map((r: { sortOrder: number }) => r.sortOrder)).toEqual([2, 3]);
+        });
+
+        it('rejects a non-UUID investigation id with 400', async () => {
+            const res = await listByInvestigation('no-es-uuid');
+
+            expect(res.status).toBe(400);
+        });
+
+        it('answers 404 over an investigation that does not exist', async () => {
+            const res = await listByInvestigation(unknownUuid);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_002A_INVESTIGATION_NOT_FOUND');
         });
     });
 });

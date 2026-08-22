@@ -1,6 +1,17 @@
-import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { createInvestigationTeamMemberService } from '../services/investigationTeamMember.service';
+﻿import { Request, Response, NextFunction } from 'express';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import {
+    createInvestigationTeamMemberService,
+    getAllInvestigationTeamMembersByInvestigationService,
+    getInvestigationTeamMembersByInvestigationService
+} from '../services/investigationTeamMember.service';
+
+// The only two things the three listings read from the query. There is no filter to unwrap: every
+// listing returns the whole team of its parent, ordered by sortOrder
+const pagination = (req: Request) => ({
+    limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+    offset: req.query.offset ? parseInt(req.query.offset as string) : undefined
+});
 
 // Create Investigation Team Member Controller
 // Code: ESAVI-INVTEAM-001
@@ -22,6 +33,53 @@ const createInvestigationTeamMember = async (req: Request, res: Response, next: 
     }
 }
 
+// Get Investigation Team Members By Investigation Controller
+// Code: ESAVI-INVTEAM-002A
+const getInvestigationTeamMembersByInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const { limit, offset } = pagination(req);
+    try {
+        const data = await getInvestigationTeamMembersByInvestigationService(id, req.lang, canViewInactive(req.user), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationTeamMember.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVTEAM-002A: Error fetching Investigation Team Members: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationTeamMember.getFailedPlural', req.lang), 500, 'INVTEAM_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Investigation Team Members By Investigation Controller - For Admin
+// Code: ESAVI-INVTEAM-002B
+const getAllInvestigationTeamMembersByInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const { limit, offset } = pagination(req);
+    try {
+        const data = await getAllInvestigationTeamMembersByInvestigationService(id, req.lang, canViewInactive(req.user), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationTeamMember.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVTEAM-002B: Error fetching all Investigation Team Members: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationTeamMember.getFailedPlural', req.lang), 500, 'INVTEAM_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createInvestigationTeamMember
+    createInvestigationTeamMember,
+    getInvestigationTeamMembersByInvestigation,
+    getAllInvestigationTeamMembersByInvestigation
 };
+
