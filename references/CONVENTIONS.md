@@ -297,6 +297,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | investigation | `INVESTGN` |
 | investigationAutopsy | `INVAUT` |
 | investigationSource | `INVSRC` |
+| investigationTeamMember | `INVTEAM` |
 | nonSevereNotification | `NSEVNOT` |
 | notification | `NOTIFCN` |
 | notificationDiluent | `NOTIFDIL` |
