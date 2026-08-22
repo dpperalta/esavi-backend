@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource, InvestigationTeamMember } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -653,6 +653,22 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( investigationAutopsy ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: Investigation autopsy dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(investigationAutopsy.get({ plain: true })) }`,
+                'warn'
+            );
+        }
+
+        // The third satellite, and the first that is a collection: N rows hang from one
+        // investigation, so what is dumped is the COUNT and not a snapshot per row — a team of
+        // twenty would bury the log line that matters under twenty others. SPEC F31.
+        // paranoid: false counts the ones a 005A sealed too: the cascade destroys them all the same
+        const teamMemberCount = await InvestigationTeamMember.count({
+            where: { investigationId: id },
+            paranoid: false,
+            transaction
+        });
+        if( teamMemberCount > 0 ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: ${ teamMemberCount } investigation team member(s) dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }`,
                 'warn'
             );
         }

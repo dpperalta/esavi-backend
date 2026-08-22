@@ -1032,4 +1032,54 @@ describe('investigationTeamMember contract', () => {
             expect(next.sortOrder).toBe(1);
         });
     });
+
+    describe('no cascade from the parents', () => {
+
+        // The comprobation that the absence of a cascade is deliberate and not an oversight.
+        // investigationTeamMember is the first satellite of investigation with an isActive of its
+        // own, and a cascade writing it would destroy information: on reactivating the
+        // investigation there would be no way to tell who was retired by hand from who was dragged
+        it('deactivating and reactivating the investigation does not touch isActive or deletedAt', async () => {
+            const { investigationId, ids } = await seedTeam();
+            const before = await readRow(ids[0]);
+
+            await request(app).delete(`/api/investigations/${ investigationId }`).set(authHeader('ADMIN'));
+            const afterRetire = await readRow(ids[0]);
+            expect(afterRetire!.getDataValue('isActive')).toBe(true);
+            expect(afterRetire!.getDataValue('deletedAt')).toBeNull();
+
+            await request(app).patch(`/api/investigations/activate/${ investigationId }`).set(authHeader('SUPERADMIN'));
+            const afterActivate = await readRow(ids[0]);
+            expect(afterActivate!.getDataValue('isActive')).toBe(true);
+            expect(afterActivate!.getDataValue('deletedAt')).toBeNull();
+            expect(afterActivate!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
+        });
+
+        it('deactivating the case does not touch its members either', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+
+            await request(app).delete(`/api/esavi-cases/${ caseId }`).set(authHeader('ADMIN'));
+
+            const row = await readRow(data.investigationTeamMemberId);
+            expect(row!.getDataValue('isActive')).toBe(true);
+            expect(row!.getDataValue('deletedAt')).toBeNull();
+        });
+
+        // ESAVI-INVESTGN-005C is not blocked: the ON DELETE CASCADE of Postgres fires and the
+        // only mitigation is the warn dump, which does not stop anything
+        it('purging the investigation destroys its members by cascade, with no error', async () => {
+            const { investigationId, ids } = await seedTeam();
+            await request(app).delete(`/api/investigations/${ investigationId }`).set(authHeader('ADMIN'));
+
+            const res = await request(app)
+                .delete(`/api/investigations/purge/${ investigationId }`).set(authHeader('SUPERADMIN'));
+
+            expect(res.status).toBe(200);
+            for( const id of ids ) {
+                expect(await readRow(id)).toBeNull();
+            }
+        });
+    });
 });
