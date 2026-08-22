@@ -1,0 +1,198 @@
+import { InferAttributes, Op, WhereOptions } from 'sequelize';
+import { CatalogItem, EsaviCase, Investigation, InvestigationTeamMember } from '../models';
+import { AppError, getMessage, toTitleCase } from '../helpers';
+import { AppDetails, AuthUser, CreateInvestigationTeamMemberInput } from '../types';
+
+// The columns the INSERT of ESAVI-INVTEAM-001 writes, listed one by one so sortOrder stays out of
+// it. Omitting the value is not enough: the column is allowNull: false and Sequelize runs its own
+// notNull validation over every attribute of the create before reaching Postgres, so an unlisted
+// sortOrder would be rejected in the application and TRG_investigationTeamMember_setSortOrder would
+// never get to assign it. Passing the field list is what makes the column absent from the
+// statement. investigationTeamMemberId is out for the same reason it is out of the body:
+// gen_random_uuid() writes it
+const CREATE_FIELDS: (keyof InferAttributes<InvestigationTeamMember>)[] = [
+    'investigationId',
+    'fullName',
+    'institutionName',
+    'email',
+    'phone',
+    'notes',
+    'isActive',
+    'appDetails'
+];
+
+// The investigation travels in every response, listings included: it is what governs the visibility
+// of the member, and hiding it would leave the client unable to explain why a record it read in a
+// list answers 404 through 003. Its own sysDetails stays out, like the one of the member.
+// status never comes back null, by the rule F28 imposed on that entity
+const INVESTIGATION_INCLUDE = {
+    model: Investigation,
+    as: 'investigation',
+    attributes: ['investigationId', 'isActive', 'investigationStartDate'],
+    include: [
+        {
+            model: CatalogItem,
+            as: 'status',
+            attributes: ['catalogItemId', 'code', 'name']
+        },
+        {
+            model: EsaviCase,
+            as: 'case',
+            attributes: ['caseId', 'caseCode', 'eventDate']
+        }
+    ]
+};
+
+// sysDetails is trigger metadata and never leaves the service. Everything else travels, sortOrder
+// included: the client did not send it and cannot change it, but it is what explains the order the
+// listings come back in
+const MEMBER_EXCLUDE = {
+    exclude: ['sysDetails']
+};
+
+// The response of §3.7, and there is no reduced form: the same shape is returned by the row
+// operations and by every row of the three listings
+const toInvestigationTeamMemberResponse = (member: InvestigationTeamMember) => {
+    const plain = member.toJSON() as Record<string, unknown>;
+    delete plain.sysDetails;
+
+    const investigation = plain.investigation as Record<string, unknown> | null | undefined;
+    if( investigation ) delete investigation.sysDetails;
+
+    return plain;
+}
+
+// The read every operation shares to build its response. The investigation include is mandatory and
+// not decorative: with required: true and the isActive filter it is what implements the inherited
+// visibility, so a member hanging from a retired investigation simply does not come back
+const findInvestigationTeamMemberWithRelations = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationTeamMember.findOne({
+        where: includeInactive ? { investigationTeamMemberId: id } : { investigationTeamMemberId: id, isActive: true },
+        attributes: MEMBER_EXCLUDE,
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// The investigation must exist and be active: a retired investigation does not take new members.
+// The operation code travels in so the AppError keeps it
+const assertInvestigationIsValid = async (investigationId: string, op: string, lang: string) => {
+    const investigation = await Investigation.findOne({
+        where: { investigationId, isActive: true },
+        attributes: ['investigationId']
+    });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationTeamMember.investigationNotFound', lang),
+            404,
+            `INVTEAM_${ op }_INVESTIGATION_NOT_FOUND`
+        );
+    }
+}
+
+// The free texts are normalized on write with trim, and a text that is blank after trimming is no
+// text at all. institutionName goes through here and NOT through toTitleCase, against the general
+// rule of the conventions: the institution names of this domain are acronyms — MINSAL, ISP, OPS —
+// and title casing them would turn them into Minsal, Isp and Ops, corrupting a value that is
+// printed on an official document
+const normalizeText = (value: string | null | undefined): string | null => {
+    if( value === undefined || value === null ) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+// The name is the one field that does carry toTitleCase, and it is normalized before being compared
+// anywhere: the duplicate guard reads the normalized value, and so does the diff of 004. Comparing
+// the raw one would let 'ana pérez' look like a change over a stored 'Ana Pérez'
+const normalizeFullName = (value: string): string => toTitleCase(value.trim());
+
+// Lowercased on top of the trim. The column is citext, so Postgres already ignores case when
+// comparing, but the diff of 004 compares text in the application: without this, 'ANA@X.CL' over a
+// stored 'ana@x.cl' would produce a difference that the database itself does not recognize
+const normalizeEmail = (value: string | null | undefined): string | null => {
+    if( value === undefined || value === null ) return null;
+    const trimmed = value.trim().toLowerCase();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+// The duplicate guard of 001 and 004, and the first of the repository resting on a free text field:
+// there is no UNIQUE in the DDL and no catalog to resolve against, so this is a business rule of the
+// service and nothing else. It compares the already normalized fullName against the ACTIVE rows of
+// the same investigation — a retired member does not block registering the same person again, which
+// is the normal way of undoing a mistaken create without going through 005B.
+//
+// What it does not cover is declared in §7 of the spec: it is an exact match over normalized text,
+// so 'Juan Pérez' and 'Juan Perez' are two different people here. It is not deduplication
+const assertFullNameIsAvailable = async (
+    investigationId: string,
+    fullName: string,
+    op: string,
+    lang: string,
+    excludeId?: string
+) => {
+    const where: WhereOptions = excludeId
+        ? { investigationId, fullName, isActive: true, investigationTeamMemberId: { [Op.ne]: excludeId } }
+        : { investigationId, fullName, isActive: true };
+
+    const existing = await InvestigationTeamMember.findOne({
+        where,
+        attributes: ['investigationTeamMemberId']
+    });
+    if( existing ) {
+        throw new AppError(
+            getMessage('investigationTeamMember.alreadyExists', lang, { fullName }),
+            409,
+            `INVTEAM_${ op }_ALREADY_EXISTS`
+        );
+    }
+}
+
+// Create Investigation Team Member Service
+// Code: ESAVI-INVTEAM-001
+const createInvestigationTeamMemberService = async (
+    data: CreateInvestigationTeamMemberInput,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    // The four steps of §3.5, in this order: the parent first, because a 404 over the investigation
+    // makes every other check meaningless; the normalization second, because the guard has to read
+    // the value that is going to be stored and not the one the client typed
+    await assertInvestigationIsValid(data.investigationId, '001', lang);
+
+    const fullName = normalizeFullName(data.fullName);
+
+    await assertFullNameIsAvailable(data.investigationId, fullName, '001', lang);
+
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVTEAM-001',
+        detail: 'Investigation team member created by service'
+    };
+
+    // sortOrder is deliberately absent from this object AND from CREATE_FIELDS: the trigger assigns
+    // COALESCE(MAX("sortOrder"), 0) + 1 over the live rows of the same investigation. A create with
+    // only investigationId and fullName is valid and leaves the four optional columns null
+    const created = await InvestigationTeamMember.create({
+        investigationId: data.investigationId,
+        fullName,
+        institutionName: normalizeText(data.institutionName),
+        email: normalizeEmail(data.email),
+        phone: normalizeText(data.phone),
+        notes: normalizeText(data.notes),
+        isActive: true,
+        appDetails: [newEntry]
+    }, { fields: CREATE_FIELDS });
+
+    // Re-read so the response carries the resolved investigation, its status and its case, and the
+    // sortOrder the trigger assigned, which the create instance does not know
+    const member = await findInvestigationTeamMemberWithRelations(created.investigationTeamMemberId, true);
+    return member ? toInvestigationTeamMemberResponse(member) : null;
+}
+
+export {
+    createInvestigationTeamMemberService
+};
