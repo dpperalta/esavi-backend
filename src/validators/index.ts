@@ -27,4 +27,5 @@ export * from './notificationPregnancyComplication.validator';
 export * from './investigation.validator';
 export * from './investigationSource.validator';
 export * from './investigationAutopsy.validator';
+export * from './investigationTeamMember.validator';
 export * from './systemConfig.validator';
