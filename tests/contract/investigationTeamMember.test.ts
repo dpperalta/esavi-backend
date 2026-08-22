@@ -79,6 +79,9 @@ describe('investigationTeamMember contract', () => {
     const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
         request(app).put(`/api/investigation-team-members/${ id }`).set(authHeader(role)).send(payload);
 
+    const activate = (id: string, role: TestRole = 'ADMIN') =>
+        request(app).patch(`/api/investigation-team-members/activate/${ id }`).set(authHeader(role));
+
     const remove = (id: string, role: TestRole = 'ADMIN') =>
         request(app).delete(`/api/investigation-team-members/${ id }`).set(authHeader(role));
 
@@ -817,6 +820,128 @@ describe('investigationTeamMember contract', () => {
             })).body;
 
             expect((await remove(data.investigationTeamMemberId)).status).toBe(200);
+        });
+    });
+
+    describe('005B — reactivate, with sortOrder reassignment', () => {
+
+        // THE scenario that breaks a clean delegation, and the reason 005B does not simply hand
+        // over to setEntityActiveStatusService. The row that is retired has to be the one holding
+        // the HIGHEST sortOrder: setSortOrderByParent assigns COALESCE(MAX, 0) + 1 over the live
+        // rows, so it does not fill gaps
+        it('reactivating after another member took the freed sortOrder answers 200', async () => {
+            const investigationId = await createInvestigationFixture();
+            const a = (await create({ investigationId, fullName: 'Ana Uno' })).body.data;
+            const b = (await create({ investigationId, fullName: 'Ana Dos' })).body.data;
+            expect([a.sortOrder, b.sortOrder]).toEqual([1, 2]);
+
+            await remove(b.investigationTeamMemberId);
+            const c = (await create({ investigationId, fullName: 'Ana Tres' })).body.data;
+            expect(c.sortOrder).toBe(2);
+
+            const res = await activate(b.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+            const row = await readRow(b.investigationTeamMemberId);
+            expect(row!.getDataValue('isActive')).toBe(true);
+            expect(row!.getDataValue('deletedAt')).toBeNull();
+            // B reappears at the end of the list, with a number nobody holds
+            expect(row!.getDataValue('sortOrder')).toBe(3);
+        });
+
+        // The other variant: retiring the member that is NOT the last one leaves a gap the
+        // trigger never fills, so the reactivation finds no collision
+        it('reactivating when the gap was not reused leaves sortOrder untouched', async () => {
+            const investigationId = await createInvestigationFixture();
+            const a = (await create({ investigationId, fullName: 'Ana Uno' })).body.data;
+            await create({ investigationId, fullName: 'Ana Dos' });
+
+            await remove(a.investigationTeamMemberId);
+            const c = (await create({ investigationId, fullName: 'Ana Tres' })).body.data;
+            expect(c.sortOrder).toBe(3);
+
+            const res = await activate(a.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+            expect((await readRow(a.investigationTeamMemberId))!.getDataValue('sortOrder')).toBe(1);
+        });
+
+        it('reactivating with no collision does not touch sortOrder', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+
+            const res = await activate(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+            expect((await readRow(data.investigationTeamMemberId))!.getDataValue('sortOrder')).toBe(1);
+        });
+
+        it('records the audit entry with method ESAVI-INVTEAM-005B', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+            await activate(data.investigationTeamMemberId);
+
+            const appDetails = await appDetailsOf(data.investigationTeamMemberId);
+            expect(appDetails.map(e => e.method))
+                .toEqual(['ESAVI-INVTEAM-001', 'ESAVI-INVTEAM-005A', 'ESAVI-INVTEAM-005B']);
+        });
+
+        it('reactivating one that is already active answers 409', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+
+            const res = await activate(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(409);
+            expect(res.body.code).toBe('INVTEAM_005B_ALREADY_ACTIVE');
+        });
+
+        it('answers 404 over an ID that does not exist', async () => {
+            const res = await activate(unknownUuid);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_005B_NOT_FOUND');
+        });
+
+        it('rejects a USER with 403', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+
+            const res = await activate(data.investigationTeamMemberId, 'USER');
+
+            expect(res.status).toBe(403);
+        });
+
+        // 005B does not revalidate the chain: the state of the row does not depend on the parent
+        it('reactivating one whose investigation was retired meanwhile answers 200', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+            await retireInvestigation(investigationId);
+
+            const res = await activate(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+        });
+
+        // The consequence assumed in §6, explicit here so nobody "fixes" it by accident: 005B is a
+        // recovery operation, and blocking it would leave rows unrecoverable through that route
+        it('reactivating one whose fullName is already live answers 200 and leaves the duplicate', async () => {
+            const investigationId = await createInvestigationFixture();
+            const first = (await create({ investigationId, fullName: 'Ana Pérez' })).body.data;
+            await remove(first.investigationTeamMemberId);
+            await create({ investigationId, fullName: 'Ana Pérez' });
+
+            const res = await activate(first.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+
+            const live = await listByInvestigation(investigationId);
+            expect(live.body.data.rows.filter((r: { fullName: string }) => r.fullName === 'Ana Pérez'))
+                .toHaveLength(2);
         });
     });
 });

@@ -1,4 +1,4 @@
-import { InferAttributes, Op, WhereOptions } from 'sequelize';
+import { InferAttributes, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationTeamMember } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -500,6 +500,68 @@ const updateInvestigationTeamMemberService = async (
     return updated ? toInvestigationTeamMemberResponse(updated) : null;
 }
 
+// UQ_investigationTeamMember_parent_sortOrder is a partial unique index over
+// (investigationId, sortOrder) WHERE deletedAt IS NULL AND sortOrder IS NOT NULL
+// (esaviapp.sql:1350-1352). A 005A seals deletedAt, so the number leaves both the index and the MAX
+// the insert trigger computes, and a later create legitimately reuses it. The moment
+// setEntityActiveStatusService clears deletedAt, the reactivated row re-enters the index carrying a
+// number another live row already holds, and the UPDATE dies with a constraint violation — a 500
+// for an operation that should answer 200.
+//
+// The fix is to move the number before touching deletedAt: while deletedAt is still sealed the row
+// is outside the partial index, so this write is free. Inverting the two steps makes the index fail
+// inside the helper's own UPDATE — the constraint is not deferrable and there would be no way to
+// fix it afterwards.
+//
+// This is a write with an intention of its own over a field the client neither sent nor can send,
+// so it does not go through buildDifferentialUpdate: it does not come from comparing an incoming
+// value against the stored one, but from a constraint of the database.
+//
+// A missing row is left alone: the helper right after raises the 404. An already active row finds
+// no collision either — the index guarantees no other live row shares its number — so nothing is
+// written and the helper raises its 409 as usual.
+//
+// This is the sixth copy of this block in the repository, after F16, F21, F22, F24 and F27.
+// Extracting it into a common helper is the clearest candidate for a consolidation spec, and it is
+// not done here because it would touch five entities already marked Implementado
+const reassignSortOrderOnCollision = async (id: string, transaction: Transaction) => {
+    const member = await InvestigationTeamMember.findOne({
+        where: { investigationTeamMemberId: id },
+        paranoid: false,
+        transaction
+    });
+    if( !member || member.deletedAt === null ) {
+        return;
+    }
+
+    const collision = await InvestigationTeamMember.findOne({
+        where: {
+            investigationId: member.investigationId,
+            sortOrder: member.sortOrder as number,
+            deletedAt: null,
+            investigationTeamMemberId: { [Op.ne]: id }
+        },
+        attributes: ['investigationTeamMemberId'],
+        paranoid: false,
+        transaction
+    });
+    if( !collision ) {
+        return;
+    }
+
+    // The same count TRG_investigationTeamMember_setSortOrder does on insert, so the reactivated
+    // member reappears at the end of the list
+    const highest = await InvestigationTeamMember.max<number, InvestigationTeamMember>('sortOrder', {
+        where: { investigationId: member.investigationId, deletedAt: null },
+        transaction
+    });
+
+    await member.update(
+        { sortOrder: ( Number(highest) || 0 ) + 1 },
+        { transaction, fields: ['sortOrder'] }
+    );
+}
+
 // Set Investigation Team Member Activation Service
 // Code: ESAVI-INVTEAM-005A / ESAVI-INVTEAM-005B
 // One service for the two operations, as the rest of the repository does it. Neither is a
@@ -525,6 +587,16 @@ const setInvestigationTeamMemberActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // Only on the way back: a 005A is what frees the number, so it never collides.
+        // The reactivation revalidates nothing else — not the duplicate fullName, not the state of
+        // the investigation. Bringing a row back to life is undoing a deactivation, not rewriting
+        // it. The consequence — a 005B can leave two active rows with the same fullName in one
+        // investigation — is assumed and declared in §6 of the spec: the alternative leaves an
+        // ADMIN with a row that can never come back and nothing to do about it but purge it
+        if( isActive ) {
+            await reassignSortOrderOnCollision(id, transaction);
+        }
+
         const member = await setEntityActiveStatusService({
             model: InvestigationTeamMember,
             where: { investigationTeamMemberId: id },

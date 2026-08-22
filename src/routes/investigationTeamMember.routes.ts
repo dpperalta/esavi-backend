@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateInvestigationTeamMember,
     createInvestigationTeamMember,
     deleteInvestigationTeamMember,
     getAllInvestigationTeamMembersByInvestigation,
@@ -49,6 +50,13 @@ router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...inv
 // The real query of the domain, and the only non-canonical operation of the entity. Declared
 // before /:id so Express does not capture 'case' as an :id
 router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationTeamMemberCaseIdValidator, validateFields, getInvestigationTeamMembersByCaseId);
+
+// Activate Investigation Team Member
+// Code: ESAVI-INVTEAM-005B
+// Declared with the literal paths, before /:id. ADMIN and not SUPERADMIN, following F27: this is
+// not the trivial delegation the canonical matrix assumes but an operation carrying a sortOrder
+// reassignment in a transaction, and it is part of the operational flow of correcting a report
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...investigationTeamMemberIdValidator, validateFields, activateInvestigationTeamMember);
 
 // Get Investigation Team Member by ID
 // Code: ESAVI-INVTEAM-003

@@ -166,7 +166,29 @@ const deleteInvestigationTeamMember = async (req: Request, res: Response, next: 
     }
 }
 
+// Activate Investigation Team Member Controller
+// Code: ESAVI-INVTEAM-005B
+const activateInvestigationTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setInvestigationTeamMemberActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationTeamMember.activatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVTEAM-005B: Error activating Investigation Team Member: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationTeamMember.activatedFailed', req.lang), 500, 'INVTEAM_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
+    activateInvestigationTeamMember,
     createInvestigationTeamMember,
     deleteInvestigationTeamMember,
     updateInvestigationTeamMember,
