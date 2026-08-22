@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationTeamMember,
+    deleteInvestigationTeamMember,
     getAllInvestigationTeamMembersByInvestigation,
     getInvestigationTeamMemberById,
     getInvestigationTeamMembersByCaseId,
@@ -61,5 +62,12 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationTeam
 // USER for the same reason as 001: correcting the record of who investigated is part of the same
 // operational flow. Differential — SPEC F12 — so a PUT that resends an unchanged form writes nothing
 router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationTeamMemberIdValidator, ...updateInvestigationTeamMemberValidator, validateFields, updateInvestigationTeamMember);
+
+// Delete Investigation Team Member - Logical delete, for Admin
+// Code: ESAVI-INVTEAM-005A
+// Declared after the literal paths. It is the first satellite of investigation with a 005A,
+// because it is the first with an isActive of its own: retiring a person from the investigating
+// team is a fact of the domain, and no cascade from investigation or from esaviCase writes it
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...investigationTeamMemberIdValidator, validateFields, deleteInvestigationTeamMember);
 
 export default router;

@@ -79,6 +79,9 @@ describe('investigationTeamMember contract', () => {
     const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
         request(app).put(`/api/investigation-team-members/${ id }`).set(authHeader(role)).send(payload);
 
+    const remove = (id: string, role: TestRole = 'ADMIN') =>
+        request(app).delete(`/api/investigation-team-members/${ id }`).set(authHeader(role));
+
     const versionOf = async (id: string) =>
         ((await readRow(id))!.getDataValue('sysDetails') as { version?: number } | null)?.version;
 
@@ -733,6 +736,87 @@ describe('investigationTeamMember contract', () => {
             const res = await update(data.investigationTeamMemberId, { fullName: 'Ana Uno' });
 
             expect(res.status).toBe(200);
+        });
+    });
+
+    describe('005A — deactivate', () => {
+
+        it('seals isActive and deletedAt, and records the audit entry', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+
+            const res = await remove(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+            const row = await readRow(data.investigationTeamMemberId);
+            expect(row!.getDataValue('isActive')).toBe(false);
+            expect(row!.getDataValue('deletedAt')).not.toBeNull();
+
+            const appDetails = await appDetailsOf(data.investigationTeamMemberId);
+            expect(appDetails[appDetails.length - 1].method).toBe('ESAVI-INVTEAM-005A');
+        });
+
+        it('deactivating twice answers 409 ALREADY_INACTIVE', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await remove(data.investigationTeamMemberId);
+
+            const res = await remove(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(409);
+            expect(res.body.code).toBe('INVTEAM_005A_ALREADY_INACTIVE');
+        });
+
+        it('answers 404 over an ID that does not exist', async () => {
+            const res = await remove(unknownUuid);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_005A_NOT_FOUND');
+        });
+
+        it('rejects a USER with 403', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+
+            const res = await remove(data.investigationTeamMemberId, 'USER');
+
+            expect(res.status).toBe(403);
+        });
+
+        // The seal frees the sortOrder from the partial unique index, which is correct and
+        // deliberate: the gap stays available for the next member
+        it('after deactivating, a new create reuses the freed sortOrder', async () => {
+            const investigationId = await createInvestigationFixture();
+            await create({ investigationId, fullName: 'Ana Uno' });
+            const second = (await create({ investigationId, fullName: 'Ana Dos' })).body.data;
+            expect(second.sortOrder).toBe(2);
+
+            await remove(second.investigationTeamMemberId);
+            const third = (await create({ investigationId, fullName: 'Ana Tres' })).body.data;
+
+            expect(third.sortOrder).toBe(2);
+        });
+
+        // The difference with F29 and F30: 005A operates over the state of the row itself, so it
+        // does not apply the inherited visibility
+        it('deactivating the member of a retired investigation works', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await retireInvestigation(investigationId);
+
+            const res = await remove(data.investigationTeamMemberId);
+
+            expect(res.status).toBe(200);
+        });
+
+        // The table is a leaf of the graph: nothing hangs from a member, so nothing blocks it
+        it('is blocked by nothing — no previous query at all', async () => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({
+                investigationId, fullName: 'Ana Pérez', institutionName: 'MINSAL', email: 'ana@x.cl', notes: 'nota'
+            })).body;
+
+            expect((await remove(data.investigationTeamMemberId)).status).toBe(200);
         });
     });
 });

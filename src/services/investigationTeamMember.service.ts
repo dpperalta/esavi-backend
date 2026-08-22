@@ -1,5 +1,7 @@
 import { InferAttributes, Op, WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationTeamMember } from '../models';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationTeamMemberInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -498,8 +500,58 @@ const updateInvestigationTeamMemberService = async (
     return updated ? toInvestigationTeamMemberResponse(updated) : null;
 }
 
+// Set Investigation Team Member Activation Service
+// Code: ESAVI-INVTEAM-005A / ESAVI-INVTEAM-005B
+// One service for the two operations, as the rest of the repository does it. Neither is a
+// differential update: they are state writes with an intent of their own, they record a fact even
+// though no data column changes, and that is why they go through setEntityActiveStatusService and
+// never through buildDifferentialUpdate.
+//
+// Neither applies the inherited visibility either, and this is the difference with F29 and F30:
+// whoever retires or reactivates acts over the state of the row itself, and that state exists
+// independently of the parent. Retiring the member of an investigation that was withdrawn works.
+//
+// The 005A seals deletedAt, which frees the sortOrder from the partial unique index. That is
+// correct and deliberate: the gap stays available for the next member.
+//
+// The 005A is blocked by nothing. investigationTeamMember is a leaf of the graph: nothing hangs
+// from a member, so there are no children to query and no state to drag
+const setInvestigationTeamMemberActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const member = await setEntityActiveStatusService({
+            model: InvestigationTeamMember,
+            where: { investigationTeamMemberId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('investigationTeamMember.notFound', lang),
+            notFoundCode: `INVTEAM_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`investigationTeamMember.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `INVTEAM_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-INVTEAM-${ op }`,
+                detail: `Investigation team member ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return member;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationTeamMemberService,
+    setInvestigationTeamMemberActivationService,
     updateInvestigationTeamMemberService,
     getInvestigationTeamMembersByCaseIdService,
     getInvestigationTeamMemberByIdService,

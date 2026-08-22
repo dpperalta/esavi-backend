@@ -6,6 +6,7 @@ import {
     getInvestigationTeamMemberByIdService,
     getInvestigationTeamMembersByCaseIdService,
     getInvestigationTeamMembersByInvestigationService,
+    setInvestigationTeamMemberActivationService,
     updateInvestigationTeamMemberService
 } from '../services/investigationTeamMember.service';
 
@@ -144,8 +145,30 @@ const updateInvestigationTeamMember = async (req: Request, res: Response, next: 
     }
 }
 
+// Delete Investigation Team Member Controller - Logical delete
+// Code: ESAVI-INVTEAM-005A
+const deleteInvestigationTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setInvestigationTeamMemberActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationTeamMember.deletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVTEAM-005A: Error deleting Investigation Team Member: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationTeamMember.deletedFailed', req.lang), 500, 'INVTEAM_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationTeamMember,
+    deleteInvestigationTeamMember,
     updateInvestigationTeamMember,
     getInvestigationTeamMemberById,
     getInvestigationTeamMembersByCaseId,
