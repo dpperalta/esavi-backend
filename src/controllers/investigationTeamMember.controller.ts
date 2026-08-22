@@ -5,7 +5,8 @@ import {
     getAllInvestigationTeamMembersByInvestigationService,
     getInvestigationTeamMemberByIdService,
     getInvestigationTeamMembersByCaseIdService,
-    getInvestigationTeamMembersByInvestigationService
+    getInvestigationTeamMembersByInvestigationService,
+    updateInvestigationTeamMemberService
 } from '../services/investigationTeamMember.service';
 
 // The only two things the three listings read from the query. There is no filter to unwrap: every
@@ -122,8 +123,30 @@ const getInvestigationTeamMembersByCaseId = async (req: Request, res: Response, 
     }
 }
 
+// Update Investigation Team Member Controller
+// Code: ESAVI-INVTEAM-004
+const updateInvestigationTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateInvestigationTeamMemberService(id, req.body, req.user, req.lang, canViewInactive(req.user));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationTeamMember.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVTEAM-004: Error updating Investigation Team Member: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationTeamMember.updatedFailed', req.lang), 500, 'INVTEAM_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationTeamMember,
+    updateInvestigationTeamMember,
     getInvestigationTeamMemberById,
     getInvestigationTeamMembersByCaseId,
     getInvestigationTeamMembersByInvestigation,

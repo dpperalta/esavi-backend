@@ -6,13 +6,15 @@ import {
     getAllInvestigationTeamMembersByInvestigation,
     getInvestigationTeamMemberById,
     getInvestigationTeamMembersByCaseId,
-    getInvestigationTeamMembersByInvestigation
+    getInvestigationTeamMembersByInvestigation,
+    updateInvestigationTeamMember
 } from '../controllers/investigationTeamMember.controller';
 import {
     createInvestigationTeamMemberValidator,
     investigationTeamMemberCaseIdValidator,
     investigationTeamMemberIdValidator,
-    investigationTeamMemberInvestigationIdValidator
+    investigationTeamMemberInvestigationIdValidator,
+    updateInvestigationTeamMemberValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -53,5 +55,11 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // The :id is the investigationTeamMemberId and not the investigationId: unlike F29 and F30, this
 // entity has an identifier of its own, and the access by investigation is 002A
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationTeamMemberIdValidator, validateFields, getInvestigationTeamMemberById);
+
+// Update Investigation Team Member
+// Code: ESAVI-INVTEAM-004
+// USER for the same reason as 001: correcting the record of who investigated is part of the same
+// operational flow. Differential — SPEC F12 — so a PUT that resends an unchanged form writes nothing
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationTeamMemberIdValidator, ...updateInvestigationTeamMemberValidator, validateFields, updateInvestigationTeamMember);
 
 export default router;

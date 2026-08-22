@@ -1,6 +1,6 @@
 import { InferAttributes, Op, WhereOptions } from 'sequelize';
 import { CatalogItem, EsaviCase, Investigation, InvestigationTeamMember } from '../models';
-import { AppError, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationTeamMemberInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -77,6 +77,22 @@ const findInvestigationTeamMemberWithRelations = async (id: string, includeInact
     return await InvestigationTeamMember.findOne({
         where: includeInactive ? { investigationTeamMemberId: id } : { investigationTeamMemberId: id, isActive: true },
         attributes: MEMBER_EXCLUDE,
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// The same read as above without narrowing the attributes of the member, which is the precondition
+// of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads back undefined
+// for the columns it left out, and every comparison against undefined would count as a change. It
+// still carries the investigation include, so the inherited visibility is checked in the same query
+// the update instance comes from
+const findInvestigationTeamMemberRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationTeamMember.findOne({
+        where: includeInactive ? { investigationTeamMemberId: id } : { investigationTeamMemberId: id, isActive: true },
         include: [{
             ...INVESTIGATION_INCLUDE,
             required: true,
@@ -392,8 +408,99 @@ const getInvestigationTeamMembersByCaseIdService = async (
     };
 }
 
+// Update Investigation Team Member Service
+// Code: ESAVI-INVTEAM-004
+// investigationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// returns 400. The first because a member does not move between investigations — that would take a
+// person to another patient's file — and the second because the order is governed by the database.
+// Ignoring in silence is what keeps working the PUT that resends the response of its own GET, the
+// normal use of a form
+const updateInvestigationTeamMemberService = async (
+    id: string,
+    data: Partial<CreateInvestigationTeamMemberInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const member = await findInvestigationTeamMemberRow(id, canViewInactive);
+    if( !member ) {
+        throw new AppError(
+            getMessage('investigationTeamMember.notFound', lang),
+            404,
+            'INVTEAM_004_NOT_FOUND'
+        );
+    }
+
+    // The name is normalized once and used twice: by the duplicate guard and by the diff. The guard
+    // runs only when fullName travels — with no new name there is nothing to check — and it runs
+    // BEFORE the diff and independently of it: renaming a row to a name another ACTIVE member of the
+    // same investigation already holds is a 409 even if nothing else in the body changes
+    const fullName = data.fullName !== undefined ? normalizeFullName(data.fullName) : undefined;
+    if( fullName !== undefined ) {
+        await assertFullNameIsAvailable(member.investigationId, fullName, '004', lang, id);
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The row is read whole, with no narrowed attributes: that is the precondition of
+    // buildDifferentialUpdate
+    const stored = member.get({ plain: true }) as Record<string, unknown>;
+
+    // The five data fields, all compared against undefined and NEVER by truthiness: an
+    // `if( data.x )` would make it impossible to erase a stored value with an explicit null.
+    // Every one of them enters ALREADY NORMALIZED, which is what keeps a client resending
+    // 'ana pérez' over a stored 'Ana Pérez' — or 'ANA@X.CL' over 'ana@x.cl' — from counting as a
+    // change. investigationId, sortOrder, investigationTeamMemberId and isActive are not here:
+    // the first two are immutable, the third is the primary key and the last is governed by 005A
+    // and 005B
+    const candidates: Record<string, unknown> = {
+        // Modifiable but not erasable, and the only field without the `?? null` of the nullable
+        // ones: the validator already rejected an explicit null, so what arrives here is a name
+        fullName,
+        // Without toTitleCase, deliberately: MINSAL must not become Minsal
+        institutionName: data.institutionName !== undefined ? normalizeText(data.institutionName) : undefined,
+        email: data.email !== undefined ? normalizeEmail(data.email) : undefined,
+        phone: data.phone !== undefined ? normalizeText(data.phone) : undefined,
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationTeamMember_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationTeamMemberWithRelations(id, true);
+        return unchanged ? toInvestigationTeamMemberResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the generic
+    // loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(member.appDetails) ? member.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVTEAM-004',
+        detail: 'Investigation team member updated by service'
+    };
+    await member.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationTeamMemberWithRelations(id, true);
+    return updated ? toInvestigationTeamMemberResponse(updated) : null;
+}
+
 export {
     createInvestigationTeamMemberService,
+    updateInvestigationTeamMemberService,
     getInvestigationTeamMembersByCaseIdService,
     getInvestigationTeamMemberByIdService,
     getInvestigationTeamMembersByInvestigationService,

@@ -4,6 +4,7 @@ import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -74,6 +75,15 @@ describe('investigationTeamMember contract', () => {
 
     const retireInvestigation = (investigationId: string) =>
         Investigation.update({ isActive: false }, { where: { investigationId } });
+
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+        request(app).put(`/api/investigation-team-members/${ id }`).set(authHeader(role)).send(payload);
+
+    const versionOf = async (id: string) =>
+        ((await readRow(id))!.getDataValue('sysDetails') as { version?: number } | null)?.version;
+
+    const appDetailsOf = async (id: string): Promise<{ method: string }[]> =>
+        ((await readRow(id))!.getDataValue('appDetails') as { method: string }[]) ?? [];
 
     const getByCase = (caseId: string, role: TestRole = 'USER') =>
         request(app).get(`/api/investigation-team-members/case/${ caseId }`).set(authHeader(role));
@@ -539,6 +549,190 @@ describe('investigationTeamMember contract', () => {
             const res = await getByCase('no-es-uuid');
 
             expect(res.status).toBe(400);
+        });
+    });
+
+    describe('004 — update, differential', () => {
+
+        // Mints one member and hands back its id, so the update tests do not repeat the seed
+        const seedMember = async (payload: Record<string, unknown> = {}): Promise<string> => {
+            const investigationId = await createInvestigationFixture();
+            const res = await create({ investigationId, fullName: 'Ana Pérez', ...payload });
+            expect(res.status).toBe(201);
+            return res.body.data.investigationTeamMemberId;
+        };
+
+        // The strongest case of SPEC F12: the record is read with a GET and sent back whole
+        it('a PUT resending the response of its own GET writes nothing', async () => {
+            const id = await seedMember({ institutionName: 'MINSAL', email: 'ana@x.cl', notes: 'nota' });
+
+            await expectPutOfGetResponseWritesNothing({
+                path: '/api/investigation-team-members',
+                id,
+                model: InvestigationTeamMember,
+                role: 'USER'
+            });
+        });
+
+        it('a PUT with an empty body writes nothing', async () => {
+            const id = await seedMember();
+            const versionBefore = await versionOf(id);
+
+            const res = await update(id, {});
+
+            expect(res.status).toBe(200);
+            expect(await versionOf(id)).toBe(versionBefore);
+            expect(await appDetailsOf(id)).toHaveLength(1);
+        });
+
+        // The criterion the normalization before the comparison protects: the value is compared
+        // already passed through toTitleCase, so this is not a change
+        it('a PUT with fullName "ana pérez" over a stored "Ana Pérez" writes nothing', async () => {
+            const id = await seedMember();
+            const versionBefore = await versionOf(id);
+
+            const res = await update(id, { fullName: 'ana pérez' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.fullName).toBe('Ana Pérez');
+            expect(await versionOf(id)).toBe(versionBefore);
+            expect(await appDetailsOf(id)).toHaveLength(1);
+        });
+
+        it('a PUT with email "ANA@X.CL" over a stored "ana@x.cl" writes nothing', async () => {
+            const id = await seedMember({ email: 'ana@x.cl' });
+            const versionBefore = await versionOf(id);
+
+            const res = await update(id, { email: 'ANA@X.CL' });
+
+            expect(res.status).toBe(200);
+            expect(await versionOf(id)).toBe(versionBefore);
+        });
+
+        it('a PUT that changes one field adds exactly one entry and bumps the version by 1', async () => {
+            const id = await seedMember();
+            const versionBefore = await versionOf(id);
+
+            const res = await update(id, { notes: 'nueva nota' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.notes).toBe('nueva nota');
+            expect(await versionOf(id)).toBe((versionBefore ?? 0) + 1);
+
+            const appDetails = await appDetailsOf(id);
+            expect(appDetails).toHaveLength(2);
+            expect(appDetails[0].method).toBe('ESAVI-INVTEAM-001');
+            expect(appDetails[1].method).toBe('ESAVI-INVTEAM-004');
+        });
+
+        it('writes only the field that changed', async () => {
+            const id = await seedMember({ institutionName: 'MINSAL', phone: '+56 9 1111' });
+
+            const { data } = (await update(id, { notes: 'nueva nota' })).body;
+
+            expect(data.institutionName).toBe('MINSAL');
+            expect(data.phone).toBe('+56 9 1111');
+            expect(data.fullName).toBe('Ana Pérez');
+        });
+
+        // The four nullable fields: an explicit null erases a stored value, and that IS a write
+        it.each(['institutionName', 'email', 'phone', 'notes'])('%s: null empties the field and writes', async (field) => {
+            const id = await seedMember({ institutionName: 'MINSAL', email: 'ana@x.cl', phone: '+56 9 1111', notes: 'nota' });
+            const versionBefore = await versionOf(id);
+
+            const res = await update(id, { [field]: null });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data[field]).toBeNull();
+            expect(await versionOf(id)).toBe((versionBefore ?? 0) + 1);
+        });
+
+        it('rejects fullName: null with 400 and writes nothing', async () => {
+            const id = await seedMember();
+            const versionBefore = await versionOf(id);
+
+            const res = await update(id, { fullName: null });
+
+            expect(res.status).toBe(400);
+            expect(await versionOf(id)).toBe(versionBefore);
+        });
+
+        // The two immutable fields: ignored in silence, never a 400
+        it('ignores investigationId and sortOrder sent in the body', async () => {
+            const id = await seedMember();
+            const otherInvestigation = await createInvestigationFixture();
+            const before = await readRow(id);
+
+            const res = await update(id, { investigationId: otherInvestigation, sortOrder: 99 });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.investigationId).toBe(before!.getDataValue('investigationId'));
+            expect(res.body.data.sortOrder).toBe(1);
+        });
+
+        it('answers 404 over an ID that does not exist', async () => {
+            const res = await update(unknownUuid, { notes: 'x' });
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVTEAM_004_NOT_FOUND');
+        });
+
+        it.each([
+            ['USER' as TestRole, 404],
+            ['SUPERADMIN' as TestRole, 200]
+        ])('a member of a retired investigation answers %s -> %i', async (role, status) => {
+            const investigationId = await createInvestigationFixture();
+            const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
+            await retireInvestigation(investigationId);
+
+            const res = await update(data.investigationTeamMemberId, { notes: 'x' }, role);
+
+            expect(res.status).toBe(status);
+        });
+
+        it('rejects a rename colliding with another ACTIVE member with 409', async () => {
+            const investigationId = await createInvestigationFixture();
+            await create({ investigationId, fullName: 'Ana Uno' });
+            const { data } = (await create({ investigationId, fullName: 'Ana Dos' })).body;
+
+            const res = await update(data.investigationTeamMemberId, { fullName: 'Ana Uno' });
+
+            expect(res.status).toBe(409);
+            expect(res.body.code).toBe('INVTEAM_004_ALREADY_EXISTS');
+            expect(res.body.message).toContain('Ana Uno');
+        });
+
+        it('admits a rename colliding with an INACTIVE member', async () => {
+            const investigationId = await createInvestigationFixture();
+            const first = (await create({ investigationId, fullName: 'Ana Uno' })).body.data;
+            const second = (await create({ investigationId, fullName: 'Ana Dos' })).body.data;
+            await retire(first.investigationTeamMemberId);
+
+            const res = await update(second.investigationTeamMemberId, { fullName: 'Ana Uno' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.fullName).toBe('Ana Uno');
+        });
+
+        // The guard excludes the row itself, or renaming a member to the name it already has
+        // would collide with itself
+        it('renaming a row to its own name does not fire the 409', async () => {
+            const id = await seedMember();
+
+            const res = await update(id, { fullName: 'Ana Pérez' });
+
+            expect(res.status).toBe(200);
+        });
+
+        it('the collision is checked only inside the same investigation', async () => {
+            const first = await createInvestigationFixture();
+            const second = await createInvestigationFixture();
+            await create({ investigationId: first, fullName: 'Ana Uno' });
+            const { data } = (await create({ investigationId: second, fullName: 'Ana Dos' })).body;
+
+            const res = await update(data.investigationTeamMemberId, { fullName: 'Ana Uno' });
+
+            expect(res.status).toBe(200);
         });
     });
 });
