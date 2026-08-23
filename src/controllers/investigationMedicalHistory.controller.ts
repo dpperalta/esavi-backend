@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationMedicalHistoryListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationMedicalHistoryListFilters } from '../types';
 import {
     createInvestigationMedicalHistoryService,
     getAllInvestigationMedicalHistoriesService,
-    getInvestigationMedicalHistoriesService
+    getInvestigationMedicalHistoriesService,
+    getInvestigationMedicalHistoryByIdService
 } from '../services/investigationMedicalHistory.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
@@ -78,8 +79,36 @@ const getAllInvestigationMedicalHistories = async (req: Request, res: Response, 
     }
 }
 
+// Get Investigation Medical History By ID Controller
+// Code: ESAVI-INVMEDH-003
+// canViewInactive is what lets a SUPERADMIN read the medical history of a retired investigation:
+// the entity has no state of its own, so the predicate is applied over the visibility it inherits
+const getInvestigationMedicalHistoryById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationMedicalHistoryByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationMedicalHistory.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVMEDH-003: Error fetching Investigation Medical History: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationMedicalHistory.getFailed', req.lang), 500, 'INVMEDH_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationMedicalHistory,
     getInvestigationMedicalHistories,
-    getAllInvestigationMedicalHistories
+    getAllInvestigationMedicalHistories,
+    getInvestigationMedicalHistoryById
 }

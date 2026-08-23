@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationMedicalHistory,
     getAllInvestigationMedicalHistories,
-    getInvestigationMedicalHistories
+    getInvestigationMedicalHistories,
+    getInvestigationMedicalHistoryById
 } from '../controllers/investigationMedicalHistory.controller';
 import {
     createInvestigationMedicalHistoryValidator,
+    investigationMedicalHistoryIdValidator,
     investigationMedicalHistoryListValidator
 } from '../validators';
 
@@ -33,5 +35,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationMedical
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the medical
 // history of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationMedicalHistoryListValidator, validateFields, getAllInvestigationMedicalHistories);
+
+// Get Investigation Medical History by ID
+// Code: ESAVI-INVMEDH-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationMedicalHistoryIdValidator, validateFields, getInvestigationMedicalHistoryById);
 
 export default router;
