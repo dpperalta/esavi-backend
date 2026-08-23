@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource, InvestigationTeamMember } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationSource, InvestigationTeamMember } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -509,6 +509,30 @@ const cascadeClearInvestigationAutopsy = (investigationId: string, authUser: Aut
         transaction
     });
 
+// The third satellite without isActive to join the cascade, and the one SPEC F32 extracted the
+// common service for. investigationMedicalHistory behaves exactly like the two above: no state of
+// its own, so what moves is its deletedAt. investigationTeamMember is NOT here — it has an isActive
+// column of its own and nothing drags it
+const cascadeSealInvestigationMedicalHistory = (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) =>
+    cascadeSealSatellite({
+        model: InvestigationMedicalHistory,
+        where: { investigationId },
+        method: 'ESAVI-INVESTGN-005A',
+        detail: 'Investigation medical history sealed by cascade from its investigation',
+        authUser,
+        transaction
+    });
+
+const cascadeClearInvestigationMedicalHistory = (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) =>
+    cascadeClearSatellite({
+        model: InvestigationMedicalHistory,
+        where: { investigationId },
+        method: 'ESAVI-INVESTGN-005B',
+        detail: 'Investigation medical history returned by cascade from its investigation',
+        authUser,
+        transaction
+    });
+
 // Setting Investigation Active/Inactive Service
 // Code: ESAVI-INVESTGN-005A / ESAVI-INVESTGN-005B
 // It does NOT go through buildDifferentialUpdate, and that is deliberate: these are writes with an
@@ -547,15 +571,17 @@ const setInvestigationActivationService = async (
         });
 
         // Only after the investigation itself moved: if it was already in that state, the generic
-        // service threw a 409 above and the cascade is never reached. Neither satellite has state
-        // of its own, so retiring them is retiring their investigation and returning them is
-        // returning it. Both travel in the same transaction the service already opened
+        // service threw a 409 above and the cascade is never reached. None of the three satellites
+        // has state of its own, so retiring them is retiring their investigation and returning them
+        // is returning it. The three travel in the same transaction the service already opened
         if( isActive ) {
             await cascadeClearInvestigationSource(id, authUser, transaction);
             await cascadeClearInvestigationAutopsy(id, authUser, transaction);
+            await cascadeClearInvestigationMedicalHistory(id, authUser, transaction);
         } else {
             await cascadeSealInvestigationSource(id, authUser, transaction);
             await cascadeSealInvestigationAutopsy(id, authUser, transaction);
+            await cascadeSealInvestigationMedicalHistory(id, authUser, transaction);
         }
 
         await transaction.commit();
@@ -597,6 +623,16 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( investigationAutopsy ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: Investigation autopsy dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(investigationAutopsy.get({ plain: true })) }`,
+                'warn'
+            );
+        }
+
+        // The fourth satellite, dumped as a snapshot like the first two: the relation is one to one,
+        // so there is a single row and it fits in one line. SPEC F32
+        const medicalHistory = await InvestigationMedicalHistory.findByPk(id, { transaction });
+        if( medicalHistory ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: Investigation medical history dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(medicalHistory.get({ plain: true })) }`,
                 'warn'
             );
         }
