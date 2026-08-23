@@ -5,6 +5,7 @@ import {
     createInvestigationMedicalHistoryService,
     getAllInvestigationMedicalHistoriesService,
     getInvestigationMedicalHistoriesService,
+    getInvestigationMedicalHistoryByCaseIdService,
     getInvestigationMedicalHistoryByIdService
 } from '../services/investigationMedicalHistory.service';
 
@@ -106,9 +107,37 @@ const getInvestigationMedicalHistoryById = async (req: Request, res: Response, n
     }
 }
 
+// Get Investigation Medical History By Case ID Controller
+// Code: ESAVI-INVMEDH-006
+// The only non-canonical operation of the entity. It returns the record itself, not { count, rows }:
+// the chain case -> investigation -> medical history is one to one on both hops
+const getInvestigationMedicalHistoryByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationMedicalHistoryByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationMedicalHistory.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVMEDH-006: Error fetching Investigation Medical History by Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationMedicalHistory.getFailed', req.lang), 500, 'INVMEDH_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationMedicalHistory,
     getInvestigationMedicalHistories,
     getAllInvestigationMedicalHistories,
-    getInvestigationMedicalHistoryById
+    getInvestigationMedicalHistoryById,
+    getInvestigationMedicalHistoryByCaseId
 }

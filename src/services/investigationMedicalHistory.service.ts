@@ -424,9 +424,47 @@ const getInvestigationMedicalHistoryByIdService = async (id: string, lang: strin
     return toInvestigationMedicalHistoryResponse(history);
 }
 
+// Get Investigation Medical History By Case ID Service
+// Code: ESAVI-INVMEDH-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It returns the
+// record itself and not { count, rows } — the chain case -> investigation -> medical history is one
+// to one on both hops, and wrapping a single record in a collection would force unwrapping a
+// one-element array on every screen.
+// The three 404 are deliberately distinct, and the asymmetry with 003 is intentional: there the
+// client already holds the primary key of the row, here it enters through a caseId and needs to know
+// which link of the chain broke — whether the case is not there, whether it has no visible
+// investigation, or whether the anamnesis has not been recorded yet. Those are three different
+// actions on the user's side, and one generic message would make them indistinguishable
+const getInvestigationMedicalHistoryByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('investigationMedicalHistory.caseNotFound', lang), 404, 'INVMEDH_006_CASE_NOT_FOUND');
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationMedicalHistory.investigationNotFound', lang),
+            404,
+            'INVMEDH_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    const history = await findInvestigationMedicalHistoryWithRelations(investigation.investigationId, includeInactive);
+    if( !history ) {
+        throw new AppError(getMessage('investigationMedicalHistory.notFound', lang), 404, 'INVMEDH_006_NOT_FOUND');
+    }
+    return toInvestigationMedicalHistoryResponse(history);
+}
+
 export {
     createInvestigationMedicalHistoryService,
     getInvestigationMedicalHistoriesService,
     getAllInvestigationMedicalHistoriesService,
-    getInvestigationMedicalHistoryByIdService
+    getInvestigationMedicalHistoryByIdService,
+    getInvestigationMedicalHistoryByCaseIdService
 }

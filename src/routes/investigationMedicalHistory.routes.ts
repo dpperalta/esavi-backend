@@ -5,10 +5,12 @@ import {
     createInvestigationMedicalHistory,
     getAllInvestigationMedicalHistories,
     getInvestigationMedicalHistories,
+    getInvestigationMedicalHistoryByCaseId,
     getInvestigationMedicalHistoryById
 } from '../controllers/investigationMedicalHistory.controller';
 import {
     createInvestigationMedicalHistoryValidator,
+    investigationMedicalHistoryCaseIdValidator,
     investigationMedicalHistoryIdValidator,
     investigationMedicalHistoryListValidator
 } from '../validators';
@@ -35,6 +37,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationMedical
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the medical
 // history of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationMedicalHistoryListValidator, validateFields, getAllInvestigationMedicalHistories);
+
+// Get Investigation Medical History by Case
+// Code: ESAVI-INVMEDH-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared before
+// /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationMedicalHistoryCaseIdValidator, validateFields, getInvestigationMedicalHistoryByCaseId);
 
 // Get Investigation Medical History by ID
 // Code: ESAVI-INVMEDH-003
