@@ -1,10 +1,17 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createInvestigationMedicalHistory } from '../controllers/investigationMedicalHistory.controller';
-import { createInvestigationMedicalHistoryValidator } from '../validators';
+import {
+    createInvestigationMedicalHistory,
+    getAllInvestigationMedicalHistories,
+    getInvestigationMedicalHistories
+} from '../controllers/investigationMedicalHistory.controller';
+import {
+    createInvestigationMedicalHistoryValidator,
+    investigationMedicalHistoryListValidator
+} from '../validators';
 
-const { USER } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -14,5 +21,17 @@ const router = Router();
 // F13, F14, F28, F29, F30 and F31 already fixed: the detail is captured in the same operational
 // flow as the case, and splitting it across two roles would break the form in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationMedicalHistoryValidator, validateFields, createInvestigationMedicalHistory);
+
+// Get Investigation Medical Histories
+// Code: ESAVI-INVMEDH-002A
+// Only the medical histories of active investigations. The entity has no isActive of its own: the
+// filter lands on the where of the investigation include, which is the real source of its visibility
+router.get('/', tokenValidation, validateUserRole(USER), ...investigationMedicalHistoryListValidator, validateFields, getInvestigationMedicalHistories);
+
+// Get All Investigation Medical Histories - For Admin
+// Code: ESAVI-INVMEDH-002B
+// Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the medical
+// history of a retired investigation
+router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationMedicalHistoryListValidator, validateFields, getAllInvestigationMedicalHistories);
 
 export default router;

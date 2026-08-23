@@ -1,7 +1,14 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationMedicalHistory } from '../models';
 import { AppError, getMessage } from '../helpers';
-import { AppDetails, AuthUser, CreateInvestigationMedicalHistoryInput } from '../types';
+import {
+    AppDetails,
+    AuthUser,
+    CreateInvestigationMedicalHistoryInput,
+    InvestigationMedicalHistoryListFilters
+} from '../types';
 import { AnswerOption } from '../constants/enums.constants';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The four catalog codes are local constants of this service, with the pattern of
 // notificationPregnancyComplication.service.ts:23. They do not go to
@@ -318,6 +325,89 @@ const createInvestigationMedicalHistoryService = async (
     return created ? toInvestigationMedicalHistoryResponse(created) : null;
 }
 
+// The order of the two listings, as in F29 and unlike F30. This entity has no date of the domain
+// that orders it better: its fifteen columns are answers of an anamnesis, not dated facts, and none
+// of them orders the way deathDate ordered F30. createdAt never moves after the insert, unlike
+// updatedAt, which would shuffle the list on every save
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
+
+// Only the filter that lands on the medical history itself, and it lands on the primary key. caseId
+// does not belong here: it is a column of the investigation, so it travels in the where of the
+// include instead — the same include that already implements the inherited visibility, so filtering
+// by case costs no extra join
+const buildListWhere = (filters: InvestigationMedicalHistoryListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( filters.investigationId ) where.investigationId = filters.investigationId;
+    return where as WhereOptions;
+}
+
+// The where of the investigation include, which carries two things at once: the visibility — the
+// isActive that separates 002A from 002B — and the caseId filter when it arrives. Both conditions
+// live in the same object, so they accumulate with AND
+const buildInvestigationWhere = (filters: InvestigationMedicalHistoryListFilters, includeInactive: boolean): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( !includeInactive ) where.isActive = true;
+    if( filters.caseId ) where.caseId = filters.caseId;
+    return where as WhereOptions;
+}
+
+// The includes shared by the two listings. The parent goes required: true, which keeps it an INNER
+// JOIN — what makes the filters above bite and what keeps a medical history hanging from a retired
+// investigation out of 002A. The four catalogs go required: false, and that is not a detail: with
+// required: true every row outside the pregnancy block would disappear from the listing, and those
+// will be most of them
+const listInclude = (filters: InvestigationMedicalHistoryListFilters, includeInactive: boolean) => [
+    {
+        ...INVESTIGATION_INCLUDE,
+        required: true,
+        where: buildInvestigationWhere(filters, includeInactive)
+    },
+    ...CATALOG_INCLUDES
+];
+
+// Get Active Investigation Medical Histories Service
+// Code: ESAVI-INVMEDH-002A
+// The dual listing inherited from F29 and F30: the visibility is not a column of its own, it is
+// inherited from investigation.isActive, so the two variants return different sets. Without a 002B
+// an ADMIN would have no way of seeing the medical history of a retired investigation
+const getInvestigationMedicalHistoriesService = async (
+    filters: InvestigationMedicalHistoryListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationMedicalHistory.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: MEDICAL_HISTORY_EXCLUDE,
+        include: listInclude(filters, false),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    // The rows carry the same full shape as the 003: there is no reduced shape. The entity has
+    // fifteen data columns and trimming them would leave a listing with no content
+    return { count, rows: rows.map(toInvestigationMedicalHistoryResponse) };
+}
+
+// Get All Investigation Medical Histories Service - For Admin
+// Code: ESAVI-INVMEDH-002B
+const getAllInvestigationMedicalHistoriesService = async (
+    filters: InvestigationMedicalHistoryListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationMedicalHistory.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: MEDICAL_HISTORY_EXCLUDE,
+        include: listInclude(filters, true),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toInvestigationMedicalHistoryResponse) };
+}
+
 export {
-    createInvestigationMedicalHistoryService
+    createInvestigationMedicalHistoryService,
+    getInvestigationMedicalHistoriesService,
+    getAllInvestigationMedicalHistoriesService
 }
