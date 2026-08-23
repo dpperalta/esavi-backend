@@ -28,4 +28,5 @@ export * from './investigation.validator';
 export * from './investigationSource.validator';
 export * from './investigationAutopsy.validator';
 export * from './investigationTeamMember.validator';
+export * from './investigationMedicalHistory.validator';
 export * from './systemConfig.validator';
