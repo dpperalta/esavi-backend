@@ -1,6 +1,6 @@
 # SPEC F31 — CRUD de `investigationTeamMember`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — dependencia dura de modelo: es el padre de esta tabla)**, **SPEC F16 (`notificationEvent` — aporta el hallazgo del `sortOrder` en el `005B` y la nota de `CREATE_FIELDS`)**, **SPEC F27 (`notificationPregnancyComplication` — hermana de forma: la colección con `sortOrder`, el índice añadido al DDL y la reasignación del `005B`)**, SPEC F29 y SPEC F30 (`investigationSource` e `investigationAutopsy` — hermanas de padre: aportan la visibilidad heredada de `investigation`), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-21
 > **Objetivo:** Dar de alta `investigationTeamMember` —quiénes investigaron el caso— como la **tercera** de las catorce tablas satélite de `investigation`, y la **primera de ellas que es una colección con estado propio**.

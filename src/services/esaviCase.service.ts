@@ -6,6 +6,7 @@ import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
+import { cascadeSealSatellite } from './common/satelliteCascade.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -590,8 +591,9 @@ const cascadeSealNonSevereNotifications = async (caseId: string, authUser: AuthU
 // make in that spec, and the only thing that detects it is its own acceptance criterion.
 //
 // investigationSource has no isActive column, so what moves is its deletedAt, and rows already
-// sealed are left alone by the where: they keep their original date and receive no new entry.
-// SPEC F29 adds this satellite to the mechanism SPEC F07 left in place
+// sealed are left alone: they keep their original date and receive no new entry.
+// SPEC F29 adds this satellite to the mechanism SPEC F07 left in place; SPEC F32 moved the drag
+// itself to common/satelliteCascade.service.ts, so what stays here is the two-hop walk
 const cascadeSealInvestigationSources = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
     const investigations = await Investigation.findAll({
         where: { caseId },
@@ -602,29 +604,14 @@ const cascadeSealInvestigationSources = async (caseId: string, authUser: AuthUse
         return;
     }
 
-    const now = new Date();
-    // The method is the code of the operation that dragged it, not ESAVI-INVSRC-005*: the audit
-    // says who did it, not which row it landed on
-    const newEntry: AppDetails = {
-        createdAt: now,
-        user: authUser?.userId || 'undefined',
+    await cascadeSealSatellite({
+        model: InvestigationSource,
+        where: { investigationId: investigations.map(investigation => investigation.investigationId) },
         method: 'ESAVI-CASE-005A',
-        detail: 'Investigation source sealed by cascade from its ESAVI Case'
-    };
-    await InvestigationSource.update(
-        {
-            deletedAt: now,
-            updatedAt: now,
-            appDetails: appendedAppDetails(newEntry)
-        },
-        {
-            where: {
-                investigationId: investigations.map(investigation => investigation.investigationId),
-                deletedAt: null
-            },
-            transaction
-        }
-    );
+        detail: 'Investigation source sealed by cascade from its ESAVI Case',
+        authUser,
+        transaction
+    });
 }
 
 // The second satellite of the investigation branch, and the eighth sibling of this block. It is
@@ -636,8 +623,8 @@ const cascadeSealInvestigationSources = async (caseId: string, authUser: AuthUse
 // it is its own acceptance criterion.
 //
 // investigationAutopsy has no isActive column either, so what moves is its deletedAt, and rows
-// already sealed are left alone by the where: they keep their original date and receive no new
-// entry. ESAVI-CASE-005B clears nothing, coherent with F07 and F29
+// already sealed are left alone: they keep their original date and receive no new entry.
+// ESAVI-CASE-005B clears nothing, coherent with F07 and F29
 const cascadeSealInvestigationAutopsies = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
     const investigations = await Investigation.findAll({
         where: { caseId },
@@ -648,29 +635,14 @@ const cascadeSealInvestigationAutopsies = async (caseId: string, authUser: AuthU
         return;
     }
 
-    const now = new Date();
-    // The method is the code of the operation that dragged it, not ESAVI-INVAUT-005*: the audit
-    // says who did it, not which row it landed on
-    const newEntry: AppDetails = {
-        createdAt: now,
-        user: authUser?.userId || 'undefined',
+    await cascadeSealSatellite({
+        model: InvestigationAutopsy,
+        where: { investigationId: investigations.map(investigation => investigation.investigationId) },
         method: 'ESAVI-CASE-005A',
-        detail: 'Investigation autopsy sealed by cascade from its ESAVI Case'
-    };
-    await InvestigationAutopsy.update(
-        {
-            deletedAt: now,
-            updatedAt: now,
-            appDetails: appendedAppDetails(newEntry)
-        },
-        {
-            where: {
-                investigationId: investigations.map(investigation => investigation.investigationId),
-                deletedAt: null
-            },
-            transaction
-        }
-    );
+        detail: 'Investigation autopsy sealed by cascade from its ESAVI Case',
+        authUser,
+        transaction
+    });
 }
 
 // Setting ESAVI Case Active/Inactive Service
