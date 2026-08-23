@@ -7,6 +7,7 @@ import {
     getInvestigationMedicalHistoriesService,
     getInvestigationMedicalHistoryByCaseIdService,
     getInvestigationMedicalHistoryByIdService,
+    purgeInvestigationMedicalHistoryService,
     updateInvestigationMedicalHistoryService
 } from '../services/investigationMedicalHistory.service';
 
@@ -163,11 +164,33 @@ const updateInvestigationMedicalHistory = async (req: Request, res: Response, ne
     }
 }
 
+// Purge Investigation Medical History Controller
+// Code: ESAVI-INVMEDH-005C
+// Answers { ok, message } with no data: the row no longer exists, so there is nothing to return
+const purgeInvestigationMedicalHistory = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeInvestigationMedicalHistoryService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationMedicalHistory.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVMEDH-005C: Error purging Investigation Medical History: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationMedicalHistory.purgeFailed', req.lang), 500, 'INVMEDH_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationMedicalHistory,
     getInvestigationMedicalHistories,
     getAllInvestigationMedicalHistories,
     getInvestigationMedicalHistoryById,
     getInvestigationMedicalHistoryByCaseId,
-    updateInvestigationMedicalHistory
+    updateInvestigationMedicalHistory,
+    purgeInvestigationMedicalHistory
 }
