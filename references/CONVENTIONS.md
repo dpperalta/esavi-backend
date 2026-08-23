@@ -176,6 +176,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | investigation | `006` | obtener la investigación de un caso — la relación es uno a uno y se entra por el `caseId` |
 | investigationSource | `006` | obtener las fuentes de investigación de un caso — la cadena `caso → investigación → fuente` es uno a uno en los dos saltos |
 | investigationAutopsy | `006` | obtener la autopsia de un caso — la cadena `caso → investigación → autopsia` es uno a uno en los dos saltos |
+| investigationTeamMember | `006` | listar el equipo investigador de un caso — la cadena `caso → investigación` es uno a uno, pero de la investigación cuelgan N miembros |
 | vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
 | catalogItem | `006` | importación masiva desde fichero `.xlsx`, con creación de `catalogType` al vuelo — SUPERADMIN, `POST /import` |
 | systemConfig | `006` | leer por el par `(code, scope)` — la aplicación conoce el nombre del parámetro, no su UUID. `GET /code/:code`, USER |
@@ -296,6 +297,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | investigation | `INVESTGN` |
 | investigationAutopsy | `INVAUT` |
 | investigationSource | `INVSRC` |
+| investigationTeamMember | `INVTEAM` |
 | nonSevereNotification | `NSEVNOT` |
 | notification | `NOTIFCN` |
 | notificationDiluent | `NOTIFDIL` |

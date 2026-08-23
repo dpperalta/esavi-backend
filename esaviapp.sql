@@ -1009,6 +1009,7 @@ CREATE TABLE IF NOT EXISTS "investigationTeamMember" (
   "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
   CONSTRAINT "FK_investigationTeamMember_investigation" FOREIGN KEY ("investigationId") REFERENCES "investigation" ("investigationId") ON UPDATE CASCADE ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS "IX_investigationTeamMember_investigation" ON "investigationTeamMember" ("investigationId");
 
 CREATE TABLE IF NOT EXISTS "investigationCovidHistory" (
   "investigationId" uuid PRIMARY KEY,

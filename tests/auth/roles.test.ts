@@ -401,6 +401,32 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/investigation-autopsies/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVAUT-004' },
     { method: 'delete', path: `/api/investigation-autopsies/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVAUT-005C' },
 
+    // investigationTeamMember (SPEC F31) — who investigated the case, the third satellite of
+    // investigation and the FIRST of them that is a collection with state of its own. It is the
+    // first with an isActive column, and with it the seven canonical operations come back: unlike
+    // its two sisters it does have a 005A and a 005B, because retiring a person from the team is a
+    // fact of the domain and not a consequence of its parent being withdrawn. No cascade from
+    // investigation or from esaviCase ever writes that column.
+    // NINE ROWS: the seven canonical ones, the 005C of physical delete, and the non-canonical 006
+    // that walks case -> investigation, one to one, and opens into the N members hanging from it.
+    // The :id is the investigationTeamMemberId and NOT the investigationId, so 003 is the access by
+    // member and the access by investigation is the pair of listings 002A / 002B, entered by the
+    // parent and with no filter at all.
+    // TWO ROWS DEVIATE from the canonical matrix. 001 and 004 on USER, the same deviation as F05,
+    // F06, F07, F09, F10, F13, F14, F28, F29 and F30: the detail is captured in the same
+    // operational flow as the case. And 005B on ADMIN and not SUPERADMIN, following F27: the
+    // activation of this entity is not the trivial delegation the matrix assumes but an operation
+    // carrying a sortOrder reassignment in a transaction
+    { method: 'post',   path: '/api/investigation-team-members',                                  minRole: 'USER',       code: 'ESAVI-INVTEAM-001' },
+    { method: 'get',    path: `/api/investigation-team-members/admin/investigation/${ UUID }`,    minRole: 'ADMIN',      code: 'ESAVI-INVTEAM-002B' },
+    { method: 'get',    path: `/api/investigation-team-members/investigation/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-INVTEAM-002A' },
+    { method: 'get',    path: `/api/investigation-team-members/case/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVTEAM-006' },
+    { method: 'delete', path: `/api/investigation-team-members/purge/${ UUID }`,                  minRole: 'SUPERADMIN', code: 'ESAVI-INVTEAM-005C' },
+    { method: 'patch',  path: `/api/investigation-team-members/activate/${ UUID }`,               minRole: 'ADMIN',      code: 'ESAVI-INVTEAM-005B' },
+    { method: 'get',    path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVTEAM-003' },
+    { method: 'put',    path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVTEAM-004' },
+    { method: 'delete', path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'ADMIN',      code: 'ESAVI-INVTEAM-005A' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -479,7 +505,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(225);
+            expect(ROUTE_RULES).toHaveLength(234);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

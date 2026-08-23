@@ -30,6 +30,7 @@ import notificationPregnancyComplicationRoutes from './notificationPregnancyComp
 import investigationRoutes from './investigation.routes';
 import investigationSourceRoutes from './investigationSource.routes';
 import investigationAutopsyRoutes from './investigationAutopsy.routes';
+import investigationTeamMemberRoutes from './investigationTeamMember.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -83,6 +84,9 @@ router.use('/investigation-sources', investigationSourceRoutes);
 // The second of the fourteen satellites of investigation: the death and the autopsy of an
 // investigated case. Plural in the path like the rest, even though the relation is one to one
 router.use('/investigation-autopsies', investigationAutopsyRoutes);
+// The third of the fourteen satellites of investigation, and the first of them that is a
+// collection: who investigated the case, N rows per investigation and ordered by sortOrder
+router.use('/investigation-team-members', investigationTeamMemberRoutes);
 router.use('/system-configs', systemConfigRoutes);
 
 export default router;

@@ -1,6 +1,6 @@
 # SPEC F30 — CRUD de `investigationAutopsy`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — dependencia dura de modelo: la PK de esta tabla *es* su FK)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), **SPEC F29 (`investigationSource` — hermana directa: aporta el patrón completo de satélite de `investigation`, los tres arrastres del `deletedAt` y el listado dual heredado)**, SPEC F13 (patrón de satélite sin `isActive`), SPEC F14 (`assertRowIsSealed` en `src/helpers/rowSeal.helper.ts`), SPEC F08 (operación `005C`), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-21
 > **Objetivo:** Dar de alta `investigationAutopsy` —el fallecimiento y la autopsia de un caso investigado— como la **segunda** de las catorce tablas satélite de `investigation`.
