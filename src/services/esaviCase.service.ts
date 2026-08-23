@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
+import { Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -645,6 +645,37 @@ const cascadeSealInvestigationAutopsies = async (caseId: string, authUser: AuthU
     });
 }
 
+// The third satellite of the investigation branch, and the NINTH sibling of this block. It is
+// necessary and not redundant, by the exact reason the seventh and the eighth document: the mass
+// Investigation.update further up does NOT go through setInvestigationActivationService, so the
+// cascade SPEC F32 installed there never fires from here. Without this function the medical history
+// of an investigation dragged by its case would stay unsealed — invisible but not sealed, and
+// therefore never purgable. It is the easiest mistake to make in that spec, because the previous
+// step looks like it already solved it and it does not.
+//
+// investigationMedicalHistory has no isActive column either, so what moves is its deletedAt, and
+// rows already sealed are left alone: they keep their original date and receive no new entry.
+// ESAVI-CASE-005B clears nothing, coherent with F07, F29 and F30
+const cascadeSealInvestigationMedicalHistories = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const investigations = await Investigation.findAll({
+        where: { caseId },
+        attributes: ['investigationId'],
+        transaction
+    });
+    if( investigations.length === 0 ) {
+        return;
+    }
+
+    await cascadeSealSatellite({
+        model: InvestigationMedicalHistory,
+        where: { investigationId: investigations.map(investigation => investigation.investigationId) },
+        method: 'ESAVI-CASE-005A',
+        detail: 'Investigation medical history sealed by cascade from its ESAVI Case',
+        authUser,
+        transaction
+    });
+}
+
 // Setting ESAVI Case Active/Inactive Service
 // Code: ESAVI-CASE-005A / ESAVI-CASE-005B
 // 005A also deactivates every active notifier of the case, its active classification and its
@@ -685,6 +716,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
             await cascadeSealNonSevereNotifications(id, authUser, transaction);
             await cascadeSealInvestigationSources(id, authUser, transaction);
             await cascadeSealInvestigationAutopsies(id, authUser, transaction);
+            await cascadeSealInvestigationMedicalHistories(id, authUser, transaction);
         }
 
         await transaction.commit();
