@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -1426,6 +1426,112 @@ describe('esaviCase contract', () => {
 
             expect(( await InvestigationSource.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
             expect(( await InvestigationAutopsy.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
+        });
+
+    });
+
+    /**
+     * SPEC F32 adds the investigation medical history as the eighth satellite reached from
+     * here, and the fourth one walked in two hops. It is necessary for the exact reason the
+     * two blocks above document, and F32 is also the spec that moved the drag itself into
+     * common/satelliteCascade.service.ts: the mass Investigation.update never goes through
+     * setInvestigationActivationService, so the cascade installed there does not fire from
+     * this side, and without this ninth sibling the medical history would stay unsealed —
+     * invisible but not sealed, and therefore never purgable.
+     * The last case is the one that matters most across the three specs: the three satellites
+     * without isActive are sealed in the same transaction by the same common service, so no
+     * spec may have broken the other two.
+     */
+    describe('005A — the cascade over the investigation medical history', () => {
+
+        // Like the source and unlike the autopsy, the medical history opens empty
+        const createMedicalHistoryChain = async ( caseId: string ): Promise<string> => {
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+                .send({ investigationId });
+            return investigationId;
+        };
+
+        const readMedicalHistory = async ( id: string ) => {
+            const row = await InvestigationMedicalHistory.findByPk(id);
+            return {
+                deletedAt: row!.getDataValue('deletedAt') as Date | null,
+                appDetails: row!.getDataValue('appDetails') as { method: string }[]
+            };
+        };
+
+        it('seals the medical history transitively, in the same transaction that deactivates the investigation', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createMedicalHistoryChain(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const medicalHistory = await readMedicalHistory(investigationId);
+            expect(medicalHistory.deletedAt).not.toBeNull();
+            // The method is the code of the operation that dragged it, never an ESAVI-INVMEDH one.
+            // It is also what proves this cascade fired and not the one of ESAVI-INVESTGN-005A
+            expect(medicalHistory.appDetails.map(entry => entry.method)).toEqual([
+                'ESAVI-INVMEDH-001', 'ESAVI-CASE-005A'
+            ]);
+            expect(( await Investigation.findByPk(investigationId) )?.getDataValue('isActive')).toBe(false);
+        });
+
+        it('does not undo it when the case is reactivated', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createMedicalHistoryChain(caseId);
+            await deleteCase(caseId);
+            const sealed = await readMedicalHistory(investigationId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const after = await readMedicalHistory(investigationId);
+            expect(after.deletedAt).toEqual(sealed.deletedAt);
+            expect(after.appDetails).toHaveLength(sealed.appDetails.length);
+        });
+
+        it('does not fail on a case with no investigation, nor on one whose investigation has no medical history', async () => {
+            const bare = await createCase();
+            expect(( await deleteCase(bare.body.data.caseId) ).status).toBe(200);
+
+            const withoutHistory = await createCase();
+            const caseId = withoutHistory.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+            expect(await InvestigationMedicalHistory.findByPk(investigation.body.data.investigationId)).toBeNull();
+        });
+
+        it('seals the THREE satellites together: the ninth sibling did not break the seventh nor the eighth', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+                .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+                .send({ investigationId });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+
+            expect(( await InvestigationSource.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
+            expect(( await InvestigationAutopsy.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
+            expect(( await InvestigationMedicalHistory.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
         });
 
     });
