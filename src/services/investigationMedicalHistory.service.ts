@@ -1,0 +1,323 @@
+import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationMedicalHistory } from '../models';
+import { AppError, getMessage } from '../helpers';
+import { AppDetails, AuthUser, CreateInvestigationMedicalHistoryInput } from '../types';
+import { AnswerOption } from '../constants/enums.constants';
+
+// The four catalog codes are local constants of this service, with the pattern of
+// notificationPregnancyComplication.service.ts:23. They do not go to
+// src/constants/investigation.constants.ts because only this service consumes them.
+// NONE of the four catalogTypes is seeded by the DDL: that is a deployment precondition declared in
+// the spec, and until somebody loads them every UUID sent on these four fields answers 404
+const GESTATION_METHOD_CATALOG_CODE = 'gestationMethod';
+const DELIVERY_TYPE_CATALOG_CODE = 'deliveryType';
+const BIRTH_CONDITION_CATALOG_CODE = 'birthCondition';
+const PREGNANCY_OUTCOME_CATALOG_CODE = 'pregnancyOutcome';
+
+// The investigation travels in every response: it is what governs the visibility of the medical
+// history, and hiding it would leave the client unable to explain why a record it read yesterday
+// now answers 404. Its own sysDetails stays out, like the one of the medical history.
+// status never comes back null, by the rule F28 imposed on that entity
+const INVESTIGATION_INCLUDE = {
+    model: Investigation,
+    as: 'investigation',
+    attributes: ['investigationId', 'isActive', 'investigationStartDate'],
+    include: [
+        {
+            model: CatalogItem,
+            as: 'status',
+            attributes: ['catalogItemId', 'code', 'name']
+        },
+        {
+            model: EsaviCase,
+            as: 'case',
+            attributes: ['caseId', 'caseCode', 'eventDate']
+        }
+    ]
+};
+
+// The four catalogs travel resolved in every operation, listings included, as F27 does with its
+// complicationType: a client painting the form gets the name without asking for the catalog apart.
+// All four go in required: false — with required: true every row outside the pregnancy block, which
+// will be most of them, would simply disappear from the listing
+const CATALOG_INCLUDES = [
+    { model: CatalogItem, as: 'gestationMethod', attributes: ['catalogItemId', 'code', 'name'], required: false },
+    { model: CatalogItem, as: 'delivery', attributes: ['catalogItemId', 'code', 'name'], required: false },
+    { model: CatalogItem, as: 'birth', attributes: ['catalogItemId', 'code', 'name'], required: false },
+    { model: CatalogItem, as: 'pregnancyOutcome', attributes: ['catalogItemId', 'code', 'name'], required: false }
+];
+
+// sysDetails is trigger metadata and never leaves the service. investigationId does travel: here
+// it is the primary key of the row, and also the identifier of its investigation
+const MEDICAL_HISTORY_EXCLUDE = {
+    exclude: ['sysDetails']
+};
+
+// The five answerOption columns are returned exactly as stored, null included: they are never
+// normalized when building the response. A null means the form did not collect the answer and a
+// 'NO_ANSWER' means it was asked and not answered — different data, and neither becomes the other.
+// birthWeightGrams comes back as the string DECIMAL gives through pg — '3250.00', not 3250 — and is
+// deliberately NOT converted: converting it would force a reconversion before comparing in the diff
+// and would reopen from the other side the problem the numeric rule of the helper already solves.
+// There is no isActive to return — the table does not have that column. deletedAt is the only
+// status mark the row carries, and investigation.isActive is the real source of its visibility
+const toInvestigationMedicalHistoryResponse = (history: InvestigationMedicalHistory) => {
+    const plain = history.toJSON() as Record<string, unknown>;
+    delete plain.sysDetails;
+
+    const investigation = plain.investigation as Record<string, unknown> | null | undefined;
+    if( investigation ) delete investigation.sysDetails;
+
+    // The sysDetails of the four resolved catalogItem never travels either
+    for( const alias of ['gestationMethod', 'delivery', 'birth', 'pregnancyOutcome'] ) {
+        const catalogItem = plain[alias] as Record<string, unknown> | null | undefined;
+        if( catalogItem ) delete catalogItem.sysDetails;
+    }
+
+    return plain;
+}
+
+// The read every operation shares to build its response. The investigation include is mandatory and
+// not decorative: with required: true and the isActive filter it is what implements the inherited
+// visibility, so a medical history hanging from a retired investigation simply does not come back
+const findInvestigationMedicalHistoryWithRelations = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationMedicalHistory.findOne({
+        where: { investigationId: id },
+        attributes: MEDICAL_HISTORY_EXCLUDE,
+        include: [
+            {
+                ...INVESTIGATION_INCLUDE,
+                required: true,
+                where: includeInactive ? {} : { isActive: true }
+            },
+            ...CATALOG_INCLUDES
+        ]
+    });
+}
+
+// The investigation must exist and be active: a retired investigation does not take new medical
+// histories. The operation code travels in so the AppError keeps it
+const assertInvestigationIsValid = async (investigationId: string, op: string, lang: string) => {
+    const investigation = await Investigation.findOne({
+        where: { investigationId, isActive: true },
+        attributes: ['investigationId']
+    });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationMedicalHistory.investigationNotFound', lang),
+            404,
+            `INVMEDH_${ op }_INVESTIGATION_NOT_FOUND`
+        );
+    }
+}
+
+// The one to one is imposed by the primary key itself, which is also the foreign key: there is no
+// extra UNIQUE because none is needed. The lookup does not filter by deletedAt on purpose — a sealed
+// medical history still occupies its investigationId, and only ESAVI-INVMEDH-005C frees it. The
+// check does not rely on the collision either: a 23505 would reach the client as a 500 and its
+// Postgres message says nothing useful. The message carries the investigationId because otherwise
+// the client sees a 409 about a row it did not name
+const assertMedicalHistoryDoesNotExist = async (investigationId: string, op: string, lang: string) => {
+    const existing = await InvestigationMedicalHistory.findByPk(investigationId, { attributes: ['investigationId'] });
+    if( existing ) {
+        throw new AppError(
+            getMessage('investigationMedicalHistory.alreadyExists', lang, { investigationId }),
+            409,
+            `INVMEDH_${ op }_ALREADY_EXISTS`
+        );
+    }
+}
+
+// The free texts are normalized on write with trim, and a text that is blank after trimming is no
+// text at all. There is neither `code` nor `name` here, so neither toConstantCase nor toTitleCase
+// apply
+const normalizeText = (value: string | null | undefined): string | null => {
+    if( value === undefined || value === null ) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+// The nine fields the pregnancy block governs, in the order the spec declares them. The order is
+// what decides which one is interpolated into {{field}} when more than one of them offends
+const PREGNANCY_BLOCK_FIELDS = [
+    'gestationalWeeks',
+    'gestationMethodItemId',
+    'deliveryItemId',
+    'birthItemId',
+    'pregnancyOutcomeItemId',
+    'hasPregnancyRiskFactor',
+    'riskFactorDescription',
+    'birthWeightGrams',
+    'wasBreastfed'
+] as const;
+
+// "Travelling with content" is not the same as "travelling": a field sent as null is the same
+// destination the forcing of 004 reaches on its own, so it is never an offence. A blank string is
+// no content either — normalizeText would store it as null. 0 IS content, on both numeric fields:
+// checking truthiness here would let a gestationalWeeks of 0 through the closed block
+const hasContent = (value: unknown): boolean => {
+    if( value === undefined || value === null ) return false;
+    if( typeof value === 'string' ) return value.trim().length > 0;
+    return true;
+}
+
+// The rule of the pregnancy block, in the strict variant 001 uses. It is evaluated over the
+// RESULTING state of isPregnancyConfirmed — on create the body is the whole resulting state — and
+// the comparison is ALWAYS strict against 'YES'. Over answerOption the "no" has four distinct forms
+// — 'NO', 'UNKNOWN', 'NOT_APPLICABLE' and 'NO_ANSWER' — plus the null of "it was never asked", and
+// the five close the block alike. Writing the rule against the truthiness of the value would work
+// by accident, because the five strings of the ENUM are truthy, and would break in silence.
+//
+// On create it is a 400 and never a silent forcing: there is no inherited state to clear — whatever
+// arrives, arrives in the body — so accepting in silence a datum that will never be stored would
+// return a 201 lying about what it saved
+const assertPregnancyFieldsAreAllowed = (
+    resultingPregnancy: AnswerOption | null,
+    data: Partial<CreateInvestigationMedicalHistoryInput>,
+    op: string,
+    lang: string
+) => {
+    if( resultingPregnancy === 'YES' ) return;
+
+    const offender = PREGNANCY_BLOCK_FIELDS.find(field => hasContent(data[field]));
+    if( offender ) {
+        throw new AppError(
+            getMessage('investigationMedicalHistory.pregnancyFieldsNotAllowed', lang, { field: offender }),
+            400,
+            `INVMEDH_${ op }_PREGNANCY_FIELDS_NOT_ALLOWED`
+        );
+    }
+}
+
+// The item must exist, be active and belong to its own catalogType: any other catalogItem would be
+// a valid UUID pointing at a meaningless type. It is the double hop of F27 and F28, literal. The FK
+// of the DDL points at catalogItem without distinguishing the type, so this filter is the ONLY
+// defence against an item of `outcome` ending up stored as a gestation method.
+//
+// Three causes — it does not exist, it is inactive, it does not belong to the catalog — and a single
+// error per field, because none of the three is actionable in a different way
+const assertCatalogItemIsValid = async (
+    catalogItemId: string,
+    catalogCode: string,
+    messageKey: string,
+    errorCode: string,
+    lang: string
+) => {
+    const item = await CatalogItem.findOne({
+        where: { catalogItemId, isActive: true },
+        attributes: ['catalogItemId'],
+        include: [{
+            model: CatalogType,
+            as: 'catalogType',
+            where: { code: catalogCode },
+            attributes: []
+        }]
+    });
+    if( !item ) {
+        throw new AppError(
+            getMessage(`investigationMedicalHistory.${ messageKey }`, lang),
+            404,
+            errorCode
+        );
+    }
+}
+
+// The four catalog keys, validated only when they are going to be stored with content. A key the
+// forcing of the block is about to set to null is not resolved: there is nothing to look up. The
+// validation runs BEFORE the diff and with independence of it — an inactive item is a 404 even if
+// it matches what is stored — but it is posterior to the rule of the block
+const assertCatalogItemsAreValid = async (
+    values: {
+        gestationMethodItemId?: string | null;
+        deliveryItemId?: string | null;
+        birthItemId?: string | null;
+        pregnancyOutcomeItemId?: string | null;
+    },
+    op: string,
+    lang: string
+) => {
+    if( values.gestationMethodItemId ) {
+        await assertCatalogItemIsValid(
+            values.gestationMethodItemId, GESTATION_METHOD_CATALOG_CODE,
+            'gestationMethodNotFound', `INVMEDH_${ op }_GESTATION_METHOD_NOT_FOUND`, lang
+        );
+    }
+    if( values.deliveryItemId ) {
+        await assertCatalogItemIsValid(
+            values.deliveryItemId, DELIVERY_TYPE_CATALOG_CODE,
+            'deliveryNotFound', `INVMEDH_${ op }_DELIVERY_NOT_FOUND`, lang
+        );
+    }
+    if( values.birthItemId ) {
+        await assertCatalogItemIsValid(
+            values.birthItemId, BIRTH_CONDITION_CATALOG_CODE,
+            'birthNotFound', `INVMEDH_${ op }_BIRTH_NOT_FOUND`, lang
+        );
+    }
+    if( values.pregnancyOutcomeItemId ) {
+        await assertCatalogItemIsValid(
+            values.pregnancyOutcomeItemId, PREGNANCY_OUTCOME_CATALOG_CODE,
+            'pregnancyOutcomeNotFound', `INVMEDH_${ op }_PREGNANCY_OUTCOME_NOT_FOUND`, lang
+        );
+    }
+}
+
+// Create Investigation Medical History Service
+// Code: ESAVI-INVMEDH-001
+const createInvestigationMedicalHistoryService = async (
+    data: CreateInvestigationMedicalHistoryInput,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    await assertInvestigationIsValid(data.investigationId, '001', lang);
+    await assertMedicalHistoryDoesNotExist(data.investigationId, '001', lang);
+
+    // On create the body is the whole resulting state, so the rule is evaluated over it directly.
+    // It runs before the four foreign keys and before anything is written
+    assertPregnancyFieldsAreAllowed(data.isPregnancyConfirmed ?? null, data, '001', lang);
+    await assertCatalogItemsAreValid(data, '001', lang);
+
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVMEDH-001',
+        detail: 'Investigation medical history created by service'
+    };
+
+    // The empty create: the minimum is { investigationId } and the fifteen data columns come back
+    // null. It is the pattern of F13, F14 and F29 and the opposite of F30 — a medical history that
+    // has not been asked yet is a real state of the form, not a client error.
+    // The five answerOption keep their null: what does not arrive is stored null and never 'NO' nor
+    // 'NO_ANSWER'. The ?? null is what keeps that distinction, and it is written without any
+    // truthiness check because the five strings of the ENUM are truthy and because 0 is a valid
+    // value of gestationalWeeks and of birthWeightGrams.
+    // deletedAt is born null and there is no isActive to set: the investigation had to be active to
+    // get here, so a medical history cannot be created already dragged
+    await InvestigationMedicalHistory.create({
+        investigationId: data.investigationId,
+        hasPriorHospitalizationHistory: data.hasPriorHospitalizationHistory ?? null,
+        priorHospitalizationObservations: normalizeText(data.priorHospitalizationObservations),
+        hasFamilyHistory: data.hasFamilyHistory ?? null,
+        familyHistoryObservations: normalizeText(data.familyHistoryObservations),
+        isPregnancyConfirmed: data.isPregnancyConfirmed ?? null,
+        gestationalWeeks: data.gestationalWeeks ?? null,
+        gestationMethodItemId: data.gestationMethodItemId ?? null,
+        deliveryItemId: data.deliveryItemId ?? null,
+        birthItemId: data.birthItemId ?? null,
+        pregnancyOutcomeItemId: data.pregnancyOutcomeItemId ?? null,
+        hasPregnancyRiskFactor: data.hasPregnancyRiskFactor ?? null,
+        riskFactorDescription: normalizeText(data.riskFactorDescription),
+        birthWeightGrams: data.birthWeightGrams ?? null,
+        wasBreastfed: data.wasBreastfed ?? null,
+        notes: normalizeText(data.notes),
+        appDetails: [newEntry]
+    });
+
+    // Re-read so the response carries the resolved investigation, its status, its case and the four
+    // catalogs, not just the raw identifiers
+    const created = await findInvestigationMedicalHistoryWithRelations(data.investigationId, true);
+    return created ? toInvestigationMedicalHistoryResponse(created) : null;
+}
+
+export {
+    createInvestigationMedicalHistoryService
+}
