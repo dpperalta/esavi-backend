@@ -6,7 +6,8 @@ import {
     getAllInvestigationMedicalHistoriesService,
     getInvestigationMedicalHistoriesService,
     getInvestigationMedicalHistoryByCaseIdService,
-    getInvestigationMedicalHistoryByIdService
+    getInvestigationMedicalHistoryByIdService,
+    updateInvestigationMedicalHistoryService
 } from '../services/investigationMedicalHistory.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
@@ -134,10 +135,39 @@ const getInvestigationMedicalHistoryByCaseId = async (req: Request, res: Respons
     }
 }
 
+// Update Investigation Medical History Controller
+// Code: ESAVI-INVMEDH-004
+// The main operation of the entity: the row is opened empty and completed over time
+const updateInvestigationMedicalHistory = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationMedicalHistoryService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationMedicalHistory.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVMEDH-004: Error updating Investigation Medical History: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationMedicalHistory.updatedFailed', req.lang), 500, 'INVMEDH_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationMedicalHistory,
     getInvestigationMedicalHistories,
     getAllInvestigationMedicalHistories,
     getInvestigationMedicalHistoryById,
-    getInvestigationMedicalHistoryByCaseId
+    getInvestigationMedicalHistoryByCaseId,
+    updateInvestigationMedicalHistory
 }

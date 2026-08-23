@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationMedicalHistory } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -98,6 +98,22 @@ const findInvestigationMedicalHistoryWithRelations = async (id: string, includeI
             },
             ...CATALOG_INCLUDES
         ]
+    });
+}
+
+// The same read as above without narrowing the attributes of the medical history, which is the
+// precondition of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads back
+// undefined for the columns it left out, and every comparison against undefined would count as a
+// change. It still carries the investigation include, so the inherited visibility is checked in the
+// same query the update instance comes from
+const findInvestigationMedicalHistoryRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationMedicalHistory.findOne({
+        where: { investigationId: id },
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
     });
 }
 
@@ -461,10 +477,156 @@ const getInvestigationMedicalHistoryByCaseIdService = async (caseId: string, lan
     return toInvestigationMedicalHistoryResponse(history);
 }
 
+// Update Investigation Medical History Service
+// Code: ESAVI-INVMEDH-004
+// The main operation of the entity: the row is opened empty and completed over time, so this is
+// where the form is actually filled in. investigationId is ignored whether or not it arrives in the
+// body — it is the primary key of the row and the foreign key to its investigation at the same time,
+// and moving it would take a patient's anamnesis to another file. It does not return 400 either,
+// which is what keeps working the PUT that resends the response of its own GET
+const updateInvestigationMedicalHistoryService = async (
+    id: string,
+    data: Partial<CreateInvestigationMedicalHistoryInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const history = await findInvestigationMedicalHistoryRow(id, canViewInactive);
+    if( !history ) {
+        throw new AppError(getMessage('investigationMedicalHistory.notFound', lang), 404, 'INVMEDH_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The row is read WITHOUT narrowed attributes, which is the precondition of the helper
+    const stored = history.get({ plain: true }) as Record<string, unknown>;
+
+    // The resulting state governs the pregnancy block and is computed once, before anything else:
+    // what travels merged with what is stored. It is the service and not the validator who emits it,
+    // because express-validator cannot see the stored row. It runs BEFORE the diff and
+    // independently of it
+    const resultingPregnancy = data.isPregnancyConfirmed !== undefined
+        ? ( data.isPregnancyConfirmed ?? null )
+        : ( ( stored.isPregnancyConfirmed as AnswerOption | null ) ?? null );
+
+    // The update variant of the rule: a field of the block that does NOT travel is forced to null
+    // further down without asking and without an error; one that travels WITH CONTENT is still a
+    // 400, because a body that denies the pregnancy and at the same time dates the delivery
+    // contradicts itself, and swallowing it would lose the datum in silence while making the client
+    // believe it was saved. Sending it as null is not an error: it is the same destination the
+    // forcing reaches on its own
+    assertPregnancyFieldsAreAllowed(resultingPregnancy, data, '004', lang);
+
+    // Only the keys that travel with content are resolved against their catalog. One the forcing of
+    // the block is about to set to null is not looked up: there is nothing to find. The check runs
+    // BEFORE the diff and independently of it — an inactive item is a 404 even when it matches what
+    // is stored — but it is posterior to the rule of the block
+    await assertCatalogItemsAreValid(data, '004', lang);
+
+    // No candidate is placed under an `if( data.x )`. Over the five answerOption a truthiness check
+    // would work by accident — the five strings of the ENUM are truthy — but would silently discard
+    // the null the client empties the field with. Over gestationalWeeks it would be outright
+    // destructive: 0 is a valid value of the CHECK and would be thrown away. The same with
+    // birthWeightGrams. No field is encrypted
+    const candidates: Record<string, unknown> = {
+        // investigationId does NOT enter: immutable, ignored in silence and with no 400
+
+        // The five fields outside the pregnancy block, as plain nullable ones. The `?? null` is what
+        // keeps null and 'NO_ANSWER' apart: the first means the form did not collect the answer, the
+        // second that it was asked and not answered
+        hasPriorHospitalizationHistory: data.hasPriorHospitalizationHistory !== undefined
+            ? ( data.hasPriorHospitalizationHistory ?? null ) : undefined,
+        // Normalized before comparing, or a body differing only in surrounding blanks would count as
+        // a change. Not tied to its flag: a note explaining WHY the answer is 'UNKNOWN' is exactly
+        // when the free text is worth the most
+        priorHospitalizationObservations: data.priorHospitalizationObservations !== undefined
+            ? normalizeText(data.priorHospitalizationObservations) : undefined,
+        hasFamilyHistory: data.hasFamilyHistory !== undefined ? ( data.hasFamilyHistory ?? null ) : undefined,
+        familyHistoryObservations: data.familyHistoryObservations !== undefined
+            ? normalizeText(data.familyHistoryObservations) : undefined,
+
+        // The key of the block, and it is NOT governed by it: it is the field that decides, not one
+        // of the decided. Entering as a conditional derivative would make it annul itself
+        isPregnancyConfirmed: data.isPregnancyConfirmed !== undefined ? ( data.isPregnancyConfirmed ?? null ) : undefined,
+
+        // The nine conditional derivatives. When the resulting key is not 'YES' the null enters
+        // candidates ALWAYS, with no presence check, and it is buildDifferentialUpdate who decides
+        // whether it differs: closing a block that was already closed writes nothing. A cleanup with
+        // a second UPDATE after the diff would write even when nothing changed
+        gestationalWeeks: resultingPregnancy === 'YES'
+            ? ( data.gestationalWeeks !== undefined ? ( data.gestationalWeeks ?? null ) : undefined )
+            : null,
+        gestationMethodItemId: resultingPregnancy === 'YES'
+            ? ( data.gestationMethodItemId !== undefined ? ( data.gestationMethodItemId ?? null ) : undefined )
+            : null,
+        deliveryItemId: resultingPregnancy === 'YES'
+            ? ( data.deliveryItemId !== undefined ? ( data.deliveryItemId ?? null ) : undefined )
+            : null,
+        birthItemId: resultingPregnancy === 'YES'
+            ? ( data.birthItemId !== undefined ? ( data.birthItemId ?? null ) : undefined )
+            : null,
+        pregnancyOutcomeItemId: resultingPregnancy === 'YES'
+            ? ( data.pregnancyOutcomeItemId !== undefined ? ( data.pregnancyOutcomeItemId ?? null ) : undefined )
+            : null,
+        hasPregnancyRiskFactor: resultingPregnancy === 'YES'
+            ? ( data.hasPregnancyRiskFactor !== undefined ? ( data.hasPregnancyRiskFactor ?? null ) : undefined )
+            : null,
+        riskFactorDescription: resultingPregnancy === 'YES'
+            ? ( data.riskFactorDescription !== undefined ? normalizeText(data.riskFactorDescription) : undefined )
+            : null,
+        // Compared by the numeric rule of the helper: stored arrives as the string '3250.00' and the
+        // client resends the number 3250, and those are the same weight. It is the rule that keeps
+        // every open of the form from producing an invented difference, and the reason the column is
+        // declared DECIMAL(8, 2) and not FLOAT
+        birthWeightGrams: resultingPregnancy === 'YES'
+            ? ( data.birthWeightGrams !== undefined ? ( data.birthWeightGrams ?? null ) : undefined )
+            : null,
+        wasBreastfed: resultingPregnancy === 'YES'
+            ? ( data.wasBreastfed !== undefined ? ( data.wasBreastfed ?? null ) : undefined )
+            : null,
+
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationMedicalHistory_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationMedicalHistoryWithRelations(id, true);
+        return unchanged ? toInvestigationMedicalHistoryResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the generic
+    // loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(history.appDetails) ? history.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVMEDH-004',
+        detail: 'Investigation medical history updated by service'
+    };
+    await history.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationMedicalHistoryWithRelations(id, true);
+    return updated ? toInvestigationMedicalHistoryResponse(updated) : null;
+}
+
 export {
     createInvestigationMedicalHistoryService,
     getInvestigationMedicalHistoriesService,
     getAllInvestigationMedicalHistoriesService,
     getInvestigationMedicalHistoryByIdService,
-    getInvestigationMedicalHistoryByCaseIdService
+    getInvestigationMedicalHistoryByCaseIdService,
+    updateInvestigationMedicalHistoryService
 }

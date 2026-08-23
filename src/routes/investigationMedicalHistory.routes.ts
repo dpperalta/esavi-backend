@@ -6,13 +6,15 @@ import {
     getAllInvestigationMedicalHistories,
     getInvestigationMedicalHistories,
     getInvestigationMedicalHistoryByCaseId,
-    getInvestigationMedicalHistoryById
+    getInvestigationMedicalHistoryById,
+    updateInvestigationMedicalHistory
 } from '../controllers/investigationMedicalHistory.controller';
 import {
     createInvestigationMedicalHistoryValidator,
     investigationMedicalHistoryCaseIdValidator,
     investigationMedicalHistoryIdValidator,
-    investigationMedicalHistoryListValidator
+    investigationMedicalHistoryListValidator,
+    updateInvestigationMedicalHistoryValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -50,5 +52,11 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // The :id is the investigationId: this entity has no identifier of its own, so this is already the
 // access by investigation
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationMedicalHistoryIdValidator, validateFields, getInvestigationMedicalHistoryById);
+
+// Update Investigation Medical History
+// Code: ESAVI-INVMEDH-004
+// USER for the same reason as 001: completing the anamnesis is part of the same operational flow.
+// It is the main operation of the entity — the row is opened with one field and filled in over time
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationMedicalHistoryIdValidator, ...updateInvestigationMedicalHistoryValidator, validateFields, updateInvestigationMedicalHistory);
 
 export default router;
