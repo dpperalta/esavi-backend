@@ -22,6 +22,7 @@ import { initInvestigationAutopsyAssociations } from './investigationAutopsy.ass
 import { initInvestigationTeamMemberAssociations } from './investigationTeamMember.associations';
 import { initInvestigationMedicalHistoryAssociations } from './investigationMedicalHistory.associations';
 import { initInvestigationPregnancyConditionAssociations } from './investigationPregnancyCondition.associations';
+import { initInvestigationClinicalEvaluationAssociations } from './investigationClinicalEvaluation.associations';
 import { initSystemConfigAssociations } from './systemConfig.associations';
 
 export const initAssociations = (): void => {
@@ -49,5 +50,6 @@ export const initAssociations = (): void => {
     initInvestigationTeamMemberAssociations();
     initInvestigationMedicalHistoryAssociations();
     initInvestigationPregnancyConditionAssociations();
+    initInvestigationClinicalEvaluationAssociations();
     initSystemConfigAssociations();
 }

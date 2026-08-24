@@ -33,6 +33,7 @@ import investigationAutopsyRoutes from './investigationAutopsy.routes';
 import investigationTeamMemberRoutes from './investigationTeamMember.routes';
 import investigationMedicalHistoryRoutes from './investigationMedicalHistory.routes';
 import investigationPregnancyConditionRoutes from './investigationPregnancyCondition.routes';
+import investigationClinicalEvaluationRoutes from './investigationClinicalEvaluation.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -97,6 +98,10 @@ router.use('/investigation-medical-histories', investigationMedicalHistoryRoutes
 // medical history declared confirmed. It hangs from investigationMedicalHistory and not from
 // investigation, which is why it is entered by /investigation/:id and never by /
 router.use('/investigation-pregnancy-conditions', investigationPregnancyConditionRoutes);
+// The fifth of the fourteen satellites of investigation, and the sixth with a spec of its own: the
+// clinical evaluation of the investigated patient. It is the first satellite with an encrypted
+// column — clinicalDetailsPersonName — and the first with no foreign key to catalogItem at all
+router.use('/investigation-clinical-evaluations', investigationClinicalEvaluationRoutes);
 router.use('/system-configs', systemConfigRoutes);
 
 export default router;

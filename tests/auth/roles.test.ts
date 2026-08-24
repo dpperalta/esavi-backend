@@ -462,6 +462,25 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVPREG-004' },
     { method: 'delete', path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'ADMIN',      code: 'ESAVI-INVPREG-005A' },
 
+    // investigationClinicalEvaluation (SPEC F34) — the fifth of the fourteen satellites of
+    // investigation, and the fourth one without an isActive column of its own. SEVEN operations and
+    // NO 005A or 005B: the entity has no state to activate, so retiring a clinical evaluation is
+    // retiring its investigation. The dual listing is inherited from F29, F30 and F32 — the
+    // visibility comes from investigation.isActive, so 002A and 002B return different sets.
+    // TWO ROWS DEVIATE from the canonical matrix, and they are the same deviation as F05, F06, F07,
+    // F09, F10, F13, F14, F28, F29, F30, F31, F32 and F33: 001 and 004 on USER, because the clinical
+    // evaluation is captured in the same operational flow as the case.
+    // The encrypted clinicalDetailsPersonName does NOT raise any minimum: what protects the column
+    // is the encryption at rest, not a stricter role — a USER completing the form has to be able to
+    // write the name it just collected
+    { method: 'post',   path: '/api/investigation-clinical-evaluations',                 minRole: 'USER',       code: 'ESAVI-INVCLIEV-001' },
+    { method: 'get',    path: '/api/investigation-clinical-evaluations',                 minRole: 'USER',       code: 'ESAVI-INVCLIEV-002A' },
+    { method: 'get',    path: '/api/investigation-clinical-evaluations/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVCLIEV-002B' },
+    { method: 'delete', path: `/api/investigation-clinical-evaluations/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVCLIEV-005C' },
+    { method: 'get',    path: `/api/investigation-clinical-evaluations/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVCLIEV-006' },
+    { method: 'get',    path: `/api/investigation-clinical-evaluations/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCLIEV-003' },
+    { method: 'put',    path: `/api/investigation-clinical-evaluations/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCLIEV-004' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -540,7 +559,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(249);
+            expect(ROUTE_RULES).toHaveLength(256);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

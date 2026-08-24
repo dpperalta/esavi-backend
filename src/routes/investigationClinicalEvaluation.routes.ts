@@ -1,0 +1,71 @@
+import { Router } from 'express';
+import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
+import { ROLES } from '../constants/roles.constants';
+import {
+    createInvestigationClinicalEvaluation,
+    getAllInvestigationClinicalEvaluations,
+    getInvestigationClinicalEvaluationByCaseId,
+    getInvestigationClinicalEvaluationById,
+    getInvestigationClinicalEvaluations,
+    purgeInvestigationClinicalEvaluation,
+    updateInvestigationClinicalEvaluation
+} from '../controllers/investigationClinicalEvaluation.controller';
+import {
+    createInvestigationClinicalEvaluationValidator,
+    investigationClinicalEvaluationCaseIdValidator,
+    investigationClinicalEvaluationIdValidator,
+    investigationClinicalEvaluationListValidator,
+    updateInvestigationClinicalEvaluationValidator
+} from '../validators';
+
+const { ADMIN, SUPERADMIN, USER } = ROLES;
+
+const router = Router();
+
+// Create Investigation Clinical Evaluation
+// Code: ESAVI-INVCLIEV-001
+// USER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
+// F13, F14, F28, F29, F30, F31, F32 and F33 already fixed: the detail is captured in the same
+// operational flow as the case, and splitting it across two roles would break the form in half
+router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationClinicalEvaluationValidator, validateFields, createInvestigationClinicalEvaluation);
+
+// Get Investigation Clinical Evaluations
+// Code: ESAVI-INVCLIEV-002A
+// Only the clinical evaluations of active investigations. The entity has no isActive of its own: the
+// filter lands on the where of the investigation include, which is the real source of its visibility
+router.get('/', tokenValidation, validateUserRole(USER), ...investigationClinicalEvaluationListValidator, validateFields, getInvestigationClinicalEvaluations);
+
+// Get All Investigation Clinical Evaluations - For Admin
+// Code: ESAVI-INVCLIEV-002B
+// Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the clinical
+// evaluation of a retired investigation
+router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationClinicalEvaluationListValidator, validateFields, getAllInvestigationClinicalEvaluations);
+
+// Purge Investigation Clinical Evaluation - Physical delete, for SuperAdmin
+// Code: ESAVI-INVCLIEV-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not have an
+// activity flag and does not manage its own state — its investigation does. This is also the only
+// operation that releases the investigationId
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationClinicalEvaluationIdValidator, validateFields, purgeInvestigationClinicalEvaluation);
+
+// Get Investigation Clinical Evaluation by Case
+// Code: ESAVI-INVCLIEV-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared before
+// /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationClinicalEvaluationCaseIdValidator, validateFields, getInvestigationClinicalEvaluationByCaseId);
+
+// Get Investigation Clinical Evaluation by ID
+// Code: ESAVI-INVCLIEV-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationClinicalEvaluationIdValidator, validateFields, getInvestigationClinicalEvaluationById);
+
+// Update Investigation Clinical Evaluation
+// Code: ESAVI-INVCLIEV-004
+// USER for the same reason as 001: completing the clinical evaluation is part of the same operational
+// flow. It is the main operation of the entity — the row is opened with one field and filled in over
+// time
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationClinicalEvaluationIdValidator, ...updateInvestigationClinicalEvaluationValidator, validateFields, updateInvestigationClinicalEvaluation);
+
+export default router;
