@@ -1128,6 +1128,7 @@ CREATE TABLE IF NOT EXISTS "evaluationInstitution" (
   CONSTRAINT "FK_evaluationInstitution_facility" FOREIGN KEY ("healthFacilityId") REFERENCES "healthFacility" ("healthFacilityId") ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT "FK_evaluationInstitution_type" FOREIGN KEY ("evaluationInstitutionTypeItemId") REFERENCES "catalogItem" ("catalogItemId") ON UPDATE CASCADE ON DELETE RESTRICT
 );
+CREATE INDEX IF NOT EXISTS "IX_evaluationInstitution_investigation" ON "evaluationInstitution" ("investigationId");
 
 CREATE TABLE IF NOT EXISTS "investigationVaccinationContext" (
   "investigationId" uuid PRIMARY KEY,
@@ -1602,5 +1603,10 @@ CALL "upsertCatalogItem"('administrationRoute', 'Administration route', 'INTRAMU
 CALL "upsertCatalogItem"('administrationRoute', 'Administration route', 'SUBCUTANEOUS', 'Subcutaneous', 'SUBCUTANEOUS', 2);
 CALL "upsertCatalogItem"('pharmaceuticalForm', 'Pharmaceutical form', 'SOLUTION', 'Solution', 'SOLUTION', 1);
 CALL "upsertCatalogItem"('pharmaceuticalForm', 'Pharmaceutical form', 'SUSPENSION', 'Suspension', 'SUSPENSION', 2);
+CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'HOSPITAL', 'Hospital', 'HOSPITAL', 1);
+CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'HEALTH_CENTER', 'Health center', 'HEALTH_CENTER', 2);
+CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'LABORATORY', 'Laboratory', 'LABORATORY', 3);
+CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'PRIVATE_PRACTICE', 'Private practice', 'PRIVATE_PRACTICE', 4);
+CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'OTHER', 'Other', 'OTHER', 5);
 
 COMMIT;
