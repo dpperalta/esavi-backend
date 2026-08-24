@@ -1,6 +1,7 @@
 import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationSource, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -1149,6 +1150,120 @@ describe('investigation contract', () => {
             expect((await InvestigationSource.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).toBeNull();
             expect((await InvestigationAutopsy.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).toBeNull();
             expect((await readMedicalHistory(id))!.getDataValue('deletedAt')).toBeNull();
+        });
+    });
+
+    // SPEC F34 hangs the fifth of the fourteen satellites off the same three operations, and it is
+    // the FOURTH consumer of common/satelliteCascade.service.ts — the file F32 extracted precisely
+    // so this one would not duplicate the drag again, and which F34 consumes without modifying.
+    // What is checked here is the effect on the clinical evaluation, seen from the side of the
+    // investigation: the detailed behaviour of the entity lives in
+    // tests/contract/investigationClinicalEvaluation.test.ts.
+    // investigationClinicalEvaluation has no isActive column either, so what the cascades move is
+    // its deletedAt. Its encrypted column changes nothing for the cascade — no value is read, only a
+    // date is moved — but it DOES change the purge dump, and that is why the third case reads the
+    // log: the other three satellites are dumped with a raw JSON.stringify of the row, and doing the
+    // same here would drop the ciphertext of clinicalDetailsPersonName into esaviLog.log.
+    // The last case is the one that matters most: the FOUR satellites travel in the same transaction
+    // over the same common service, so no spec may have broken the other three
+    describe('the cascade over investigationClinicalEvaluation', () => {
+
+        // The clinical evaluation is created through its own endpoint, which is the only way it is
+        // ever born. Like the source and the medical history, it opens empty: { investigationId } is
+        // the whole minimum
+        const createClinicalEvaluation = (investigationId: string, payload: Record<string, unknown> = {}) =>
+            request(app).post('/api/investigation-clinical-evaluations')
+                .set(authHeader('USER'))
+                .send({ investigationId, ...payload });
+
+        // Where esaviLog writes. Read directly because the warn dump of the purge never reaches an
+        // HTTP response: it is the only trace an irreversible cascade leaves
+        const logPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
+
+        const readClinicalEvaluation = async (id: string) =>
+            await InvestigationClinicalEvaluation.findByPk(id, { paranoid: false });
+
+        const clinicalEvaluationMethods = async (id: string): Promise<string[]> =>
+            (((await readClinicalEvaluation(id))!.getDataValue('appDetails') as { method: string }[]) ?? [])
+                .map(entry => entry.method);
+
+        it('deactivating the investigation seals its clinical evaluation', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            expect((await createClinicalEvaluation(id, { notes: 'a note' })).status).toBe(201);
+
+            expect((await deactivate(id)).status).toBe(200);
+
+            expect((await readClinicalEvaluation(id))!.getDataValue('deletedAt')).not.toBeNull();
+            expect(await clinicalEvaluationMethods(id)).toEqual(['ESAVI-INVCLIEV-001', 'ESAVI-INVESTGN-005A']);
+        });
+
+        it('reactivating it returns the clinical evaluation, keeping the previous history', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createClinicalEvaluation(id, { notes: 'a note' });
+            await deactivate(id);
+
+            expect((await activate(id)).status).toBe(200);
+
+            const clinicalEvaluation = (await readClinicalEvaluation(id))!;
+            expect(clinicalEvaluation.getDataValue('deletedAt')).toBeNull();
+            expect(clinicalEvaluation.getDataValue('notes')).toBe('a note');
+            expect(await clinicalEvaluationMethods(id)).toEqual([
+                'ESAVI-INVCLIEV-001', 'ESAVI-INVESTGN-005A', 'ESAVI-INVESTGN-005B'
+            ]);
+        });
+
+        it('purging the investigation destroys the clinical evaluation by Postgres cascade, dumping it without its encrypted column', async () => {
+            // The purge is not blocked when the investigation has satellites: it is the decision F13
+            // and F29 declared and F30, F32 and F34 inherited, with the warn dump in the log as the
+            // only mitigation — four lines now, one per satellite without isActive
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createClinicalEvaluation(id, { clinicalDetailsPersonName: 'juan carlos', notes: 'cascade dump' });
+            await deactivate(id);
+
+            const logBefore = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf-8').length : 0;
+
+            expect((await purge(id)).status).toBe(200);
+
+            expect(await readClinicalEvaluation(id)).toBeNull();
+            expect(await Investigation.findByPk(id, { paranoid: false })).toBeNull();
+
+            // log4js buffers, so give the appender a tick to flush
+            await new Promise(resolve => setTimeout(resolve, 250));
+            const added = fs.readFileSync(logPath, 'utf-8').slice(logBefore);
+            const evaluationLine = added.split('\n')
+                .find(line => line.includes('ESAVI-INVESTGN-005C') && line.includes('clinical evaluation'));
+
+            // The line exists and carries the row, but not the encrypted column in ANY of its forms
+            expect(evaluationLine).toBeDefined();
+            expect(evaluationLine).toContain('cascade dump');
+            expect(evaluationLine).not.toContain('clinicalDetailsPersonName');
+            expect(evaluationLine).not.toContain('Juan Carlos');
+            expect(evaluationLine).not.toContain(esaviCrypt('Juan Carlos'));
+        });
+
+        it('an investigation with the FOUR satellites seals and clears the four in the same transaction', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+                .send({ investigationId: id, isDeath: true, deathDate: '2024-06-01' });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER')).send({ investigationId: id });
+            await createClinicalEvaluation(id);
+
+            const satellites = [InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationClinicalEvaluation];
+
+            await deactivate(id);
+            for( const model of satellites ) {
+                expect((await model.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).not.toBeNull();
+            }
+
+            await activate(id);
+            for( const model of satellites ) {
+                expect((await model.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).toBeNull();
+            }
         });
     });
 });
