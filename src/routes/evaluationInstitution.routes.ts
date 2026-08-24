@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createEvaluationInstitution,
+    deleteEvaluationInstitution,
     getAllEvaluationInstitutionsByInvestigation,
     getEvaluationInstitutionById,
     getEvaluationInstitutionsByInvestigation,
@@ -53,5 +54,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitu
 // Update Evaluation Institution
 // Code: ESAVI-EVALINST-004
 router.put('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionIdValidator, ...updateEvaluationInstitutionValidator, validateFields, updateEvaluationInstitution);
+
+// Delete Evaluation Institution - Soft delete
+// Code: ESAVI-EVALINST-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...evaluationInstitutionIdValidator, validateFields, deleteEvaluationInstitution);
 
 export default router;

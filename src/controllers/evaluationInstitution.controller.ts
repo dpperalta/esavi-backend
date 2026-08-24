@@ -6,6 +6,7 @@ import {
     getAllEvaluationInstitutionsByInvestigationService,
     getEvaluationInstitutionByIdService,
     getEvaluationInstitutionsByInvestigationService,
+    setEvaluationInstitutionActivationService,
     updateEvaluationInstitutionService
 } from '../services/evaluationInstitution.service';
 
@@ -139,10 +140,32 @@ const updateEvaluationInstitution = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Delete Evaluation Institution Controller - Soft delete
+// Code: ESAVI-EVALINST-005A
+const deleteEvaluationInstitution = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setEvaluationInstitutionActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('evaluationInstitution.deletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-EVALINST-005A: Error deleting Evaluation Institution: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('evaluationInstitution.deletedFailed', req.lang), 500, 'EVALINST_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createEvaluationInstitution,
     getEvaluationInstitutionsByInvestigation,
     getAllEvaluationInstitutionsByInvestigation,
     getEvaluationInstitutionById,
-    updateEvaluationInstitution
+    updateEvaluationInstitution,
+    deleteEvaluationInstitution
 }

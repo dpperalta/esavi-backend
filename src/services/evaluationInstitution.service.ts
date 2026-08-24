@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EvaluationInstitution, HealthFacility, Investigation, InvestigationClinicalEvaluation } from '../models';
 import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEvaluationInstitutionInput } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The catalogType every evaluationInstitutionTypeItemId must belong to. The foreign key of the DDL
@@ -708,10 +709,61 @@ const updateEvaluationInstitutionService = async (
     return updated ? toEvaluationInstitutionResponse(updated) : null;
 }
 
+// Set Evaluation Institution Activation Service
+// Code: ESAVI-EVALINST-005A / ESAVI-EVALINST-005B
+// One service for the two operations, as the rest of the repository does it. Neither is a
+// differential update: they are state writes with an intent of their own, they record a fact even
+// though no data column changes, and that is why they go through setEntityActiveStatusService and
+// never through buildDifferentialUpdate.
+//
+// The 005A seals deletedAt, which frees the sortOrder from the partial unique index. That is correct
+// and deliberate: the gap stays available for the next institution.
+//
+// Neither operation applies the inherited visibility, and that is the criterion of F31 and F33:
+// whoever withdraws or reactivates acts over the row's own state, and that state exists
+// independently of its two parents. Retiring an institution of an inactive investigation answers 200.
+//
+// The 005A is blocked by nothing. evaluationInstitution is a leaf of the graph: no table of the 45
+// references it, so there are no children to query and no state to drag — least of all its parent's
+// receivedMedicalAttention, which stays governed by F34
+const setEvaluationInstitutionActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const institution = await setEntityActiveStatusService({
+            model: EvaluationInstitution,
+            where: { evaluationInstitutionId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('evaluationInstitution.notFound', lang),
+            notFoundCode: `EVALINST_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`evaluationInstitution.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `EVALINST_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-EVALINST-${ op }`,
+                detail: `Evaluation institution ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return institution;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createEvaluationInstitutionService,
     getEvaluationInstitutionsByInvestigationService,
     getAllEvaluationInstitutionsByInvestigationService,
     getEvaluationInstitutionByIdService,
-    updateEvaluationInstitutionService
+    updateEvaluationInstitutionService,
+    setEvaluationInstitutionActivationService
 }
