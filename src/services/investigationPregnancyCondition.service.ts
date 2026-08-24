@@ -656,6 +656,71 @@ const updateInvestigationPregnancyConditionService = async (
     return updated ? toInvestigationPregnancyConditionResponse(updated) : null;
 }
 
+// The one piece of ESAVI-INVPREG-005B that is not a clean delegation, and the reason this entity
+// cannot hand its activation to setEntityActiveStatusService and be done with it. It is the finding
+// of F16, whole, and the seventh table of the repository to inherit it after F21, F22, F24, F27 and
+// F31. Copying the 005B of the parent F32 by proximity — a clean delegation, because
+// investigationMedicalHistory has no sortOrder and no isActive — instead of F16's by structural
+// likeness, is the most probable mistake of this spec.
+//
+// UQ_investigationPregnancyCondition_parent_sortOrder is a partial unique index over
+// (investigationId, sortOrder) WHERE deletedAt IS NULL AND sortOrder IS NOT NULL
+// (esaviapp.sql:1357-1358). A 005A seals deletedAt, so the number leaves both the index and the MAX
+// the insert trigger computes, and a later create legitimately reuses it. The moment
+// entityActivation.service.ts:34 clears deletedAt, the reactivated row re-enters the index carrying
+// a number another live row already holds, and the UPDATE dies with a constraint violation — a 500
+// for an operation that should answer 200.
+//
+// The fix is to move the number before touching deletedAt: while deletedAt is still sealed the row
+// is outside the partial index, so this write is free. Inverting the two steps makes the index fail
+// inside the helper's own UPDATE — the constraint is not deferrable and there would be no way to fix
+// it afterwards.
+//
+// This is a write with an intention of its own over a field the client neither sent nor can send, so
+// it does not go through buildDifferentialUpdate: it does not come from comparing an incoming value
+// against the stored one, but from a constraint of the database.
+//
+// A missing row is left alone: the helper right after raises the 404. An already active row finds no
+// collision either — the index guarantees no other live row shares its number — so nothing is
+// written and the helper raises its 409 as usual
+const reassignSortOrderOnCollision = async (id: string, transaction: Transaction) => {
+    const condition = await InvestigationPregnancyCondition.findOne({
+        where: { pregnancyConditionId: id },
+        paranoid: false,
+        transaction
+    });
+    if( !condition || condition.deletedAt === null ) {
+        return;
+    }
+
+    const collision = await InvestigationPregnancyCondition.findOne({
+        where: {
+            investigationId: condition.investigationId,
+            sortOrder: condition.sortOrder as number,
+            deletedAt: null,
+            pregnancyConditionId: { [Op.ne]: id }
+        },
+        attributes: ['pregnancyConditionId'],
+        paranoid: false,
+        transaction
+    });
+    if( !collision ) {
+        return;
+    }
+
+    // The same count TRG_investigationPregnancyCondition_setSortOrder does on insert, so the
+    // reactivated condition reappears at the end of the list
+    const highest = await InvestigationPregnancyCondition.max<number, InvestigationPregnancyCondition>('sortOrder', {
+        where: { investigationId: condition.investigationId, deletedAt: null },
+        transaction
+    });
+
+    await condition.update(
+        { sortOrder: ( Number(highest) || 0 ) + 1 },
+        { transaction, fields: ['sortOrder'] }
+    );
+}
+
 // Set Investigation Pregnancy Condition Activation Service
 // Code: ESAVI-INVPREG-005A / ESAVI-INVPREG-005B
 // One service for the two operations, as the rest of the repository does it. Neither is a
@@ -682,6 +747,18 @@ const setInvestigationPregnancyConditionActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // Only on the way back: a 005A is what frees the number, so it never collides.
+        // The reactivation revalidates nothing else — not the duplicate guard, not the term, not the
+        // state of the medical history or of the investigation. Bringing a row back to life is
+        // undoing a deactivation, not rewriting it, which is the criterion of F27 §6 and F31 §6. The
+        // consequence — a 005B can resurrect a diagnosticTermId that another live sister already
+        // holds — is assumed and declared in §6 of the spec: the alternative leaves a row that can
+        // never come back and nothing to do about it but purge it. The duplicate is visible,
+        // correctable with a 005A and breaks nothing
+        if( isActive ) {
+            await reassignSortOrderOnCollision(id, transaction);
+        }
+
         const condition = await setEntityActiveStatusService({
             model: InvestigationPregnancyCondition,
             where: { pregnancyConditionId: id },

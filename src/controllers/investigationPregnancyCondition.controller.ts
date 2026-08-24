@@ -160,7 +160,31 @@ const deleteInvestigationPregnancyCondition = async (req: Request, res: Response
     }
 }
 
+// Activate Investigation Pregnancy Condition Controller - For Admin
+// Code: ESAVI-INVPREG-005B
+// ADMIN and not SUPERADMIN, following F27 and F31: the activation of this entity is not the trivial
+// delegation the canonical matrix of §9 assumes, but an operation with sortOrder reassignment inside
+// a transaction, and whoever administers the case must be able to run it
+const activateInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setInvestigationPregnancyConditionActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-005B: Error activating Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.activatedFailed', req.lang), 500, 'INVPREG_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
+    activateInvestigationPregnancyCondition,
     createInvestigationPregnancyCondition,
     deleteInvestigationPregnancyCondition,
     getInvestigationPregnancyConditionById,

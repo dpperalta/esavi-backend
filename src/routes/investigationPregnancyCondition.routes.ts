@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateInvestigationPregnancyCondition,
     createInvestigationPregnancyCondition,
     deleteInvestigationPregnancyCondition,
     getAllInvestigationPregnancyConditionsByInvestigation,
@@ -44,6 +45,12 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // condition id: the listing is entered by the foreign key. Declared after /admin/investigation/:id,
 // which is the more specific literal path
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionInvestigationIdValidator, ...investigationPregnancyConditionListValidator, validateFields, getInvestigationPregnancyConditionsByInvestigation);
+
+// Activate Investigation Pregnancy Condition - For Admin
+// Code: ESAVI-INVPREG-005B
+// Declared with the literal paths, before /:id. ADMIN and not SUPERADMIN, following F27 and F31: it
+// carries a sortOrder reassignment and is case administration, not system administration
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...investigationPregnancyConditionIdValidator, validateFields, activateInvestigationPregnancyCondition);
 
 // Get Investigation Pregnancy Condition by ID
 // Code: ESAVI-INVPREG-003
