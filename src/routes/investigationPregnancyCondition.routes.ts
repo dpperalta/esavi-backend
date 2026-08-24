@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationPregnancyCondition,
     getAllInvestigationPregnancyConditionsByInvestigation,
+    getInvestigationPregnancyConditionById,
     getInvestigationPregnancyConditionsByInvestigation
 } from '../controllers/investigationPregnancyCondition.controller';
 import {
     createInvestigationPregnancyConditionValidator,
+    investigationPregnancyConditionIdValidator,
     investigationPregnancyConditionInvestigationIdValidator,
     investigationPregnancyConditionListValidator
 } from '../validators';
@@ -39,5 +41,11 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // condition id: the listing is entered by the foreign key. Declared after /admin/investigation/:id,
 // which is the more specific literal path
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionInvestigationIdValidator, ...investigationPregnancyConditionListValidator, validateFields, getInvestigationPregnancyConditionsByInvestigation);
+
+// Get Investigation Pregnancy Condition by ID
+// Code: ESAVI-INVPREG-003
+// Declared after every literal path: an /:id first would swallow /admin, /investigation, /purge and
+// /activate, and the UUID validator would answer 400 for routes that do exist
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionIdValidator, validateFields, getInvestigationPregnancyConditionById);
 
 export default router;

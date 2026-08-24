@@ -448,8 +448,41 @@ const getAllInvestigationPregnancyConditionsByInvestigationService = async (
     };
 }
 
+// Get Investigation Pregnancy Condition By ID Service
+// Code: ESAVI-INVPREG-003
+// Three filters, and two of them are the inherited visibility in chain: the condition must exist and
+// be active, the medical history it hangs from must not be sealed, and the investigation that medical
+// history hangs from must be active — unless canViewInactive says otherwise, today SUPERADMIN.
+//
+// The intermediate link is checked by deletedAt and not by isActive, because that table has no such
+// column: it is the first visibility chain of the repository that crosses a table with no state of
+// its own.
+//
+// The three conditions are evaluated the same way, with no priority among them: it is enough that one
+// fails, so there is nothing to decide when two of them fail at once. The three failures answer the
+// same 404 without distinguishing, because telling them apart would confirm to a USER that a
+// condition exists under an investigation it is not allowed to see.
+//
+// The :id is the pregnancyConditionId. This is NOT the access by investigation — that is the 002A
+const getInvestigationPregnancyConditionByIdService = async (
+    id: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const condition = await findConditionWithRelations(id, canViewInactive);
+    if( !condition ) {
+        throw new AppError(
+            getMessage('investigationPregnancyCondition.notFound', lang),
+            404,
+            'INVPREG_003_NOT_FOUND'
+        );
+    }
+    return toInvestigationPregnancyConditionResponse(condition);
+}
+
 export {
     createInvestigationPregnancyConditionService,
+    getInvestigationPregnancyConditionByIdService,
     getInvestigationPregnancyConditionsByInvestigationService,
     getAllInvestigationPregnancyConditionsByInvestigationService
 }
