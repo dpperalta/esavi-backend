@@ -32,6 +32,7 @@ import investigationSourceRoutes from './investigationSource.routes';
 import investigationAutopsyRoutes from './investigationAutopsy.routes';
 import investigationTeamMemberRoutes from './investigationTeamMember.routes';
 import investigationMedicalHistoryRoutes from './investigationMedicalHistory.routes';
+import investigationPregnancyConditionRoutes from './investigationPregnancyCondition.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -92,6 +93,10 @@ router.use('/investigation-team-members', investigationTeamMemberRoutes);
 // history of the investigated patient. Plural in the path like the rest, even though the relation
 // is one to one
 router.use('/investigation-medical-histories', investigationMedicalHistoryRoutes);
+// The first granddaughter of the investigation block: the conditions recorded over the pregnancy the
+// medical history declared confirmed. It hangs from investigationMedicalHistory and not from
+// investigation, which is why it is entered by /investigation/:id and never by /
+router.use('/investigation-pregnancy-conditions', investigationPregnancyConditionRoutes);
 router.use('/system-configs', systemConfigRoutes);
 
 export default router;
