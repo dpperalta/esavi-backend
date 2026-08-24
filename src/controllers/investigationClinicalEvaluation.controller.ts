@@ -6,7 +6,8 @@ import {
     getAllInvestigationClinicalEvaluationsService,
     getInvestigationClinicalEvaluationByCaseIdService,
     getInvestigationClinicalEvaluationByIdService,
-    getInvestigationClinicalEvaluationsService
+    getInvestigationClinicalEvaluationsService,
+    updateInvestigationClinicalEvaluationService
 } from '../services/investigationClinicalEvaluation.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
@@ -134,10 +135,39 @@ const getInvestigationClinicalEvaluationByCaseId = async (req: Request, res: Res
     }
 }
 
+// Update Investigation Clinical Evaluation Controller
+// Code: ESAVI-INVCLIEV-004
+// The main operation of the entity: the row is opened empty and completed over time
+const updateInvestigationClinicalEvaluation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationClinicalEvaluationService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationClinicalEvaluation.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCLIEV-004: Error updating Investigation Clinical Evaluation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationClinicalEvaluation.updatedFailed', req.lang), 500, 'INVCLIEV_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationClinicalEvaluation,
     getInvestigationClinicalEvaluations,
     getAllInvestigationClinicalEvaluations,
     getInvestigationClinicalEvaluationById,
-    getInvestigationClinicalEvaluationByCaseId
+    getInvestigationClinicalEvaluationByCaseId,
+    updateInvestigationClinicalEvaluation
 }

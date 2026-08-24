@@ -6,13 +6,15 @@ import {
     getAllInvestigationClinicalEvaluations,
     getInvestigationClinicalEvaluationByCaseId,
     getInvestigationClinicalEvaluationById,
-    getInvestigationClinicalEvaluations
+    getInvestigationClinicalEvaluations,
+    updateInvestigationClinicalEvaluation
 } from '../controllers/investigationClinicalEvaluation.controller';
 import {
     createInvestigationClinicalEvaluationValidator,
     investigationClinicalEvaluationCaseIdValidator,
     investigationClinicalEvaluationIdValidator,
-    investigationClinicalEvaluationListValidator
+    investigationClinicalEvaluationListValidator,
+    updateInvestigationClinicalEvaluationValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -50,5 +52,12 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // The :id is the investigationId: this entity has no identifier of its own, so this is already the
 // access by investigation
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationClinicalEvaluationIdValidator, validateFields, getInvestigationClinicalEvaluationById);
+
+// Update Investigation Clinical Evaluation
+// Code: ESAVI-INVCLIEV-004
+// USER for the same reason as 001: completing the clinical evaluation is part of the same operational
+// flow. It is the main operation of the entity — the row is opened with one field and filled in over
+// time
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationClinicalEvaluationIdValidator, ...updateInvestigationClinicalEvaluationValidator, validateFields, updateInvestigationClinicalEvaluation);
 
 export default router;

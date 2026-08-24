@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { CatalogItem, EsaviCase, Investigation, InvestigationClinicalEvaluation } from '../models';
-import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -69,6 +69,22 @@ const findInvestigationClinicalEvaluationWithRelations = async (id: string, incl
     return await InvestigationClinicalEvaluation.findOne({
         where: { investigationId: id },
         attributes: CLINICAL_EVALUATION_EXCLUDE,
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// The same read as above without narrowing the attributes of the clinical evaluation, which is the
+// precondition of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads back
+// undefined for the columns it left out, and every comparison against undefined would count as a
+// change. It still carries the investigation include, so the inherited visibility is checked in the
+// same query the update instance comes from
+const findInvestigationClinicalEvaluationRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationClinicalEvaluation.findOne({
+        where: { investigationId: id },
         include: [{
             ...INVESTIGATION_INCLUDE,
             required: true,
@@ -412,10 +428,160 @@ const getInvestigationClinicalEvaluationByCaseIdService = async (caseId: string,
     return toInvestigationClinicalEvaluationResponse(evaluation);
 }
 
+// Update Investigation Clinical Evaluation Service
+// Code: ESAVI-INVCLIEV-004
+// The main operation of the entity: the row is opened empty and completed over time, so this is
+// where the form is actually filled in. investigationId is ignored whether or not it arrives in the
+// body — it is the primary key of the row and the foreign key to its investigation at the same time,
+// and moving it would take a patient's assessment to another file. It does not return 400 either,
+// which is what keeps working the PUT that resends the response of its own GET
+const updateInvestigationClinicalEvaluationService = async (
+    id: string,
+    data: Partial<CreateInvestigationClinicalEvaluationInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const evaluation = await findInvestigationClinicalEvaluationRow(id, canViewInactive);
+    if( !evaluation ) {
+        throw new AppError(getMessage('investigationClinicalEvaluation.notFound', lang), 404, 'INVCLIEV_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The row is read WITHOUT narrowed attributes, which is the precondition of the helper
+    const stored = evaluation.get({ plain: true }) as Record<string, unknown>;
+
+    // The stored name is DECRYPTED before anything compares against it, and only when it is not
+    // null — esaviDecrypt is never handed a null. From here on `stored` carries plain text on that
+    // column, which is what makes the diff compare in clear. Comparing ciphertext against ciphertext
+    // would work today, because esaviCrypt is deterministic while the IV is fixed, and would break
+    // in silence the day it stops being: the coupling CONVENTIONS.md §11 forbids explicitly
+    stored.clinicalDetailsPersonName = stored.clinicalDetailsPersonName
+        ? esaviDecrypt(stored.clinicalDetailsPersonName as string)
+        : null;
+
+    // The rule of the three pairs, over the RESULTING state: what travels merged with what is
+    // stored. It is the service and not the validator who emits it, because express-validator cannot
+    // see the stored row. It runs BEFORE the diff and independently of it
+    assertFlagExplanationPairs(data, stored, '004', lang);
+
+    // The resulting flag of each pair, recomputed here to drive the conditional derivatives below.
+    // The comparison is `=== true` for the same reason as in the rule: over a nullable boolean
+    // false, null and absent all close the pair
+    const resultingFlag = (flag: 'sourceOther' | 'suspectedChildAbuse' | 'suspectedDomesticViolence'): boolean =>
+        ( data[flag] !== undefined ? ( data[flag] ?? null ) : ( ( stored[flag] as boolean | null | undefined ) ?? null ) ) === true;
+
+    const sourceOtherOn = resultingFlag('sourceOther');
+    const childAbuseOn = resultingFlag('suspectedChildAbuse');
+    const domesticViolenceOn = resultingFlag('suspectedDomesticViolence');
+
+    // No candidate is placed under an `if( data.x )`. Over the six booleans that would be outright
+    // destructive: false is a valid value and a truthiness check would throw it away, leaving the
+    // field with no way of being turned off. Over receivedMedicalAttention it would work by accident
+    // — the five strings of the ENUM are truthy — but would silently discard the null the field is
+    // emptied with
+    const candidates: Record<string, unknown> = {
+        // investigationId does NOT enter: immutable, ignored in silence and with no 400
+
+        // It governs nothing: the shape is validated, the value is stored, and there its role ends.
+        // The `?? null` is what keeps null and 'NO_ANSWER' apart — the first means the form did not
+        // collect the answer, the second that it was asked and not answered
+        receivedMedicalAttention: data.receivedMedicalAttention !== undefined
+            ? ( data.receivedMedicalAttention ?? null ) : undefined,
+
+        // The three plain sources. They drag nothing: no explanation is attached to them
+        sourceExam: data.sourceExam !== undefined ? ( data.sourceExam ?? null ) : undefined,
+        sourceDocuments: data.sourceDocuments !== undefined ? ( data.sourceDocuments ?? null ) : undefined,
+        sourceVerbalAutopsy: data.sourceVerbalAutopsy !== undefined ? ( data.sourceVerbalAutopsy ?? null ) : undefined,
+
+        // The three flags are the keys of their pairs and are NOT part of them: they are the fields
+        // that decide, not the decided. Entering as conditional derivatives would make them annul
+        // themselves
+        sourceOther: data.sourceOther !== undefined ? ( data.sourceOther ?? null ) : undefined,
+        suspectedChildAbuse: data.suspectedChildAbuse !== undefined ? ( data.suspectedChildAbuse ?? null ) : undefined,
+        suspectedDomesticViolence: data.suspectedDomesticViolence !== undefined
+            ? ( data.suspectedDomesticViolence ?? null ) : undefined,
+
+        // The three CONDITIONAL DERIVATIVES. When the resulting flag is not true the null enters
+        // candidates ALWAYS, with no presence check, and it is buildDifferentialUpdate who decides
+        // whether it differs: turning off a suspicion that was already off writes nothing. A cleanup
+        // with a second UPDATE after the diff would write even when nothing changed
+        otherDescription: sourceOtherOn
+            ? ( data.otherDescription !== undefined ? normalizeText(data.otherDescription) : undefined )
+            : null,
+        childAbuseExplanation: childAbuseOn
+            ? ( data.childAbuseExplanation !== undefined ? normalizeText(data.childAbuseExplanation) : undefined )
+            : null,
+        domesticViolenceExplanation: domesticViolenceOn
+            ? ( data.domesticViolenceExplanation !== undefined ? normalizeText(data.domesticViolenceExplanation) : undefined )
+            : null,
+
+        // The encrypted column enters the diff in PLAIN TEXT, normalized exactly as it will be
+        // stored — .trim() and toTitleCase — so that resending the name a GET returned is not a
+        // change. esaviCrypt is applied further down, AFTER the diff
+        clinicalDetailsPersonName: data.clinicalDetailsPersonName !== undefined
+            ? normalizePersonName(data.clinicalDetailsPersonName) : undefined,
+
+        // The five free texts in clear, normalized before comparing, or a body differing only in
+        // surrounding blanks would count as a change
+        familyClinicalDetails: data.familyClinicalDetails !== undefined
+            ? normalizeText(data.familyClinicalDetails) : undefined,
+        completeClinicalSummary: data.completeClinicalSummary !== undefined
+            ? normalizeText(data.completeClinicalSummary) : undefined,
+        signsAndSymptoms: data.signsAndSymptoms !== undefined ? normalizeText(data.signsAndSymptoms) : undefined,
+        otherSocialBackground: data.otherSocialBackground !== undefined
+            ? normalizeText(data.otherSocialBackground) : undefined,
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationClinicalEvaluation_setSysDetails fires on every
+    // write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationClinicalEvaluationWithRelations(id, true);
+        return unchanged ? toInvestigationClinicalEvaluationResponse(unchanged) : null;
+    }
+
+    // The name is encrypted NOW, after the diff, over the value the helper returned — and only when
+    // it is there and carries content. A null is written as null and never as the encryption of the
+    // empty string
+    if( objectToUpdate.clinicalDetailsPersonName ) {
+        objectToUpdate.clinicalDetailsPersonName = esaviCrypt(objectToUpdate.clinicalDetailsPersonName as string);
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the generic
+    // loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(evaluation.appDetails) ? evaluation.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVCLIEV-004',
+        detail: 'Investigation clinical evaluation updated by service'
+    };
+    await evaluation.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationClinicalEvaluationWithRelations(id, true);
+    return updated ? toInvestigationClinicalEvaluationResponse(updated) : null;
+}
+
 export {
     createInvestigationClinicalEvaluationService,
     getInvestigationClinicalEvaluationsService,
     getAllInvestigationClinicalEvaluationsService,
     getInvestigationClinicalEvaluationByIdService,
-    getInvestigationClinicalEvaluationByCaseIdService
+    getInvestigationClinicalEvaluationByCaseIdService,
+    updateInvestigationClinicalEvaluationService
 }
