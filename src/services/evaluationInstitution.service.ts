@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EvaluationInstitution, HealthFacility, Investigation, InvestigationClinicalEvaluation } from '../models';
 import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEvaluationInstitutionInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The catalogType every evaluationInstitutionTypeItemId must belong to. The foreign key of the DDL
 // points at catalogItem without distinguishing the type, so this code is the only defence against an
@@ -417,6 +418,87 @@ const createEvaluationInstitutionService = async (
     return institution ? toEvaluationInstitutionResponse(institution) : null;
 }
 
+// Get Active Evaluation Institutions By Investigation Service
+// Code: ESAVI-EVALINST-002A
+// The listing is entered by the foreign key and never by /: a recorded institution does not exist
+// without its clinical evaluation, and a global listing has no reader. It is not entered by the case
+// either — that would add a hop the client has already walked, since whoever reaches the institutions
+// got the investigationId from ESAVI-INVCLIEV-006, and that same UUID is the primary key of the
+// clinical evaluation. That is why this entity has no 006.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// healthFacilityId, type or text — those are out of the scope of this spec. Ordering by personName or
+// personContact is not merely out of scope but impossible: an ORDER BY over an encrypted column
+// orders ciphertext.
+//
+// A visible clinical evaluation with no institutions answers 200 with { count: 0, rows: [] }, and only
+// a clinical evaluation that fails the guard answers 404.
+//
+// The rows go through toEvaluationInstitutionResponse one by one, which is where the two encrypted
+// columns are decrypted: this is the first collection of the repository that has to do it
+const getEvaluationInstitutionsByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await findValidClinicalEvaluation(investigationId, '002A', lang, canViewInactive);
+
+    const institutions = await EvaluationInstitution.findAndCountAll({
+        where: { investigationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [HEALTH_FACILITY_INCLUDE, INSTITUTION_TYPE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: institutions.count,
+        rows: institutions.rows.map(toEvaluationInstitutionResponse)
+    };
+}
+
+// Get All Evaluation Institutions By Investigation Service - For Admin
+// Code: ESAVI-EVALINST-002B
+// The same listing as 002A without the isActive filter: it is the only door to an institution that
+// was retired, and therefore the entry point of whoever is going to reactivate or purge it.
+// paranoid: false is declarative here — the model is not paranoid, so deletedAt is a plain column and
+// no scope would hide the sealed rows — and it is written for the same reason
+// entityActivation.service.ts writes it: the intent is to see everything, including what a 005A
+// sealed. Those are exactly the rows IX_evaluationInstitution_investigation exists for: the partial
+// unique index of esaviapp.sql leaves them out, so it cannot serve this query.
+//
+// The parent guard still applies: an ADMIN sees inactive institutions, not the institutions of a
+// clinical evaluation that does not exist
+const getAllEvaluationInstitutionsByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await findValidClinicalEvaluation(investigationId, '002B', lang, canViewInactive);
+
+    const institutions = await EvaluationInstitution.findAndCountAll({
+        where: { investigationId },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [HEALTH_FACILITY_INCLUDE, INSTITUTION_TYPE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: institutions.count,
+        rows: institutions.rows.map(toEvaluationInstitutionResponse)
+    };
+}
+
 export {
-    createEvaluationInstitutionService
+    createEvaluationInstitutionService,
+    getEvaluationInstitutionsByInvestigationService,
+    getAllEvaluationInstitutionsByInvestigationService
 }

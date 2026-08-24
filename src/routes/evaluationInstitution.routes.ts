@@ -2,13 +2,17 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
-    createEvaluationInstitution
+    createEvaluationInstitution,
+    getAllEvaluationInstitutionsByInvestigation,
+    getEvaluationInstitutionsByInvestigation
 } from '../controllers/evaluationInstitution.controller';
 import {
-    createEvaluationInstitutionValidator
+    createEvaluationInstitutionValidator,
+    evaluationInstitutionInvestigationIdValidator,
+    evaluationInstitutionListValidator
 } from '../validators';
 
-const { USER } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -22,5 +26,18 @@ const router = Router();
 // in the same operational flow as the case, and splitting the clinical evaluation form between two
 // roles would break the capture in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createEvaluationInstitutionValidator, validateFields, createEvaluationInstitution);
+
+// Get All Evaluation Institutions By Investigation - For Admin
+// Code: ESAVI-EVALINST-002B
+// Two distinct routes and not one GET branching by role, which is why each one carries its own letter
+// in the five places: they also differ in the minimum role
+router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN), ...evaluationInstitutionInvestigationIdValidator, ...evaluationInstitutionListValidator, validateFields, getAllEvaluationInstitutionsByInvestigation);
+
+// Get Active Evaluation Institutions By Investigation
+// Code: ESAVI-EVALINST-002A
+// The :id is the investigationId — which names the clinical evaluation, not the investigation — and
+// not an institution id: the listing is entered by the foreign key. Declared after
+// /admin/investigation/:id, which is the more specific literal path
+router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionInvestigationIdValidator, ...evaluationInstitutionListValidator, validateFields, getEvaluationInstitutionsByInvestigation);
 
 export default router;
