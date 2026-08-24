@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -12,6 +12,7 @@ import {
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { cascadeClearSatellite, cascadeSealSatellite } from './common/satelliteCascade.service';
+import { clinicalEvaluationLogSnapshot } from './investigationClinicalEvaluation.service';
 
 const CASE_INCLUDE = {
     model: EsaviCase,
@@ -533,6 +534,30 @@ const cascadeClearInvestigationMedicalHistory = (investigationId: string, authUs
         transaction
     });
 
+// The fourth satellite without isActive to join the cascade, and the fourth consumer of the common
+// service SPEC F32 extracted. investigationClinicalEvaluation behaves exactly like the three above:
+// no state of its own, so what moves is its deletedAt. Its encrypted column changes nothing here —
+// the cascade never reads the value, it only moves a date. SPEC F34
+const cascadeSealInvestigationClinicalEvaluation = (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) =>
+    cascadeSealSatellite({
+        model: InvestigationClinicalEvaluation,
+        where: { investigationId },
+        method: 'ESAVI-INVESTGN-005A',
+        detail: 'Investigation clinical evaluation sealed by cascade from its investigation',
+        authUser,
+        transaction
+    });
+
+const cascadeClearInvestigationClinicalEvaluation = (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) =>
+    cascadeClearSatellite({
+        model: InvestigationClinicalEvaluation,
+        where: { investigationId },
+        method: 'ESAVI-INVESTGN-005B',
+        detail: 'Investigation clinical evaluation returned by cascade from its investigation',
+        authUser,
+        transaction
+    });
+
 // Setting Investigation Active/Inactive Service
 // Code: ESAVI-INVESTGN-005A / ESAVI-INVESTGN-005B
 // It does NOT go through buildDifferentialUpdate, and that is deliberate: these are writes with an
@@ -571,17 +596,19 @@ const setInvestigationActivationService = async (
         });
 
         // Only after the investigation itself moved: if it was already in that state, the generic
-        // service threw a 409 above and the cascade is never reached. None of the three satellites
+        // service threw a 409 above and the cascade is never reached. None of the four satellites
         // has state of its own, so retiring them is retiring their investigation and returning them
-        // is returning it. The three travel in the same transaction the service already opened
+        // is returning it. The four travel in the same transaction the service already opened
         if( isActive ) {
             await cascadeClearInvestigationSource(id, authUser, transaction);
             await cascadeClearInvestigationAutopsy(id, authUser, transaction);
             await cascadeClearInvestigationMedicalHistory(id, authUser, transaction);
+            await cascadeClearInvestigationClinicalEvaluation(id, authUser, transaction);
         } else {
             await cascadeSealInvestigationSource(id, authUser, transaction);
             await cascadeSealInvestigationAutopsy(id, authUser, transaction);
             await cascadeSealInvestigationMedicalHistory(id, authUser, transaction);
+            await cascadeSealInvestigationClinicalEvaluation(id, authUser, transaction);
         }
 
         await transaction.commit();
@@ -633,6 +660,19 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( medicalHistory ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: Investigation medical history dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(medicalHistory.get({ plain: true })) }`,
+                'warn'
+            );
+        }
+
+        // The fifth satellite, dumped as a snapshot like the other one to one ones — but through
+        // clinicalEvaluationLogSnapshot and NOT through JSON.stringify of the whole row: that table
+        // carries clinicalDetailsPersonName encrypted, and a raw snapshot would drop its ciphertext
+        // into src/logs/esaviLog.log under its own column name. The field list lives in the service
+        // of the entity so this line and its own 005C omit exactly the same thing. SPEC F34
+        const clinicalEvaluation = await InvestigationClinicalEvaluation.findByPk(id, { transaction });
+        if( clinicalEvaluation ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: Investigation clinical evaluation dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ clinicalEvaluationLogSnapshot(clinicalEvaluation) }`,
                 'warn'
             );
         }

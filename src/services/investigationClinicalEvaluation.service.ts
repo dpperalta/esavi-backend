@@ -592,7 +592,10 @@ const CLINICAL_EVALUATION_LOG_FIELDS = [
     'otherSocialBackground', 'notes', 'createdAt', 'updatedAt', 'deletedAt'
 ] as const;
 
-const clinicalEvaluationLogSnapshot = (evaluation: InvestigationClinicalEvaluation): string => {
+// Exported because ESAVI-INVESTGN-005C dumps this same row from investigation.service.ts, and the
+// omission has to hold on both sides: two copies of the field list would leak the encrypted column
+// the first time somebody edited only one of them
+export const clinicalEvaluationLogSnapshot = (evaluation: InvestigationClinicalEvaluation): string => {
     const plain = evaluation.get({ plain: true }) as Record<string, unknown>;
     const snapshot: Record<string, unknown> = {};
     for( const field of CLINICAL_EVALUATION_LOG_FIELDS ) snapshot[field] = plain[field];
