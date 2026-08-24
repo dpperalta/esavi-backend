@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EvaluationInstitution, HealthFacility, Investigation, InvestigationClinicalEvaluation } from '../models';
-import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEvaluationInstitutionInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -333,6 +333,33 @@ const findInstitutionWithRelations = async (id: string, includeInactive: boolean
     });
 }
 
+// The read ESAVI-EVALINST-004 works from. Two differences with the one above, and both are
+// deliberate. It does not narrow the attributes: buildDifferentialUpdate compares the whole stored
+// row, and an instance read with a narrowed `attributes` reads back undefined for what it left out,
+// so every comparison would count as a change. And it does not need the two response includes — the
+// update resolves nothing from them, and the response is re-read afterwards anyway.
+//
+// The parent chain stays, so the inherited visibility is checked in the same query the update
+// instance comes from
+const findInstitutionRow = async (id: string, includeInactive: boolean = false, transaction?: Transaction) => {
+    return await EvaluationInstitution.findOne({
+        where: includeInactive ? { evaluationInstitutionId: id } : { evaluationInstitutionId: id, isActive: true },
+        include: [
+            {
+                ...CLINICAL_EVALUATION_INCLUDE,
+                required: true,
+                where: includeInactive ? {} : { deletedAt: null },
+                include: [{
+                    ...CLINICAL_EVALUATION_INCLUDE.include[0],
+                    required: true,
+                    where: includeInactive ? {} : { isActive: true }
+                }]
+            }
+        ],
+        transaction
+    });
+}
+
 // Create Evaluation Institution Service
 // Code: ESAVI-EVALINST-001
 // Everything inside a single transaction, so the parent guard, the two master validations and the
@@ -530,9 +557,161 @@ const getEvaluationInstitutionByIdService = async (
     return toEvaluationInstitutionResponse(institution);
 }
 
+// Update Evaluation Institution Service
+// Code: ESAVI-EVALINST-004
+// Everything inside a single transaction, so the two master validations and the duplicate guard see
+// the same snapshot the UPDATE lands on.
+//
+// investigationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// answers 400: the first one is immutable — moving an institution to another clinical evaluation is
+// not updating it, it is creating a different one — and the second one is governed by the database
+const updateEvaluationInstitutionService = async (
+    id: string,
+    data: Partial<CreateEvaluationInstitutionInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const institution = await findInstitutionRow(id, canViewInactive, transaction);
+        if( !institution ) {
+            throw new AppError(
+                getMessage('evaluationInstitution.notFound', lang),
+                404,
+                'EVALINST_004_NOT_FOUND'
+            );
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
+        const stored = institution.get({ plain: true }) as Record<string, unknown>;
+
+        // The two encrypted columns are DECRYPTED before anything compares against them, and only
+        // when they are not null — esaviDecrypt is never handed a null. From here on `stored`
+        // carries plain text on both, which is what makes the diff compare in clear. Comparing
+        // ciphertext against ciphertext would work today, because esaviCrypt is deterministic while
+        // the IV is fixed, and would break in silence the day it stops being: the coupling
+        // CONVENTIONS.md §11 forbids explicitly
+        stored.personName = stored.personName
+            ? esaviDecrypt(stored.personName as string)
+            : null;
+        stored.personContact = stored.personContact
+            ? esaviDecrypt(stored.personContact as string)
+            : null;
+
+        // The resulting values of the four writable texts and the two foreign keys, computed once so
+        // the identification rule, the two master validations, the duplicate guard and the diff all
+        // look at the same thing. An absent key keeps what is stored; a key that travelled — null
+        // included — replaces it
+        const resultingHealthFacilityId = data.healthFacilityId !== undefined
+            ? ( data.healthFacilityId ?? null )
+            : ( stored.healthFacilityId as string | null );
+        const resultingInstitutionName = data.institutionName !== undefined
+            ? normalizeText(data.institutionName)
+            : ( stored.institutionName as string | null );
+        const resultingTypeItemId = data.evaluationInstitutionTypeItemId !== undefined
+            ? ( data.evaluationInstitutionTypeItemId ?? null )
+            : ( stored.evaluationInstitutionTypeItemId as string | null );
+
+        // Over the RESULTING state and not over the body: emptying the only one of the two that was
+        // there is a 400, emptying one while the other survives is a 200. Before the two master
+        // validations, because there is no point resolving a facility on a row that is going to be
+        // left unidentified anyway
+        assertIdentificationIsPresent(resultingHealthFacilityId, resultingInstitutionName, '004', lang);
+
+        // BEFORE the diff and with independence of it: an inactive facility or an item of another
+        // catalog is a 404 even if it matches what is stored. They only run when the key ends up
+        // with a value — what is being emptied resolves nothing
+        if( resultingHealthFacilityId ) {
+            await assertHealthFacilityIsValid(resultingHealthFacilityId, '004', lang, transaction);
+        }
+        if( resultingTypeItemId ) {
+            await assertInstitutionTypeIsValid(resultingTypeItemId, '004', lang, transaction);
+        }
+
+        // The guard runs over the RESULTING facility and excludes the row itself, so re-sending its
+        // own facility is a 200 that writes nothing while landing on another live sister is a 409
+        await assertNoDuplicateInstitution(
+            stored.investigationId as string,
+            resultingHealthFacilityId,
+            '004',
+            lang,
+            transaction,
+            id
+        );
+
+        // investigationId, sortOrder and isActive are deliberately absent: the first two are
+        // immutable and the state moves through 005A and 005B. Five nullable fields, two of them
+        // encrypted, and NO derived one — this entity resolves nothing against any master, so
+        // nothing enters "always" and a body with no changes produces an empty diff.
+        //
+        // The two encrypted ones enter in PLAIN TEXT: esaviCrypt is applied further down, AFTER the
+        // diff. normalizeText returns null for the empty string, so institutionName: "" empties the
+        // column instead of storing ''
+        const candidates: Record<string, unknown> = {
+            healthFacilityId: data.healthFacilityId !== undefined ? ( data.healthFacilityId ?? null ) : undefined,
+            // Trimmed and never title cased, or a PUT resending the GET would rewrite what the
+            // investigator wrote — MINSAL must not become Minsal
+            institutionName: data.institutionName !== undefined ? normalizeText(data.institutionName) : undefined,
+            personName: data.personName !== undefined ? normalizePersonName(data.personName) : undefined,
+            personContact: data.personContact !== undefined ? normalizeText(data.personContact) : undefined,
+            evaluationInstitutionTypeItemId: data.evaluationInstitutionTypeItemId !== undefined ? ( data.evaluationInstitutionTypeItemId ?? null ) : undefined,
+            notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_evaluationInstitution_setSysDetails fires on every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // The encryption goes HERE, after the diff and only over what really changed. A null
+            // that survived the diff stays null: esaviCrypt is never handed one
+            if( objectToUpdate.personName ) {
+                objectToUpdate.personName = esaviCrypt(objectToUpdate.personName as string);
+            }
+            if( objectToUpdate.personContact ) {
+                objectToUpdate.personContact = esaviCrypt(objectToUpdate.personContact as string);
+            }
+
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(institution.appDetails)
+                ? institution.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-EVALINST-004',
+                detail: 'Evaluation institution updated by service'
+            };
+            await institution.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    // Re-read so the response carries the two masters with their nested fields and the two columns
+    // decrypted, whether or not anything was written
+    const updated = await findInstitutionWithRelations(id, true);
+    return updated ? toEvaluationInstitutionResponse(updated) : null;
+}
+
 export {
     createEvaluationInstitutionService,
     getEvaluationInstitutionsByInvestigationService,
     getAllEvaluationInstitutionsByInvestigationService,
-    getEvaluationInstitutionByIdService
+    getEvaluationInstitutionByIdService,
+    updateEvaluationInstitutionService
 }

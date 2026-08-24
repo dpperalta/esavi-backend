@@ -5,13 +5,15 @@ import {
     createEvaluationInstitution,
     getAllEvaluationInstitutionsByInvestigation,
     getEvaluationInstitutionById,
-    getEvaluationInstitutionsByInvestigation
+    getEvaluationInstitutionsByInvestigation,
+    updateEvaluationInstitution
 } from '../controllers/evaluationInstitution.controller';
 import {
     createEvaluationInstitutionValidator,
     evaluationInstitutionIdValidator,
     evaluationInstitutionInvestigationIdValidator,
-    evaluationInstitutionListValidator
+    evaluationInstitutionListValidator,
+    updateEvaluationInstitutionValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -47,5 +49,9 @@ router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...eva
 // Declared after every literal path: an /:id first would swallow /admin, /investigation, /purge and
 // /activate, and the UUID validator would answer 400 for routes that do exist
 router.get('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionIdValidator, validateFields, getEvaluationInstitutionById);
+
+// Update Evaluation Institution
+// Code: ESAVI-EVALINST-004
+router.put('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionIdValidator, ...updateEvaluationInstitutionValidator, validateFields, updateEvaluationInstitution);
 
 export default router;

@@ -5,7 +5,8 @@ import {
     createEvaluationInstitutionService,
     getAllEvaluationInstitutionsByInvestigationService,
     getEvaluationInstitutionByIdService,
-    getEvaluationInstitutionsByInvestigationService
+    getEvaluationInstitutionsByInvestigationService,
+    updateEvaluationInstitutionService
 } from '../services/evaluationInstitution.service';
 
 // Create Evaluation Institution Controller
@@ -111,9 +112,37 @@ const getEvaluationInstitutionById = async (req: Request, res: Response, next: N
     }
 }
 
+// Update Evaluation Institution Controller
+// Code: ESAVI-EVALINST-004
+const updateEvaluationInstitution = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateEvaluationInstitutionService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('evaluationInstitution.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-EVALINST-004: Error updating Evaluation Institution: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('evaluationInstitution.updatedFailed', req.lang), 500, 'EVALINST_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createEvaluationInstitution,
     getEvaluationInstitutionsByInvestigation,
     getAllEvaluationInstitutionsByInvestigation,
-    getEvaluationInstitutionById
+    getEvaluationInstitutionById,
+    updateEvaluationInstitution
 }
