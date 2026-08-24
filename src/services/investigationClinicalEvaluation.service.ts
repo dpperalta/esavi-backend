@@ -1,10 +1,13 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, EsaviCase, Investigation, InvestigationClinicalEvaluation } from '../models';
 import { AppError, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import {
     AppDetails,
     AuthUser,
-    CreateInvestigationClinicalEvaluationInput
+    CreateInvestigationClinicalEvaluationInput,
+    InvestigationClinicalEvaluationListFilters
 } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The investigation travels in every response: it is what governs the visibility of the clinical
 // evaluation, and hiding it would leave the client unable to explain why a record it read yesterday
@@ -275,6 +278,87 @@ const createInvestigationClinicalEvaluationService = async (
     return created ? toInvestigationClinicalEvaluationResponse(created) : null;
 }
 
+// The order of the two listings, as in F29 and F32. This entity has no date of the domain that
+// orders it better: its sixteen columns are answers of a clinical assessment, not dated facts.
+// createdAt never moves after the insert, unlike updatedAt, which would shuffle the list on every
+// save. And ordering by clinicalDetailsPersonName is IMPOSSIBLE: an ORDER BY over an encrypted
+// column orders by the ciphertext, the same limitation F05 declared for the names of patient
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
+
+// Only the filter that lands on the clinical evaluation itself, and it lands on the primary key.
+// caseId does not belong here: it is a column of the investigation, so it travels in the where of
+// the include instead — the same include that already implements the inherited visibility, so
+// filtering by case costs no extra join
+const buildListWhere = (filters: InvestigationClinicalEvaluationListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( filters.investigationId ) where.investigationId = filters.investigationId;
+    return where as WhereOptions;
+}
+
+// The where of the investigation include, which carries two things at once: the visibility — the
+// isActive that separates 002A from 002B — and the caseId filter when it arrives. Both conditions
+// live in the same object, so they accumulate with AND
+const buildInvestigationWhere = (filters: InvestigationClinicalEvaluationListFilters, includeInactive: boolean): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( !includeInactive ) where.isActive = true;
+    if( filters.caseId ) where.caseId = filters.caseId;
+    return where as WhereOptions;
+}
+
+// The include shared by the two listings, and the only one there is. The parent goes required: true,
+// which keeps it an INNER JOIN — what makes the filters above bite and what keeps a clinical
+// evaluation hanging from a retired investigation out of 002A
+const listInclude = (filters: InvestigationClinicalEvaluationListFilters, includeInactive: boolean) => [{
+    ...INVESTIGATION_INCLUDE,
+    required: true,
+    where: buildInvestigationWhere(filters, includeInactive)
+}];
+
+// Get Active Investigation Clinical Evaluations Service
+// Code: ESAVI-INVCLIEV-002A
+// The dual listing inherited from F29, F30 and F32: the visibility is not a column of its own, it is
+// inherited from investigation.isActive, so the two variants return different sets. Without a 002B
+// an ADMIN would have no way of seeing the clinical evaluation of a retired investigation
+const getInvestigationClinicalEvaluationsService = async (
+    filters: InvestigationClinicalEvaluationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationClinicalEvaluation.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: CLINICAL_EVALUATION_EXCLUDE,
+        include: listInclude(filters, false),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    // The rows carry the same full shape as the 003: there is no reduced shape. The entity has
+    // sixteen data columns and trimming them would leave a listing with no content.
+    // clinicalDetailsPersonName is decrypted ROW BY ROW here — the same cost F05 assumes in patient,
+    // bounded by DEFAULT_LIMIT — so no listing ever returns a ciphertext
+    return { count, rows: rows.map(toInvestigationClinicalEvaluationResponse) };
+}
+
+// Get All Investigation Clinical Evaluations Service - For Admin
+// Code: ESAVI-INVCLIEV-002B
+const getAllInvestigationClinicalEvaluationsService = async (
+    filters: InvestigationClinicalEvaluationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationClinicalEvaluation.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: CLINICAL_EVALUATION_EXCLUDE,
+        include: listInclude(filters, true),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toInvestigationClinicalEvaluationResponse) };
+}
+
 export {
-    createInvestigationClinicalEvaluationService
+    createInvestigationClinicalEvaluationService,
+    getInvestigationClinicalEvaluationsService,
+    getAllInvestigationClinicalEvaluationsService
 }

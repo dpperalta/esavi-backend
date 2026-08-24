@@ -1,8 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
+import { InvestigationClinicalEvaluationListFilters } from '../types';
 import {
-    createInvestigationClinicalEvaluationService
+    createInvestigationClinicalEvaluationService,
+    getAllInvestigationClinicalEvaluationsService,
+    getInvestigationClinicalEvaluationsService
 } from '../services/investigationClinicalEvaluation.service';
+
+// The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
+// absent filter never turns into an `undefined` in the where clause
+const listFilters = (req: Request): InvestigationClinicalEvaluationListFilters => ({
+    investigationId: req.query.investigationId as string | undefined,
+    caseId: req.query.caseId as string | undefined
+});
 
 // Create Investigation Clinical Evaluation Controller
 // Code: ESAVI-INVCLIEV-001
@@ -24,6 +34,52 @@ const createInvestigationClinicalEvaluation = async (req: Request, res: Response
     }
 }
 
+// Get Investigation Clinical Evaluations Controller
+// Code: ESAVI-INVCLIEV-002A
+const getInvestigationClinicalEvaluations = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getInvestigationClinicalEvaluationsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationClinicalEvaluation.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCLIEV-002A: Error fetching Investigation Clinical Evaluations: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationClinicalEvaluation.getFailedPlural', req.lang), 500, 'INVCLIEV_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Investigation Clinical Evaluations Controller - For Admin
+// Code: ESAVI-INVCLIEV-002B
+const getAllInvestigationClinicalEvaluations = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllInvestigationClinicalEvaluationsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationClinicalEvaluation.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCLIEV-002B: Error fetching all Investigation Clinical Evaluations: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationClinicalEvaluation.getFailedPlural', req.lang), 500, 'INVCLIEV_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createInvestigationClinicalEvaluation
+    createInvestigationClinicalEvaluation,
+    getInvestigationClinicalEvaluations,
+    getAllInvestigationClinicalEvaluations
 }
