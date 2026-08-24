@@ -81,7 +81,7 @@ const dataFieldValidators = [
     // isFloat and not isDecimal: the column is numeric(8,2) and the only rule of the CHECK is that
     // it cannot be negative. 0 has to pass here too
     body('birthWeightGrams').optional({ nullable: true })
-        .isFloat({ min: 0 }).withMessage('Birth Weight Grams must be a number greater than or equal to 0'),
+        .isFloat({ min: 0, max: 6000 }).withMessage('Birth Weight Grams must be a number between 0 and 6000'),
     body('wasBreastfed').optional({ nullable: true })
         .isIn(ANSWER_OPTION_VALUES).withMessage(`Was Breastfed must be one of: ${ ANSWER_OPTIONS.join(', ') }`),
     body('notes').optional({ nullable: true }).isString()
