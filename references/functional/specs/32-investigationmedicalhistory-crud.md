@@ -1,6 +1,6 @@
 # SPEC F32 — CRUD de `investigationMedicalHistory`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — dependencia dura de modelo: la PK de esta tabla *es* su FK)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), **SPEC F29 y SPEC F30 (`investigationSource` e `investigationAutopsy` — hermanas de forma: aportan el patrón de satélite uno a uno, la visibilidad heredada y los tres arrastres del `deletedAt` que este spec extrae a un servicio común)**, SPEC F13 y SPEC F14 (patrón de satélite sin `isActive`), **SPEC F25 (`notificationPregnancy` — aporta el tri-estado de `answerOption` sobre datos de embarazo)**, **SPEC F27 (`notificationPregnancyComplication` — aporta el patrón de validación de una FK a `catalogItem` contra su `catalogType`)**, SPEC F08 (operación `005C`), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-23
 > **Objetivo:** Dar de alta `investigationMedicalHistory` —los antecedentes médicos, familiares y gestacionales del paciente investigado— como la **cuarta** de las catorce tablas satélite de `investigation`, y extraer a un servicio común el arrastre del `deletedAt` que F29 y F30 duplicaron.
