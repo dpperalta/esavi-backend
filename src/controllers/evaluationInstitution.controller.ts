@@ -146,11 +146,12 @@ const updateEvaluationInstitution = async (req: Request, res: Response, next: Ne
 const deleteEvaluationInstitution = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setEvaluationInstitutionActivationService(id, req.user, req.lang, false);
+        await setEvaluationInstitutionActivationService(id, req.user, req.lang, false);
+        // No data: a state operation reports that it happened, not the row it happened to. It is the
+        // rule tests/contract/response.test.ts polices over the source of every controller
         return res.status(200).json({
             ok: true,
-            message: getMessage('evaluationInstitution.deletedSuccess', req.lang),
-            data
+            message: getMessage('evaluationInstitution.deletedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-EVALINST-005A: Error deleting Evaluation Institution: ' + error, 'error');
@@ -167,11 +168,10 @@ const deleteEvaluationInstitution = async (req: Request, res: Response, next: Ne
 const activateEvaluationInstitution = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setEvaluationInstitutionActivationService(id, req.user, req.lang, true);
+        await setEvaluationInstitutionActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
-            message: getMessage('evaluationInstitution.activatedSuccess', req.lang),
-            data
+            message: getMessage('evaluationInstitution.activatedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-EVALINST-005B: Error activating Evaluation Institution: ' + error, 'error');
@@ -191,8 +191,7 @@ const purgeEvaluationInstitution = async (req: Request, res: Response, next: Nex
         await purgeEvaluationInstitutionService(id, req.user, req.lang);
         return res.status(200).json({
             ok: true,
-            message: getMessage('evaluationInstitution.purgeSuccess', req.lang),
-            data: null
+            message: getMessage('evaluationInstitution.purgeSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-EVALINST-005C: Error purging Evaluation Institution: ' + error, 'error');

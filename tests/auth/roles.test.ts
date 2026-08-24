@@ -481,6 +481,29 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/investigation-clinical-evaluations/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCLIEV-003' },
     { method: 'put',    path: `/api/investigation-clinical-evaluations/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCLIEV-004' },
 
+    // evaluationInstitution (SPEC F35) — the second granddaughter of the investigation block and the
+    // first one hanging from the clinical evaluation. EIGHT operations and no 006: the entry is by
+    // /investigation/:id, and that :id is the one ESAVI-INVCLIEV-006 already returns from the caseId,
+    // so a 006 of its own would duplicate the guard chain to save a call the client already makes.
+    // FOUR ROWS DEVIATE from the canonical matrix, the same deviation as F05, F06, F07, F09, F10,
+    // F13, F14 and F28 to F34: 001, 002A, 003 and 004 on USER, because the institution is captured in
+    // the same operational flow as the case.
+    // AND A FIFTH: 005B on ADMIN and not on SUPERADMIN, following F27, F31 and F33 — the activation
+    // of this entity is not the trivial delegation the canonical matrix assumes but an operation
+    // carrying a sortOrder reassignment inside a transaction, and whoever administers the case must
+    // be able to run it.
+    // The encrypted personName and personContact do NOT raise any minimum: what protects the columns
+    // is the encryption at rest, not a stricter role — a USER completing the form has to be able to
+    // write the contact it just collected
+    { method: 'post',   path: '/api/evaluation-institutions',                                minRole: 'USER',       code: 'ESAVI-EVALINST-001' },
+    { method: 'get',    path: `/api/evaluation-institutions/admin/investigation/${ UUID }`,  minRole: 'ADMIN',      code: 'ESAVI-EVALINST-002B' },
+    { method: 'get',    path: `/api/evaluation-institutions/investigation/${ UUID }`,        minRole: 'USER',       code: 'ESAVI-EVALINST-002A' },
+    { method: 'delete', path: `/api/evaluation-institutions/purge/${ UUID }`,                minRole: 'SUPERADMIN', code: 'ESAVI-EVALINST-005C' },
+    { method: 'patch',  path: `/api/evaluation-institutions/activate/${ UUID }`,             minRole: 'ADMIN',      code: 'ESAVI-EVALINST-005B' },
+    { method: 'get',    path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'USER',       code: 'ESAVI-EVALINST-003' },
+    { method: 'put',    path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'USER',       code: 'ESAVI-EVALINST-004' },
+    { method: 'delete', path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'ADMIN',      code: 'ESAVI-EVALINST-005A' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -559,7 +582,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(256);
+            expect(ROUTE_RULES).toHaveLength(264);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
