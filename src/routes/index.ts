@@ -34,6 +34,7 @@ import investigationTeamMemberRoutes from './investigationTeamMember.routes';
 import investigationMedicalHistoryRoutes from './investigationMedicalHistory.routes';
 import investigationPregnancyConditionRoutes from './investigationPregnancyCondition.routes';
 import investigationClinicalEvaluationRoutes from './investigationClinicalEvaluation.routes';
+import evaluationInstitutionRoutes from './evaluationInstitution.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -102,6 +103,11 @@ router.use('/investigation-pregnancy-conditions', investigationPregnancyConditio
 // clinical evaluation of the investigated patient. It is the first satellite with an encrypted
 // column — clinicalDetailsPersonName — and the first with no foreign key to catalogItem at all
 router.use('/investigation-clinical-evaluations', investigationClinicalEvaluationRoutes);
+// The second granddaughter of the investigation block and the first one hanging from the clinical
+// evaluation: the institutions that evaluated the patient, with the person who attended. It is the
+// first COLLECTION of the repository with encrypted columns — personName and personContact — which
+// is why both listings decrypt row by row
+router.use('/evaluation-institutions', evaluationInstitutionRoutes);
 router.use('/system-configs', systemConfigRoutes);
 
 export default router;
