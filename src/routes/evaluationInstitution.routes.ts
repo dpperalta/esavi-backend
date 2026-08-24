@@ -8,6 +8,7 @@ import {
     getAllEvaluationInstitutionsByInvestigation,
     getEvaluationInstitutionById,
     getEvaluationInstitutionsByInvestigation,
+    purgeEvaluationInstitution,
     updateEvaluationInstitution
 } from '../controllers/evaluationInstitution.controller';
 import {
@@ -18,7 +19,7 @@ import {
     updateEvaluationInstitutionValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -45,6 +46,11 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // not an institution id: the listing is entered by the foreign key. Declared after
 // /admin/investigation/:id, which is the more specific literal path
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionInvestigationIdValidator, ...evaluationInstitutionListValidator, validateFields, getEvaluationInstitutionsByInvestigation);
+
+// Purge Evaluation Institution - Physical delete, for SuperAdmin
+// Code: ESAVI-EVALINST-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...evaluationInstitutionIdValidator, validateFields, purgeEvaluationInstitution);
 
 // Activate Evaluation Institution - For Admin
 // Code: ESAVI-EVALINST-005B

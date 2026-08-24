@@ -6,6 +6,7 @@ import {
     getAllEvaluationInstitutionsByInvestigationService,
     getEvaluationInstitutionByIdService,
     getEvaluationInstitutionsByInvestigationService,
+    purgeEvaluationInstitutionService,
     setEvaluationInstitutionActivationService,
     updateEvaluationInstitutionService
 } from '../services/evaluationInstitution.service';
@@ -182,6 +183,27 @@ const activateEvaluationInstitution = async (req: Request, res: Response, next: 
     }
 }
 
+// Purge Evaluation Institution Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-EVALINST-005C
+const purgeEvaluationInstitution = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeEvaluationInstitutionService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('evaluationInstitution.purgeSuccess', req.lang),
+            data: null
+        });
+    } catch (error) {
+        esaviLog('ESAVI-EVALINST-005C: Error purging Evaluation Institution: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('evaluationInstitution.purgeFailed', req.lang), 500, 'EVALINST_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createEvaluationInstitution,
     getEvaluationInstitutionsByInvestigation,
@@ -189,5 +211,6 @@ export {
     getEvaluationInstitutionById,
     updateEvaluationInstitution,
     deleteEvaluationInstitution,
-    activateEvaluationInstitution
+    activateEvaluationInstitution,
+    purgeEvaluationInstitution
 }

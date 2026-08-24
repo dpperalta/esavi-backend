@@ -4,6 +4,7 @@ import { CatalogItem, CatalogType, EvaluationInstitution, HealthFacility, Invest
 import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEvaluationInstitutionInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The catalogType every evaluationInstitutionTypeItemId must belong to. The foreign key of the DDL
@@ -843,11 +844,56 @@ const setEvaluationInstitutionActivationService = async (
     }
 }
 
+// Purging Evaluation Institution Service - For SuperAdmin
+// Code: ESAVI-EVALINST-005C
+// evaluationInstitution is outside the preventPhysicalDelete loop of esaviapp.sql, so the row can
+// really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification: its canonical guard — the row must have
+// been retired with a 005A first, 409 otherwise — applies over the row itself. Here that guard IS
+// effective, unlike in F29, F30, F32 and F34, because this table does have an isActive column. The
+// state of the clinical evaluation and of the investigation is deliberately not checked.
+//
+// And here is the difference with the 005C of its parent: this table is a leaf of the graph. None of
+// the 45 tables references evaluationInstitutionId, so destroying a row drags no other one, there is
+// no cascade to count and no ids to dump. The two foreign keys it cites are ON DELETE RESTRICT in
+// the other direction — an institution keeps a facility or a catalog item from being physically
+// deleted, never the other way round — and both masters are in preventPhysicalDelete anyway, so the
+// restriction is real but unreachable.
+//
+// No appDetails entry either: the row is destroyed in the same transaction, which is the absence
+// CONVENTIONS.md §6 declares legitimate
+const purgeEvaluationInstitutionService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: EvaluationInstitution,
+            where: { evaluationInstitutionId: id },
+            transaction,
+            operationCode: 'ESAVI-EVALINST-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('evaluationInstitution.notFound', lang),
+            notFoundCode: 'EVALINST_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('evaluationInstitution.stillActive', lang, { id }),
+            stillActiveCode: 'EVALINST_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createEvaluationInstitutionService,
     getEvaluationInstitutionsByInvestigationService,
     getAllEvaluationInstitutionsByInvestigationService,
     getEvaluationInstitutionByIdService,
     updateEvaluationInstitutionService,
-    setEvaluationInstitutionActivationService
+    setEvaluationInstitutionActivationService,
+    purgeEvaluationInstitutionService
 }
