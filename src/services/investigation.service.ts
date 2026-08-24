@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationSource, InvestigationTeamMember } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -649,6 +649,27 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( teamMemberCount > 0 ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: ${ teamMemberCount } investigation team member(s) dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }`,
+                'warn'
+            );
+        }
+
+        // The fifth line, and the first of a SECOND HOP this service carries: these rows do not hang
+        // from investigation but from investigationMedicalHistory, so the cascade reaches them
+        // through investigation -> medicalHistory -> conditions. It goes after the medicalHistory
+        // line because destroying that row is what drags these. SPEC F33.
+        // The shared primary key of the medical history makes the second hop free: the same
+        // investigationId is the foreign key of the conditions, so no extra query is needed. Count
+        // and not snapshot, by the same criterion as the team members, and paranoid: false because
+        // the cascade destroys the sealed ones too. Without this line the destruction of these rows
+        // is completely silent
+        const pregnancyConditionCount = await InvestigationPregnancyCondition.count({
+            where: { investigationId: id },
+            paranoid: false,
+            transaction
+        });
+        if( pregnancyConditionCount > 0 ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: ${ pregnancyConditionCount } investigation pregnancy condition(s) dragged by ON DELETE CASCADE in two hops, purged by ${ authUser?.userId || 'undefined' }`,
                 'warn'
             );
         }

@@ -298,6 +298,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | investigation | `INVESTGN` |
 | investigationAutopsy | `INVAUT` |
 | investigationMedicalHistory | `INVMEDH` |
+| investigationPregnancyCondition | `INVPREG` |
 | investigationSource | `INVSRC` |
 | investigationTeamMember | `INVTEAM` |
 | nonSevereNotification | `NSEVNOT` |

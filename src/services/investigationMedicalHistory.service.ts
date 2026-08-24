@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationMedicalHistory } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage } from '../helpers';
+import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationMedicalHistory, InvestigationPregnancyCondition } from '../models';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -630,7 +630,12 @@ const updateInvestigationMedicalHistoryService = async (
 // so the row can really be destroyed. This is also the only path that releases the investigationId:
 // the logical seal of deletedAt does NOT free the slot of the primary key, so after a 005C a POST
 // over that same investigation answers 201 again. And it drags by ON DELETE CASCADE every
-// investigationPregnancyCondition of that investigation, once that table exists.
+// investigationPregnancyCondition of that investigation, which SPEC F33 gave a model and a CRUD.
+// That cascade is NOT blocked: it is dumped. The question F32 §7 left in writing is answered in
+// F33 §6 — whoever runs this is a SUPERADMIN over an already sealed row, and a block would force a
+// purge in two steps whose only advantage is a warning the log already gives. It would also be
+// incomplete: ESAVI-INVESTGN-005C destroys those same rows through the same CASCADE without passing
+// through this service, so the closed door would have an open window next to it.
 // The existence check runs WITHOUT the inherited visibility, on purpose: whoever purges is
 // SUPERADMIN and the row may well hang from a retired investigation — which is precisely the normal
 // state of something about to be purged.
@@ -652,6 +657,23 @@ const purgeInvestigationMedicalHistoryService = async (id: string, authUser: Aut
         }
 
         assertRowIsSealed(history, 'INVMEDH_005C_NOT_DELETED', lang);
+
+        // Written before the destroy and inside the transaction that already exists, so what the
+        // cascade is about to erase leaves a trace. It does not stop the purge and it does not open
+        // a transaction of its own. A count and not a snapshot per row, by the criterion F31 fixed
+        // for collections: twenty conditions would bury the line that matters under twenty more.
+        // paranoid: false counts the ones a 005A sealed too — the cascade destroys them all the same
+        const pregnancyConditionCount = await InvestigationPregnancyCondition.count({
+            where: { investigationId: id },
+            paranoid: false,
+            transaction
+        });
+        if( pregnancyConditionCount > 0 ) {
+            esaviLog(
+                `ESAVI-INVMEDH-005C: ${ pregnancyConditionCount } investigation pregnancy condition(s) dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }`,
+                'warn'
+            );
+        }
 
         await purgeEntityService({
             model: InvestigationMedicalHistory,

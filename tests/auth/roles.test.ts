@@ -443,6 +443,25 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/investigation-medical-histories/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVMEDH-003' },
     { method: 'put',    path: `/api/investigation-medical-histories/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVMEDH-004' },
 
+    // investigationPregnancyCondition (SPEC F33) — the FIRST GRANDDAUGHTER of the investigation
+    // block: its foreign key points at investigationMedicalHistory and not at investigation, even
+    // though the column is called investigationId. EIGHT operations and no 006, like F24 and F27:
+    // the entry is the investigationId, which is at once the primary key of the medical history and
+    // the one ESAVI-INVESTGN-006 already returns from the caseId.
+    // FOUR ROWS DEVIATE from the canonical matrix. 001, 002A, 003 and 004 on USER, the same
+    // deviation as F05, F06, F07, F09, F10, F13, F14, F28, F29, F30, F31 and F32: the condition is
+    // captured in the same operational flow as the case. And 005B on ADMIN and not SUPERADMIN,
+    // following F27 and F31: the activation carries a sortOrder reassignment inside a transaction,
+    // so it is case administration and not the trivial delegation the matrix assumes
+    { method: 'post',   path: '/api/investigation-pregnancy-conditions',                                  minRole: 'USER',       code: 'ESAVI-INVPREG-001' },
+    { method: 'get',    path: `/api/investigation-pregnancy-conditions/admin/investigation/${ UUID }`,    minRole: 'ADMIN',      code: 'ESAVI-INVPREG-002B' },
+    { method: 'get',    path: `/api/investigation-pregnancy-conditions/investigation/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-INVPREG-002A' },
+    { method: 'delete', path: `/api/investigation-pregnancy-conditions/purge/${ UUID }`,                  minRole: 'SUPERADMIN', code: 'ESAVI-INVPREG-005C' },
+    { method: 'patch',  path: `/api/investigation-pregnancy-conditions/activate/${ UUID }`,               minRole: 'ADMIN',      code: 'ESAVI-INVPREG-005B' },
+    { method: 'get',    path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVPREG-003' },
+    { method: 'put',    path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVPREG-004' },
+    { method: 'delete', path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'ADMIN',      code: 'ESAVI-INVPREG-005A' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -521,7 +540,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(241);
+            expect(ROUTE_RULES).toHaveLength(249);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

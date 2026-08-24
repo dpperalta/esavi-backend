@@ -1,0 +1,216 @@
+import { Request, Response, NextFunction } from 'express';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
+import {
+    createInvestigationPregnancyConditionService,
+    getAllInvestigationPregnancyConditionsByInvestigationService,
+    getInvestigationPregnancyConditionByIdService,
+    getInvestigationPregnancyConditionsByInvestigationService,
+    purgeInvestigationPregnancyConditionService,
+    setInvestigationPregnancyConditionActivationService,
+    updateInvestigationPregnancyConditionService
+} from '../services/investigationPregnancyCondition.service';
+
+// Create Investigation Pregnancy Condition Controller
+// Code: ESAVI-INVPREG-001
+const createInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await createInvestigationPregnancyConditionService(req.body, req.user, req.lang);
+        return res.status(201).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.createdSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-001: Error creating Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.createdFailed', req.lang), 500, 'INVPREG_001_CREATION_FAILED', error));
+    }
+}
+
+// Get Active Investigation Pregnancy Conditions By Investigation Controller
+// Code: ESAVI-INVPREG-002A
+const getInvestigationPregnancyConditionsByInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getInvestigationPregnancyConditionsByInvestigationService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-002A: Error fetching Investigation Pregnancy Conditions by Investigation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.getFailed', req.lang), 500, 'INVPREG_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Investigation Pregnancy Conditions By Investigation Controller - For Admin
+// Code: ESAVI-INVPREG-002B
+const getAllInvestigationPregnancyConditionsByInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllInvestigationPregnancyConditionsByInvestigationService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-002B: Error fetching all Investigation Pregnancy Conditions by Investigation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.getFailed', req.lang), 500, 'INVPREG_002B_FETCH_FAILED', error));
+    }
+}
+
+// Get Investigation Pregnancy Condition By ID Controller
+// Code: ESAVI-INVPREG-003
+const getInvestigationPregnancyConditionById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getInvestigationPregnancyConditionByIdService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-003: Error fetching Investigation Pregnancy Condition by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.getFailed', req.lang), 500, 'INVPREG_003_FETCH_FAILED', error));
+    }
+}
+
+// Update Investigation Pregnancy Condition Controller
+// Code: ESAVI-INVPREG-004
+const updateInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateInvestigationPregnancyConditionService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-004: Error updating Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.updatedFailed', req.lang), 500, 'INVPREG_004_UPDATE_FAILED', error));
+    }
+}
+
+// Delete Investigation Pregnancy Condition Controller - Soft delete
+// Code: ESAVI-INVPREG-005A
+const deleteInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setInvestigationPregnancyConditionActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-005A: Error deleting Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.deletedFailed', req.lang), 500, 'INVPREG_005A_DELETION_FAILED', error));
+    }
+}
+
+// Activate Investigation Pregnancy Condition Controller - For Admin
+// Code: ESAVI-INVPREG-005B
+// ADMIN and not SUPERADMIN, following F27 and F31: the activation of this entity is not the trivial
+// delegation the canonical matrix of §9 assumes, but an operation with sortOrder reassignment inside
+// a transaction, and whoever administers the case must be able to run it
+const activateInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setInvestigationPregnancyConditionActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-005B: Error activating Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.activatedFailed', req.lang), 500, 'INVPREG_005B_ACTIVATION_FAILED', error));
+    }
+}
+
+// Purge Investigation Pregnancy Condition Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-INVPREG-005C
+const purgeInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeInvestigationPregnancyConditionService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-005C: Error purging Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.purgeFailed', req.lang), 500, 'INVPREG_005C_PURGE_FAILED', error));
+    }
+}
+
+export {
+    activateInvestigationPregnancyCondition,
+    createInvestigationPregnancyCondition,
+    deleteInvestigationPregnancyCondition,
+    getInvestigationPregnancyConditionById,
+    purgeInvestigationPregnancyCondition,
+    updateInvestigationPregnancyCondition,
+    getInvestigationPregnancyConditionsByInvestigation,
+    getAllInvestigationPregnancyConditionsByInvestigation
+}
