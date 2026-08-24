@@ -6,6 +6,7 @@ import {
     getAllInvestigationPregnancyConditionsByInvestigationService,
     getInvestigationPregnancyConditionByIdService,
     getInvestigationPregnancyConditionsByInvestigationService,
+    setInvestigationPregnancyConditionActivationService,
     updateInvestigationPregnancyConditionService
 } from '../services/investigationPregnancyCondition.service';
 
@@ -139,8 +140,29 @@ const updateInvestigationPregnancyCondition = async (req: Request, res: Response
     }
 }
 
+// Delete Investigation Pregnancy Condition Controller - Soft delete
+// Code: ESAVI-INVPREG-005A
+const deleteInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setInvestigationPregnancyConditionActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-005A: Error deleting Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.deletedFailed', req.lang), 500, 'INVPREG_005A_DELETION_FAILED', error));
+    }
+}
+
 export {
     createInvestigationPregnancyCondition,
+    deleteInvestigationPregnancyCondition,
     getInvestigationPregnancyConditionById,
     updateInvestigationPregnancyCondition,
     getInvestigationPregnancyConditionsByInvestigation,

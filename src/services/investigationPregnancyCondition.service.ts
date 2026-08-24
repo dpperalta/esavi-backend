@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { DiagnosticTerm, Investigation, InvestigationMedicalHistory, InvestigationPregnancyCondition } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateInvestigationPregnancyConditionInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -655,9 +656,60 @@ const updateInvestigationPregnancyConditionService = async (
     return updated ? toInvestigationPregnancyConditionResponse(updated) : null;
 }
 
+// Set Investigation Pregnancy Condition Activation Service
+// Code: ESAVI-INVPREG-005A / ESAVI-INVPREG-005B
+// One service for the two operations, as the rest of the repository does it. Neither is a
+// differential update: they are state writes with an intent of their own, they record a fact even
+// though no data column changes, and that is why they go through setEntityActiveStatusService and
+// never through buildDifferentialUpdate.
+//
+// The 005A seals deletedAt, which frees the sortOrder from the partial unique index. That is correct
+// and deliberate: the gap stays available for the next condition.
+//
+// Neither operation applies the inherited visibility, and that is the criterion of F31 §3.5: whoever
+// withdraws or reactivates acts over the row's own state, and that state exists independently of its
+// two parents. Retiring a condition of an inactive investigation answers 200.
+//
+// The 005A is blocked by nothing. investigationPregnancyCondition is a leaf of the graph: no table of
+// the 45 references it, so there are no children to query and no state to drag — least of all its
+// parent's isPregnancyConfirmed, which stays governed by F32
+const setInvestigationPregnancyConditionActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const condition = await setEntityActiveStatusService({
+            model: InvestigationPregnancyCondition,
+            where: { pregnancyConditionId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('investigationPregnancyCondition.notFound', lang),
+            notFoundCode: `INVPREG_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`investigationPregnancyCondition.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `INVPREG_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-INVPREG-${ op }`,
+                detail: `Investigation pregnancy condition ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return condition;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationPregnancyConditionService,
     getInvestigationPregnancyConditionByIdService,
+    setInvestigationPregnancyConditionActivationService,
     updateInvestigationPregnancyConditionService,
     getInvestigationPregnancyConditionsByInvestigationService,
     getAllInvestigationPregnancyConditionsByInvestigationService
