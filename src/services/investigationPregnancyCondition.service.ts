@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm, Investigation, InvestigationMedicalHistory, InvestigationPregnancyCondition } from '../models';
-import { AppError, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateInvestigationPregnancyConditionInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
@@ -301,6 +301,35 @@ const findConditionWithRelations = async (id: string, includeInactive: boolean =
     });
 }
 
+// The read ESAVI-INVPREG-004 works from. Two differences with the one above, and both are deliberate.
+// It does not narrow the attributes: buildDifferentialUpdate compares the whole stored row, and an
+// instance read with a narrowed `attributes` reads back undefined for what it left out, so every
+// comparison would count as a change. And it keeps the diagnosticTerm include, because the update
+// needs the master's name to compute the effective name and its code and source to decide whether the
+// resolution has to run again.
+//
+// The parent chain stays, so the inherited visibility is checked in the same query the update
+// instance comes from
+const findConditionRow = async (id: string, includeInactive: boolean = false, transaction?: Transaction) => {
+    return await InvestigationPregnancyCondition.findOne({
+        where: includeInactive ? { pregnancyConditionId: id } : { pregnancyConditionId: id, isActive: true },
+        include: [
+            {
+                ...MEDICAL_HISTORY_INCLUDE,
+                required: true,
+                where: includeInactive ? {} : { deletedAt: null },
+                include: [{
+                    ...MEDICAL_HISTORY_INCLUDE.include[0],
+                    required: true,
+                    where: includeInactive ? {} : { isActive: true }
+                }]
+            },
+            DIAGNOSTIC_TERM_INCLUDE
+        ],
+        transaction
+    });
+}
+
 // Create Investigation Pregnancy Condition Service
 // Code: ESAVI-INVPREG-001
 // Everything inside a single transaction, because the resolution against the clinical master may
@@ -480,9 +509,156 @@ const getInvestigationPregnancyConditionByIdService = async (
     return toInvestigationPregnancyConditionResponse(condition);
 }
 
+// Update Investigation Pregnancy Condition Service
+// Code: ESAVI-INVPREG-004
+// Everything inside a single transaction, for the same reason as the 001: the resolution against the
+// clinical master may write in diagnosticTerm.
+//
+// investigationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// answers 400: the first one is immutable — moving a condition to another investigation is not
+// updating it, it is creating a different one — and the second one is governed by the database
+const updateInvestigationPregnancyConditionService = async (
+    id: string,
+    data: Partial<CreateInvestigationPregnancyConditionInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const condition = await findConditionRow(id, canViewInactive, transaction);
+        if( !condition ) {
+            throw new AppError(
+                getMessage('investigationPregnancyCondition.notFound', lang),
+                404,
+                'INVPREG_004_NOT_FOUND'
+            );
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
+        const stored = condition.get({ plain: true }) as Record<string, unknown>;
+        const storedTerm = stored.diagnosticTerm as { code: string | null, name: string, source: TermSource } | null;
+
+        // What the GET shows as the name of the condition, and the only thing an incoming
+        // conditionName can be compared against: this table has a single text column, so
+        // storedEffectiveName is unambiguous where F16 had to choose between two columns
+        const storedEffectiveName = ( stored.conditionRaw as string | null ) ?? storedTerm?.name ?? null;
+
+        // The second condition is the trap F16 documented and paid for, and F27 simplified. Without
+        // it a PUT resending the whole response of its GET would rewrite conditionRaw on every row
+        // with a divergence, and the text the investigator wrote would disappear with nobody
+        // noticing. A conditionName arriving EQUAL to what the GET displayed is not a rewrite, so it
+        // falls through to the fallback exactly like an absent key
+        const incomingName = data.conditionName !== undefined
+                && normalizeText(data.conditionName) !== storedEffectiveName
+            ? normalizeText(data.conditionName)
+            : storedEffectiveName;
+
+        // The resolution is re-fired by the change of value, never by the presence of the key
+        // (SPEC F12). The stored code and source are the ones of the term that was resolved, read
+        // from the include: a PUT resending them consults nothing and writes nothing
+        const storedCode = storedTerm?.code ?? null;
+        const storedSource = storedTerm?.source ?? null;
+
+        const codeArrived = data.conditionCode !== undefined;
+        const trimmedIncomingCode = normalizeText(data.conditionCode);
+        const incomingCode = codeArrived
+            ? ( trimmedIncomingCode ? toConstantCase(trimmedIncomingCode) : null )
+            : storedCode;
+        const sourceArrived = data.source !== undefined && data.source !== null;
+        const incomingSource = sourceArrived ? ( data.source as TermSource ) : storedSource;
+
+        const mustResolveAgain = incomingCode !== storedCode
+            || ( sourceArrived && incomingSource !== storedSource )
+            || incomingName !== storedEffectiveName;
+
+        const resolved: ResolvedConditionTerm = mustResolveAgain
+            ? await resolveConditionTerm(
+                incomingCode,
+                incomingName ?? '',
+                incomingSource,
+                '004',
+                authUser,
+                lang,
+                transaction
+            )
+            : {
+                diagnosticTermId: stored.diagnosticTermId as string | null,
+                conditionRaw: stored.conditionRaw as string | null
+            };
+
+        // The guard runs over the RESULTING term and excludes the row itself, so re-sending its own
+        // term is a 200 that writes nothing while landing on another live sister is a 409. Before the
+        // diff and independently of it
+        await assertNoDuplicateCondition(
+            stored.investigationId as string,
+            resolved.diagnosticTermId,
+            '004',
+            lang,
+            transaction,
+            id
+        );
+
+        // investigationId, sortOrder and isActive are deliberately absent: the first two are
+        // immutable and the state moves through 005A and 005B. The two derived fields enter ALWAYS —
+        // with the resolved value or with the stored one — so a resolution that did not change
+        // anything produces no diff and therefore no write.
+        //
+        // conditionName does not appear here because it is not a column: it enters through the two
+        // derived fields
+        const candidates: Record<string, unknown> = {
+            diagnosticTermId: resolved.diagnosticTermId,
+            conditionRaw: resolved.conditionRaw,
+            // Trimmed and never title cased, or a PUT resending the GET would rewrite what the
+            // investigator wrote
+            notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_investigationPregnancyCondition_setSysDetails fires on
+        // every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(condition.appDetails)
+                ? condition.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-INVPREG-004',
+                detail: 'Investigation pregnancy condition updated by service'
+            };
+            await condition.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    // Re-read so the response carries the resolved master term with its six fields, whether or not
+    // anything was written
+    const updated = await findConditionWithRelations(id, true);
+    return updated ? toInvestigationPregnancyConditionResponse(updated) : null;
+}
+
 export {
     createInvestigationPregnancyConditionService,
     getInvestigationPregnancyConditionByIdService,
+    updateInvestigationPregnancyConditionService,
     getInvestigationPregnancyConditionsByInvestigationService,
     getAllInvestigationPregnancyConditionsByInvestigationService
 }

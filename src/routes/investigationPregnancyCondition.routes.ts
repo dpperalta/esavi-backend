@@ -5,13 +5,15 @@ import {
     createInvestigationPregnancyCondition,
     getAllInvestigationPregnancyConditionsByInvestigation,
     getInvestigationPregnancyConditionById,
-    getInvestigationPregnancyConditionsByInvestigation
+    getInvestigationPregnancyConditionsByInvestigation,
+    updateInvestigationPregnancyCondition
 } from '../controllers/investigationPregnancyCondition.controller';
 import {
     createInvestigationPregnancyConditionValidator,
     investigationPregnancyConditionIdValidator,
     investigationPregnancyConditionInvestigationIdValidator,
-    investigationPregnancyConditionListValidator
+    investigationPregnancyConditionListValidator,
+    updateInvestigationPregnancyConditionValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -47,5 +49,9 @@ router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...inv
 // Declared after every literal path: an /:id first would swallow /admin, /investigation, /purge and
 // /activate, and the UUID validator would answer 400 for routes that do exist
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionIdValidator, validateFields, getInvestigationPregnancyConditionById);
+
+// Update Investigation Pregnancy Condition
+// Code: ESAVI-INVPREG-004
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionIdValidator, ...updateInvestigationPregnancyConditionValidator, validateFields, updateInvestigationPregnancyCondition);
 
 export default router;

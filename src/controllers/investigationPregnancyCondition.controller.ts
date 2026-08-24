@@ -5,7 +5,8 @@ import {
     createInvestigationPregnancyConditionService,
     getAllInvestigationPregnancyConditionsByInvestigationService,
     getInvestigationPregnancyConditionByIdService,
-    getInvestigationPregnancyConditionsByInvestigationService
+    getInvestigationPregnancyConditionsByInvestigationService,
+    updateInvestigationPregnancyConditionService
 } from '../services/investigationPregnancyCondition.service';
 
 // Create Investigation Pregnancy Condition Controller
@@ -111,9 +112,37 @@ const getInvestigationPregnancyConditionById = async (req: Request, res: Respons
     }
 }
 
+// Update Investigation Pregnancy Condition Controller
+// Code: ESAVI-INVPREG-004
+const updateInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateInvestigationPregnancyConditionService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-004: Error updating Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.updatedFailed', req.lang), 500, 'INVPREG_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationPregnancyCondition,
     getInvestigationPregnancyConditionById,
+    updateInvestigationPregnancyCondition,
     getInvestigationPregnancyConditionsByInvestigation,
     getAllInvestigationPregnancyConditionsByInvestigation
 }
