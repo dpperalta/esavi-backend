@@ -1080,6 +1080,7 @@ CREATE TABLE IF NOT EXISTS "investigationPregnancyCondition" (
   CONSTRAINT "FK_investigationPregnancyCondition_medicalHistory" FOREIGN KEY ("investigationId") REFERENCES "investigationMedicalHistory" ("investigationId") ON UPDATE CASCADE ON DELETE CASCADE,
   CONSTRAINT "FK_investigationPregnancyCondition_term" FOREIGN KEY ("diagnosticTermId") REFERENCES "diagnosticTerm" ("diagnosticTermId") ON UPDATE CASCADE ON DELETE RESTRICT
 );
+CREATE INDEX IF NOT EXISTS "IX_investigationPregnancyCondition_investigation" ON "investigationPregnancyCondition" ("investigationId");
 
 CREATE TABLE IF NOT EXISTS "investigationClinicalEvaluation" (
   "investigationId" uuid PRIMARY KEY,
