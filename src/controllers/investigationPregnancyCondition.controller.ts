@@ -6,6 +6,7 @@ import {
     getAllInvestigationPregnancyConditionsByInvestigationService,
     getInvestigationPregnancyConditionByIdService,
     getInvestigationPregnancyConditionsByInvestigationService,
+    purgeInvestigationPregnancyConditionService,
     setInvestigationPregnancyConditionActivationService,
     updateInvestigationPregnancyConditionService
 } from '../services/investigationPregnancyCondition.service';
@@ -183,11 +184,32 @@ const activateInvestigationPregnancyCondition = async (req: Request, res: Respon
     }
 }
 
+// Purge Investigation Pregnancy Condition Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-INVPREG-005C
+const purgeInvestigationPregnancyCondition = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeInvestigationPregnancyConditionService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationPregnancyCondition.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVPREG-005C: Error purging Investigation Pregnancy Condition: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationPregnancyCondition.purgeFailed', req.lang), 500, 'INVPREG_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     activateInvestigationPregnancyCondition,
     createInvestigationPregnancyCondition,
     deleteInvestigationPregnancyCondition,
     getInvestigationPregnancyConditionById,
+    purgeInvestigationPregnancyCondition,
     updateInvestigationPregnancyCondition,
     getInvestigationPregnancyConditionsByInvestigation,
     getAllInvestigationPregnancyConditionsByInvestigation

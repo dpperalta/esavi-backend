@@ -8,6 +8,7 @@ import {
     getAllInvestigationPregnancyConditionsByInvestigation,
     getInvestigationPregnancyConditionById,
     getInvestigationPregnancyConditionsByInvestigation,
+    purgeInvestigationPregnancyCondition,
     updateInvestigationPregnancyCondition
 } from '../controllers/investigationPregnancyCondition.controller';
 import {
@@ -18,7 +19,7 @@ import {
     updateInvestigationPregnancyConditionValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -45,6 +46,11 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // condition id: the listing is entered by the foreign key. Declared after /admin/investigation/:id,
 // which is the more specific literal path
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionInvestigationIdValidator, ...investigationPregnancyConditionListValidator, validateFields, getInvestigationPregnancyConditionsByInvestigation);
+
+// Purge Investigation Pregnancy Condition - Physical delete, for SuperAdmin
+// Code: ESAVI-INVPREG-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationPregnancyConditionIdValidator, validateFields, purgeInvestigationPregnancyCondition);
 
 // Activate Investigation Pregnancy Condition - For Admin
 // Code: ESAVI-INVPREG-005B
