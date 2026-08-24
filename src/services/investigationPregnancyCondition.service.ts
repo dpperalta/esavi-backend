@@ -5,6 +5,7 @@ import { AppError, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateInvestigationPregnancyConditionInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -372,6 +373,83 @@ const createInvestigationPregnancyConditionService = async (
     return condition ? toInvestigationPregnancyConditionResponse(condition) : null;
 }
 
+// Get Active Investigation Pregnancy Conditions By Investigation Service
+// Code: ESAVI-INVPREG-002A
+// The listing is entered by the foreign key and never by /: a recorded condition does not exist
+// without its medical history, and a global listing has no reader. It is not entered by the case
+// either — that would add a hop the client has already walked, since whoever reaches the conditions
+// got the investigationId from ESAVI-INVESTGN-006, and that same UUID is the primary key of the
+// medical history.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// diagnosticTermId or text — those are out of the scope of this spec.
+//
+// A visible medical history with no conditions answers 200 with { count: 0, rows: [] }, and only a
+// medical history that fails the guard answers 404. It is the difference with F31, whose listing
+// guarded against investigation, where an investigation with no members was the only case possible
+const getInvestigationPregnancyConditionsByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await findValidMedicalHistory(investigationId, '002A', lang, canViewInactive);
+
+    const conditions = await InvestigationPregnancyCondition.findAndCountAll({
+        where: { investigationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: conditions.count,
+        rows: conditions.rows.map(toInvestigationPregnancyConditionResponse)
+    };
+}
+
+// Get All Investigation Pregnancy Conditions By Investigation Service - For Admin
+// Code: ESAVI-INVPREG-002B
+// The same listing as 002A without the isActive filter: it is the only door to a condition that was
+// retired, and therefore the entry point of whoever is going to reactivate or purge it.
+// paranoid: false is declarative here — the model is not paranoid, so deletedAt is a plain column and
+// no scope would hide the sealed rows — and it is written for the same reason
+// entityActivation.service.ts:21 writes it: the intent is to see everything, including what a 005A
+// sealed. Those are exactly the rows IX_investigationPregnancyCondition_investigation exists for: the
+// partial unique index of esaviapp.sql:1357-1358 leaves them out.
+//
+// The parent guard still applies: an ADMIN sees inactive conditions, not the conditions of a medical
+// history that does not exist
+const getAllInvestigationPregnancyConditionsByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await findValidMedicalHistory(investigationId, '002B', lang, canViewInactive);
+
+    const conditions = await InvestigationPregnancyCondition.findAndCountAll({
+        where: { investigationId },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: conditions.count,
+        rows: conditions.rows.map(toInvestigationPregnancyConditionResponse)
+    };
+}
+
 export {
-    createInvestigationPregnancyConditionService
+    createInvestigationPregnancyConditionService,
+    getInvestigationPregnancyConditionsByInvestigationService,
+    getAllInvestigationPregnancyConditionsByInvestigationService
 }

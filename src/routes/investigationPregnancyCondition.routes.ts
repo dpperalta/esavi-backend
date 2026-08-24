@@ -2,13 +2,17 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
-    createInvestigationPregnancyCondition
+    createInvestigationPregnancyCondition,
+    getAllInvestigationPregnancyConditionsByInvestigation,
+    getInvestigationPregnancyConditionsByInvestigation
 } from '../controllers/investigationPregnancyCondition.controller';
 import {
-    createInvestigationPregnancyConditionValidator
+    createInvestigationPregnancyConditionValidator,
+    investigationPregnancyConditionInvestigationIdValidator,
+    investigationPregnancyConditionListValidator
 } from '../validators';
 
-const { USER } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -22,5 +26,18 @@ const router = Router();
 // captured in the same operational flow as the case, and splitting the pregnancy form between two
 // roles would break the capture in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationPregnancyConditionValidator, validateFields, createInvestigationPregnancyCondition);
+
+// Get All Investigation Pregnancy Conditions By Investigation - For Admin
+// Code: ESAVI-INVPREG-002B
+// Two distinct routes and not one GET branching by role, which is why each one carries its own letter
+// in the five places: they also differ in the minimum role
+router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN), ...investigationPregnancyConditionInvestigationIdValidator, ...investigationPregnancyConditionListValidator, validateFields, getAllInvestigationPregnancyConditionsByInvestigation);
+
+// Get Active Investigation Pregnancy Conditions By Investigation
+// Code: ESAVI-INVPREG-002A
+// The :id is the investigationId — which names the medical history, not the investigation — and not a
+// condition id: the listing is entered by the foreign key. Declared after /admin/investigation/:id,
+// which is the more specific literal path
+router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionInvestigationIdValidator, ...investigationPregnancyConditionListValidator, validateFields, getInvestigationPregnancyConditionsByInvestigation);
 
 export default router;
