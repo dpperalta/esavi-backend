@@ -4,6 +4,7 @@ import { AuthUser } from '../types';
 import {
     createEvaluationInstitutionService,
     getAllEvaluationInstitutionsByInvestigationService,
+    getEvaluationInstitutionByIdService,
     getEvaluationInstitutionsByInvestigationService
 } from '../services/evaluationInstitution.service';
 
@@ -85,8 +86,34 @@ const getAllEvaluationInstitutionsByInvestigation = async (req: Request, res: Re
     }
 }
 
+// Get Evaluation Institution By ID Controller
+// Code: ESAVI-EVALINST-003
+const getEvaluationInstitutionById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getEvaluationInstitutionByIdService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('evaluationInstitution.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-EVALINST-003: Error fetching Evaluation Institution by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('evaluationInstitution.getFailed', req.lang), 500, 'EVALINST_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createEvaluationInstitution,
     getEvaluationInstitutionsByInvestigation,
-    getAllEvaluationInstitutionsByInvestigation
+    getAllEvaluationInstitutionsByInvestigation,
+    getEvaluationInstitutionById
 }

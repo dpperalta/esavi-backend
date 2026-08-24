@@ -497,8 +497,42 @@ const getAllEvaluationInstitutionsByInvestigationService = async (
     };
 }
 
+// Get Evaluation Institution By ID Service
+// Code: ESAVI-EVALINST-003
+// Three filters, and two of them are the inherited visibility in chain: the institution must exist
+// and be active, the clinical evaluation it hangs from must not be sealed, and the investigation that
+// clinical evaluation hangs from must be active — unless canViewInactive says otherwise, today
+// SUPERADMIN.
+//
+// The intermediate link is checked by deletedAt and not by isActive, because that table has no such
+// column: it is the second visibility chain of the repository that crosses a table with no state of
+// its own, after F33.
+//
+// The three conditions are evaluated the same way, with no priority among them: it is enough that one
+// fails, so there is nothing to decide when two of them fail at once. The three failures answer the
+// same 404 without distinguishing, because telling them apart would confirm to a USER that an
+// institution exists under an investigation it is not allowed to see.
+//
+// The :id is the evaluationInstitutionId. This is NOT the access by investigation — that is the 002A
+const getEvaluationInstitutionByIdService = async (
+    id: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const institution = await findInstitutionWithRelations(id, canViewInactive);
+    if( !institution ) {
+        throw new AppError(
+            getMessage('evaluationInstitution.notFound', lang),
+            404,
+            'EVALINST_003_NOT_FOUND'
+        );
+    }
+    return toEvaluationInstitutionResponse(institution);
+}
+
 export {
     createEvaluationInstitutionService,
     getEvaluationInstitutionsByInvestigationService,
-    getAllEvaluationInstitutionsByInvestigationService
+    getAllEvaluationInstitutionsByInvestigationService,
+    getEvaluationInstitutionByIdService
 }

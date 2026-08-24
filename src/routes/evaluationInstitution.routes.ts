@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createEvaluationInstitution,
     getAllEvaluationInstitutionsByInvestigation,
+    getEvaluationInstitutionById,
     getEvaluationInstitutionsByInvestigation
 } from '../controllers/evaluationInstitution.controller';
 import {
     createEvaluationInstitutionValidator,
+    evaluationInstitutionIdValidator,
     evaluationInstitutionInvestigationIdValidator,
     evaluationInstitutionListValidator
 } from '../validators';
@@ -39,5 +41,11 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // not an institution id: the listing is entered by the foreign key. Declared after
 // /admin/investigation/:id, which is the more specific literal path
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionInvestigationIdValidator, ...evaluationInstitutionListValidator, validateFields, getEvaluationInstitutionsByInvestigation);
+
+// Get Evaluation Institution by ID
+// Code: ESAVI-EVALINST-003
+// Declared after every literal path: an /:id first would swallow /admin, /investigation, /purge and
+// /activate, and the UUID validator would answer 400 for routes that do exist
+router.get('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionIdValidator, validateFields, getEvaluationInstitutionById);
 
 export default router;
