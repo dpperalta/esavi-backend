@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateEvaluationInstitution,
     createEvaluationInstitution,
     deleteEvaluationInstitution,
     getAllEvaluationInstitutionsByInvestigation,
@@ -44,6 +45,13 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // not an institution id: the listing is entered by the foreign key. Declared after
 // /admin/investigation/:id, which is the more specific literal path
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionInvestigationIdValidator, ...evaluationInstitutionListValidator, validateFields, getEvaluationInstitutionsByInvestigation);
+
+// Activate Evaluation Institution - For Admin
+// Code: ESAVI-EVALINST-005B
+// Declared with the literal paths, before /:id. ADMIN and not SUPERADMIN, following F27, F31 and
+// F33: it carries a sortOrder reassignment inside a transaction and is case administration, not
+// system administration
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...evaluationInstitutionIdValidator, validateFields, activateEvaluationInstitution);
 
 // Get Evaluation Institution by ID
 // Code: ESAVI-EVALINST-003

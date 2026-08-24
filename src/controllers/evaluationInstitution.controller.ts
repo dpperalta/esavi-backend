@@ -161,11 +161,33 @@ const deleteEvaluationInstitution = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Activate Evaluation Institution Controller - For Admin
+// Code: ESAVI-EVALINST-005B
+const activateEvaluationInstitution = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setEvaluationInstitutionActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('evaluationInstitution.activatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-EVALINST-005B: Error activating Evaluation Institution: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('evaluationInstitution.activatedFailed', req.lang), 500, 'EVALINST_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createEvaluationInstitution,
     getEvaluationInstitutionsByInvestigation,
     getAllEvaluationInstitutionsByInvestigation,
     getEvaluationInstitutionById,
     updateEvaluationInstitution,
-    deleteEvaluationInstitution
+    deleteEvaluationInstitution,
+    activateEvaluationInstitution
 }
