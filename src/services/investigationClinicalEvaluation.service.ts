@@ -1,6 +1,7 @@
 import { WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationClinicalEvaluation } from '../models';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, esaviLog, getMessage, toTitleCase } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -577,11 +578,91 @@ const updateInvestigationClinicalEvaluationService = async (
     return updated ? toInvestigationClinicalEvaluationResponse(updated) : null;
 }
 
+// The row about to be destroyed, dumped at warn level so what disappears leaves a trace.
+// clinicalDetailsPersonName is DELIBERATELY OMITTED: this is the only point of the spec where the
+// datum could leave the database and land in src/logs/esaviLog.log, and dumping it decrypted would
+// annul the encryption through the back door. What is registered is the investigationId and the rest
+// of the row
+const CLINICAL_EVALUATION_LOG_FIELDS = [
+    'investigationId', 'receivedMedicalAttention',
+    'sourceExam', 'sourceDocuments', 'sourceVerbalAutopsy', 'sourceOther', 'otherDescription',
+    'suspectedChildAbuse', 'childAbuseExplanation',
+    'suspectedDomesticViolence', 'domesticViolenceExplanation',
+    'familyClinicalDetails', 'completeClinicalSummary', 'signsAndSymptoms',
+    'otherSocialBackground', 'notes', 'createdAt', 'updatedAt', 'deletedAt'
+] as const;
+
+const clinicalEvaluationLogSnapshot = (evaluation: InvestigationClinicalEvaluation): string => {
+    const plain = evaluation.get({ plain: true }) as Record<string, unknown>;
+    const snapshot: Record<string, unknown> = {};
+    for( const field of CLINICAL_EVALUATION_LOG_FIELDS ) snapshot[field] = plain[field];
+    return JSON.stringify(snapshot);
+}
+
+// Purging Investigation Clinical Evaluation Service - For SuperAdmin
+// Code: ESAVI-INVCLIEV-005C
+// investigationClinicalEvaluation is outside the preventPhysicalDelete loop of
+// esaviapp.sql:1368-1381, so the row can really be destroyed. This is also the only path that
+// releases the investigationId: the logical seal of deletedAt does NOT free the slot of the primary
+// key, so after a 005C a POST over that same investigation answers 201 again. And it will drag by
+// ON DELETE CASCADE every evaluationInstitution of that investigation, when that table exists.
+// The existence check runs WITHOUT the inherited visibility, on purpose: whoever purges is
+// SUPERADMIN and the row may well hang from a retired investigation — which is precisely the normal
+// state of something about to be purged.
+// The guard by deletedAt is assertRowIsSealed, shared with investigationSource, investigationAutopsy,
+// investigationMedicalHistory and the two notification satellites: it lives in a helper and not in
+// purgeEntityService, whose isActive check is inert on this table — `undefined !== true`, so every
+// row would be purgable immediately and the only safety net this table has would be gone. The helper
+// is consumed without modifying it: it derives the i18n key investigationClinicalEvaluation.notDeleted
+// from the table name and the id from the primaryKeyAttribute of the model, so this entity registers
+// nothing anywhere.
+//
+// THE ONE DEVIATION FROM ITS SISTERS: this service does the destroy itself instead of delegating to
+// purgeEntityService. That common service dumps a snapshot of the WHOLE row before destroying it, and
+// on this table that snapshot would carry clinicalDetailsPersonName — its ciphertext, under its
+// column name — straight into src/logs/esaviLog.log, which is exactly what SPEC F34 §3.5 forbids and
+// what a criterion of §5 checks by grep. The alternatives were teaching purgeEntityService to exclude
+// columns, which the spec puts out of scope, or accepting the ciphertext in the log, which would
+// erode the encryption decision §6 calls the most expensive one to reverse. What the common service
+// contributes here is little: its notFound guard is already covered above and its isActive check is
+// inert on a table without that column, so what is lost by not calling it is the dump — the very
+// thing being replaced
+const purgeInvestigationClinicalEvaluationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        // paranoid: false, because the row about to be purged is precisely one that a 005A sealed.
+        // The whole row and not just the two columns of the guard: the dump below needs its content
+        const evaluation = await InvestigationClinicalEvaluation.findByPk(id, { paranoid: false, transaction });
+        if( !evaluation ) {
+            throw new AppError(getMessage('investigationClinicalEvaluation.notFound', lang), 404, 'INVCLIEV_005C_NOT_FOUND');
+        }
+
+        assertRowIsSealed(evaluation, 'INVCLIEV_005C_NOT_DELETED', lang);
+
+        // Written before the destroy and inside the transaction that already exists, so what is about
+        // to be erased leaves a trace. It does not stop the purge and it does not open a transaction
+        // of its own
+        esaviLog(
+            `ESAVI-INVCLIEV-005C: investigation clinical evaluation purged by ${ authUser?.userId || 'undefined' }: ${ clinicalEvaluationLogSnapshot(evaluation) }`,
+            'warn'
+        );
+
+        // No appDetails entry: the row is destroyed in this same transaction, so any audit written
+        // into it would be destroyed with it. That is what CONVENTIONS.md §6 prescribes for a 005C
+        await evaluation.destroy({ force: true, transaction });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationClinicalEvaluationService,
     getInvestigationClinicalEvaluationsService,
     getAllInvestigationClinicalEvaluationsService,
     getInvestigationClinicalEvaluationByIdService,
     getInvestigationClinicalEvaluationByCaseIdService,
-    updateInvestigationClinicalEvaluationService
+    updateInvestigationClinicalEvaluationService,
+    purgeInvestigationClinicalEvaluationService
 }

@@ -7,6 +7,7 @@ import {
     getInvestigationClinicalEvaluationByCaseIdService,
     getInvestigationClinicalEvaluationByIdService,
     getInvestigationClinicalEvaluationsService,
+    purgeInvestigationClinicalEvaluationService,
     updateInvestigationClinicalEvaluationService
 } from '../services/investigationClinicalEvaluation.service';
 
@@ -163,11 +164,33 @@ const updateInvestigationClinicalEvaluation = async (req: Request, res: Response
     }
 }
 
+// Purge Investigation Clinical Evaluation Controller
+// Code: ESAVI-INVCLIEV-005C
+// Answers { ok, message } with no data: the row no longer exists, so there is nothing to return
+const purgeInvestigationClinicalEvaluation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeInvestigationClinicalEvaluationService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationClinicalEvaluation.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCLIEV-005C: Error purging Investigation Clinical Evaluation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationClinicalEvaluation.purgeFailed', req.lang), 500, 'INVCLIEV_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationClinicalEvaluation,
     getInvestigationClinicalEvaluations,
     getAllInvestigationClinicalEvaluations,
     getInvestigationClinicalEvaluationById,
     getInvestigationClinicalEvaluationByCaseId,
-    updateInvestigationClinicalEvaluation
+    updateInvestigationClinicalEvaluation,
+    purgeInvestigationClinicalEvaluation
 }

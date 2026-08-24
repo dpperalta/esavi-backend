@@ -7,6 +7,7 @@ import {
     getInvestigationClinicalEvaluationByCaseId,
     getInvestigationClinicalEvaluationById,
     getInvestigationClinicalEvaluations,
+    purgeInvestigationClinicalEvaluation,
     updateInvestigationClinicalEvaluation
 } from '../controllers/investigationClinicalEvaluation.controller';
 import {
@@ -17,7 +18,7 @@ import {
     updateInvestigationClinicalEvaluationValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -39,6 +40,13 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationClinica
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the clinical
 // evaluation of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationClinicalEvaluationListValidator, validateFields, getAllInvestigationClinicalEvaluations);
+
+// Purge Investigation Clinical Evaluation - Physical delete, for SuperAdmin
+// Code: ESAVI-INVCLIEV-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not have an
+// activity flag and does not manage its own state — its investigation does. This is also the only
+// operation that releases the investigationId
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationClinicalEvaluationIdValidator, validateFields, purgeInvestigationClinicalEvaluation);
 
 // Get Investigation Clinical Evaluation by Case
 // Code: ESAVI-INVCLIEV-006
