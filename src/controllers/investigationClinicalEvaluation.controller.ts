@@ -4,6 +4,7 @@ import { AuthUser, InvestigationClinicalEvaluationListFilters } from '../types';
 import {
     createInvestigationClinicalEvaluationService,
     getAllInvestigationClinicalEvaluationsService,
+    getInvestigationClinicalEvaluationByCaseIdService,
     getInvestigationClinicalEvaluationByIdService,
     getInvestigationClinicalEvaluationsService
 } from '../services/investigationClinicalEvaluation.service';
@@ -106,9 +107,37 @@ const getInvestigationClinicalEvaluationById = async (req: Request, res: Respons
     }
 }
 
+// Get Investigation Clinical Evaluation By Case ID Controller
+// Code: ESAVI-INVCLIEV-006
+// The only non-canonical operation of the entity. It returns the record itself, not { count, rows }:
+// the chain case -> investigation -> clinical evaluation is one to one on both hops
+const getInvestigationClinicalEvaluationByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationClinicalEvaluationByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationClinicalEvaluation.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCLIEV-006: Error fetching Investigation Clinical Evaluation by Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationClinicalEvaluation.getFailed', req.lang), 500, 'INVCLIEV_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationClinicalEvaluation,
     getInvestigationClinicalEvaluations,
     getAllInvestigationClinicalEvaluations,
-    getInvestigationClinicalEvaluationById
+    getInvestigationClinicalEvaluationById,
+    getInvestigationClinicalEvaluationByCaseId
 }

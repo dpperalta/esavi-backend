@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationClinicalEvaluation,
     getAllInvestigationClinicalEvaluations,
+    getInvestigationClinicalEvaluationByCaseId,
     getInvestigationClinicalEvaluationById,
     getInvestigationClinicalEvaluations
 } from '../controllers/investigationClinicalEvaluation.controller';
 import {
     createInvestigationClinicalEvaluationValidator,
+    investigationClinicalEvaluationCaseIdValidator,
     investigationClinicalEvaluationIdValidator,
     investigationClinicalEvaluationListValidator
 } from '../validators';
@@ -35,6 +37,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationClinica
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the clinical
 // evaluation of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationClinicalEvaluationListValidator, validateFields, getAllInvestigationClinicalEvaluations);
+
+// Get Investigation Clinical Evaluation by Case
+// Code: ESAVI-INVCLIEV-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared before
+// /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationClinicalEvaluationCaseIdValidator, validateFields, getInvestigationClinicalEvaluationByCaseId);
 
 // Get Investigation Clinical Evaluation by ID
 // Code: ESAVI-INVCLIEV-003

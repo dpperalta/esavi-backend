@@ -178,6 +178,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | investigationAutopsy | `006` | obtener la autopsia de un caso — la cadena `caso → investigación → autopsia` es uno a uno en los dos saltos |
 | investigationTeamMember | `006` | listar el equipo investigador de un caso — la cadena `caso → investigación` es uno a uno, pero de la investigación cuelgan N miembros |
 | investigationMedicalHistory | `006` | obtener los antecedentes de un caso — la cadena `caso → investigación → antecedentes` es uno a uno en los dos saltos |
+| investigationClinicalEvaluation | `006` | obtener la evaluación clínica de un caso — la cadena `caso → investigación → evaluación` es uno a uno en los dos saltos |
 | vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
 | catalogItem | `006` | importación masiva desde fichero `.xlsx`, con creación de `catalogType` al vuelo — SUPERADMIN, `POST /import` |
 | systemConfig | `006` | leer por el par `(code, scope)` — la aplicación conoce el nombre del parámetro, no su UUID. `GET /code/:code`, USER |

@@ -375,9 +375,47 @@ const getInvestigationClinicalEvaluationByIdService = async (id: string, lang: s
     return toInvestigationClinicalEvaluationResponse(evaluation);
 }
 
+// Get Investigation Clinical Evaluation By Case ID Service
+// Code: ESAVI-INVCLIEV-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It returns the
+// record itself and not { count, rows } — the chain case -> investigation -> clinical evaluation is
+// one to one on both hops, and wrapping a single record in a collection would force unwrapping a
+// one-element array on every screen.
+// The three 404 are deliberately distinct, and the asymmetry with 003 is intentional: there the
+// client already holds the primary key of the row, here it enters through a caseId and needs to know
+// which link of the chain broke — whether the case is not there, whether it has no visible
+// investigation, or whether the clinical evaluation has not been recorded yet. Those are three
+// different actions on the user's side, and one generic message would make them indistinguishable
+const getInvestigationClinicalEvaluationByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('investigationClinicalEvaluation.caseNotFound', lang), 404, 'INVCLIEV_006_CASE_NOT_FOUND');
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationClinicalEvaluation.investigationNotFound', lang),
+            404,
+            'INVCLIEV_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    const evaluation = await findInvestigationClinicalEvaluationWithRelations(investigation.investigationId, includeInactive);
+    if( !evaluation ) {
+        throw new AppError(getMessage('investigationClinicalEvaluation.notFound', lang), 404, 'INVCLIEV_006_NOT_FOUND');
+    }
+    return toInvestigationClinicalEvaluationResponse(evaluation);
+}
+
 export {
     createInvestigationClinicalEvaluationService,
     getInvestigationClinicalEvaluationsService,
     getAllInvestigationClinicalEvaluationsService,
-    getInvestigationClinicalEvaluationByIdService
+    getInvestigationClinicalEvaluationByIdService,
+    getInvestigationClinicalEvaluationByCaseIdService
 }
