@@ -427,6 +427,22 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVTEAM-004' },
     { method: 'delete', path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'ADMIN',      code: 'ESAVI-INVTEAM-005A' },
 
+    // investigationMedicalHistory (SPEC F32) — the fourth of the fourteen satellites of
+    // investigation, and the third one without an isActive column of its own. SEVEN operations and
+    // NO 005A or 005B: the entity has no state to activate, so retiring a medical history is
+    // retiring its investigation. The dual listing is inherited from F29 and F30 — the visibility
+    // comes from investigation.isActive, so 002A and 002B return different sets.
+    // TWO ROWS DEVIATE from the canonical matrix, and they are the same deviation as F05, F06, F07,
+    // F09, F10, F13, F14, F28, F29, F30 and F31: 001 and 004 on USER, because the anamnesis is
+    // captured in the same operational flow as the case
+    { method: 'post',   path: '/api/investigation-medical-histories',                 minRole: 'USER',       code: 'ESAVI-INVMEDH-001' },
+    { method: 'get',    path: '/api/investigation-medical-histories',                 minRole: 'USER',       code: 'ESAVI-INVMEDH-002A' },
+    { method: 'get',    path: '/api/investigation-medical-histories/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVMEDH-002B' },
+    { method: 'delete', path: `/api/investigation-medical-histories/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVMEDH-005C' },
+    { method: 'get',    path: `/api/investigation-medical-histories/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVMEDH-006' },
+    { method: 'get',    path: `/api/investigation-medical-histories/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVMEDH-003' },
+    { method: 'put',    path: `/api/investigation-medical-histories/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVMEDH-004' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -505,7 +521,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(234);
+            expect(ROUTE_RULES).toHaveLength(241);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

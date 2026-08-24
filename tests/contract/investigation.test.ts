@@ -1,6 +1,6 @@
 import fs from 'fs';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationSource, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -1054,6 +1054,101 @@ describe('investigation contract', () => {
             await activate(id);
             expect((await readSourceRow(id))!.getDataValue('deletedAt')).toBeNull();
             expect((await readAutopsy(id))!.getDataValue('deletedAt')).toBeNull();
+        });
+    });
+
+    // SPEC F32 hangs the fourth of the fourteen satellites off the same three operations, and it is
+    // the spec that extracted the drag itself to common/satelliteCascade.service.ts and migrated F29
+    // and F30 to it. What is checked here is the effect on the medical history, seen from the side of
+    // the investigation: the detailed behaviour of the entity lives in
+    // tests/contract/investigationMedicalHistory.test.ts.
+    // investigationMedicalHistory has no isActive column either, so what the cascades move is its
+    // deletedAt. The last case is the one that matters most: the THREE satellites travel in the same
+    // transaction over the same common service, so no spec may have broken the other two
+    describe('the cascade over investigationMedicalHistory', () => {
+
+        // The medical history is created through its own endpoint, which is the only way it is ever
+        // born. Like the source and unlike the autopsy, it opens empty: { investigationId } is the
+        // whole minimum
+        const createMedicalHistory = (investigationId: string, payload: Record<string, unknown> = {}) =>
+            request(app).post('/api/investigation-medical-histories')
+                .set(authHeader('USER'))
+                .send({ investigationId, ...payload });
+
+        const createSourceForHistory = (investigationId: string) =>
+            request(app).post('/api/investigation-sources')
+                .set(authHeader('USER')).send({ investigationId });
+
+        const createAutopsyForHistory = (investigationId: string) =>
+            request(app).post('/api/investigation-autopsies')
+                .set(authHeader('USER'))
+                .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
+
+        const readMedicalHistory = async (id: string) =>
+            await InvestigationMedicalHistory.findByPk(id, { paranoid: false });
+
+        const medicalHistoryMethods = async (id: string): Promise<string[]> =>
+            (((await readMedicalHistory(id))!.getDataValue('appDetails') as { method: string }[]) ?? [])
+                .map(entry => entry.method);
+
+        it('deactivating the investigation seals its medical history', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            expect((await createMedicalHistory(id, { notes: 'a note' })).status).toBe(201);
+
+            expect((await deactivate(id)).status).toBe(200);
+
+            expect((await readMedicalHistory(id))!.getDataValue('deletedAt')).not.toBeNull();
+            expect(await medicalHistoryMethods(id)).toEqual(['ESAVI-INVMEDH-001', 'ESAVI-INVESTGN-005A']);
+        });
+
+        it('reactivating it returns the medical history, keeping the previous history', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createMedicalHistory(id, { notes: 'a note' });
+            await deactivate(id);
+
+            expect((await activate(id)).status).toBe(200);
+
+            const medicalHistory = (await readMedicalHistory(id))!;
+            expect(medicalHistory.getDataValue('deletedAt')).toBeNull();
+            expect(medicalHistory.getDataValue('notes')).toBe('a note');
+            expect(await medicalHistoryMethods(id)).toEqual([
+                'ESAVI-INVMEDH-001', 'ESAVI-INVESTGN-005A', 'ESAVI-INVESTGN-005B'
+            ]);
+        });
+
+        it('purging the investigation destroys the medical history by Postgres cascade without erroring', async () => {
+            // The purge is not blocked when the investigation has satellites: it is the decision F13
+            // and F29 declared and F30 and F32 inherited, with the warn dump in the log as the only
+            // mitigation — three lines now, one per satellite without isActive
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createMedicalHistory(id);
+            await deactivate(id);
+
+            expect((await purge(id)).status).toBe(200);
+
+            expect(await readMedicalHistory(id)).toBeNull();
+            expect(await Investigation.findByPk(id, { paranoid: false })).toBeNull();
+        });
+
+        it('an investigation with the THREE satellites seals and clears the three in the same transaction', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createSourceForHistory(id);
+            await createAutopsyForHistory(id);
+            await createMedicalHistory(id);
+
+            await deactivate(id);
+            expect((await InvestigationSource.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).not.toBeNull();
+            expect((await InvestigationAutopsy.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).not.toBeNull();
+            expect((await readMedicalHistory(id))!.getDataValue('deletedAt')).not.toBeNull();
+
+            await activate(id);
+            expect((await InvestigationSource.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).toBeNull();
+            expect((await InvestigationAutopsy.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).toBeNull();
+            expect((await readMedicalHistory(id))!.getDataValue('deletedAt')).toBeNull();
         });
     });
 });

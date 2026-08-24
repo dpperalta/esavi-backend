@@ -1,11 +1,12 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
+import { Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
+import { cascadeSealSatellite } from './common/satelliteCascade.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -590,8 +591,9 @@ const cascadeSealNonSevereNotifications = async (caseId: string, authUser: AuthU
 // make in that spec, and the only thing that detects it is its own acceptance criterion.
 //
 // investigationSource has no isActive column, so what moves is its deletedAt, and rows already
-// sealed are left alone by the where: they keep their original date and receive no new entry.
-// SPEC F29 adds this satellite to the mechanism SPEC F07 left in place
+// sealed are left alone: they keep their original date and receive no new entry.
+// SPEC F29 adds this satellite to the mechanism SPEC F07 left in place; SPEC F32 moved the drag
+// itself to common/satelliteCascade.service.ts, so what stays here is the two-hop walk
 const cascadeSealInvestigationSources = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
     const investigations = await Investigation.findAll({
         where: { caseId },
@@ -602,29 +604,14 @@ const cascadeSealInvestigationSources = async (caseId: string, authUser: AuthUse
         return;
     }
 
-    const now = new Date();
-    // The method is the code of the operation that dragged it, not ESAVI-INVSRC-005*: the audit
-    // says who did it, not which row it landed on
-    const newEntry: AppDetails = {
-        createdAt: now,
-        user: authUser?.userId || 'undefined',
+    await cascadeSealSatellite({
+        model: InvestigationSource,
+        where: { investigationId: investigations.map(investigation => investigation.investigationId) },
         method: 'ESAVI-CASE-005A',
-        detail: 'Investigation source sealed by cascade from its ESAVI Case'
-    };
-    await InvestigationSource.update(
-        {
-            deletedAt: now,
-            updatedAt: now,
-            appDetails: appendedAppDetails(newEntry)
-        },
-        {
-            where: {
-                investigationId: investigations.map(investigation => investigation.investigationId),
-                deletedAt: null
-            },
-            transaction
-        }
-    );
+        detail: 'Investigation source sealed by cascade from its ESAVI Case',
+        authUser,
+        transaction
+    });
 }
 
 // The second satellite of the investigation branch, and the eighth sibling of this block. It is
@@ -636,8 +623,8 @@ const cascadeSealInvestigationSources = async (caseId: string, authUser: AuthUse
 // it is its own acceptance criterion.
 //
 // investigationAutopsy has no isActive column either, so what moves is its deletedAt, and rows
-// already sealed are left alone by the where: they keep their original date and receive no new
-// entry. ESAVI-CASE-005B clears nothing, coherent with F07 and F29
+// already sealed are left alone: they keep their original date and receive no new entry.
+// ESAVI-CASE-005B clears nothing, coherent with F07 and F29
 const cascadeSealInvestigationAutopsies = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
     const investigations = await Investigation.findAll({
         where: { caseId },
@@ -648,29 +635,45 @@ const cascadeSealInvestigationAutopsies = async (caseId: string, authUser: AuthU
         return;
     }
 
-    const now = new Date();
-    // The method is the code of the operation that dragged it, not ESAVI-INVAUT-005*: the audit
-    // says who did it, not which row it landed on
-    const newEntry: AppDetails = {
-        createdAt: now,
-        user: authUser?.userId || 'undefined',
+    await cascadeSealSatellite({
+        model: InvestigationAutopsy,
+        where: { investigationId: investigations.map(investigation => investigation.investigationId) },
         method: 'ESAVI-CASE-005A',
-        detail: 'Investigation autopsy sealed by cascade from its ESAVI Case'
-    };
-    await InvestigationAutopsy.update(
-        {
-            deletedAt: now,
-            updatedAt: now,
-            appDetails: appendedAppDetails(newEntry)
-        },
-        {
-            where: {
-                investigationId: investigations.map(investigation => investigation.investigationId),
-                deletedAt: null
-            },
-            transaction
-        }
-    );
+        detail: 'Investigation autopsy sealed by cascade from its ESAVI Case',
+        authUser,
+        transaction
+    });
+}
+
+// The third satellite of the investigation branch, and the NINTH sibling of this block. It is
+// necessary and not redundant, by the exact reason the seventh and the eighth document: the mass
+// Investigation.update further up does NOT go through setInvestigationActivationService, so the
+// cascade SPEC F32 installed there never fires from here. Without this function the medical history
+// of an investigation dragged by its case would stay unsealed — invisible but not sealed, and
+// therefore never purgable. It is the easiest mistake to make in that spec, because the previous
+// step looks like it already solved it and it does not.
+//
+// investigationMedicalHistory has no isActive column either, so what moves is its deletedAt, and
+// rows already sealed are left alone: they keep their original date and receive no new entry.
+// ESAVI-CASE-005B clears nothing, coherent with F07, F29 and F30
+const cascadeSealInvestigationMedicalHistories = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const investigations = await Investigation.findAll({
+        where: { caseId },
+        attributes: ['investigationId'],
+        transaction
+    });
+    if( investigations.length === 0 ) {
+        return;
+    }
+
+    await cascadeSealSatellite({
+        model: InvestigationMedicalHistory,
+        where: { investigationId: investigations.map(investigation => investigation.investigationId) },
+        method: 'ESAVI-CASE-005A',
+        detail: 'Investigation medical history sealed by cascade from its ESAVI Case',
+        authUser,
+        transaction
+    });
 }
 
 // Setting ESAVI Case Active/Inactive Service
@@ -713,6 +716,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
             await cascadeSealNonSevereNotifications(id, authUser, transaction);
             await cascadeSealInvestigationSources(id, authUser, transaction);
             await cascadeSealInvestigationAutopsies(id, authUser, transaction);
+            await cascadeSealInvestigationMedicalHistories(id, authUser, transaction);
         }
 
         await transaction.commit();
