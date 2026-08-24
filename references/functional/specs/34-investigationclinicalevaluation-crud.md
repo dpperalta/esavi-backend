@@ -1,6 +1,6 @@
 # SPEC F34 — CRUD de `investigationClinicalEvaluation`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — dependencia dura de modelo: la PK de esta tabla *es* su FK)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), **SPEC F29 (`investigationSource` — hermana de forma: aporta el patrón del par bandera/explicación con su asimetría `001`/`004`)**, SPEC F30 (`investigationAutopsy`), **SPEC F32 (`investigationMedicalHistory` — aporta `satelliteCascade.service.ts`, que este spec consume ya extraído)**, SPEC F13 y SPEC F14 (patrón de satélite sin `isActive`), **SPEC F04 (patrón de cifrado PII sobre `appUser`) y SPEC F05 (`patient` — cifrado de un nombre de persona con `toTitleCase` previo)**, SPEC F08 (operación `005C`), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-24
 > **Objetivo:** Dar de alta `investigationClinicalEvaluation` —la evaluación clínica del paciente investigado: de qué fuentes se obtuvo, qué sospechas sociales levanta y qué resumen clínico deja el investigador— como la **sexta** tabla satélite de `investigation` con spec propio.

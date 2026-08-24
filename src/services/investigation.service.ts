@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, EvaluationInstitution } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -710,6 +710,28 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( pregnancyConditionCount > 0 ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: ${ pregnancyConditionCount } investigation pregnancy condition(s) dragged by ON DELETE CASCADE in two hops, purged by ${ authUser?.userId || 'undefined' }`,
+                'warn'
+            );
+        }
+
+        // The seventh line, and the SECOND of a second hop: these rows do not hang from investigation
+        // but from investigationClinicalEvaluation, so the cascade reaches them through
+        // investigation -> clinicalEvaluation -> institutions. SPEC F35.
+        // The shared primary key of the clinical evaluation makes the second hop free: the same
+        // investigationId is the foreign key of the institutions, so no extra query is needed. Count
+        // and not snapshot, and here that is not only the criterion of the team members: these rows
+        // carry personName and personContact ENCRYPTED, so a snapshot per row would drop the
+        // ciphertext of two PII columns into src/logs/esaviLog.log. paranoid: false because the
+        // cascade destroys the sealed ones too. Without this line the destruction of these rows is
+        // completely silent
+        const evaluationInstitutionCount = await EvaluationInstitution.count({
+            where: { investigationId: id },
+            paranoid: false,
+            transaction
+        });
+        if( evaluationInstitutionCount > 0 ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: ${ evaluationInstitutionCount } evaluation institution(s) dragged by ON DELETE CASCADE in two hops, purged by ${ authUser?.userId || 'undefined' }`,
                 'warn'
             );
         }

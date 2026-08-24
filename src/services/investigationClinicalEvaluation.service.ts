@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, EsaviCase, Investigation, InvestigationClinicalEvaluation } from '../models';
+import { CatalogItem, EsaviCase, EvaluationInstitution, Investigation, InvestigationClinicalEvaluation } from '../models';
 import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, esaviLog, getMessage, toTitleCase } from '../helpers';
 import {
     AppDetails,
@@ -607,8 +607,9 @@ export const clinicalEvaluationLogSnapshot = (evaluation: InvestigationClinicalE
 // investigationClinicalEvaluation is outside the preventPhysicalDelete loop of
 // esaviapp.sql:1368-1381, so the row can really be destroyed. This is also the only path that
 // releases the investigationId: the logical seal of deletedAt does NOT free the slot of the primary
-// key, so after a 005C a POST over that same investigation answers 201 again. And it will drag by
-// ON DELETE CASCADE every evaluationInstitution of that investigation, when that table exists.
+// key, so after a 005C a POST over that same investigation answers 201 again. And it drags by
+// ON DELETE CASCADE every evaluationInstitution of that investigation, which SPEC F35 gave a spec of
+// its own: the count of what disappears is dumped below.
 // The existence check runs WITHOUT the inherited visibility, on purpose: whoever purges is
 // SUPERADMIN and the row may well hang from a retired investigation — which is precisely the normal
 // state of something about to be purged.
@@ -649,6 +650,29 @@ const purgeInvestigationClinicalEvaluationService = async (id: string, authUser:
             `ESAVI-INVCLIEV-005C: investigation clinical evaluation purged by ${ authUser?.userId || 'undefined' }: ${ clinicalEvaluationLogSnapshot(evaluation) }`,
             'warn'
         );
+
+        // What the ON DELETE CASCADE of FK_evaluationInstitution_clinicalEvaluation destroys with
+        // this row, added by SPEC F35. paranoid: false counts the ones a 005A sealed too: the
+        // cascade takes them all the same.
+        //
+        // A COUNT and never a snapshot per row, and here that is not the aesthetic criterion F31
+        // fixed for collections: a snapshot of these rows would write the ciphertext of two PII
+        // columns — personName and personContact — into src/logs/esaviLog.log, which is the very
+        // thing the dump above avoids for clinicalDetailsPersonName.
+        //
+        // It blocks nothing and opens no transaction of its own, and the line is only emitted when
+        // there is something to report
+        const institutionCount = await EvaluationInstitution.count({
+            where: { investigationId: id },
+            paranoid: false,
+            transaction
+        });
+        if( institutionCount > 0 ) {
+            esaviLog(
+                `ESAVI-INVCLIEV-005C: ${ institutionCount } evaluation institution(s) dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }`,
+                'warn'
+            );
+        }
 
         // No appDetails entry: the row is destroyed in this same transaction, so any audit written
         // into it would be destroyed with it. That is what CONVENTIONS.md §6 prescribes for a 005C

@@ -293,6 +293,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | diagnosticTerm | `DIAGTERM` |
 | diluentCatalog | `DILUENT` |
 | esaviCase | `CASE` |
+| evaluationInstitution | `EVALINST` |
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
 | healthFacility | `HFAC` |
