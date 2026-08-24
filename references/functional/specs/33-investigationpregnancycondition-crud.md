@@ -1,6 +1,6 @@
 # SPEC F33 — CRUD de `investigationPregnancyCondition`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F32 (`investigationMedicalHistory` — dependencia dura de modelo: es el padre de la FK, y quien dejó por escrito la pregunta que §1.D responde)**, **SPEC F27 (`notificationPregnancyComplication` — gemelo estructural: aporta la resolución con dos derivados, la guarda de duplicado sin respaldo de base y el índice añadido al DDL)**, **SPEC F15 (`diagnosticTerm` — dependencia dura de implementación: aporta `resolveDiagnosticTermService`)**, SPEC F16 (`notificationEvent` — origen del hallazgo del `sortOrder` en el `005B` y de la nota de `CREATE_FIELDS`), SPEC F31 (`investigationTeamMember` — hermana de forma dentro del bloque de investigación: la colección con `isActive` que ninguna cascada pisa), SPEC F28 (`investigation` — su volcado de purga gana una línea), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa, y gobierna cuándo se re-dispara la resolución contra el maestro)
 > **Fecha:** 2026-08-23
 > **Objetivo:** Dar de alta `investigationPregnancyCondition` —las condiciones registradas sobre el embarazo del paciente investigado— como la **primera nieta del bloque de investigación**, y responder la pregunta que F32 dejó abierta sobre su propio `005C`.
