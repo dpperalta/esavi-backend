@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationClinicalEvaluationListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationClinicalEvaluationListFilters } from '../types';
 import {
     createInvestigationClinicalEvaluationService,
     getAllInvestigationClinicalEvaluationsService,
+    getInvestigationClinicalEvaluationByIdService,
     getInvestigationClinicalEvaluationsService
 } from '../services/investigationClinicalEvaluation.service';
 
@@ -78,8 +79,36 @@ const getAllInvestigationClinicalEvaluations = async (req: Request, res: Respons
     }
 }
 
+// Get Investigation Clinical Evaluation By ID Controller
+// Code: ESAVI-INVCLIEV-003
+// canViewInactive is what lets a SUPERADMIN read the clinical evaluation of a retired investigation:
+// the entity has no state of its own, so the predicate is applied over the visibility it inherits
+const getInvestigationClinicalEvaluationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationClinicalEvaluationByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationClinicalEvaluation.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCLIEV-003: Error fetching Investigation Clinical Evaluation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationClinicalEvaluation.getFailed', req.lang), 500, 'INVCLIEV_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationClinicalEvaluation,
     getInvestigationClinicalEvaluations,
-    getAllInvestigationClinicalEvaluations
+    getAllInvestigationClinicalEvaluations,
+    getInvestigationClinicalEvaluationById
 }

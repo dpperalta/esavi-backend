@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationClinicalEvaluation,
     getAllInvestigationClinicalEvaluations,
+    getInvestigationClinicalEvaluationById,
     getInvestigationClinicalEvaluations
 } from '../controllers/investigationClinicalEvaluation.controller';
 import {
     createInvestigationClinicalEvaluationValidator,
+    investigationClinicalEvaluationIdValidator,
     investigationClinicalEvaluationListValidator
 } from '../validators';
 
@@ -33,5 +35,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationClinica
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the clinical
 // evaluation of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationClinicalEvaluationListValidator, validateFields, getAllInvestigationClinicalEvaluations);
+
+// Get Investigation Clinical Evaluation by ID
+// Code: ESAVI-INVCLIEV-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationClinicalEvaluationIdValidator, validateFields, getInvestigationClinicalEvaluationById);
 
 export default router;
