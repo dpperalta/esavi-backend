@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { EsaviCase, Investigation, InvestigationVaccineAdministered, VaccineWhodrug } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationVaccineAdministeredInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -211,6 +211,29 @@ const findVaccineAdministeredWithRelations = async (
                 where: includeInactive ? {} : { isActive: true }
             }
         ],
+        transaction
+    });
+}
+
+// The read the 004 works from. Deliberately WITHOUT narrowed attributes: that is the precondition of
+// buildDifferentialUpdate — an instance read with a narrowed attribute list reads back undefined for
+// the columns it left out, and every comparison against undefined counts as a change.
+//
+// The parent include travels here too, so the inherited visibility is checked in the very query the
+// instance comes out of and not in a second one that could see a different snapshot
+const findVaccineAdministeredRow = async (
+    vaccineAdministeredId: string,
+    canViewInactive: boolean,
+    transaction?: Transaction
+) => {
+    return InvestigationVaccineAdministered.findOne({
+        where: canViewInactive
+            ? { vaccineAdministeredId }
+            : { vaccineAdministeredId, isActive: true },
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            where: canViewInactive ? {} : { isActive: true }
+        }],
         transaction
     });
 }
@@ -433,10 +456,140 @@ const getInvestigationVaccinesAdministeredByCaseIdService = async (
     };
 }
 
+// Update Investigation Vaccine Administered Service
+// Code: ESAVI-INVVACAD-004
+// Everything inside a single transaction, so the master validation and the duplicate guard see the
+// same snapshot the UPDATE lands on.
+//
+// investigationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// answers 400: the first one is immutable — moving an administered vaccine to another investigation
+// is not updating it, it is creating a different one — and the second one is governed by the database
+const updateInvestigationVaccineAdministeredService = async (
+    id: string,
+    data: Partial<CreateInvestigationVaccineAdministeredInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const vaccine = await findVaccineAdministeredRow(id, canViewInactive, transaction);
+        if( !vaccine ) {
+            throw new AppError(
+                getMessage('investigationVaccineAdministered.notFound', lang),
+                404,
+                'INVVACAD_004_NOT_FOUND'
+            );
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
+        const stored = vaccine.get({ plain: true }) as Record<string, unknown>;
+
+        // The resulting values of the two fields the guards look at, computed once so the
+        // requiredness rule, the master validation, the duplicate guard and the diff all look at the
+        // same thing. An absent key keeps what is stored; a key that travelled — null included —
+        // replaces it
+        const resultingWhodrugId = data.vaccineWhodrugId !== undefined
+            ? ( data.vaccineWhodrugId ?? null )
+            : ( stored.vaccineWhodrugId as string | null );
+        const resultingDoseNumber = data.doseNumber !== undefined
+            ? ( data.doseNumber ?? null )
+            : ( stored.doseNumber as number | null );
+
+        // Evaluated over the RESULTING state and never over the body, which is precisely why it
+        // lives here and not in the validator: "absent" means "do not touch it" and only the service
+        // knows what is stored. An explicit vaccineWhodrugId: null is the one case this rejects, and
+        // it is rejected BEFORE the diff and with independence of it
+        if( !resultingWhodrugId ) {
+            throw new AppError(
+                getMessage('investigationVaccineAdministered.vaccineRequired', lang),
+                400,
+                'INVVACAD_004_VACCINE_REQUIRED'
+            );
+        }
+
+        // Only when the key travelled with a value: an absent vaccineWhodrugId is not revalidated,
+        // and a null one was already rejected above. An inactive entry is a 404 even if it matches
+        // what is stored
+        if( data.vaccineWhodrugId ) {
+            await assertWhodrugIsValid(data.vaccineWhodrugId, '004', lang, transaction);
+        }
+
+        // Also before the diff: a taken triple is a 409 even if the rest of the body changes nothing
+        await assertNoDuplicateVaccine(
+            stored.investigationId as string,
+            resultingWhodrugId,
+            resultingDoseNumber,
+            '004',
+            lang,
+            transaction,
+            id
+        );
+
+        // investigationId, sortOrder and isActive are deliberately absent: the first two are
+        // immutable and the state moves through 005A and 005B.
+        //
+        // NOTHING enters under an if( data.x ). On doseNumber that would be destructive — 0 is a
+        // valid value, the dose zero of a schedule that starts at zero, and a truthiness check would
+        // throw it away leaving no way to store it. On notes it would silently discard the empty
+        // string the field is emptied with.
+        //
+        // vaccineWhodrugId enters as nullable despite being required, and that is deliberate: the
+        // rule is imposed above, before and apart. Writing it as data.x ? data.x : undefined would
+        // make a null that survived be discarded in silence instead of failing, which is exactly
+        // what the rule exists to prevent
+        const candidates: Record<string, unknown> = {
+            vaccineWhodrugId: data.vaccineWhodrugId !== undefined ? ( data.vaccineWhodrugId ?? null ) : undefined,
+            doseNumber: data.doseNumber !== undefined ? ( data.doseNumber ?? null ) : undefined,
+            notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_investigationVaccineAdministered_setSysDetails fires on
+        // every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(vaccine.appDetails)
+                ? vaccine.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-INVVACAD-004',
+                detail: 'Investigation vaccine administered updated by service'
+            };
+            await vaccine.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    // Re-read so the response carries the master with its nested fields, whether or not anything was
+    // written
+    const updated = await findVaccineAdministeredWithRelations(id, true);
+    return updated ? toInvestigationVaccineAdministeredResponse(updated) : null;
+}
+
 export {
     createInvestigationVaccineAdministeredService,
     getInvestigationVaccinesAdministeredByInvestigationService,
     getAllInvestigationVaccinesAdministeredByInvestigationService,
     getInvestigationVaccineAdministeredByIdService,
-    getInvestigationVaccinesAdministeredByCaseIdService
+    getInvestigationVaccinesAdministeredByCaseIdService,
+    updateInvestigationVaccineAdministeredService
 }

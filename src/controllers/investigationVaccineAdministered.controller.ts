@@ -6,7 +6,8 @@ import {
     getAllInvestigationVaccinesAdministeredByInvestigationService,
     getInvestigationVaccineAdministeredByIdService,
     getInvestigationVaccinesAdministeredByCaseIdService,
-    getInvestigationVaccinesAdministeredByInvestigationService
+    getInvestigationVaccinesAdministeredByInvestigationService,
+    updateInvestigationVaccineAdministeredService
 } from '../services/investigationVaccineAdministered.service';
 
 // Create Investigation Vaccine Administered Controller
@@ -141,10 +142,38 @@ const getInvestigationVaccinesAdministeredByCaseId = async (req: Request, res: R
     }
 }
 
+// Update Investigation Vaccine Administered Controller
+// Code: ESAVI-INVVACAD-004
+const updateInvestigationVaccineAdministered = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateInvestigationVaccineAdministeredService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccineAdministered.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACAD-004: Error updating Investigation Vaccine Administered: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccineAdministered.updatedFailed', req.lang), 500, 'INVVACAD_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccineAdministered,
     getInvestigationVaccinesAdministeredByInvestigation,
     getAllInvestigationVaccinesAdministeredByInvestigation,
     getInvestigationVaccineAdministeredById,
-    getInvestigationVaccinesAdministeredByCaseId
+    getInvestigationVaccinesAdministeredByCaseId,
+    updateInvestigationVaccineAdministered
 }

@@ -6,14 +6,16 @@ import {
     getAllInvestigationVaccinesAdministeredByInvestigation,
     getInvestigationVaccineAdministeredById,
     getInvestigationVaccinesAdministeredByCaseId,
-    getInvestigationVaccinesAdministeredByInvestigation
+    getInvestigationVaccinesAdministeredByInvestigation,
+    updateInvestigationVaccineAdministered
 } from '../controllers/investigationVaccineAdministered.controller';
 import {
     createInvestigationVaccineAdministeredValidator,
     investigationVaccineAdministeredCaseIdValidator,
     investigationVaccineAdministeredIdValidator,
     investigationVaccineAdministeredInvestigationIdValidator,
-    investigationVaccineAdministeredListValidator
+    investigationVaccineAdministeredListValidator,
+    updateInvestigationVaccineAdministeredValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -55,5 +57,9 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // Declared after every literal path: an /:id first would swallow /admin, /investigation, /case,
 // /purge and /activate, and the UUID validator would answer 400 for routes that do exist
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredIdValidator, validateFields, getInvestigationVaccineAdministeredById);
+
+// Update Investigation Vaccine Administered
+// Code: ESAVI-INVVACAD-004
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredIdValidator, ...updateInvestigationVaccineAdministeredValidator, validateFields, updateInvestigationVaccineAdministered);
 
 export default router;
