@@ -5,4 +5,5 @@ export * from './investigationTeamMember.types';
 export * from './investigationMedicalHistory.types';
 export * from './investigationPregnancyCondition.types';
 export * from './investigationClinicalEvaluation.types';
+export * from './investigationVaccinationContext.types';
 export * from './evaluationInstitution.types';
