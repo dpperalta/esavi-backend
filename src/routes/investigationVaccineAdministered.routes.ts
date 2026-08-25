@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationVaccineAdministered,
+    deleteInvestigationVaccineAdministered,
     getAllInvestigationVaccinesAdministeredByInvestigation,
     getInvestigationVaccineAdministeredById,
     getInvestigationVaccinesAdministeredByCaseId,
@@ -61,5 +62,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationVacc
 // Update Investigation Vaccine Administered
 // Code: ESAVI-INVVACAD-004
 router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredIdValidator, ...updateInvestigationVaccineAdministeredValidator, validateFields, updateInvestigationVaccineAdministered);
+
+// Delete Investigation Vaccine Administered - Soft delete
+// Code: ESAVI-INVVACAD-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...investigationVaccineAdministeredIdValidator, validateFields, deleteInvestigationVaccineAdministered);
 
 export default router;

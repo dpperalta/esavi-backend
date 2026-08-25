@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { EsaviCase, Investigation, InvestigationVaccineAdministered, VaccineWhodrug } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationVaccineAdministeredInput } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // There is no CREATE_FIELDS here, and that is a decision and not an omission. In the eight sister
@@ -585,11 +586,64 @@ const updateInvestigationVaccineAdministeredService = async (
     return updated ? toInvestigationVaccineAdministeredResponse(updated) : null;
 }
 
+// Set Investigation Vaccine Administered Activation Service
+// Code: ESAVI-INVVACAD-005A / ESAVI-INVVACAD-005B
+// One service for the two operations, as the rest of the repository does it. Neither is a
+// differential update: they are state writes with an intent of their own, they record a fact even
+// though no data column changes, and that is why they go through setEntityActiveStatusService and
+// never through buildDifferentialUpdate.
+//
+// This is the first satellite of investigation since F31 that can have these two at all: F29, F30,
+// F32, F34 and F36 have no isActive column and therefore no state of their own to withdraw.
+//
+// The 005A seals deletedAt, which FREES the sortOrder from the partial unique index. That is correct
+// and deliberate: the gap stays available for the next vaccine.
+//
+// Neither operation applies the inherited visibility, and that is the criterion of F31, F33 and F35:
+// whoever withdraws or reactivates acts over the row's own state, and that state exists
+// independently of its parent. Retiring a vaccine of an inactive investigation answers 200.
+//
+// The 005A is blocked by nothing. investigationVaccineAdministered is a leaf of the graph: no table
+// of the 45 references it, so there are no children to query and no state to drag
+const setInvestigationVaccineAdministeredActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const vaccine = await setEntityActiveStatusService({
+            model: InvestigationVaccineAdministered,
+            where: { vaccineAdministeredId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('investigationVaccineAdministered.notFound', lang),
+            notFoundCode: `INVVACAD_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`investigationVaccineAdministered.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `INVVACAD_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-INVVACAD-${ op }`,
+                detail: `Investigation vaccine administered ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return vaccine;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationVaccineAdministeredService,
     getInvestigationVaccinesAdministeredByInvestigationService,
     getAllInvestigationVaccinesAdministeredByInvestigationService,
     getInvestigationVaccineAdministeredByIdService,
     getInvestigationVaccinesAdministeredByCaseIdService,
-    updateInvestigationVaccineAdministeredService
+    updateInvestigationVaccineAdministeredService,
+    setInvestigationVaccineAdministeredActivationService
 }

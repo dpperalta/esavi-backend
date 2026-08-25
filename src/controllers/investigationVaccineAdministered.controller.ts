@@ -7,6 +7,7 @@ import {
     getInvestigationVaccineAdministeredByIdService,
     getInvestigationVaccinesAdministeredByCaseIdService,
     getInvestigationVaccinesAdministeredByInvestigationService,
+    setInvestigationVaccineAdministeredActivationService,
     updateInvestigationVaccineAdministeredService
 } from '../services/investigationVaccineAdministered.service';
 
@@ -169,11 +170,34 @@ const updateInvestigationVaccineAdministered = async (req: Request, res: Respons
     }
 }
 
+// Delete Investigation Vaccine Administered Controller
+// Code: ESAVI-INVVACAD-005A
+const deleteInvestigationVaccineAdministered = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setInvestigationVaccineAdministeredActivationService(id, req.user, req.lang, false);
+        // No data: a state operation reports that it happened, not the row it happened to. It is the
+        // rule tests/contract/response.test.ts polices over the source of every controller
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccineAdministered.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACAD-005A: Error deleting Investigation Vaccine Administered: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccineAdministered.deletedFailed', req.lang), 500, 'INVVACAD_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccineAdministered,
     getInvestigationVaccinesAdministeredByInvestigation,
     getAllInvestigationVaccinesAdministeredByInvestigation,
     getInvestigationVaccineAdministeredById,
     getInvestigationVaccinesAdministeredByCaseId,
-    updateInvestigationVaccineAdministered
+    updateInvestigationVaccineAdministered,
+    deleteInvestigationVaccineAdministered
 }
