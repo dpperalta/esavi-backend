@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, EvaluationInstitution } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered, EvaluationInstitution } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -769,6 +769,25 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( evaluationInstitutionCount > 0 ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: ${ evaluationInstitutionCount } evaluation institution(s) dragged by ON DELETE CASCADE in two hops, purged by ${ authUser?.userId || 'undefined' }`,
+                'warn'
+            );
+        }
+
+        // The eighth line, and the SECOND satellite of investigation that is a collection hanging
+        // straight off it — a single hop, unlike the two above. SPEC F37.
+        // Count and not snapshot, by the criterion of the team members: an investigation recording
+        // ten vaccines would bury the log line that matters under ten others. paranoid: false counts
+        // the ones a 005A sealed too, because the cascade destroys them all the same. The master
+        // entries are NOT touched: the foreign key to vaccineWhodrug is ON DELETE RESTRICT and the
+        // dictionary survives the purge intact
+        const vaccineAdministeredCount = await InvestigationVaccineAdministered.count({
+            where: { investigationId: id },
+            paranoid: false,
+            transaction
+        });
+        if( vaccineAdministeredCount > 0 ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: ${ vaccineAdministeredCount } investigation vaccine(s) administered dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }`,
                 'warn'
             );
         }
