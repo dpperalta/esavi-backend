@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered, EvaluationInstitution } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered, InvestigationColdChain, EvaluationInstitution } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -581,6 +581,29 @@ const cascadeClearInvestigationVaccinationContext = (investigationId: string, au
         transaction
     });
 
+// The sixth satellite without isActive to join the cascade, and the sixth consumer of the common
+// service SPEC F32 extracted, which is consumed here WITHOUT being touched. investigationColdChain
+// behaves exactly like the five above: no state of its own, so what moves is its deletedAt. SPEC F38
+const cascadeSealInvestigationColdChain = (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) =>
+    cascadeSealSatellite({
+        model: InvestigationColdChain,
+        where: { investigationId },
+        method: 'ESAVI-INVESTGN-005A',
+        detail: 'Investigation cold chain sealed by cascade from its investigation',
+        authUser,
+        transaction
+    });
+
+const cascadeClearInvestigationColdChain = (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) =>
+    cascadeClearSatellite({
+        model: InvestigationColdChain,
+        where: { investigationId },
+        method: 'ESAVI-INVESTGN-005B',
+        detail: 'Investigation cold chain returned by cascade from its investigation',
+        authUser,
+        transaction
+    });
+
 // Setting Investigation Active/Inactive Service
 // Code: ESAVI-INVESTGN-005A / ESAVI-INVESTGN-005B
 // It does NOT go through buildDifferentialUpdate, and that is deliberate: these are writes with an
@@ -628,12 +651,14 @@ const setInvestigationActivationService = async (
             await cascadeClearInvestigationMedicalHistory(id, authUser, transaction);
             await cascadeClearInvestigationClinicalEvaluation(id, authUser, transaction);
             await cascadeClearInvestigationVaccinationContext(id, authUser, transaction);
+            await cascadeClearInvestigationColdChain(id, authUser, transaction);
         } else {
             await cascadeSealInvestigationSource(id, authUser, transaction);
             await cascadeSealInvestigationAutopsy(id, authUser, transaction);
             await cascadeSealInvestigationMedicalHistory(id, authUser, transaction);
             await cascadeSealInvestigationClinicalEvaluation(id, authUser, transaction);
             await cascadeSealInvestigationVaccinationContext(id, authUser, transaction);
+            await cascadeSealInvestigationColdChain(id, authUser, transaction);
         }
 
         await transaction.commit();
@@ -710,6 +735,18 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( vaccinationContext ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: Investigation vaccination context dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(vaccinationContext.get({ plain: true })) }`,
+                'warn'
+            );
+        }
+
+        // The eighth satellite, dumped as a snapshot like the other one to one ones and through a
+        // plain JSON.stringify of the WHOLE row: like investigationVaccinationContext this table
+        // carries no encrypted column and no person's name, so there is nothing to omit — its
+        // fifteen columns are how a product was kept and how it travelled. SPEC F38
+        const coldChain = await InvestigationColdChain.findByPk(id, { transaction });
+        if( coldChain ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: Investigation cold chain dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(coldChain.get({ plain: true })) }`,
                 'warn'
             );
         }

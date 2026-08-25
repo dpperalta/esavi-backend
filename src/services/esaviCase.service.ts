@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
+import { Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -737,6 +737,34 @@ const cascadeSealInvestigationVaccinationContexts = async (caseId: string, authU
     });
 }
 
+// The same reasoning for the eighth satellite of investigation. Investigation.update further up
+// does NOT go through setInvestigationActivationService, so the cascade SPEC F38 installed there
+// never fires from here. Without this function the cold chain of an investigation dragged by its
+// case would stay unsealed - invisible but not sealed, and therefore never purgable.
+//
+// investigationColdChain has no isActive column either, so what moves is its deletedAt, and rows
+// already sealed are left alone: they keep their original date and receive no new entry.
+// ESAVI-CASE-005B clears nothing, coherent with F07, F29, F30, F32, F34 and F36
+const cascadeSealInvestigationColdChains = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const investigations = await Investigation.findAll({
+        where: { caseId },
+        attributes: ['investigationId'],
+        transaction
+    });
+    if( investigations.length === 0 ) {
+        return;
+    }
+
+    await cascadeSealSatellite({
+        model: InvestigationColdChain,
+        where: { investigationId: investigations.map(investigation => investigation.investigationId) },
+        method: 'ESAVI-CASE-005A',
+        detail: 'Investigation cold chain sealed by cascade from its ESAVI Case',
+        authUser,
+        transaction
+    });
+}
+
 // Setting ESAVI Case Active/Inactive Service
 // Code: ESAVI-CASE-005A / ESAVI-CASE-005B
 // 005A also deactivates every active notifier of the case, its active classification and its
@@ -780,6 +808,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
             await cascadeSealInvestigationMedicalHistories(id, authUser, transaction);
             await cascadeSealInvestigationClinicalEvaluations(id, authUser, transaction);
             await cascadeSealInvestigationVaccinationContexts(id, authUser, transaction);
+            await cascadeSealInvestigationColdChains(id, authUser, transaction);
         }
 
         await transaction.commit();
