@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { Investigation, InvestigationVaccineAdministered, VaccineWhodrug } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationVaccineAdministeredInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // There is no CREATE_FIELDS here, and that is a decision and not an omission. In the eight sister
 // tables of the setSortOrderByParent loop the column is NOT NULL, so Sequelize runs its own notNull
@@ -281,6 +282,75 @@ const createInvestigationVaccineAdministeredService = async (
     return vaccine ? toInvestigationVaccineAdministeredResponse(vaccine) : null;
 }
 
+// Get Active Investigation Vaccines Administered By Investigation Service
+// Code: ESAVI-INVVACAD-002A
+// The listing is entered by the foreign key and never by /: an administered vaccine does not exist
+// without its investigation, and a global listing has no reader. Unlike the five one to one
+// satellites, the 003 cannot double as the listing here: the row has a key of its own, so the access
+// by row and the access by investigation are different things.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// vaccineWhodrugId, doseNumber or text over notes — those are out of the scope of this spec.
+//
+// A visible investigation with no vaccines answers 200 with { count: 0, rows: [] }, and only an
+// investigation that fails the guard answers 404
+const getInvestigationVaccinesAdministeredByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await findValidInvestigation(investigationId, '002A', lang, canViewInactive);
+
+    const vaccines = await InvestigationVaccineAdministered.findAndCountAll({
+        where: { investigationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [WHODRUG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: vaccines.count,
+        rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
+    };
+}
+
+// Get All Investigation Vaccines Administered By Investigation Service
+// Code: ESAVI-INVVACAD-002B
+// Identical to the 002A but for the where, which does not filter by isActive: this one returns the
+// retired rows and the ones with a sealed deletedAt too. It is the operation that justifies the new
+// index of §3.1 — the only index covering investigationId today is the partial unique one, which
+// excludes precisely the rows this listing does return
+const getAllInvestigationVaccinesAdministeredByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await findValidInvestigation(investigationId, '002B', lang, canViewInactive);
+
+    const vaccines = await InvestigationVaccineAdministered.findAndCountAll({
+        where: { investigationId },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [WHODRUG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: vaccines.count,
+        rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
+    };
+}
+
 export {
-    createInvestigationVaccineAdministeredService
+    createInvestigationVaccineAdministeredService,
+    getInvestigationVaccinesAdministeredByInvestigationService,
+    getAllInvestigationVaccinesAdministeredByInvestigationService
 }
