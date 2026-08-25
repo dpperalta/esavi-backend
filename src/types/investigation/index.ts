@@ -7,4 +7,5 @@ export * from './investigationPregnancyCondition.types';
 export * from './investigationClinicalEvaluation.types';
 export * from './investigationVaccinationContext.types';
 export * from './investigationVaccineAdministered.types';
+export * from './investigationColdChain.types';
 export * from './evaluationInstitution.types';
