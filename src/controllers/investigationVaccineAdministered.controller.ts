@@ -192,6 +192,26 @@ const deleteInvestigationVaccineAdministered = async (req: Request, res: Respons
     }
 }
 
+// Activate Investigation Vaccine Administered Controller
+// Code: ESAVI-INVVACAD-005B
+const activateInvestigationVaccineAdministered = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setInvestigationVaccineAdministeredActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccineAdministered.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACAD-005B: Error activating Investigation Vaccine Administered: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccineAdministered.activatedFailed', req.lang), 500, 'INVVACAD_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccineAdministered,
     getInvestigationVaccinesAdministeredByInvestigation,
@@ -199,5 +219,6 @@ export {
     getInvestigationVaccineAdministeredById,
     getInvestigationVaccinesAdministeredByCaseId,
     updateInvestigationVaccineAdministered,
-    deleteInvestigationVaccineAdministered
+    deleteInvestigationVaccineAdministered,
+    activateInvestigationVaccineAdministered
 }

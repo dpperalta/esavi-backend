@@ -586,6 +586,84 @@ const updateInvestigationVaccineAdministeredService = async (
     return updated ? toInvestigationVaccineAdministeredResponse(updated) : null;
 }
 
+// The two guards ESAVI-INVVACAD-005B runs before handing over to setEntityActiveStatusService, in
+// this order and not the other one.
+//
+// The order between the uniqueness guard and the sortOrder reassignment is NOT indifferent:
+// reordering a row that is going to be rejected right afterwards would leave a modification written
+// that no completed operation justifies, and appDetails would record a movement nobody asked for.
+//
+// It revalidates nothing else. Not the parent chain — reactivating a row whose investigation was
+// deactivated in the meantime answers 200, by the reason of F31 §3.5 — and not the master either: an
+// entry retired from the dictionary after the record still says what was administered, as in every
+// read
+const prepareReactivation = async (id: string, lang: string, transaction: Transaction) => {
+    const vaccine = await InvestigationVaccineAdministered.findOne({
+        where: { vaccineAdministeredId: id },
+        paranoid: false,
+        transaction
+    });
+
+    // Absent or already alive: the delegation below raises the 404 and the 409, and it is the only
+    // place those two are produced
+    if( !vaccine || vaccine.isActive ) {
+        return;
+    }
+
+    // The triple is the STORED one: the 005B receives no body. The 005B is the third door a
+    // duplicate can enter the live list through, because it returns a row whose triple may have been
+    // taken while it was retired
+    await assertNoDuplicateVaccine(
+        vaccine.investigationId,
+        vaccine.vaccineWhodrugId ?? null,
+        vaccine.doseNumber ?? null,
+        '005B',
+        lang,
+        transaction,
+        id
+    );
+
+    // While deletedAt stays sealed the row is outside the partial unique index, so the write below is
+    // free. Past that point it is not, and there is nothing safe to reassign
+    if( vaccine.deletedAt === null || vaccine.deletedAt === undefined ) {
+        return;
+    }
+
+    // If the row carries no number there is no collision possible: the partial index excludes the
+    // nulls, and this table is the second one of the family whose column is nullable
+    if( vaccine.sortOrder === null || vaccine.sortOrder === undefined ) {
+        return;
+    }
+
+    const collision = await InvestigationVaccineAdministered.findOne({
+        where: {
+            investigationId: vaccine.investigationId,
+            sortOrder: vaccine.sortOrder as number,
+            deletedAt: null,
+            vaccineAdministeredId: { [Op.ne]: id }
+        },
+        attributes: ['vaccineAdministeredId'],
+        paranoid: false,
+        transaction
+    });
+    if( !collision ) {
+        return;
+    }
+
+    // The same count TRG_investigationVaccineAdministered_setSortOrder does on insert, so the
+    // reactivated vaccine reappears at the END of the list. A static update and not an instance one,
+    // which writes this column and only this column without an explicit field list
+    const highest = await InvestigationVaccineAdministered.max<number, InvestigationVaccineAdministered>('sortOrder', {
+        where: { investigationId: vaccine.investigationId, deletedAt: null },
+        transaction
+    });
+
+    await InvestigationVaccineAdministered.update(
+        { sortOrder: ( Number(highest) || 0 ) + 1 },
+        { where: { vaccineAdministeredId: id }, transaction }
+    );
+}
+
 // Set Investigation Vaccine Administered Activation Service
 // Code: ESAVI-INVVACAD-005A / ESAVI-INVVACAD-005B
 // One service for the two operations, as the rest of the repository does it. Neither is a
@@ -614,6 +692,11 @@ const setInvestigationVaccineAdministeredActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // Only on the way back: a 005A is what frees the number, so it never collides
+        if( isActive ) {
+            await prepareReactivation(id, lang, transaction);
+        }
+
         const vaccine = await setEntityActiveStatusService({
             model: InvestigationVaccineAdministered,
             where: { vaccineAdministeredId: id },

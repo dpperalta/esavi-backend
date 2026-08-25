@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateInvestigationVaccineAdministered,
     createInvestigationVaccineAdministered,
     deleteInvestigationVaccineAdministered,
     getAllInvestigationVaccinesAdministeredByInvestigation,
@@ -52,6 +53,13 @@ router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...inv
 // and not the investigationId, so this is the door the operational flow actually uses. Declared with
 // the literal paths, before /:id
 router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredCaseIdValidator, ...investigationVaccineAdministeredListValidator, validateFields, getInvestigationVaccinesAdministeredByCaseId);
+
+// Activate Investigation Vaccine Administered - For Admin
+// Code: ESAVI-INVVACAD-005B
+// Declared with the literal paths, before /:id. ADMIN and not SUPERADMIN, following F27, F31, F33
+// and F35: it carries a sortOrder reassignment inside a transaction and is case administration, not
+// system administration
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...investigationVaccineAdministeredIdValidator, validateFields, activateInvestigationVaccineAdministered);
 
 // Get Investigation Vaccine Administered by ID
 // Code: ESAVI-INVVACAD-003
