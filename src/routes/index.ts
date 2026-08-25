@@ -37,6 +37,7 @@ import investigationClinicalEvaluationRoutes from './investigationClinicalEvalua
 import investigationVaccinationContextRoutes from './investigationVaccinationContext.routes';
 import evaluationInstitutionRoutes from './evaluationInstitution.routes';
 import investigationVaccineAdministeredRoutes from './investigationVaccineAdministered.routes';
+import investigationColdChainRoutes from './investigationColdChain.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -121,6 +122,12 @@ router.use('/investigation-vaccination-contexts', investigationVaccinationContex
 // administered, with their dose number. The first satellite of investigation since F31 that has
 // isActive, and therefore the first of them since then with a complete 005A and 005B
 router.use('/investigation-vaccines-administered', investigationVaccineAdministeredRoutes);
+
+// The eighth satellite of investigation with a spec of its own, and the seventh with the exact
+// shape of F36: the primary key IS the foreign key, no isActive, dual listing and 006 by case.
+// How the investigated vaccine was kept and how it travelled — and the first spec of the series
+// that does not add a single line to the DDL: it has no foreign key to catalogItem at all
+router.use('/investigation-cold-chains', investigationColdChainRoutes);
 
 router.use('/system-configs', systemConfigRoutes);
 
