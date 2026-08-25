@@ -6,7 +6,8 @@ import {
     getAllInvestigationAdministrationErrorsService,
     getInvestigationAdministrationErrorByCaseIdService,
     getInvestigationAdministrationErrorByIdService,
-    getInvestigationAdministrationErrorsService
+    getInvestigationAdministrationErrorsService,
+    updateInvestigationAdministrationErrorService
 } from '../services/investigationAdministrationError.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
@@ -135,10 +136,40 @@ const getInvestigationAdministrationErrorByCaseId = async (req: Request, res: Re
     }
 }
 
+// Update Investigation Administration Error Controller
+// Code: ESAVI-INVADMER-004
+// canViewInactive travels for the same reason as in the 003: the entity has no state of its own, so
+// whether a retired investigation may be written is decided over the visibility it inherits
+const updateInvestigationAdministrationError = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationAdministrationErrorService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-004: Error updating Investigation Administration Error: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.updatedFailed', req.lang), 500, 'INVADMER_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationAdministrationError,
     getAllInvestigationAdministrationErrors,
     getInvestigationAdministrationErrorByCaseId,
     getInvestigationAdministrationErrorById,
-    getInvestigationAdministrationErrors
+    getInvestigationAdministrationErrors,
+    updateInvestigationAdministrationError
 };

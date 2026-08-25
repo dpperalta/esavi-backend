@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { EsaviCase, Investigation, InvestigationAdministrationError } from '../models';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -125,20 +125,25 @@ const normalizeText = (value: string | null | undefined): string | null => {
     return trimmed.length > 0 ? trimmed : null;
 }
 
-// "Travelling with content" is not the same as "travelling": a field sent as null is the same
-// destination the forcing of 004 reaches on its own, so it is never an offence, on create or on
-// update. A blank string is no content either — normalizeText would store it as null.
-// FALSE IS CONTENT, and that is the whole point of the last line: over the four syringe types a
-// truthiness check would throw the false away, and "syringes were used, but not glass ones" — a
-// legitimate answer of the form — would become inexpressible.
-// This entity needs NO travels() helper, which is the difference with F38: that one had to separate
-// a conflict from a relay in its container rule, and here there is no precedence between fields at
-// all. Whether the key arrived only matters for the asymmetry of the forbidden fields, and
-// hasContent already answers it — an absent key and a null key are the same thing to this rule
-const hasContent = (value: unknown): boolean => {
+// Whether a value sent for a field of a CLOSED block is an offence. An absent key and a null key are
+// never one: null is the same destination the forcing of 004 reaches on its own. A blank string is
+// not one either — normalizeText would store it as null.
+// THE ONLY PLACE OF THE ENTITY WHERE false IS NOT TREATED AS A VALUE, and it is deliberate. Over the
+// four syringe type booleans:
+//   - on 001 a false IS an offence. There is no inherited state on a create, so everything that
+//     arrives, arrives in the body: accepting "syringes were used, but not glass ones" next to a
+//     flag saying auto disable syringes WERE used would return a 201 lying about what it saved.
+//   - on 004 a false is NOT an offence, and this is what keeps alive the escape hatch of §3.5: the
+//     way to close a block whose last true is being turned off is to send that false together with
+//     the flag, in the same request. Answering 400 there would leave the row with no legal way out
+//     other than a second round trip.
+// A true and a non-blank string offend on both operations. Everywhere ELSE in this service — the
+// minimum rule, the create write and the diff — false is a full value: it says "syringes were used,
+// but not of this type", a legitimate answer of the form that a truthiness check would throw away
+const isForbiddenValue = (value: unknown, op: string): boolean => {
     if( value === undefined || value === null ) return false;
     if( typeof value === 'string' ) return value.trim().length > 0;
-    return true;
+    return op === '001' ? true : value === true;
 }
 
 // The resulting state of one field: what travels in the body if the key arrives, and what is stored
@@ -173,12 +178,14 @@ const isSyringeBlockOpen = (
 // of the form, and a composite condition would collapse them into a single 400.
 //
 // OUTER PASS — the block is closed. The five fields are forbidden, and the two operations part ways
-// exactly as F34, F36 and F38 fixed. On create it is always a 400: there is no inherited state to
-// clear, so accepting in silence a datum that will never be stored would return a 201 lying about
-// what it saved. On update it is a 400 only for the fields that travel WITH CONTENT; the ones that
-// do not travel are forced to null by the candidates, without asking and without an error. Sending
-// them as null is not an offence on either operation: it is the same destination the forcing reaches
-// on its own. The nested pass is not reached.
+// exactly as F34, F36 and F38 fixed, with isForbiddenValue drawing the line. On create every value
+// offends, false included: there is no inherited state to clear, so accepting in silence a datum
+// that will never be stored would return a 201 lying about what it saved. On update only a true or a
+// non-blank string offends; the fields that do not travel are forced to null by the candidates,
+// without asking and without an error, and a false travels legally so the row can be closed in the
+// same request that turns off its last declared type. Sending them as null is not an offence on
+// either operation: it is the same destination the forcing reaches on its own. The nested pass is
+// not reached.
 //
 // MINIMUM RULE — the block is open. AT LEAST ONE of the four types must result true, which is the
 // first minimum rule of the repository: the DDL comment says required, and an open and empty block
@@ -204,7 +211,7 @@ const assertSyringeBlock = (
 
     // Outer pass
     if( !isSyringeBlockOpen(data, stored) ) {
-        const offending = SYRINGE_BLOCK_FIELDS.some(field => hasContent(body[field]));
+        const offending = SYRINGE_BLOCK_FIELDS.some(field => isForbiddenValue(body[field], op));
         if( offending ) {
             throw new AppError(
                 getMessage('investigationAdministrationError.syringeDetailNotAllowed', lang),
@@ -229,7 +236,7 @@ const assertSyringeBlock = (
 
     // Nested pass
     const otherSyringesUsed = resultingValue<boolean>(data, stored, 'usedOtherSyringes') === true;
-    if( !otherSyringesUsed && hasContent(body.otherSyringesDescription) ) {
+    if( !otherSyringesUsed && isForbiddenValue(body.otherSyringesDescription, op) ) {
         throw new AppError(
             getMessage('investigationAdministrationError.otherDescriptionNotAllowed', lang),
             400,
@@ -451,4 +458,190 @@ export const getInvestigationAdministrationErrorByCaseIdService = async (caseId:
         throw new AppError(getMessage('investigationAdministrationError.notFound', lang), 404, 'INVADMER_006_NOT_FOUND');
     }
     return toInvestigationAdministrationErrorResponse(administrationError);
+}
+
+// The same read as findInvestigationAdministrationErrorWithRelations without narrowing the
+// attributes of the administration error, which is the precondition of buildDifferentialUpdate: an
+// instance read with a narrowed `attributes` reads back undefined for the columns it left out, and
+// every comparison against undefined would count as a change. It still carries the investigation
+// include, so the inherited visibility is checked in the same query the update instance comes from
+const findInvestigationAdministrationErrorRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationAdministrationError.findOne({
+        where: { investigationId: id },
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// Update Investigation Administration Error Service
+// Code: ESAVI-INVADMER-004
+// The main operation of the entity: the row is opened empty and completed over time, so this is
+// where the form is actually filled in. investigationId is ignored whether or not it arrives in the
+// body — it is the primary key of the row and the foreign key to its investigation at the same time,
+// and an administration error is not moved between investigations. It does not return 400 either,
+// which is what keeps working the PUT that resends the response of its own GET
+export const updateInvestigationAdministrationErrorService = async (
+    id: string,
+    data: Partial<CreateInvestigationAdministrationErrorInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const administrationError = await findInvestigationAdministrationErrorRow(id, canViewInactive);
+    if( !administrationError ) {
+        throw new AppError(getMessage('investigationAdministrationError.notFound', lang), 404, 'INVADMER_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The row is read WITHOUT narrowed attributes, which is the precondition of the helper: with
+    // trimmed attributes an absent field reads back undefined and every comparison against it would
+    // count as "it changed"
+    const stored = administrationError.get({ plain: true }) as Record<string, unknown>;
+
+    // The rule of the block and its nested pass, over the RESULTING state: what travels merged with
+    // what is stored. It is the service and not the validator who emits them, because
+    // express-validator cannot see the stored row. They run BEFORE the diff and independently of it.
+    // Evaluating the minimum rule over the body instead would turn a PUT { notes: 'x' } over a row
+    // with the block open and populated into a 400
+    assertSyringeBlock(data, stored, '004', lang);
+
+    // The resulting state of the block key, recomputed here to drive the conditional derivatives
+    // below. The comparison is against 'NO' for the same reason as in the rule: this is the first
+    // block of the repository that opens with the negative answer
+    const blockOpen = isSyringeBlockOpen(data, stored);
+
+    // The nested key, which only matters while the outer block is open. With the outer block closed
+    // the description falls with the other four regardless of this value
+    const otherSyringesUsed = resultingValue<boolean>(data, stored, 'usedOtherSyringes') === true;
+
+    // No candidate is placed under an `if( data.x )`. Over the four booleans that would be outright
+    // destructive: false is a valid value and a truthiness check would throw it away, leaving
+    // "syringes were used, but not glass ones" with no way of being stored. Over the twelve
+    // answerOption columns it would work by accident — the five strings of the ENUM are truthy — but
+    // would silently discard the null the field is emptied with
+    const candidates: Record<string, unknown> = {
+        // investigationId does NOT enter: immutable, ignored in silence and with no 400
+
+        // THE KEY OF THE SYRINGE BLOCK, and it is NOT part of it: it is the field that decides, not
+        // the one decided. Entering as a conditional derivative would make it annul itself
+        usedAutoDisableSyringes: data.usedAutoDisableSyringes !== undefined
+            ? ( data.usedAutoDisableSyringes ?? null ) : undefined,
+
+        // THE FOUR CONDITIONAL DERIVATIVES OF THE BLOCK. With the block closed the null enters
+        // candidates ALWAYS, with no presence check, and it is buildDifferentialUpdate who decides
+        // whether it differs: closing a block that was already closed writes nothing and does not
+        // grow appDetails. A cleanup with a second UPDATE after the diff would write even when
+        // nothing changed
+        usedGlassSyringes: blockOpen
+            ? ( data.usedGlassSyringes !== undefined ? ( data.usedGlassSyringes ?? null ) : undefined )
+            : null,
+        usedDisposableSyringes: blockOpen
+            ? ( data.usedDisposableSyringes !== undefined ? ( data.usedDisposableSyringes ?? null ) : undefined )
+            : null,
+        usedRecycledDisposableSyringes: blockOpen
+            ? ( data.usedRecycledDisposableSyringes !== undefined ? ( data.usedRecycledDisposableSyringes ?? null ) : undefined )
+            : null,
+        usedOtherSyringes: blockOpen
+            ? ( data.usedOtherSyringes !== undefined ? ( data.usedOtherSyringes ?? null ) : undefined )
+            : null,
+
+        // THE CONDITIONAL DERIVATIVE OF DOUBLE CONDITION, and the only one of the repository. It
+        // survives only when BOTH blocks are open; either of them closed forces it to null. The two
+        // conditions are written as one && here because at this point they are already two resolved
+        // booleans — the two SUCCESSIVE PASSES that keep their error codes apart live in
+        // assertSyringeBlock, which has already run
+        otherSyringesDescription: blockOpen && otherSyringesUsed
+            ? ( data.otherSyringesDescription !== undefined ? normalizeText(data.otherSyringesDescription) : undefined )
+            : null,
+
+        // OUTSIDE THE BLOCK: never forced and never forbidden. It is stored even when no syringe type
+        // was declared at all. Normalized before comparing, or a body differing only in surrounding
+        // blanks would count as a change
+        syringesKeyFindings: data.syringesKeyFindings !== undefined ? normalizeText(data.syringesKeyFindings) : undefined,
+
+        // The five reconstitution columns, independent of each other and of everything else. None of
+        // them is ever forced, and none is validated against another: the five may result 'YES' at
+        // once
+        reconstitutionUsedSameSyringe: data.reconstitutionUsedSameSyringe !== undefined
+            ? ( data.reconstitutionUsedSameSyringe ?? null ) : undefined,
+        reconstitutionUsedSameSyringeDifferentVaccine: data.reconstitutionUsedSameSyringeDifferentVaccine !== undefined
+            ? ( data.reconstitutionUsedSameSyringeDifferentVaccine ?? null ) : undefined,
+        reconstitutionUsedDifferentSyringeSameVial: data.reconstitutionUsedDifferentSyringeSameVial !== undefined
+            ? ( data.reconstitutionUsedDifferentSyringeSameVial ?? null ) : undefined,
+        reconstitutionUsedDifferentSyringeDifferentVaccine: data.reconstitutionUsedDifferentSyringeDifferentVaccine !== undefined
+            ? ( data.reconstitutionUsedDifferentSyringeDifferentVaccine ?? null ) : undefined,
+        reconstitutionFollowedManufacturerRecommendation: data.reconstitutionFollowedManufacturerRecommendation !== undefined
+            ? ( data.reconstitutionFollowedManufacturerRecommendation ?? null ) : undefined,
+        reconstitutionKeyFindings: data.reconstitutionKeyFindings !== undefined
+            ? normalizeText(data.reconstitutionKeyFindings) : undefined,
+
+        // THE SIX had* / *Notes PAIRS, TWELVE INDEPENDENT CANDIDATES. NOT ONE OF THE SIX NOTES IS A
+        // CONDITIONAL DERIVATIVE: hanging a note from its flag would force it to null the moment the
+        // flag stops being 'YES', silently erasing a note already stored with the flag at 'NO' — the
+        // reason why the answer is no, which is a legitimate record of the form
+        hadPrescriptionError: data.hadPrescriptionError !== undefined
+            ? ( data.hadPrescriptionError ?? null ) : undefined,
+        prescriptionErrorNotes: data.prescriptionErrorNotes !== undefined
+            ? normalizeText(data.prescriptionErrorNotes) : undefined,
+        hadContaminatedVaccine: data.hadContaminatedVaccine !== undefined
+            ? ( data.hadContaminatedVaccine ?? null ) : undefined,
+        contaminatedVaccineNotes: data.contaminatedVaccineNotes !== undefined
+            ? normalizeText(data.contaminatedVaccineNotes) : undefined,
+        hadAbnormalVaccineConditions: data.hadAbnormalVaccineConditions !== undefined
+            ? ( data.hadAbnormalVaccineConditions ?? null ) : undefined,
+        abnormalConditionsNotes: data.abnormalConditionsNotes !== undefined
+            ? normalizeText(data.abnormalConditionsNotes) : undefined,
+        hadPreparationError: data.hadPreparationError !== undefined
+            ? ( data.hadPreparationError ?? null ) : undefined,
+        preparationErrorNotes: data.preparationErrorNotes !== undefined
+            ? normalizeText(data.preparationErrorNotes) : undefined,
+        hadHandlingError: data.hadHandlingError !== undefined
+            ? ( data.hadHandlingError ?? null ) : undefined,
+        handlingErrorNotes: data.handlingErrorNotes !== undefined
+            ? normalizeText(data.handlingErrorNotes) : undefined,
+        hadImproperAdministration: data.hadImproperAdministration !== undefined
+            ? ( data.hadImproperAdministration ?? null ) : undefined,
+        improperAdministrationNotes: data.improperAdministrationNotes !== undefined
+            ? normalizeText(data.improperAdministrationNotes) : undefined,
+
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationAdministrationError_setSysDetails fires on every
+    // write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationAdministrationErrorWithRelations(id, true);
+        return unchanged ? toInvestigationAdministrationErrorResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the generic
+    // loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(administrationError.appDetails) ? administrationError.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVADMER-004',
+        detail: 'Investigation administration error updated by service'
+    };
+    await administrationError.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationAdministrationErrorWithRelations(id, true);
+    return updated ? toInvestigationAdministrationErrorResponse(updated) : null;
 }
