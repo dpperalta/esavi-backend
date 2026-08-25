@@ -34,6 +34,7 @@ import investigationTeamMemberRoutes from './investigationTeamMember.routes';
 import investigationMedicalHistoryRoutes from './investigationMedicalHistory.routes';
 import investigationPregnancyConditionRoutes from './investigationPregnancyCondition.routes';
 import investigationClinicalEvaluationRoutes from './investigationClinicalEvaluation.routes';
+import investigationVaccinationContextRoutes from './investigationVaccinationContext.routes';
 import evaluationInstitutionRoutes from './evaluationInstitution.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
@@ -108,6 +109,12 @@ router.use('/investigation-clinical-evaluations', investigationClinicalEvaluatio
 // first COLLECTION of the repository with encrypted columns — personName and personContact — which
 // is why both listings decrypt row by row
 router.use('/evaluation-institutions', evaluationInstitutionRoutes);
+// The sixth of the fourteen satellites of investigation, and the seventh with a spec of its own:
+// the context of the vaccination session in which the investigated dose was administered - the time
+// slot, the shared exposure per vial and per batch, and the cluster. It is the first entity of the
+// repository with TWO foreign keys resolved against one and the same catalog, vaccinationMoment
+router.use('/investigation-vaccination-contexts', investigationVaccinationContextRoutes);
+
 router.use('/system-configs', systemConfigRoutes);
 
 export default router;
