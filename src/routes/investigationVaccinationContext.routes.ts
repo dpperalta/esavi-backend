@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationVaccinationContext,
     getAllInvestigationVaccinationContexts,
+    getInvestigationVaccinationContextById,
     getInvestigationVaccinationContexts
 } from '../controllers/investigationVaccinationContext.controller';
 import {
     createInvestigationVaccinationContextValidator,
+    investigationVaccinationContextIdValidator,
     investigationVaccinationContextListValidator
 } from '../validators';
 
@@ -33,5 +35,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationVaccina
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the vaccination
 // context of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationVaccinationContextListValidator, validateFields, getAllInvestigationVaccinationContexts);
+
+// Get Investigation Vaccination Context by ID
+// Code: ESAVI-INVVACTX-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationVaccinationContextIdValidator, validateFields, getInvestigationVaccinationContextById);
 
 export default router;

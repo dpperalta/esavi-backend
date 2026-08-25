@@ -451,8 +451,27 @@ const getAllInvestigationVaccinationContextsService = async (
     return { count, rows: rows.map(toInvestigationVaccinationContextResponse) };
 }
 
+// Get Investigation Vaccination Context By ID Service
+// Code: ESAVI-INVVACTX-003
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation and no separate operation is needed for it.
+// Two filters, and the second one is the inherited visibility: the row must exist, and its
+// investigation must be active unless canViewInactive says otherwise — today SUPERADMIN. Both
+// failures answer the same 404 without distinguishing, because telling them apart would confirm to a
+// USER that a context exists under an investigation it is not allowed to see.
+// The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
+// investigation, which is what makes it possible to consult it before purging it
+const getInvestigationVaccinationContextByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const context = await findInvestigationVaccinationContextWithRelations(id, includeInactive);
+    if( !context ) {
+        throw new AppError(getMessage('investigationVaccinationContext.notFound', lang), 404, 'INVVACTX_003_NOT_FOUND');
+    }
+    return toInvestigationVaccinationContextResponse(context);
+}
+
 export {
     createInvestigationVaccinationContextService,
     getAllInvestigationVaccinationContextsService,
+    getInvestigationVaccinationContextByIdService,
     getInvestigationVaccinationContextsService
 };

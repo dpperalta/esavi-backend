@@ -96,6 +96,9 @@ describe('investigationVaccinationContext contract', () => {
         return investigationId;
     };
 
+    const getById = (id: string, role: TestRole = 'USER') =>
+        request(app).get(`${ basePath }/${ id }`).set(authHeader(role));
+
     const list = (query: string = '', role: TestRole = 'USER') =>
         request(app).get(`${ basePath }${ query }`).set(authHeader(role));
 
@@ -559,6 +562,94 @@ describe('investigationVaccinationContext contract', () => {
 
             expect(returned[0]).toBe(second);
             expect(returned[1]).toBe(first);
+        });
+    });
+
+    describe('003 — get by ID', () => {
+
+        it('returns the full shape with the two catalogs resolved', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            expect((await create({
+                investigationId,
+                momentItemId: firstHoursItemId,
+                multidoseItemId: lastHoursItemId,
+                vaccinatedPerVialCount: 0,
+                locations: 'Quito'
+            })).status).toBe(201);
+
+            const res = await getById(investigationId);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.investigationId).toBe(investigationId);
+            expect(res.body.data.moment.code).toBe('FIRST_HOURS');
+            expect(res.body.data.multidoseMoment.code).toBe('LAST_HOURS');
+            expect(res.body.data.vaccinatedPerVialCount).toBe(0);
+            expect(res.body.data.investigation.status).not.toBeNull();
+            expect(res.body.data.investigation.case.caseId).toBe(caseId);
+        });
+
+        it('an ID that does not exist returns 404', async () => {
+            const res = await getById(unknownUuid);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVVACTX_003_NOT_FOUND');
+        });
+
+        it('an :id that is not a UUID returns 400', async () => {
+            const res = await getById('not-a-uuid');
+
+            expect(res.status).toBe(400);
+        });
+
+        it('a row whose investigation is inactive returns 404 for USER and ADMIN and 200 for SUPERADMIN', async () => {
+            const investigationId = await seed();
+            await retireInvestigation(investigationId);
+
+            expect((await getById(investigationId, 'USER')).status).toBe(404);
+            expect((await getById(investigationId, 'ADMIN')).status).toBe(404);
+
+            const superAdmin = await getById(investigationId, 'SUPERADMIN');
+            expect(superAdmin.status).toBe(200);
+            expect(superAdmin.body.data.investigation.isActive).toBe(false);
+        });
+
+        it('a row with deletedAt sealed but an active investigation IS returned: the seal does not hide it, its parent does', async () => {
+            const investigationId = await seed();
+            await seal(investigationId);
+
+            const res = await getById(investigationId);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.deletedAt).not.toBeNull();
+        });
+
+        it('moment and multidoseMoment come back null when their FK is null', async () => {
+            const investigationId = await seed();
+
+            const res = await getById(investigationId);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.moment).toBeNull();
+            expect(res.body.data.multidoseMoment).toBeNull();
+        });
+
+        it('exposes sysDetails in none of the objects of the response', async () => {
+            const investigationId = await seed({ momentItemId: firstHoursItemId });
+
+            const res = await getById(investigationId);
+
+            expect(res.body.data.sysDetails).toBeUndefined();
+            expect(res.body.data.isActive).toBeUndefined();
+            expect(res.body.data.investigation.sysDetails).toBeUndefined();
+            expect(res.body.data.moment.sysDetails).toBeUndefined();
+        });
+
+        it('/admin is not captured as an :id', async () => {
+            const res = await listAdmin();
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toHaveProperty('count');
         });
     });
 });

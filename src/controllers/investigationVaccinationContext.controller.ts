@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationVaccinationContextListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationVaccinationContextListFilters } from '../types';
 import {
     createInvestigationVaccinationContextService,
     getAllInvestigationVaccinationContextsService,
+    getInvestigationVaccinationContextByIdService,
     getInvestigationVaccinationContextsService
 } from '../services/investigationVaccinationContext.service';
 
@@ -78,8 +79,36 @@ const getAllInvestigationVaccinationContexts = async (req: Request, res: Respons
     }
 }
 
+// Get Investigation Vaccination Context By ID Controller
+// Code: ESAVI-INVVACTX-003
+// canViewInactive is what lets a SUPERADMIN read the vaccination context of a retired investigation:
+// the entity has no state of its own, so the predicate is applied over the visibility it inherits
+const getInvestigationVaccinationContextById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationVaccinationContextByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccinationContext.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACTX-003: Error fetching Investigation Vaccination Context: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccinationContext.getFailed', req.lang), 500, 'INVVACTX_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccinationContext,
     getAllInvestigationVaccinationContexts,
+    getInvestigationVaccinationContextById,
     getInvestigationVaccinationContexts
 };
