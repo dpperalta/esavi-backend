@@ -407,7 +407,7 @@ Sin `isActive`, lo que las cascadas mueven es el sello de `deletedAt`. Los tres 
 
 ### 3.6 Claves i18n nuevas
 
-Bloque `investigationVaccinationContext` en `src/data/i18n/es.json`, `en.json` y `nl.json` — **dieciocho claves**:
+Bloque `investigationVaccinationContext` en `src/data/i18n/es.json`, `en.json` y `nl.json` — **veinte claves**:
 
 | Clave | Uso |
 |---|---|
@@ -485,7 +485,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 2. **Modelo, asociaciones y tipos.** `src/models/investigationVaccinationContext.model.ts` con la PK **sin `defaultValue`**, `isCluster` y `clusterUsedSameVial` en `ENUM(...ANSWER_OPTIONS)`, los cuatro contadores en `SMALLINT`, `clusterIdentificationNumber` en `STRING(100)`, `locations` y `notes` en `TEXT`, y **sin atributo `isActive`**; `src/models/associations/investigationVaccinationContext.associations.ts` con el `belongsTo` a `Investigation` como `investigation`, el inverso `Investigation.hasOne(..., { as: 'vaccinationContext' })` y **los dos `belongsTo` a `CatalogItem` con alias `moment` y `multidoseMoment`**, registrado en `initModels()`; `src/types/investigation/investigationVaccinationContext.types.ts` con `CreateInvestigationVaccinationContextInput`, exportado por el `index.ts` de barrel del dominio. Alta en `src/models/index.ts`.
    *Verificación:* `npm run build` en 0; **un `findAll` con los dos include de catálogo a la vez devuelve dos objetos distintos y no dos copias del mismo** — es la comprobación que prueba que los alias están bien puestos; `vaccinationContext` no colisiona con `source`, `autopsy`, `teamMembers`, `medicalHistory` ni `clinicalEvaluation`; `npm test` sigue en verde, porque el `hasOne` nuevo no se incluye en ninguna respuesta de `investigation`.
 
-3. **Claves i18n.** El bloque `investigationVaccinationContext` completo de §3.6 en `es.json`, `en.json` y `nl.json`, con las **dieciocho** claves. **Sin `activatedSuccess`, `deletedSuccess`, `alreadyActive` ni `alreadyInactive`.**
+3. **Claves i18n.** El bloque `investigationVaccinationContext` completo de §3.6 en `es.json`, `en.json` y `nl.json`, con las **veinte** claves. **Sin `activatedSuccess`, `deletedSuccess`, `alreadyActive` ni `alreadyInactive`.**
    *Verificación:* `npm run i18n:check` en 0 y `npm test -- messages` pasa; `investigationVaccinationContext.notDeleted` existe en los tres archivos, que es lo que `assertRowIsSealed` resolverá en tiempo de ejecución sin que ningún `grep` estático lo vea; `momentNotFound` y `multidoseNotFound` están en los tres idiomas y **no son copia literal la una de la otra**.
 
 4. **Validadores.** `src/validators/investigationVaccinationContext.validator.ts` con cinco arrays: `investigationVaccinationContextIdValidator`, `investigationVaccinationContextCaseIdValidator` (para el `param('caseId')` del `006`), `investigationVaccinationContextListValidator` (los dos filtros más `limit` y `offset`), `createInvestigationVaccinationContextValidator` y `updateInvestigationVaccinationContextValidator`. El de create exige `investigationId` UUID; los dos comparten las dos FKs de catálogo con `.isUUID()` admitiendo `null`, los dos `answerOption` con `.isIn(ANSWER_OPTIONS)` admitiendo `null`, los cuatro contadores con `.isInt({ min: 0, max: 32767 })` admitiendo `null`, `clusterIdentificationNumber` con `.isLength({ max: 100 })`, y `locations` y `notes` como cadena. **Ni la regla del bloque ni la del vial van aquí:** dependen del estado guardado y viven en el servicio. Alta en `src/validators/index.ts`.
@@ -598,7 +598,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 
 **Cierre**
 
-- [ ] Las dieciocho claves nuevas existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
+- [ ] Las veinte claves nuevas existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
 - [ ] `npm run check` sale en 0.
 
 ---
