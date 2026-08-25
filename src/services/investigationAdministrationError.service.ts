@@ -395,3 +395,21 @@ export const getAllInvestigationAdministrationErrorsService = async (
     });
     return { count, rows: rows.map(toInvestigationAdministrationErrorResponse) };
 }
+
+// Get Investigation Administration Error By ID Service
+// Code: ESAVI-INVADMER-003
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation and no separate operation is needed for it.
+// Two filters, and the second one is the inherited visibility: the row must exist, and its
+// investigation must be active unless canViewInactive says otherwise — today SUPERADMIN. Both
+// failures answer the same 404 without distinguishing, because telling them apart would confirm to a
+// USER that an administration error exists under an investigation it is not allowed to see.
+// The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
+// investigation, which is what makes it possible to consult it before purging it
+export const getInvestigationAdministrationErrorByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const administrationError = await findInvestigationAdministrationErrorWithRelations(id, includeInactive);
+    if( !administrationError ) {
+        throw new AppError(getMessage('investigationAdministrationError.notFound', lang), 404, 'INVADMER_003_NOT_FOUND');
+    }
+    return toInvestigationAdministrationErrorResponse(administrationError);
+}

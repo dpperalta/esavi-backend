@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationAdministrationErrorListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationAdministrationErrorListFilters } from '../types';
 import {
     createInvestigationAdministrationErrorService,
     getAllInvestigationAdministrationErrorsService,
+    getInvestigationAdministrationErrorByIdService,
     getInvestigationAdministrationErrorsService
 } from '../services/investigationAdministrationError.service';
 
@@ -78,8 +79,37 @@ const getAllInvestigationAdministrationErrors = async (req: Request, res: Respon
     }
 }
 
+// Get Investigation Administration Error By ID Controller
+// Code: ESAVI-INVADMER-003
+// canViewInactive is what lets a SUPERADMIN read the administration error of a retired
+// investigation: the entity has no state of its own, so the predicate is applied over the visibility
+// it inherits
+const getInvestigationAdministrationErrorById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationAdministrationErrorByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-003: Error fetching Investigation Administration Error: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.getFailed', req.lang), 500, 'INVADMER_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationAdministrationError,
     getAllInvestigationAdministrationErrors,
+    getInvestigationAdministrationErrorById,
     getInvestigationAdministrationErrors
 };

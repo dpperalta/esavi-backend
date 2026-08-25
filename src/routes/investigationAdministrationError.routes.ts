@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationAdministrationError,
     getAllInvestigationAdministrationErrors,
+    getInvestigationAdministrationErrorById,
     getInvestigationAdministrationErrors
 } from '../controllers/investigationAdministrationError.controller';
 import {
     createInvestigationAdministrationErrorValidator,
+    investigationAdministrationErrorIdValidator,
     investigationAdministrationErrorListValidator
 } from '../validators';
 
@@ -34,5 +36,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationAdminis
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the
 // administration error of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationAdministrationErrorListValidator, validateFields, getAllInvestigationAdministrationErrors);
+
+// Get Investigation Administration Error by ID
+// Code: ESAVI-INVADMER-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationAdministrationErrorIdValidator, validateFields, getInvestigationAdministrationErrorById);
 
 export default router;
