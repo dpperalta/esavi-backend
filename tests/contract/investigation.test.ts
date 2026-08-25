@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -1254,6 +1254,138 @@ describe('investigation contract', () => {
             await createClinicalEvaluation(id);
 
             const satellites = [InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationClinicalEvaluation];
+
+            await deactivate(id);
+            for( const model of satellites ) {
+                expect((await model.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).not.toBeNull();
+            }
+
+            await activate(id);
+            for( const model of satellites ) {
+                expect((await model.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).toBeNull();
+            }
+        });
+    });
+
+    // SPEC F36 hangs the sixth of the fourteen satellites off the same three operations, and it is
+    // the FIFTH consumer of common/satelliteCascade.service.ts, which it consumes without modifying.
+    // What is checked here is the effect on the vaccination context, seen from the side of the
+    // investigation: the detailed behaviour of the entity lives in
+    // tests/contract/investigationVaccinationContext.test.ts.
+    // investigationVaccinationContext has no isActive column either, so what the cascades move is
+    // its deletedAt. Unlike investigationClinicalEvaluation it carries no encrypted column, so its
+    // purge dump is a raw JSON.stringify of the whole row and there is nothing to omit.
+    // The last case is the one that matters most: the FIVE satellites travel in the same transaction
+    // over the same common service, so no spec may have broken the other four
+    describe('the cascade over investigationVaccinationContext', () => {
+
+        // The vaccination context is created through its own endpoint, which is the only way it is
+        // ever born. Like the source, the medical history and the clinical evaluation, it opens
+        // empty: { investigationId } is the whole minimum
+        const createVaccinationContext = (investigationId: string, payload: Record<string, unknown> = {}) =>
+            request(app).post('/api/investigation-vaccination-contexts')
+                .set(authHeader('USER'))
+                .send({ investigationId, ...payload });
+
+        const logPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
+
+        const readVaccinationContext = async (id: string) =>
+            await InvestigationVaccinationContext.findByPk(id, { paranoid: false });
+
+        const vaccinationContextMethods = async (id: string): Promise<string[]> =>
+            (((await readVaccinationContext(id))!.getDataValue('appDetails') as { method: string }[]) ?? [])
+                .map(entry => entry.method);
+
+        it('deactivating the investigation seals its vaccination context', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            expect((await createVaccinationContext(id, { notes: 'a note' })).status).toBe(201);
+
+            expect((await deactivate(id)).status).toBe(200);
+
+            expect((await readVaccinationContext(id))!.getDataValue('deletedAt')).not.toBeNull();
+            expect(await vaccinationContextMethods(id)).toEqual(['ESAVI-INVVACTX-001', 'ESAVI-INVESTGN-005A']);
+        });
+
+        it('reactivating it returns the vaccination context, keeping the previous history', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createVaccinationContext(id, { notes: 'a note' });
+            await deactivate(id);
+
+            expect((await activate(id)).status).toBe(200);
+
+            const context = (await readVaccinationContext(id))!;
+            expect(context.getDataValue('deletedAt')).toBeNull();
+            expect(context.getDataValue('notes')).toBe('a note');
+            expect(await vaccinationContextMethods(id)).toEqual([
+                'ESAVI-INVVACTX-001', 'ESAVI-INVESTGN-005A', 'ESAVI-INVESTGN-005B'
+            ]);
+        });
+
+        it('a row sealed by hand BEFORE the cascade keeps its original deletedAt and gets no new entry', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createVaccinationContext(id);
+
+            const sealedAt = new Date('2024-01-15T10:00:00.000Z');
+            await InvestigationVaccinationContext.update({ deletedAt: sealedAt }, { where: { investigationId: id } });
+
+            await deactivate(id);
+
+            const context = (await readVaccinationContext(id))!;
+            expect(new Date(context.getDataValue('deletedAt') as Date).toISOString()).toBe(sealedAt.toISOString());
+            expect(await vaccinationContextMethods(id)).toEqual(['ESAVI-INVVACTX-001']);
+        });
+
+        it('an investigation with no vaccination context deactivates and reactivates without error', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+
+            expect((await deactivate(id)).status).toBe(200);
+            expect((await activate(id)).status).toBe(200);
+        });
+
+        it('purging the investigation destroys the vaccination context by Postgres cascade, dumping the whole row', async () => {
+            // The purge is not blocked when the investigation has satellites: it is the decision F13
+            // and F29 declared and F30, F32, F34 and F36 inherited, with the warn dump in the log as
+            // the only mitigation - five lines now, one per satellite without isActive
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createVaccinationContext(id, { locations: 'cascade dump probe', vaccinatedPerVialCount: 0 });
+            await deactivate(id);
+
+            const logBefore = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf-8').length : 0;
+
+            expect((await purge(id)).status).toBe(200);
+
+            expect(await readVaccinationContext(id)).toBeNull();
+            expect(await Investigation.findByPk(id, { paranoid: false })).toBeNull();
+
+            // log4js buffers, so give the appender a tick to flush
+            await new Promise(resolve => setTimeout(resolve, 250));
+            const added = fs.readFileSync(logPath, 'utf-8').slice(logBefore);
+            const contextLine = added.split('\n')
+                .find(line => line.includes('ESAVI-INVESTGN-005C') && line.includes('vaccination context'));
+
+            expect(contextLine).toBeDefined();
+            expect(contextLine).toContain('cascade dump probe');
+        });
+
+        it('an investigation with the FIVE satellites without isActive seals and clears the five in the same transaction', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+                .send({ investigationId: id, isDeath: true, deathDate: '2024-06-01' });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER')).send({ investigationId: id });
+            await createVaccinationContext(id);
+
+            const satellites = [
+                InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory,
+                InvestigationClinicalEvaluation, InvestigationVaccinationContext
+            ];
 
             await deactivate(id);
             for( const model of satellites ) {
