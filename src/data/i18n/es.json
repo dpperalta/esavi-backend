@@ -863,6 +863,26 @@
         "purgeSuccess": "Vacuna administrada eliminada permanentemente",
         "purgeFailed": "Error al eliminar permanentemente la vacuna administrada. Por favor, inténtelo de nuevo más tarde."
     },
+    "investigationColdChain": {
+        "notFound": "Cadena de frío no encontrada. Por favor, verifique el ID de la investigación e inténtelo de nuevo.",
+        "idRequired": "El ID de la investigación es obligatorio",
+        "investigationNotFound": "La investigación indicada no existe o está inactiva",
+        "alreadyExists": "La investigación con ID {{investigationId}} ya tiene una cadena de frío registrada",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "rangeDeviationNotAllowed": "La desviación del rango de temperatura solo se admite cuando se declara que la temperatura de almacenamiento fue monitorizada",
+        "transportContainerConflict": "El termo y la caja fría no pueden declararse los dos como utilizados: indique un solo contenedor de transporte",
+        "notDeleted": "La cadena de frío con ID {{id}} no ha sido retirada. Desactive su investigación antes de eliminarla permanentemente.",
+        "createdSuccess": "Cadena de frío creada exitosamente",
+        "createdFailed": "Error al crear la cadena de frío. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Cadena de frío obtenida exitosamente",
+        "getFailed": "Error al obtener la cadena de frío. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Listado de cadenas de frío obtenido exitosamente",
+        "getFailedPlural": "Error al obtener el listado de cadenas de frío. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Cadena de frío actualizada exitosamente",
+        "updatedFailed": "Error al actualizar la cadena de frío. Por favor, inténtelo de nuevo más tarde.",
+        "purgeSuccess": "Cadena de frío eliminada permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente la cadena de frío. Por favor, inténtelo de nuevo más tarde."
+    },
     "systemConfig": {
         "createdSuccess": "Configuración creada exitosamente",
         "createdFailed": "Error al crear la configuración. Por favor, inténtelo de nuevo más tarde.",

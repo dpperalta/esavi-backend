@@ -863,6 +863,26 @@
         "purgeSuccess": "Toegediend vaccin permanent verwijderd",
         "purgeFailed": "Definitief verwijderen van het toegediende vaccin mislukt. Probeer het later opnieuw."
     },
+    "investigationColdChain": {
+        "notFound": "Koudeketen niet gevonden. Controleer de ID van het onderzoek en probeer het opnieuw.",
+        "idRequired": "De ID van het onderzoek is verplicht",
+        "investigationNotFound": "Het opgegeven onderzoek bestaat niet of is inactief",
+        "alreadyExists": "Het onderzoek met ID {{investigationId}} heeft al een koudeketen geregistreerd",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "rangeDeviationNotAllowed": "De afwijking van het temperatuurbereik is alleen toegestaan wanneer wordt opgegeven dat de opslagtemperatuur is gecontroleerd",
+        "transportContainerConflict": "De thermos en de koelbox kunnen niet allebei als gebruikt worden opgegeven: geef één transportcontainer op",
+        "notDeleted": "De koudeketen met ID {{id}} is niet ingetrokken. Deactiveer het onderzoek voordat u deze permanent verwijdert.",
+        "createdSuccess": "Koudeketen succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de koudeketen mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Koudeketen succesvol opgehaald",
+        "getFailed": "Ophalen van de koudeketen mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Lijst met koudeketens succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de lijst met koudeketens mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Koudeketen succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de koudeketen mislukt. Probeer het later opnieuw.",
+        "purgeSuccess": "Koudeketen permanent verwijderd",
+        "purgeFailed": "Definitief verwijderen van de koudeketen mislukt. Probeer het later opnieuw."
+    },
     "systemConfig": {
         "createdSuccess": "Configuratie succesvol aangemaakt",
         "createdFailed": "Aanmaken van de configuratie mislukt. Probeer het later opnieuw.",
