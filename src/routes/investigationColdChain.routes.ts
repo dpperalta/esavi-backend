@@ -1,10 +1,17 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { createInvestigationColdChain } from '../controllers/investigationColdChain.controller';
-import { createInvestigationColdChainValidator } from '../validators';
+import {
+    createInvestigationColdChain,
+    getAllInvestigationColdChains,
+    getInvestigationColdChains
+} from '../controllers/investigationColdChain.controller';
+import {
+    createInvestigationColdChainValidator,
+    investigationColdChainListValidator
+} from '../validators';
 
-const { USER } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -14,5 +21,17 @@ const router = Router();
 // F13, F14 and F28 to F37 already fixed: the detail is captured in the same operational flow as the
 // case, and splitting it across two roles would break the form in half
 router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationColdChainValidator, validateFields, createInvestigationColdChain);
+
+// Get Investigation Cold Chains
+// Code: ESAVI-INVCOLD-002A
+// Only the cold chains of active investigations. The entity has no isActive of its own: the filter
+// lands on the where of the investigation include, which is the real source of its visibility
+router.get('/', tokenValidation, validateUserRole(USER), ...investigationColdChainListValidator, validateFields, getInvestigationColdChains);
+
+// Get All Investigation Cold Chains - For Admin
+// Code: ESAVI-INVCOLD-002B
+// Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the cold chain
+// of a retired investigation
+router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationColdChainListValidator, validateFields, getAllInvestigationColdChains);
 
 export default router;
