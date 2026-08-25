@@ -7,6 +7,7 @@ import {
     getInvestigationVaccineAdministeredByIdService,
     getInvestigationVaccinesAdministeredByCaseIdService,
     getInvestigationVaccinesAdministeredByInvestigationService,
+    purgeInvestigationVaccineAdministeredService,
     setInvestigationVaccineAdministeredActivationService,
     updateInvestigationVaccineAdministeredService
 } from '../services/investigationVaccineAdministered.service';
@@ -212,6 +213,26 @@ const activateInvestigationVaccineAdministered = async (req: Request, res: Respo
     }
 }
 
+// Purge Investigation Vaccine Administered Controller
+// Code: ESAVI-INVVACAD-005C
+const purgeInvestigationVaccineAdministered = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeInvestigationVaccineAdministeredService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccineAdministered.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACAD-005C: Error purging Investigation Vaccine Administered: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccineAdministered.purgeFailed', req.lang), 500, 'INVVACAD_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccineAdministered,
     getInvestigationVaccinesAdministeredByInvestigation,
@@ -220,5 +241,6 @@ export {
     getInvestigationVaccinesAdministeredByCaseId,
     updateInvestigationVaccineAdministered,
     deleteInvestigationVaccineAdministered,
-    activateInvestigationVaccineAdministered
+    activateInvestigationVaccineAdministered,
+    purgeInvestigationVaccineAdministered
 }

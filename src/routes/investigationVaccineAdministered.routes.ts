@@ -9,6 +9,7 @@ import {
     getInvestigationVaccineAdministeredById,
     getInvestigationVaccinesAdministeredByCaseId,
     getInvestigationVaccinesAdministeredByInvestigation,
+    purgeInvestigationVaccineAdministered,
     updateInvestigationVaccineAdministered
 } from '../controllers/investigationVaccineAdministered.controller';
 import {
@@ -20,7 +21,7 @@ import {
     updateInvestigationVaccineAdministeredValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -53,6 +54,11 @@ router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...inv
 // and not the investigationId, so this is the door the operational flow actually uses. Declared with
 // the literal paths, before /:id
 router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredCaseIdValidator, ...investigationVaccineAdministeredListValidator, validateFields, getInvestigationVaccinesAdministeredByCaseId);
+
+// Purge Investigation Vaccine Administered - Physical delete, for SuperAdmin
+// Code: ESAVI-INVVACAD-005C
+// Declared with the literal paths, before /:id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationVaccineAdministeredIdValidator, validateFields, purgeInvestigationVaccineAdministered);
 
 // Activate Investigation Vaccine Administered - For Admin
 // Code: ESAVI-INVVACAD-005B

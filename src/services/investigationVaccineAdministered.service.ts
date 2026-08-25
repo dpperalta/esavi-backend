@@ -4,6 +4,7 @@ import { EsaviCase, Investigation, InvestigationVaccineAdministered, VaccineWhod
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationVaccineAdministeredInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // There is no CREATE_FIELDS here, and that is a decision and not an omission. In the eight sister
@@ -721,6 +722,55 @@ const setInvestigationVaccineAdministeredActivationService = async (
     }
 }
 
+// Purge Investigation Vaccine Administered Service
+// Code: ESAVI-INVVACAD-005C
+// investigationVaccineAdministered is outside the preventPhysicalDelete loop of esaviapp.sql, so the
+// row can really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification: its canonical guard — the row must have
+// been retired with a 005A first, 409 otherwise — applies over the row itself. Here that guard IS
+// effective, unlike in F29, F30, F32, F34 and F36, because this table does have an isActive column.
+// The state of the investigation is deliberately not checked, and nothing from rowSeal.helper.ts is
+// consumed either.
+//
+// This table is a leaf of the graph. None of the 45 tables references vaccineAdministeredId, so
+// destroying a row drags no other one, there is no cascade to count and no ids to dump. The two
+// foreign keys it cites are ON DELETE RESTRICT in the other direction, and both parents are in
+// preventPhysicalDelete anyway.
+//
+// The warn dump carries the WHOLE row and nothing is omitted from it: this entity has no encrypted
+// column and no identifying datum — a foreign key to a dictionary, an integer and a note.
+//
+// No appDetails entry either: the row is destroyed in the same transaction, which is the absence
+// CONVENTIONS.md §6 declares legitimate
+const purgeInvestigationVaccineAdministeredService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: InvestigationVaccineAdministered,
+            where: { vaccineAdministeredId: id },
+            transaction,
+            operationCode: 'ESAVI-INVVACAD-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('investigationVaccineAdministered.notFound', lang),
+            notFoundCode: 'INVVACAD_005C_NOT_FOUND',
+            // alreadyActive and not alreadyInactive: the row this 409 rejects is one that is STILL
+            // ACTIVE and was never retired with a 005A, so the message has to say so. It is the key
+            // F31 uses for the same guard
+            stillActiveMessage: getMessage('investigationVaccineAdministered.alreadyActive', lang, { id }),
+            stillActiveCode: 'INVVACAD_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationVaccineAdministeredService,
     getInvestigationVaccinesAdministeredByInvestigationService,
@@ -728,5 +778,6 @@ export {
     getInvestigationVaccineAdministeredByIdService,
     getInvestigationVaccinesAdministeredByCaseIdService,
     updateInvestigationVaccineAdministeredService,
-    setInvestigationVaccineAdministeredActivationService
+    setInvestigationVaccineAdministeredActivationService,
+    purgeInvestigationVaccineAdministeredService
 }
