@@ -883,6 +883,27 @@
         "purgeSuccess": "Cold chain permanently deleted",
         "purgeFailed": "Failed to permanently delete the cold chain. Please try again later."
     },
+    "investigationAdministrationError": {
+        "notFound": "Administration error not found. Please check the investigation ID and try again.",
+        "idRequired": "The investigation ID is required",
+        "investigationNotFound": "The given investigation does not exist or is inactive",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "alreadyExists": "The investigation with ID {{investigationId}} already has an administration error recorded",
+        "syringeTypeRequired": "When auto disable syringes are declared not to have been used, at least one type of syringe used must be stated",
+        "syringeDetailNotAllowed": "The detail of the syringes used is only admitted when auto disable syringes are declared not to have been used",
+        "otherDescriptionNotAllowed": "The description of other syringes is only admitted when other syringes are declared to have been used",
+        "notDeleted": "The administration error with ID {{id}} has not been withdrawn. Deactivate its investigation before deleting it permanently.",
+        "createdSuccess": "Administration error created successfully",
+        "createdFailed": "Failed to create the administration error. Please try again later.",
+        "getSuccess": "Administration error fetched successfully",
+        "getFailed": "Failed to fetch the administration error. Please try again later.",
+        "getSuccessPlural": "Administration error list fetched successfully",
+        "getFailedPlural": "Failed to fetch the administration error list. Please try again later.",
+        "updatedSuccess": "Administration error updated successfully",
+        "updatedFailed": "Failed to update the administration error. Please try again later.",
+        "purgeSuccess": "Administration error permanently deleted",
+        "purgeFailed": "Failed to permanently delete the administration error. Please try again later."
+    },
     "systemConfig": {
         "createdSuccess": "Configuration created successfully",
         "createdFailed": "Failed to create the configuration. Please try again later.",
