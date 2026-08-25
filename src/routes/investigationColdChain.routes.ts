@@ -7,6 +7,7 @@ import {
     getInvestigationColdChainByCaseId,
     getInvestigationColdChainById,
     getInvestigationColdChains,
+    purgeInvestigationColdChain,
     updateInvestigationColdChain
 } from '../controllers/investigationColdChain.controller';
 import {
@@ -17,7 +18,7 @@ import {
     updateInvestigationColdChainValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -39,6 +40,13 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationColdCha
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the cold chain
 // of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationColdChainListValidator, validateFields, getAllInvestigationColdChains);
+
+// Purge Investigation Cold Chain - Physical delete, for SuperAdmin
+// Code: ESAVI-INVCOLD-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not have an
+// activity flag and does not manage its own state — its investigation does. This is also the only
+// operation that releases the investigationId
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationColdChainIdValidator, validateFields, purgeInvestigationColdChain);
 
 // Get Investigation Cold Chain by Case
 // Code: ESAVI-INVCOLD-006

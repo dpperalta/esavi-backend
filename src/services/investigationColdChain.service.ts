@@ -1,6 +1,7 @@
 import { WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { EsaviCase, Investigation, InvestigationColdChain } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -8,6 +9,7 @@ import {
     InvestigationColdChainListFilters
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { purgeEntityService } from './common/entityPurge.service';
 
 // The investigation travels in every response, narrowed to three fields: what the client needs is to
 // know which case the row hangs from and whether its parent is alive. Returning the whole
@@ -612,4 +614,60 @@ export const updateInvestigationColdChainService = async (
 
     const updated = await findInvestigationColdChainWithRelations(id, true);
     return updated ? toInvestigationColdChainResponse(updated) : null;
+}
+
+// Purging Investigation Cold Chain Service - For SuperAdmin
+// Code: ESAVI-INVCOLD-005C
+// investigationColdChain is outside the preventPhysicalDelete loop of esaviapp.sql, so the row can
+// really be destroyed. This is also the only path that releases the investigationId: the logical
+// seal of deletedAt does NOT free the slot of the primary key, so after a 005C a POST over that same
+// investigation answers 201 again. And it drags NOTHING: the table is a leaf of the graph —
+// `grep 'REFERENCES "investigationColdChain"' esaviapp.sql` returns nothing — so there is no cascade
+// to count and no dump of children to write.
+// The existence check runs WITHOUT the inherited visibility, on purpose: whoever purges is
+// SUPERADMIN and the row may well hang from a retired investigation — which is precisely the normal
+// state of something about to be purged.
+// The guard by deletedAt is assertRowIsSealed, shared with investigationSource, investigationAutopsy,
+// investigationMedicalHistory, investigationClinicalEvaluation, investigationVaccinationContext and
+// the two notification satellites: it lives in a helper and not in purgeEntityService, whose isActive
+// check is INERT on this table — `undefined !== true`, so every row would be purgable immediately and
+// the only safety net this table has would be gone. The helper is consumed WITHOUT modifying it: it
+// derives the i18n key investigationColdChain.notDeleted from the table name and the id from the
+// primaryKeyAttribute of the model, so this entity registers nothing anywhere.
+// The dump of the WHOLE row in warn is the one purgeEntityService already writes, and here that is
+// right: this table holds no encrypted column and no person's name to omit — its fifteen columns are
+// how a product was kept and how it travelled
+export const purgeInvestigationColdChainService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        // paranoid: false, because the row about to be purged is precisely one that a 005A sealed
+        const coldChain = await InvestigationColdChain.findByPk(id, {
+            attributes: ['investigationId', 'deletedAt'],
+            paranoid: false,
+            transaction
+        });
+        if( !coldChain ) {
+            throw new AppError(getMessage('investigationColdChain.notFound', lang), 404, 'INVCOLD_005C_NOT_FOUND');
+        }
+
+        assertRowIsSealed(coldChain, 'INVCOLD_005C_NOT_DELETED', lang);
+
+        await purgeEntityService({
+            model: InvestigationColdChain,
+            where: { investigationId: id },
+            transaction,
+            operationCode: 'ESAVI-INVCOLD-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('investigationColdChain.notFound', lang),
+            notFoundCode: 'INVCOLD_005C_NOT_FOUND',
+            // Unreachable on this table: the generic guard compares isActive, a column
+            // investigationColdChain does not have. The real guard is the one above
+            stillActiveMessage: getMessage('investigationColdChain.notDeleted', lang, { id }),
+            stillActiveCode: 'INVCOLD_005C_NOT_DELETED'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }
