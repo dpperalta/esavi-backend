@@ -1,6 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { createInvestigationAdministrationErrorService } from '../services/investigationAdministrationError.service';
+import { InvestigationAdministrationErrorListFilters } from '../types';
+import {
+    createInvestigationAdministrationErrorService,
+    getAllInvestigationAdministrationErrorsService,
+    getInvestigationAdministrationErrorsService
+} from '../services/investigationAdministrationError.service';
+
+// The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
+// absent filter never turns into an `undefined` in the where clause
+const listFilters = (req: Request): InvestigationAdministrationErrorListFilters => ({
+    investigationId: req.query.investigationId as string | undefined,
+    caseId: req.query.caseId as string | undefined
+});
 
 // Create Investigation Administration Error Controller
 // Code: ESAVI-INVADMER-001
@@ -22,6 +34,52 @@ const createInvestigationAdministrationError = async (req: Request, res: Respons
     }
 }
 
+// Get Investigation Administration Errors Controller
+// Code: ESAVI-INVADMER-002A
+const getInvestigationAdministrationErrors = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getInvestigationAdministrationErrorsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-002A: Error fetching Investigation Administration Errors: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.getFailedPlural', req.lang), 500, 'INVADMER_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Investigation Administration Errors Controller - For Admin
+// Code: ESAVI-INVADMER-002B
+const getAllInvestigationAdministrationErrors = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllInvestigationAdministrationErrorsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-002B: Error fetching all Investigation Administration Errors: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.getFailedPlural', req.lang), 500, 'INVADMER_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createInvestigationAdministrationError
+    createInvestigationAdministrationError,
+    getAllInvestigationAdministrationErrors,
+    getInvestigationAdministrationErrors
 };
