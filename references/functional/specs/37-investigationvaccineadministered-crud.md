@@ -1,6 +1,6 @@
 # SPEC F37 — CRUD de `investigationVaccineAdministered`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — padre de la FK, y de quien esta tabla hereda su visibilidad)**, **SPEC F31 (`investigationTeamMember` — hermana estructural exacta: aporta el patrón completo de satélite-colección con `isActive` y `sortOrder`)**, **SPEC F18 (`vaccineWhodrug` — el maestro que resuelve `vaccineWhodrugId`)**, SPEC F19 (importación que puebla ese maestro), SPEC F22 (`notificationVaccine` — primera consumidora del maestro, aporta la forma del `include` y del 404), SPEC F35 (`evaluationInstitution` — aporta el tratamiento del `sortOrder` anulable sin `DEFAULT`), SPEC F08 (operación `005C`), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-24
 > **Objetivo:** Dar de alta `investigationVaccineAdministered` —el listado de vacunas que la investigación registra como administradas, con su número de dosis— como la **séptima** satélite directa de `investigation` con spec propio y la **segunda** de ellas que es una colección y no un uno a uno.

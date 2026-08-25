@@ -1206,6 +1206,7 @@ CREATE TABLE IF NOT EXISTS "investigationAdministrationError" (
   "usedRecycledDisposableSyringes" boolean,
   "usedOtherSyringes" boolean,
   "otherSyringesDescription" text,
+  -- End above fields
   "syringesKeyFindings" text,
   "reconstitutionUsedSameSyringe" "answerOption",
   "reconstitutionUsedSameSyringeDifferentVaccine" "answerOption",
