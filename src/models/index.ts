@@ -34,6 +34,7 @@ import { InvestigationPregnancyCondition } from './investigationPregnancyConditi
 import { InvestigationClinicalEvaluation } from './investigationClinicalEvaluation.model';
 import { InvestigationVaccinationContext } from './investigationVaccinationContext.model';
 import { InvestigationVaccineAdministered } from './investigationVaccineAdministered.model';
+import { InvestigationColdChain } from './investigationColdChain.model';
 import { EvaluationInstitution } from './evaluationInstitution.model';
 import { SystemConfig } from './systemConfig.model';
 import { SystemConfigHistory } from './systemConfigHistory.model';
@@ -78,6 +79,7 @@ export {
     InvestigationClinicalEvaluation,
     InvestigationVaccinationContext,
     InvestigationVaccineAdministered,
+    InvestigationColdChain,
     EvaluationInstitution,
     SystemConfig,
     SystemConfigHistory

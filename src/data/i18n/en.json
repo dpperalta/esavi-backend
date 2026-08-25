@@ -863,6 +863,26 @@
         "purgeSuccess": "Administered vaccine deleted permanently",
         "purgeFailed": "Failed to permanently delete the administered vaccine. Please try again later."
     },
+    "investigationColdChain": {
+        "notFound": "Cold chain not found. Please check the investigation ID and try again.",
+        "idRequired": "The investigation ID is required",
+        "investigationNotFound": "The given investigation does not exist or is inactive",
+        "alreadyExists": "The investigation with ID {{investigationId}} already has a cold chain recorded",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "rangeDeviationNotAllowed": "The deviation of the temperature range is only admitted when the storage temperature is declared to have been monitored",
+        "transportContainerConflict": "The thermos and the cold pack cannot both be declared as used: state a single transport container",
+        "notDeleted": "The cold chain with ID {{id}} has not been withdrawn. Deactivate its investigation before deleting it permanently.",
+        "createdSuccess": "Cold chain created successfully",
+        "createdFailed": "Failed to create the cold chain. Please try again later.",
+        "getSuccess": "Cold chain fetched successfully",
+        "getFailed": "Failed to fetch the cold chain. Please try again later.",
+        "getSuccessPlural": "Cold chain list fetched successfully",
+        "getFailedPlural": "Failed to fetch the cold chain list. Please try again later.",
+        "updatedSuccess": "Cold chain updated successfully",
+        "updatedFailed": "Failed to update the cold chain. Please try again later.",
+        "purgeSuccess": "Cold chain permanently deleted",
+        "purgeFailed": "Failed to permanently delete the cold chain. Please try again later."
+    },
     "systemConfig": {
         "createdSuccess": "Configuration created successfully",
         "createdFailed": "Failed to create the configuration. Please try again later.",

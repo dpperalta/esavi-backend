@@ -547,6 +547,28 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/investigation-vaccines-administered/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVVACAD-004' },
     { method: 'delete', path: `/api/investigation-vaccines-administered/${ UUID }`,                   minRole: 'ADMIN',      code: 'ESAVI-INVVACAD-005A' },
 
+    // investigationColdChain (SPEC F38) - the eighth satellite of investigation with a spec of its
+    // own, and the seventh with the exact shape of F36: the primary key IS the foreign key, so the
+    // :id of every operation is the investigationId and the 003 is already the access by
+    // investigation. How the investigated vaccine was kept and how it travelled.
+    // SEVEN operations and NO 005A nor 005B: the table has no isActive column, so it has no state of
+    // its own to withdraw or give back - retiring a cold chain is retiring its investigation. The
+    // listing is DUAL because the visibility is inherited from investigation.isActive, and its 006
+    // enters by the caseId and walks case -> investigation -> cold chain, returning the object and
+    // not { count, rows } because both hops are one to one.
+    // TWO ROWS DEVIATE from the canonical matrix, the same deviation as F05, F06, F07, F09, F10,
+    // F13, F14 and F28 to F37: 001 and 004 on USER, because the cold chain is captured in the same
+    // operational flow as the case.
+    // Nothing here is encrypted: ten answers, four free texts and a note, with no person's name
+    // among them, so no row raises its minimum for that reason
+    { method: 'post',   path: '/api/investigation-cold-chains',                 minRole: 'USER',       code: 'ESAVI-INVCOLD-001' },
+    { method: 'get',    path: '/api/investigation-cold-chains',                 minRole: 'USER',       code: 'ESAVI-INVCOLD-002A' },
+    { method: 'get',    path: '/api/investigation-cold-chains/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVCOLD-002B' },
+    { method: 'delete', path: `/api/investigation-cold-chains/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVCOLD-005C' },
+    { method: 'get',    path: `/api/investigation-cold-chains/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVCOLD-006' },
+    { method: 'get',    path: `/api/investigation-cold-chains/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOLD-003' },
+    { method: 'put',    path: `/api/investigation-cold-chains/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOLD-004' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -625,7 +647,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(280);
+            expect(ROUTE_RULES).toHaveLength(287);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
