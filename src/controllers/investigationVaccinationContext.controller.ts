@@ -1,8 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
+import { InvestigationVaccinationContextListFilters } from '../types';
 import {
-    createInvestigationVaccinationContextService
+    createInvestigationVaccinationContextService,
+    getAllInvestigationVaccinationContextsService,
+    getInvestigationVaccinationContextsService
 } from '../services/investigationVaccinationContext.service';
+
+// The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
+// absent filter never turns into an `undefined` in the where clause
+const listFilters = (req: Request): InvestigationVaccinationContextListFilters => ({
+    investigationId: req.query.investigationId as string | undefined,
+    caseId: req.query.caseId as string | undefined
+});
 
 // Create Investigation Vaccination Context Controller
 // Code: ESAVI-INVVACTX-001
@@ -24,6 +34,52 @@ const createInvestigationVaccinationContext = async (req: Request, res: Response
     }
 }
 
+// Get Investigation Vaccination Contexts Controller
+// Code: ESAVI-INVVACTX-002A
+const getInvestigationVaccinationContexts = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getInvestigationVaccinationContextsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccinationContext.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACTX-002A: Error fetching Investigation Vaccination Contexts: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccinationContext.getFailedPlural', req.lang), 500, 'INVVACTX_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Investigation Vaccination Contexts Controller - For Admin
+// Code: ESAVI-INVVACTX-002B
+const getAllInvestigationVaccinationContexts = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllInvestigationVaccinationContextsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccinationContext.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACTX-002B: Error fetching all Investigation Vaccination Contexts: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccinationContext.getFailedPlural', req.lang), 500, 'INVVACTX_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createInvestigationVaccinationContext
+    createInvestigationVaccinationContext,
+    getAllInvestigationVaccinationContexts,
+    getInvestigationVaccinationContexts
 };

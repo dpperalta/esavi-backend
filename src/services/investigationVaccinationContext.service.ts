@@ -1,10 +1,13 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationVaccinationContext } from '../models';
 import { AppError, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
-    CreateInvestigationVaccinationContextInput
+    CreateInvestigationVaccinationContextInput,
+    InvestigationVaccinationContextListFilters
 } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The investigation travels in every response: it is what governs the visibility of the vaccination
 // context, and hiding it would leave the client unable to explain why a record it read yesterday now
@@ -364,6 +367,92 @@ const createInvestigationVaccinationContextService = async (
     return created ? toInvestigationVaccinationContextResponse(created) : null;
 }
 
+// The order of the two listings, as in F29, F32 and F34. This entity has no date of the domain that
+// orders it better: its eleven columns are the circumstances of a session, not dated facts.
+// createdAt never moves after the insert, unlike updatedAt, which would shuffle the list on every
+// save
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
+
+// Only the filter that lands on the vaccination context itself, and it lands on the primary key —
+// which is already indexed, so no index had to be declared for it. caseId does not belong here: it
+// is a column of the investigation, so it travels in the where of the include instead — the same
+// include that already implements the inherited visibility, so filtering by case costs no extra join
+const buildListWhere = (filters: InvestigationVaccinationContextListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( filters.investigationId ) where.investigationId = filters.investigationId;
+    return where as WhereOptions;
+}
+
+// The where of the investigation include, which carries two things at once: the visibility — the
+// isActive that separates 002A from 002B — and the caseId filter when it arrives. Both conditions
+// live in the same object, so they accumulate with AND
+const buildInvestigationWhere = (filters: InvestigationVaccinationContextListFilters, includeInactive: boolean): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( !includeInactive ) where.isActive = true;
+    if( filters.caseId ) where.caseId = filters.caseId;
+    return where as WhereOptions;
+}
+
+// The three includes shared by the two listings. The parent goes required: true, which keeps it an
+// INNER JOIN — what makes the filters above bite and what keeps a context hanging from a retired
+// investigation out of 002A.
+// THE TWO CATALOG INCLUDES STAY required: false, and that is not a detail: with required: true a
+// context without a recorded time slot would disappear from the listing, and with the empty create
+// as the normal case that is most of them
+const listInclude = (filters: InvestigationVaccinationContextListFilters, includeInactive: boolean) => [
+    {
+        ...INVESTIGATION_INCLUDE,
+        required: true,
+        where: buildInvestigationWhere(filters, includeInactive)
+    },
+    MOMENT_INCLUDE,
+    MULTIDOSE_MOMENT_INCLUDE
+];
+
+// Get Active Investigation Vaccination Contexts Service
+// Code: ESAVI-INVVACTX-002A
+// The dual listing inherited from F29, F30, F32 and F34: the visibility is not a column of its own,
+// it is inherited from investigation.isActive, so the two variants return different sets. Without a
+// 002B an ADMIN would have no way of seeing the context of a retired investigation
+const getInvestigationVaccinationContextsService = async (
+    filters: InvestigationVaccinationContextListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationVaccinationContext.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: VACCINATION_CONTEXT_EXCLUDE,
+        include: listInclude(filters, false),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    // The rows carry the same full shape as the 003: there is no reduced shape. The entity has
+    // eleven data columns and two small catalog objects, and trimming them would leave a listing
+    // with no content
+    return { count, rows: rows.map(toInvestigationVaccinationContextResponse) };
+}
+
+// Get All Investigation Vaccination Contexts Service - For Admin
+// Code: ESAVI-INVVACTX-002B
+const getAllInvestigationVaccinationContextsService = async (
+    filters: InvestigationVaccinationContextListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationVaccinationContext.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: VACCINATION_CONTEXT_EXCLUDE,
+        include: listInclude(filters, true),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toInvestigationVaccinationContextResponse) };
+}
+
 export {
-    createInvestigationVaccinationContextService
+    createInvestigationVaccinationContextService,
+    getAllInvestigationVaccinationContextsService,
+    getInvestigationVaccinationContextsService
 };

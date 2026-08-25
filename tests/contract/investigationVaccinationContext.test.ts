@@ -35,6 +35,7 @@ describe('investigationVaccinationContext contract', () => {
 
     const suffix = Date.now().toString(36).toUpperCase();
     const basePath = '/api/investigation-vaccination-contexts';
+    const unknownUuid = '00000000-0000-4000-8000-000000000000';
 
     let statusZeroItemId: string;
     let firstHoursItemId: string;
@@ -95,7 +96,16 @@ describe('investigationVaccinationContext contract', () => {
         return investigationId;
     };
 
+    const list = (query: string = '', role: TestRole = 'USER') =>
+        request(app).get(`${ basePath }${ query }`).set(authHeader(role));
+
+    const listAdmin = (query: string = '', role: TestRole = 'ADMIN') =>
+        request(app).get(`${ basePath }/admin${ query }`).set(authHeader(role));
+
     const readRow = async (id: string) => await InvestigationVaccinationContext.findByPk(id, { paranoid: false });
+
+    const retireInvestigation = (investigationId: string) =>
+        Investigation.update({ isActive: false }, { where: { investigationId } });
 
     const seal = (investigationId: string, at: Date = new Date()) =>
         InvestigationVaccinationContext.update({ deletedAt: at }, { where: { investigationId } });
@@ -424,6 +434,131 @@ describe('investigationVaccinationContext contract', () => {
             const res = await create({});
 
             expect(res.status).toBe(400);
+        });
+    });
+
+    describe('002A and 002B — the dual listing', () => {
+
+        it('002A leaves out the contexts of inactive investigations and 002B includes them', async () => {
+            const investigationId = await seed();
+            await retireInvestigation(investigationId);
+
+            const publicList = await list(`?investigationId=${ investigationId }`);
+            expect(publicList.status).toBe(200);
+            expect(publicList.body.data.count).toBe(0);
+            expect(publicList.body.data.rows).toEqual([]);
+
+            const adminList = await listAdmin(`?investigationId=${ investigationId }`);
+            expect(adminList.status).toBe(200);
+            expect(adminList.body.data.count).toBe(1);
+            expect(adminList.body.data.rows[0].investigationId).toBe(investigationId);
+        });
+
+        it('a USER receives 403 on /admin', async () => {
+            const res = await listAdmin('', 'USER');
+
+            expect(res.status).toBe(403);
+        });
+
+        it('a context with momentItemId null appears in both listings: the catalog includes are not required', async () => {
+            const investigationId = await seed();
+
+            const publicList = await list(`?investigationId=${ investigationId }`);
+            const adminList = await listAdmin(`?investigationId=${ investigationId }`);
+
+            expect(publicList.body.data.count).toBe(1);
+            expect(publicList.body.data.rows[0].moment).toBeNull();
+            expect(publicList.body.data.rows[0].multidoseMoment).toBeNull();
+            expect(adminList.body.data.count).toBe(1);
+        });
+
+        it('resolves the two catalog aliases as different objects in the listing too', async () => {
+            const investigationId = await seed({
+                momentItemId: firstHoursItemId,
+                multidoseItemId: lastHoursItemId
+            });
+
+            const res = await list(`?investigationId=${ investigationId }`);
+
+            expect(res.body.data.rows[0].moment.code).toBe('FIRST_HOURS');
+            expect(res.body.data.rows[0].multidoseMoment.code).toBe('LAST_HOURS');
+        });
+
+        it('filters by caseId through the investigation include', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            expect((await create({ investigationId })).status).toBe(201);
+
+            const res = await list(`?caseId=${ caseId }`);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.count).toBe(1);
+            expect(res.body.data.rows[0].investigationId).toBe(investigationId);
+        });
+
+        it('accumulates the two filters with AND', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            expect((await create({ investigationId })).status).toBe(201);
+            const otherInvestigationId = await seed();
+
+            const matching = await list(`?caseId=${ caseId }&investigationId=${ investigationId }`);
+            expect(matching.body.data.count).toBe(1);
+
+            // The same case with an investigationId that does not belong to it: AND, not OR
+            const crossed = await list(`?caseId=${ caseId }&investigationId=${ otherInvestigationId }`);
+            expect(crossed.body.data.count).toBe(0);
+        });
+
+        it('a filter with a UUID that does not exist returns 200 with count 0, not 404', async () => {
+            const res = await list(`?investigationId=${ unknownUuid }`);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.count).toBe(0);
+            expect(res.body.data.rows).toEqual([]);
+        });
+
+        it('every row carries the full shape and neither isActive nor sysDetails', async () => {
+            const investigationId = await seed({ vaccinatedPerVialCount: 0, locations: 'Quito' });
+            const res = await list(`?investigationId=${ investigationId }`);
+            const row = res.body.data.rows[0];
+
+            for( const column of dataColumns ) {
+                expect(row).toHaveProperty(column);
+            }
+            expect(row.vaccinatedPerVialCount).toBe(0);
+            expect(row).toHaveProperty('appDetails');
+            expect(row).toHaveProperty('deletedAt');
+            expect(row.isActive).toBeUndefined();
+            expect(row.sysDetails).toBeUndefined();
+            expect(row.investigation.sysDetails).toBeUndefined();
+            expect(row.investigation.status).not.toBeNull();
+        });
+
+        // UQ_investigation_case makes the chain case -> investigation -> context one to one on
+        // BOTH hops, so several contexts cannot be isolated behind one caseId. These two cases
+        // lean on the DESC order instead: the rows created last are the ones at the head of the
+        // unfiltered listing
+        it('paginates with limit and keeps the total in count', async () => {
+            await seed();
+            await seed();
+            await seed();
+
+            const res = await list('?limit=2');
+
+            expect(res.body.data.rows).toHaveLength(2);
+            expect(res.body.data.count).toBeGreaterThanOrEqual(3);
+        });
+
+        it('orders by createdAt DESC', async () => {
+            const first = await seed();
+            const second = await seed();
+
+            const res = await list('?limit=2');
+            const returned = res.body.data.rows.map((row: { investigationId: string }) => row.investigationId);
+
+            expect(returned[0]).toBe(second);
+            expect(returned[1]).toBe(first);
         });
     });
 });
