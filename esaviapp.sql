@@ -1244,6 +1244,7 @@ CREATE TABLE IF NOT EXISTS "investigationCommunity" (
   "affectedVaccinated" smallint CHECK ("affectedVaccinated" IS NULL OR "affectedVaccinated" >= 0),
   "affectedUnvaccinated" smallint CHECK ("affectedUnvaccinated" IS NULL OR "affectedUnvaccinated" >= 0),
   "affectedUnknown" smallint CHECK ("affectedUnknown" IS NULL OR "affectedUnknown" >= 0),
+  -- End above fields
   "otherComments" text,
   "notes" text,
   "createdAt" timestamptz NOT NULL DEFAULT current_timestamp,
