@@ -816,6 +816,28 @@
         "purgeSuccess": "Institución evaluadora eliminada permanentemente",
         "purgeFailed": "Error al eliminar permanentemente la institución evaluadora. Por favor, inténtelo de nuevo más tarde."
     },
+    "investigationVaccinationContext": {
+        "notFound": "Contexto de vacunación no encontrado. Por favor, verifique el ID de la investigación e inténtelo de nuevo.",
+        "idRequired": "El ID de la investigación es obligatorio",
+        "investigationNotFound": "La investigación indicada no existe o está inactiva",
+        "alreadyExists": "La investigación con ID {{investigationId}} ya tiene un contexto de vacunación registrado",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "momentNotFound": "El momento de la jornada de vacunación indicado no existe, está inactivo o no pertenece al catálogo de momentos de vacunación",
+        "multidoseNotFound": "El momento de la jornada del frasco multidosis indicado no existe, está inactivo o no pertenece al catálogo de momentos de vacunación",
+        "clusterFieldsNotAllowed": "Los datos del conglomerado solo se admiten cuando se declara que el caso pertenece a un conglomerado",
+        "clusterSameVialCountRequired": "Se declaró que no todos los casos del conglomerado usaron el mismo frasco: el número de casos que sí lo usaron es obligatorio",
+        "notDeleted": "El contexto de vacunación con ID {{id}} no ha sido retirado. Desactive su investigación antes de eliminarlo permanentemente.",
+        "createdSuccess": "Contexto de vacunación creado exitosamente",
+        "createdFailed": "Error al crear el contexto de vacunación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Contexto de vacunación obtenido exitosamente",
+        "getFailed": "Error al obtener el contexto de vacunación. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Listado de contextos de vacunación obtenido exitosamente",
+        "getFailedPlural": "Error al obtener el listado de contextos de vacunación. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Contexto de vacunación actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el contexto de vacunación. Por favor, inténtelo de nuevo más tarde.",
+        "purgeSuccess": "Contexto de vacunación eliminado permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente el contexto de vacunación. Por favor, inténtelo de nuevo más tarde."
+    },
     "systemConfig": {
         "createdSuccess": "Configuración creada exitosamente",
         "createdFailed": "Error al crear la configuración. Por favor, inténtelo de nuevo más tarde.",

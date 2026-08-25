@@ -816,6 +816,28 @@
         "purgeSuccess": "Evaluation institution permanently deleted",
         "purgeFailed": "Failed to permanently delete the evaluation institution. Please try again later."
     },
+    "investigationVaccinationContext": {
+        "notFound": "Vaccination context not found. Please check the investigation ID and try again.",
+        "idRequired": "The investigation ID is required",
+        "investigationNotFound": "The given investigation does not exist or is inactive",
+        "alreadyExists": "The investigation with ID {{investigationId}} already has a vaccination context recorded",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "momentNotFound": "The given moment of the vaccination session does not exist, is inactive or does not belong to the vaccination moment catalog",
+        "multidoseNotFound": "The given moment of the session for the multidose vial does not exist, is inactive or does not belong to the vaccination moment catalog",
+        "clusterFieldsNotAllowed": "The cluster data is only admitted when the case is declared to belong to a cluster",
+        "clusterSameVialCountRequired": "It was declared that not every case of the cluster used the same vial: the number of cases that did use it is required",
+        "notDeleted": "The vaccination context with ID {{id}} has not been withdrawn. Deactivate its investigation before deleting it permanently.",
+        "createdSuccess": "Vaccination context created successfully",
+        "createdFailed": "Failed to create the vaccination context. Please try again later.",
+        "getSuccess": "Vaccination context fetched successfully",
+        "getFailed": "Failed to fetch the vaccination context. Please try again later.",
+        "getSuccessPlural": "Vaccination context list fetched successfully",
+        "getFailedPlural": "Failed to fetch the vaccination context list. Please try again later.",
+        "updatedSuccess": "Vaccination context updated successfully",
+        "updatedFailed": "Failed to update the vaccination context. Please try again later.",
+        "purgeSuccess": "Vaccination context permanently deleted",
+        "purgeFailed": "Failed to permanently delete the vaccination context. Please try again later."
+    },
     "systemConfig": {
         "createdSuccess": "Configuration created successfully",
         "createdFailed": "Failed to create the configuration. Please try again later.",

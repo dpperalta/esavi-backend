@@ -816,6 +816,28 @@
         "purgeSuccess": "Evaluerende instelling permanent verwijderd",
         "purgeFailed": "Definitief verwijderen van de evaluerende instelling mislukt. Probeer het later opnieuw."
     },
+    "investigationVaccinationContext": {
+        "notFound": "Vaccinatiecontext niet gevonden. Controleer de ID van het onderzoek en probeer het opnieuw.",
+        "idRequired": "De ID van het onderzoek is verplicht",
+        "investigationNotFound": "Het opgegeven onderzoek bestaat niet of is inactief",
+        "alreadyExists": "Het onderzoek met ID {{investigationId}} heeft al een vaccinatiecontext geregistreerd",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "momentNotFound": "Het opgegeven moment van de vaccinatiesessie bestaat niet, is inactief of hoort niet bij de catalogus met vaccinatiemomenten",
+        "multidoseNotFound": "Het opgegeven moment van de sessie voor de multidosisflacon bestaat niet, is inactief of hoort niet bij de catalogus met vaccinatiemomenten",
+        "clusterFieldsNotAllowed": "De clustergegevens zijn alleen toegestaan wanneer wordt opgegeven dat het geval tot een cluster behoort",
+        "clusterSameVialCountRequired": "Er is opgegeven dat niet alle gevallen van het cluster dezelfde flacon gebruikten: het aantal gevallen dat deze wel gebruikte is verplicht",
+        "notDeleted": "De vaccinatiecontext met ID {{id}} is niet ingetrokken. Deactiveer het onderzoek voordat u deze permanent verwijdert.",
+        "createdSuccess": "Vaccinatiecontext succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de vaccinatiecontext mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Vaccinatiecontext succesvol opgehaald",
+        "getFailed": "Ophalen van de vaccinatiecontext mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Lijst met vaccinatiecontexten succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de lijst met vaccinatiecontexten mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Vaccinatiecontext succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de vaccinatiecontext mislukt. Probeer het later opnieuw.",
+        "purgeSuccess": "Vaccinatiecontext permanent verwijderd",
+        "purgeFailed": "Definitief verwijderen van de vaccinatiecontext mislukt. Probeer het later opnieuw."
+    },
     "systemConfig": {
         "createdSuccess": "Configuratie succesvol aangemaakt",
         "createdFailed": "Aanmaken van de configuratie mislukt. Probeer het later opnieuw.",
