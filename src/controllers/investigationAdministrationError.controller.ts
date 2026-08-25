@@ -4,6 +4,7 @@ import { AuthUser, InvestigationAdministrationErrorListFilters } from '../types'
 import {
     createInvestigationAdministrationErrorService,
     getAllInvestigationAdministrationErrorsService,
+    getInvestigationAdministrationErrorByCaseIdService,
     getInvestigationAdministrationErrorByIdService,
     getInvestigationAdministrationErrorsService
 } from '../services/investigationAdministrationError.service';
@@ -107,9 +108,37 @@ const getInvestigationAdministrationErrorById = async (req: Request, res: Respon
     }
 }
 
+// Get Investigation Administration Error By Case ID Controller
+// Code: ESAVI-INVADMER-006
+// The only non-canonical operation of the entity. It answers with the record itself and not with a
+// collection: the chain case -> investigation -> administration error is one to one on both hops
+const getInvestigationAdministrationErrorByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationAdministrationErrorByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-006: Error fetching Investigation Administration Error by case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.getFailed', req.lang), 500, 'INVADMER_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationAdministrationError,
     getAllInvestigationAdministrationErrors,
+    getInvestigationAdministrationErrorByCaseId,
     getInvestigationAdministrationErrorById,
     getInvestigationAdministrationErrors
 };
