@@ -349,8 +349,33 @@ const getAllInvestigationVaccinesAdministeredByInvestigationService = async (
     };
 }
 
+// Get Investigation Vaccine Administered By ID Service
+// Code: ESAVI-INVVACAD-003
+// The :id is the vaccineAdministeredId, and that is the difference with the five one to one
+// satellites of investigation, where the 003 already was the access by investigation.
+//
+// Two conditions govern the 404 and canViewInactive relaxes both: the row's own isActive and the
+// parent's, checked in the same query the instance comes out of. A retired row is a 404 for USER and
+// ADMIN; so is a live row whose investigation was deactivated. Both are 200 for SUPERADMIN
+const getInvestigationVaccineAdministeredByIdService = async (
+    vaccineAdministeredId: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const vaccine = await findVaccineAdministeredWithRelations(vaccineAdministeredId, canViewInactive);
+    if( !vaccine ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.notFound', lang),
+            404,
+            'INVVACAD_003_NOT_FOUND'
+        );
+    }
+    return toInvestigationVaccineAdministeredResponse(vaccine);
+}
+
 export {
     createInvestigationVaccineAdministeredService,
     getInvestigationVaccinesAdministeredByInvestigationService,
-    getAllInvestigationVaccinesAdministeredByInvestigationService
+    getAllInvestigationVaccinesAdministeredByInvestigationService,
+    getInvestigationVaccineAdministeredByIdService
 }

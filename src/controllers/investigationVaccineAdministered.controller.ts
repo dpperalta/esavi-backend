@@ -4,6 +4,7 @@ import { AuthUser } from '../types';
 import {
     createInvestigationVaccineAdministeredService,
     getAllInvestigationVaccinesAdministeredByInvestigationService,
+    getInvestigationVaccineAdministeredByIdService,
     getInvestigationVaccinesAdministeredByInvestigationService
 } from '../services/investigationVaccineAdministered.service';
 
@@ -85,8 +86,34 @@ const getAllInvestigationVaccinesAdministeredByInvestigation = async (req: Reque
     }
 }
 
+// Get Investigation Vaccine Administered By ID Controller
+// Code: ESAVI-INVVACAD-003
+const getInvestigationVaccineAdministeredById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getInvestigationVaccineAdministeredByIdService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccineAdministered.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACAD-003: Error fetching Investigation Vaccine Administered by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccineAdministered.getFailed', req.lang), 500, 'INVVACAD_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccineAdministered,
     getInvestigationVaccinesAdministeredByInvestigation,
-    getAllInvestigationVaccinesAdministeredByInvestigation
+    getAllInvestigationVaccinesAdministeredByInvestigation,
+    getInvestigationVaccineAdministeredById
 }
