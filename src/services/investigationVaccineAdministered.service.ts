@@ -1,6 +1,6 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Investigation, InvestigationVaccineAdministered, VaccineWhodrug } from '../models';
+import { EsaviCase, Investigation, InvestigationVaccineAdministered, VaccineWhodrug } from '../models';
 import { AppError, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationVaccineAdministeredInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -373,9 +373,70 @@ const getInvestigationVaccineAdministeredByIdService = async (
     return toInvestigationVaccineAdministeredResponse(vaccine);
 }
 
+// Get Investigation Vaccines Administered By Case ID Service
+// Code: ESAVI-INVVACAD-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It crosses the
+// one to one hop up to the investigation, from which N administered vaccines hang, and returns
+// { count, rows } like the two listings.
+//
+// The two 404 are deliberately distinct, and the difference matters to the client: it needs to know
+// which link of the chain broke — whether the case is not there, or whether it has no visible
+// investigation. Those are two different actions on the user's side, and one generic message would
+// make them indistinguishable.
+//
+// Only the active vaccines come back, with the same criterion as 002A: whoever needs the retired ones
+// enters through 002B, which is the admin door
+const getInvestigationVaccinesAdministeredByCaseIdService = async (
+    caseId: string,
+    lang: string,
+    includeInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.caseNotFound', lang),
+            404,
+            'INVVACAD_006_CASE_NOT_FOUND'
+        );
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.investigationNotFound', lang),
+            404,
+            'INVVACAD_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    // An investigation with no vaccines answers 200 with an empty page and never 404: the last hop
+    // is one to many and the empty list is a legitimate result — the chain is whole, there is simply
+    // nothing recorded yet
+    const vaccines = await InvestigationVaccineAdministered.findAndCountAll({
+        where: { investigationId: investigation.investigationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [WHODRUG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: vaccines.count,
+        rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
+    };
+}
+
 export {
     createInvestigationVaccineAdministeredService,
     getInvestigationVaccinesAdministeredByInvestigationService,
     getAllInvestigationVaccinesAdministeredByInvestigationService,
-    getInvestigationVaccineAdministeredByIdService
+    getInvestigationVaccineAdministeredByIdService,
+    getInvestigationVaccinesAdministeredByCaseIdService
 }

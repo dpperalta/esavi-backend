@@ -5,10 +5,12 @@ import {
     createInvestigationVaccineAdministered,
     getAllInvestigationVaccinesAdministeredByInvestigation,
     getInvestigationVaccineAdministeredById,
+    getInvestigationVaccinesAdministeredByCaseId,
     getInvestigationVaccinesAdministeredByInvestigation
 } from '../controllers/investigationVaccineAdministered.controller';
 import {
     createInvestigationVaccineAdministeredValidator,
+    investigationVaccineAdministeredCaseIdValidator,
     investigationVaccineAdministeredIdValidator,
     investigationVaccineAdministeredInvestigationIdValidator,
     investigationVaccineAdministeredListValidator
@@ -40,6 +42,13 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // The :id is the investigationId and not an administered vaccine id: the listing is entered by the
 // foreign key. Declared after /admin/investigation/:id, which is the more specific literal path
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredInvestigationIdValidator, ...investigationVaccineAdministeredListValidator, validateFields, getInvestigationVaccinesAdministeredByInvestigation);
+
+// Get Investigation Vaccines Administered By Case ID
+// Code: ESAVI-INVVACAD-006
+// The only non canonical operation of this entity. USER, like its 002A: the client holds the caseId
+// and not the investigationId, so this is the door the operational flow actually uses. Declared with
+// the literal paths, before /:id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredCaseIdValidator, ...investigationVaccineAdministeredListValidator, validateFields, getInvestigationVaccinesAdministeredByCaseId);
 
 // Get Investigation Vaccine Administered by ID
 // Code: ESAVI-INVVACAD-003
