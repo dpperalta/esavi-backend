@@ -39,6 +39,7 @@ describe('investigationVaccinationContext contract', () => {
     const suffix = Date.now().toString(36).toUpperCase();
     const basePath = '/api/investigation-vaccination-contexts';
     const unknownUuid = '00000000-0000-4000-8000-000000000000';
+    const logPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
 
     let statusZeroItemId: string;
     let firstHoursItemId: string;
@@ -110,6 +111,9 @@ describe('investigationVaccinationContext contract', () => {
 
     const listAdmin = (query: string = '', role: TestRole = 'ADMIN') =>
         request(app).get(`${ basePath }/admin${ query }`).set(authHeader(role));
+
+    const purge = (id: string, role: TestRole = 'SUPERADMIN') =>
+        request(app).delete(`${ basePath }/purge/${ id }`).set(authHeader(role));
 
     const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(payload);
@@ -1081,6 +1085,112 @@ describe('investigationVaccinationContext contract', () => {
                 expect(res.body.data.momentItemId).toBeNull();
                 expect(res.body.data.moment).toBeNull();
             });
+        });
+    });
+
+    describe('005C — purge', () => {
+
+        it('purging a row with no deletedAt sealed returns 409 and the row survives', async () => {
+            const investigationId = await seed();
+
+            const res = await purge(investigationId);
+
+            expect(res.status).toBe(409);
+            expect(res.body.code).toBe('INVVACTX_005C_NOT_DELETED');
+            expect(res.body.message).toContain(investigationId);
+            // The proof that the isActive check of purgeEntityService is INERT here: without
+            // assertRowIsSealed this row would already be gone
+            expect(await readRow(investigationId)).not.toBeNull();
+        });
+
+        it('a sealed row is purged: 200 without data, and the row is really gone', async () => {
+            const investigationId = await seed();
+            await seal(investigationId);
+
+            const res = await purge(investigationId);
+
+            expect(res.status).toBe(200);
+            expect(res.body.ok).toBe(true);
+            expect(res.body.data).toBeUndefined();
+            expect(await readRow(investigationId)).toBeNull();
+        });
+
+        it('repeating the purge returns 404', async () => {
+            const investigationId = await seed();
+            await seal(investigationId);
+            expect((await purge(investigationId)).status).toBe(200);
+
+            const res = await purge(investigationId);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVVACTX_005C_NOT_FOUND');
+        });
+
+        it('an ADMIN receives 403', async () => {
+            const investigationId = await seed();
+            await seal(investigationId);
+
+            const res = await purge(investigationId, 'ADMIN');
+
+            expect(res.status).toBe(403);
+            expect(await readRow(investigationId)).not.toBeNull();
+        });
+
+        it('purges a row hanging from a RETIRED investigation: no inherited visibility here', async () => {
+            const investigationId = await seed();
+            await retireInvestigation(investigationId);
+            await seal(investigationId);
+
+            const res = await purge(investigationId);
+
+            expect(res.status).toBe(200);
+            expect(await readRow(investigationId)).toBeNull();
+        });
+
+        it('after purging, a POST over that same investigation returns 201: only the purge frees the slot', async () => {
+            const investigationId = await seed();
+            await seal(investigationId);
+            expect((await purge(investigationId)).status).toBe(200);
+
+            const res = await create({ investigationId });
+
+            expect(res.status).toBe(201);
+        });
+
+        it('leaves the investigation and the vaccinationMoment items intact', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            expect((await create({
+                investigationId,
+                momentItemId: firstHoursItemId,
+                multidoseItemId: lastHoursItemId
+            })).status).toBe(201);
+            await seal(investigationId);
+
+            expect((await purge(investigationId)).status).toBe(200);
+
+            expect(await Investigation.findByPk(investigationId)).not.toBeNull();
+            expect(await EsaviCase.findByPk(caseId)).not.toBeNull();
+            expect(await CatalogItem.findByPk(firstHoursItemId)).not.toBeNull();
+            expect(await CatalogItem.findByPk(lastHoursItemId)).not.toBeNull();
+        });
+
+        it('an :id that does not exist returns 404 and one that is not a UUID returns 400', async () => {
+            expect((await purge(unknownUuid)).status).toBe(404);
+            expect((await purge('no-es-uuid')).status).toBe(400);
+        });
+
+        it('writes the snapshot of the whole row to the log at warn level', async () => {
+            const investigationId = await seed({ locations: 'Ibarra', vaccinatedPerVialCount: 7 });
+            await seal(investigationId);
+            const logBefore = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').length : 0;
+
+            expect((await purge(investigationId)).status).toBe(200);
+
+            const written = fs.readFileSync(logPath, 'utf8').slice(logBefore);
+            expect(written).toContain('ESAVI-INVVACTX-005C');
+            expect(written).toContain(investigationId);
+            expect(written).toContain('Ibarra');
         });
     });
 });

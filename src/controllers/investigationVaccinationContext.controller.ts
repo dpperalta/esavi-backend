@@ -7,6 +7,7 @@ import {
     getInvestigationVaccinationContextByCaseIdService,
     getInvestigationVaccinationContextByIdService,
     getInvestigationVaccinationContextsService,
+    purgeInvestigationVaccinationContextService,
     updateInvestigationVaccinationContextService
 } from '../services/investigationVaccinationContext.service';
 
@@ -164,11 +165,35 @@ const updateInvestigationVaccinationContext = async (req: Request, res: Response
     }
 }
 
+// Purge Investigation Vaccination Context Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-INVVACTX-005C
+// Responds without `data`: the row no longer exists, so there is nothing to return. It is also the
+// only operation of the entity that writes no appDetails entry, which CONVENTIONS.md §6 declares
+// correct — the row is destroyed in the same transaction any audit would have been written into
+const purgeInvestigationVaccinationContext = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeInvestigationVaccinationContextService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccinationContext.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACTX-005C: Error purging Investigation Vaccination Context: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccinationContext.purgeFailed', req.lang), 500, 'INVVACTX_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccinationContext,
     getAllInvestigationVaccinationContexts,
     getInvestigationVaccinationContextByCaseId,
     getInvestigationVaccinationContextById,
     getInvestigationVaccinationContexts,
+    purgeInvestigationVaccinationContext,
     updateInvestigationVaccinationContext
 };
