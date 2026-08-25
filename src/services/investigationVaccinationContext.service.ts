@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationVaccinationContext } from '../models';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -109,6 +109,22 @@ const findInvestigationVaccinationContextWithRelations = async (id: string, incl
             MOMENT_INCLUDE,
             MULTIDOSE_MOMENT_INCLUDE
         ]
+    });
+}
+
+// The same read as above without narrowing the attributes of the vaccination context, which is the
+// precondition of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads back
+// undefined for the columns it left out, and every comparison against undefined would count as a
+// change. It still carries the investigation include, so the inherited visibility is checked in the
+// same query the update instance comes from
+const findInvestigationVaccinationContextRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationVaccinationContext.findOne({
+        where: { investigationId: id },
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
     });
 }
 
@@ -505,10 +521,136 @@ const getInvestigationVaccinationContextByCaseIdService = async (caseId: string,
     return toInvestigationVaccinationContextResponse(context);
 }
 
+// Update Investigation Vaccination Context Service
+// Code: ESAVI-INVVACTX-004
+// The main operation of the entity: the row is opened empty and completed over time, so this is
+// where the form is actually filled in. investigationId is ignored whether or not it arrives in the
+// body — it is the primary key of the row and the foreign key to its investigation at the same time,
+// and moving it would take one session's circumstances to another file. It does not return 400
+// either, which is what keeps working the PUT that resends the response of its own GET
+const updateInvestigationVaccinationContextService = async (
+    id: string,
+    data: Partial<CreateInvestigationVaccinationContextInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const context = await findInvestigationVaccinationContextRow(id, canViewInactive);
+    if( !context ) {
+        throw new AppError(getMessage('investigationVaccinationContext.notFound', lang), 404, 'INVVACTX_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The row is read WITHOUT narrowed attributes, which is the precondition of the helper: with
+    // trimmed attributes an absent field reads back undefined and every comparison against it would
+    // count as "it changed"
+    const stored = context.get({ plain: true }) as Record<string, unknown>;
+
+    // The two rules of the domain, over the RESULTING state: what travels merged with what is
+    // stored. It is the service and not the validator who emits them, because express-validator
+    // cannot see the stored row. They run BEFORE the diff and independently of it, and the
+    // prohibition of the block runs before the obligation of the vial
+    assertClusterBlock(data, stored, '004', lang);
+    assertSharedVialRule(data, stored, '004', lang);
+
+    // ALSO before the diff: an inactive item is a 404 even when it matches what is stored
+    await assertCatalogItemsAreValid(data, '004', lang);
+
+    // The resulting state of the block key, recomputed here to drive the four conditional
+    // derivatives below. The comparison is `=== 'YES'` for the same reason as in the rule: over an
+    // answerOption the "no" has five forms and the five close the block
+    const blockOpen = isClusterBlockOpen(data, stored);
+
+    // No candidate is placed under an `if( data.x )`. Over the four counters that would be outright
+    // destructive: 0 is a valid value and a truthiness check would throw it away, leaving the field
+    // with no way of storing the zero. Over the two answerOption columns it would work by accident
+    // — the five strings of the ENUM are truthy — but would silently discard the null the field is
+    // emptied with
+    const candidates: Record<string, unknown> = {
+        // investigationId does NOT enter: immutable, ignored in silence and with no 400
+
+        // The two catalog foreign keys, plain nullables. They govern nothing
+        momentItemId: data.momentItemId !== undefined ? ( data.momentItemId ?? null ) : undefined,
+        multidoseItemId: data.multidoseItemId !== undefined ? ( data.multidoseItemId ?? null ) : undefined,
+
+        // The two counters outside the block. 0 is a valid value for both
+        vaccinatedPerVialCount: data.vaccinatedPerVialCount !== undefined
+            ? ( data.vaccinatedPerVialCount ?? null ) : undefined,
+        vaccinatedPerBatchCount: data.vaccinatedPerBatchCount !== undefined
+            ? ( data.vaccinatedPerBatchCount ?? null ) : undefined,
+
+        // Normalized before comparing, or a body differing only in surrounding blanks would count
+        // as a change
+        locations: data.locations !== undefined ? normalizeText(data.locations) : undefined,
+
+        // THE KEY OF THE BLOCK, and it is NOT part of it: it is the field that decides, not one of
+        // the decided. Entering as a conditional derivative would make it annul itself. The
+        // `?? null` is what keeps null and 'NO_ANSWER' apart — the first means the form did not
+        // collect the answer, the second that it was asked and not answered
+        isCluster: data.isCluster !== undefined ? ( data.isCluster ?? null ) : undefined,
+
+        // THE FOUR CONDITIONAL DERIVATIVES. With the block closed the null enters candidates ALWAYS,
+        // with no presence check, and it is buildDifferentialUpdate who decides whether it differs:
+        // closing a block that was already closed writes nothing and does not grow appDetails. A
+        // cleanup with a second UPDATE after the diff would write even when nothing changed.
+        // clusterUsedSameVial is a derivative AND the key of clusterSameVialCount at the same time
+        clusterIdentificationNumber: blockOpen
+            ? ( data.clusterIdentificationNumber !== undefined ? normalizeText(data.clusterIdentificationNumber) : undefined )
+            : null,
+        clusterAdditionalCaseCount: blockOpen
+            ? ( data.clusterAdditionalCaseCount !== undefined ? ( data.clusterAdditionalCaseCount ?? null ) : undefined )
+            : null,
+        clusterUsedSameVial: blockOpen
+            ? ( data.clusterUsedSameVial !== undefined ? ( data.clusterUsedSameVial ?? null ) : undefined )
+            : null,
+        clusterSameVialCount: blockOpen
+            ? ( data.clusterSameVialCount !== undefined ? ( data.clusterSameVialCount ?? null ) : undefined )
+            : null,
+
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationVaccinationContext_setSysDetails fires on every
+    // write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationVaccinationContextWithRelations(id, true);
+        return unchanged ? toInvestigationVaccinationContextResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the generic
+    // loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(context.appDetails) ? context.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVVACTX-004',
+        detail: 'Investigation vaccination context updated by service'
+    };
+    await context.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationVaccinationContextWithRelations(id, true);
+    return updated ? toInvestigationVaccinationContextResponse(updated) : null;
+}
+
 export {
     createInvestigationVaccinationContextService,
     getAllInvestigationVaccinationContextsService,
     getInvestigationVaccinationContextByCaseIdService,
     getInvestigationVaccinationContextByIdService,
-    getInvestigationVaccinationContextsService
+    getInvestigationVaccinationContextsService,
+    updateInvestigationVaccinationContextService
 };

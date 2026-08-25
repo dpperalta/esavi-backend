@@ -6,7 +6,8 @@ import {
     getAllInvestigationVaccinationContextsService,
     getInvestigationVaccinationContextByCaseIdService,
     getInvestigationVaccinationContextByIdService,
-    getInvestigationVaccinationContextsService
+    getInvestigationVaccinationContextsService,
+    updateInvestigationVaccinationContextService
 } from '../services/investigationVaccinationContext.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
@@ -134,10 +135,40 @@ const getInvestigationVaccinationContextByCaseId = async (req: Request, res: Res
     }
 }
 
+// Update Investigation Vaccination Context Controller
+// Code: ESAVI-INVVACTX-004
+// canViewInactive travels for the same reason as in the 003: the entity has no state of its own, so
+// the predicate is applied over the visibility it inherits from its investigation
+const updateInvestigationVaccinationContext = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationVaccinationContextService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccinationContext.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACTX-004: Error updating Investigation Vaccination Context: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccinationContext.updatedFailed', req.lang), 500, 'INVVACTX_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccinationContext,
     getAllInvestigationVaccinationContexts,
     getInvestigationVaccinationContextByCaseId,
     getInvestigationVaccinationContextById,
-    getInvestigationVaccinationContexts
+    getInvestigationVaccinationContexts,
+    updateInvestigationVaccinationContext
 };

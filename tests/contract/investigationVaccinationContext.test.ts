@@ -1,9 +1,12 @@
+import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 import { CatalogItem, CatalogType, EsaviCase, HealthFacility, Investigation, InvestigationVaccinationContext, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
 /**
@@ -108,7 +111,16 @@ describe('investigationVaccinationContext contract', () => {
     const listAdmin = (query: string = '', role: TestRole = 'ADMIN') =>
         request(app).get(`${ basePath }/admin${ query }`).set(authHeader(role));
 
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+        request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(payload);
+
     const readRow = async (id: string) => await InvestigationVaccinationContext.findByPk(id, { paranoid: false });
+
+    const versionOf = async (id: string) =>
+        ((await readRow(id))!.getDataValue('sysDetails') as { version?: number } | null)?.version;
+
+    const appDetailsOf = async (id: string): Promise<{ method: string }[]> =>
+        ((await readRow(id))!.getDataValue('appDetails') as { method: string }[]) ?? [];
 
     const retireInvestigation = (investigationId: string) =>
         Investigation.update({ isActive: false }, { where: { investigationId } });
@@ -740,6 +752,335 @@ describe('investigationVaccinationContext contract', () => {
             const res = await getByCase('no-es-uuid');
 
             expect(res.status).toBe(400);
+        });
+    });
+
+    describe('004 — update, differential', () => {
+
+        it('a PUT resending the whole response of its GET writes nothing', async () => {
+            const investigationId = await seed({
+                momentItemId: firstHoursItemId,
+                vaccinatedPerVialCount: 4,
+                locations: 'Quito',
+                isCluster: 'YES',
+                clusterIdentificationNumber: 'C-7'
+            });
+
+            await expectPutOfGetResponseWritesNothing({
+                path: basePath,
+                id: investigationId,
+                model: InvestigationVaccinationContext,
+                role: 'USER',
+                // The response carries the resolved relations, which the update validator does not
+                // declare; a real form does not send them back either
+                strip: ['investigation', 'moment', 'multidoseMoment', 'appDetails', 'createdAt', 'updatedAt', 'deletedAt']
+            });
+        });
+
+        it('an empty body behaves the same: 200 and nothing written', async () => {
+            const investigationId = await seed({ notes: 'unchanged' });
+            const versionBefore = await versionOf(investigationId);
+
+            const res = await update(investigationId, {});
+
+            expect(res.status).toBe(200);
+            expect(await versionOf(investigationId)).toBe(versionBefore);
+            expect(await appDetailsOf(investigationId)).toHaveLength(1);
+        });
+
+        it('changing a single field adds ONE entry and bumps the version by 1', async () => {
+            const investigationId = await seed();
+            const versionBefore = await versionOf(investigationId);
+
+            const res = await update(investigationId, { notes: 'a note' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.notes).toBe('a note');
+            expect(await versionOf(investigationId)).toBe((versionBefore ?? 0) + 1);
+
+            const appDetails = await appDetailsOf(investigationId);
+            expect(appDetails).toHaveLength(2);
+            expect(appDetails[1].method).toBe('ESAVI-INVVACTX-004');
+            expect(appDetails[0].method).toBe('ESAVI-INVVACTX-001');
+        });
+
+        it('does not use a post-diff cleanup: the service has no delete objectToUpdate', () => {
+            const source = fs.readFileSync(
+                path.join(process.cwd(), 'src', 'services', 'investigationVaccinationContext.service.ts'),
+                'utf8'
+            );
+
+            expect(source).not.toContain('delete objectToUpdate');
+            expect(source).toContain('buildDifferentialUpdate');
+        });
+
+        it('an ID that does not exist returns 404', async () => {
+            const res = await update(unknownUuid, { notes: 'x' });
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVVACTX_004_NOT_FOUND');
+        });
+
+        it('a row whose investigation is inactive returns 404 for USER and ADMIN and 200 for SUPERADMIN', async () => {
+            const investigationId = await seed();
+            await retireInvestigation(investigationId);
+
+            expect((await update(investigationId, { notes: 'x' }, 'USER')).status).toBe(404);
+            expect((await update(investigationId, { notes: 'y' }, 'ADMIN')).status).toBe(404);
+            expect((await update(investigationId, { notes: 'z' }, 'SUPERADMIN')).status).toBe(200);
+        });
+
+        it('ignores a different investigationId in silence, with no 400', async () => {
+            const investigationId = await seed();
+            const otherInvestigationId = await createInvestigationFixture();
+
+            const res = await update(investigationId, { investigationId: otherInvestigationId, notes: 'x' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.investigationId).toBe(investigationId);
+            expect(await readRow(otherInvestigationId)).toBeNull();
+        });
+
+        describe('the four counters and the zero', () => {
+
+            it.each([
+                'vaccinatedPerVialCount',
+                'vaccinatedPerBatchCount'
+            ])('%s: 0 over a stored 12 is saved as 0, and null empties it', async (field) => {
+                const investigationId = await seed({ [field]: 12 });
+
+                const zeroed = await update(investigationId, { [field]: 0 });
+                expect(zeroed.status).toBe(200);
+                expect(zeroed.body.data[field]).toBe(0);
+
+                const emptied = await update(investigationId, { [field]: null });
+                expect(emptied.status).toBe(200);
+                expect(emptied.body.data[field]).toBeNull();
+            });
+
+            it.each([
+                'clusterAdditionalCaseCount',
+                'clusterSameVialCount'
+            ])('%s inside the open block: 0 is saved as 0, and null empties it', async (field) => {
+                const investigationId = await seed({ isCluster: 'YES', [field]: 12 });
+
+                const zeroed = await update(investigationId, { [field]: 0 });
+                expect(zeroed.status).toBe(200);
+                expect(zeroed.body.data[field]).toBe(0);
+
+                const emptied = await update(investigationId, { [field]: null });
+                expect(emptied.status).toBe(200);
+                expect(emptied.body.data[field]).toBeNull();
+            });
+        });
+
+        describe('the two answerOption columns', () => {
+
+            it('null over a stored NO_ANSWER empties the field', async () => {
+                const investigationId = await seed({ isCluster: 'NO_ANSWER' });
+
+                const res = await update(investigationId, { isCluster: null });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.isCluster).toBeNull();
+            });
+
+            it('NO_ANSWER over a row that already holds it does NOT count as a change', async () => {
+                const investigationId = await seed({ isCluster: 'NO_ANSWER' });
+                const versionBefore = await versionOf(investigationId);
+
+                const res = await update(investigationId, { isCluster: 'NO_ANSWER' });
+
+                expect(res.status).toBe(200);
+                expect(await versionOf(investigationId)).toBe(versionBefore);
+            });
+        });
+
+        describe('the free texts and the trim', () => {
+
+            it.each([
+                ['locations', 'Quito'],
+                ['notes', 'a note']
+            ])('%s: the same text with surrounding blanks is not a change', async (field, value) => {
+                const investigationId = await seed({ [field]: value });
+                const versionBefore = await versionOf(investigationId);
+
+                const res = await update(investigationId, { [field]: `   ${ value }   ` });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data[field]).toBe(value);
+                expect(await versionOf(investigationId)).toBe(versionBefore);
+            });
+
+            it('clusterIdentificationNumber inside the open block trims before comparing', async () => {
+                const investigationId = await seed({ isCluster: 'YES', clusterIdentificationNumber: 'C-9' });
+                const versionBefore = await versionOf(investigationId);
+
+                const res = await update(investigationId, { clusterIdentificationNumber: '  C-9  ' });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.clusterIdentificationNumber).toBe('C-9');
+                expect(await versionOf(investigationId)).toBe(versionBefore);
+            });
+
+            it('an empty string empties the field', async () => {
+                const investigationId = await seed({ locations: 'Quito' });
+
+                const res = await update(investigationId, { locations: '' });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.locations).toBeNull();
+            });
+        });
+
+        describe('the cluster block', () => {
+
+            it('isCluster NO over a row with the four fields filled leaves the FOUR null in ONE request', async () => {
+                const investigationId = await seed({
+                    isCluster: 'YES',
+                    clusterIdentificationNumber: 'C-1',
+                    clusterAdditionalCaseCount: 3,
+                    clusterUsedSameVial: 'YES',
+                    clusterSameVialCount: 2
+                });
+
+                const res = await update(investigationId, { isCluster: 'NO' });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.isCluster).toBe('NO');
+                expect(res.body.data.clusterIdentificationNumber).toBeNull();
+                expect(res.body.data.clusterAdditionalCaseCount).toBeNull();
+                expect(res.body.data.clusterUsedSameVial).toBeNull();
+                expect(res.body.data.clusterSameVialCount).toBeNull();
+                expect(await appDetailsOf(investigationId)).toHaveLength(2);
+            });
+
+            it.each(closingIsClusterValues)('isCluster %p closes the block and forces the four to null', async (value) => {
+                const investigationId = await seed({
+                    isCluster: 'YES',
+                    clusterIdentificationNumber: 'C-1',
+                    clusterAdditionalCaseCount: 3
+                });
+
+                const res = await update(investigationId, { isCluster: value });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.clusterIdentificationNumber).toBeNull();
+                expect(res.body.data.clusterAdditionalCaseCount).toBeNull();
+            });
+
+            it('a body that closes the block and describes it at the same time returns 400', async () => {
+                const investigationId = await seed({ isCluster: 'YES', clusterIdentificationNumber: 'C-1' });
+
+                const res = await update(investigationId, { isCluster: 'NO', clusterAdditionalCaseCount: 3 });
+
+                expect(res.status).toBe(400);
+                expect(res.body.code).toBe('INVVACTX_004_CLUSTER_FIELDS_NOT_ALLOWED');
+            });
+
+            it('sending a cluster field as null while closing the block is NOT an error', async () => {
+                const investigationId = await seed({ isCluster: 'YES', clusterIdentificationNumber: 'C-1' });
+
+                const res = await update(investigationId, { isCluster: 'NO', clusterIdentificationNumber: null });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.clusterIdentificationNumber).toBeNull();
+            });
+
+            it('closing a block that was already closed and empty writes NOTHING', async () => {
+                const investigationId = await seed({ isCluster: 'NO' });
+                const versionBefore = await versionOf(investigationId);
+
+                const res = await update(investigationId, { isCluster: 'NO' });
+
+                expect(res.status).toBe(200);
+                expect(await versionOf(investigationId)).toBe(versionBefore);
+                expect(await appDetailsOf(investigationId)).toHaveLength(1);
+            });
+
+            it('isCluster YES over a row with an identifier already stored keeps the identifier', async () => {
+                const investigationId = await seed({ isCluster: 'YES', clusterIdentificationNumber: 'C-5' });
+                const versionBefore = await versionOf(investigationId);
+
+                const res = await update(investigationId, { isCluster: 'YES' });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.clusterIdentificationNumber).toBe('C-5');
+                expect(await versionOf(investigationId)).toBe(versionBefore);
+            });
+        });
+
+        describe('the shared vial rule over the resulting state', () => {
+
+            it('clusterUsedSameVial NO over a row with isCluster YES and no stored counter returns 400', async () => {
+                const investigationId = await seed({ isCluster: 'YES' });
+
+                const res = await update(investigationId, { clusterUsedSameVial: 'NO' });
+
+                expect(res.status).toBe(400);
+                expect(res.body.code).toBe('INVVACTX_004_CLUSTER_SAME_VIAL_COUNT_REQUIRED');
+            });
+
+            it('the same body succeeds when the counter is already stored: the rule reads the resulting state', async () => {
+                const investigationId = await seed({ isCluster: 'YES', clusterSameVialCount: 0 });
+
+                const res = await update(investigationId, { clusterUsedSameVial: 'NO' });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.clusterUsedSameVial).toBe('NO');
+                expect(res.body.data.clusterSameVialCount).toBe(0);
+            });
+
+            it('emptying the counter while clusterUsedSameVial stays NO returns 400', async () => {
+                const investigationId = await seed({ isCluster: 'YES', clusterUsedSameVial: 'NO', clusterSameVialCount: 2 });
+
+                const res = await update(investigationId, { clusterSameVialCount: null });
+
+                expect(res.status).toBe(400);
+                expect(res.body.code).toBe('INVVACTX_004_CLUSTER_SAME_VIAL_COUNT_REQUIRED');
+            });
+        });
+
+        describe('the two catalog foreign keys before the diff', () => {
+
+            it.each([
+                ['momentItemId', 'INVVACTX_004_MOMENT_NOT_FOUND'],
+                ['multidoseItemId', 'INVVACTX_004_MULTIDOSE_NOT_FOUND']
+            ])('%s pointing at an INACTIVE item returns 404 even when it matches what is stored', async (field, code) => {
+                const investigationId = await seed({ [field]: unknownMomentItemId });
+                await CatalogItem.update({ isActive: false }, { where: { catalogItemId: unknownMomentItemId } });
+
+                try {
+                    const res = await update(investigationId, { [field]: unknownMomentItemId });
+
+                    expect(res.status).toBe(404);
+                    expect(res.body.code).toBe(code);
+                } finally {
+                    await CatalogItem.update({ isActive: true }, { where: { catalogItemId: unknownMomentItemId } });
+                }
+            });
+
+            it('an item of another catalog returns 404 with the code of its own column', async () => {
+                const investigationId = await seed();
+
+                const moment = await update(investigationId, { momentItemId: foreignCatalogItemId });
+                expect(moment.status).toBe(404);
+                expect(moment.body.code).toBe('INVVACTX_004_MOMENT_NOT_FOUND');
+
+                const multidose = await update(investigationId, { multidoseItemId: foreignCatalogItemId });
+                expect(multidose.status).toBe(404);
+                expect(multidose.body.code).toBe('INVVACTX_004_MULTIDOSE_NOT_FOUND');
+            });
+
+            it('an explicit null resolves nothing and empties the column', async () => {
+                const investigationId = await seed({ momentItemId: firstHoursItemId });
+
+                const res = await update(investigationId, { momentItemId: null });
+
+                expect(res.status).toBe(200);
+                expect(res.body.data.momentItemId).toBeNull();
+                expect(res.body.data.moment).toBeNull();
+            });
         });
     });
 });
