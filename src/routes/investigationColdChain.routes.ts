@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationColdChain,
     getAllInvestigationColdChains,
+    getInvestigationColdChainByCaseId,
     getInvestigationColdChainById,
     getInvestigationColdChains
 } from '../controllers/investigationColdChain.controller';
 import {
     createInvestigationColdChainValidator,
+    investigationColdChainCaseIdValidator,
     investigationColdChainIdValidator,
     investigationColdChainListValidator
 } from '../validators';
@@ -35,6 +37,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationColdCha
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the cold chain
 // of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationColdChainListValidator, validateFields, getAllInvestigationColdChains);
+
+// Get Investigation Cold Chain by Case
+// Code: ESAVI-INVCOLD-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared before
+// /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationColdChainCaseIdValidator, validateFields, getInvestigationColdChainByCaseId);
 
 // Get Investigation Cold Chain by ID
 // Code: ESAVI-INVCOLD-003

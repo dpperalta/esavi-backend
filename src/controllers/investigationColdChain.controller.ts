@@ -4,6 +4,7 @@ import { AuthUser, InvestigationColdChainListFilters } from '../types';
 import {
     createInvestigationColdChainService,
     getAllInvestigationColdChainsService,
+    getInvestigationColdChainByCaseIdService,
     getInvestigationColdChainByIdService,
     getInvestigationColdChainsService
 } from '../services/investigationColdChain.service';
@@ -107,9 +108,37 @@ const getInvestigationColdChainById = async (req: Request, res: Response, next: 
     }
 }
 
+// Get Investigation Cold Chain By Case ID Controller
+// Code: ESAVI-INVCOLD-006
+// The only non-canonical operation of the entity. It answers with the record itself and not with a
+// collection: the chain case -> investigation -> cold chain is one to one on both hops
+const getInvestigationColdChainByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationColdChainByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationColdChain.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCOLD-006: Error fetching Investigation Cold Chain by case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationColdChain.getFailed', req.lang), 500, 'INVCOLD_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationColdChain,
     getAllInvestigationColdChains,
+    getInvestigationColdChainByCaseId,
     getInvestigationColdChainById,
     getInvestigationColdChains
 };

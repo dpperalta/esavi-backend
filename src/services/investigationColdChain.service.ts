@@ -1,5 +1,5 @@
 import { WhereOptions } from 'sequelize';
-import { Investigation, InvestigationColdChain } from '../models';
+import { EsaviCase, Investigation, InvestigationColdChain } from '../models';
 import { AppError, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
@@ -373,6 +373,42 @@ export const getInvestigationColdChainByIdService = async (id: string, lang: str
     const coldChain = await findInvestigationColdChainWithRelations(id, includeInactive);
     if( !coldChain ) {
         throw new AppError(getMessage('investigationColdChain.notFound', lang), 404, 'INVCOLD_003_NOT_FOUND');
+    }
+    return toInvestigationColdChainResponse(coldChain);
+}
+
+// Get Investigation Cold Chain By Case ID Service
+// Code: ESAVI-INVCOLD-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It returns the
+// record itself and not { count, rows } — the chain case -> investigation -> cold chain is one to one
+// on BOTH hops, imposed by UQ_investigation_case on the first and by the shared primary key on the
+// second, so wrapping a single record in a collection would force unwrapping a one-element array on
+// every screen.
+// THREE DISTINCT 404, and the difference matters to the client: "that case does not exist", "it has
+// no visible investigation" and "its investigation has no cold chain yet" are three different things
+// to show on screen, and only the third one is fixed by creating a cold chain
+export const getInvestigationColdChainByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('investigationColdChain.caseNotFound', lang), 404, 'INVCOLD_006_CASE_NOT_FOUND');
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationColdChain.investigationNotFound', lang),
+            404,
+            'INVCOLD_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    const coldChain = await findInvestigationColdChainWithRelations(investigation.investigationId, includeInactive);
+    if( !coldChain ) {
+        throw new AppError(getMessage('investigationColdChain.notFound', lang), 404, 'INVCOLD_006_NOT_FOUND');
     }
     return toInvestigationColdChainResponse(coldChain);
 }
