@@ -24,6 +24,7 @@ import { initInvestigationMedicalHistoryAssociations } from './investigationMedi
 import { initInvestigationPregnancyConditionAssociations } from './investigationPregnancyCondition.associations';
 import { initInvestigationClinicalEvaluationAssociations } from './investigationClinicalEvaluation.associations';
 import { initInvestigationVaccinationContextAssociations } from './investigationVaccinationContext.associations';
+import { initInvestigationVaccineAdministeredAssociations } from './investigationVaccineAdministered.associations';
 import { initEvaluationInstitutionAssociations } from './evaluationInstitution.associations';
 import { initSystemConfigAssociations } from './systemConfig.associations';
 
@@ -54,6 +55,7 @@ export const initAssociations = (): void => {
     initInvestigationPregnancyConditionAssociations();
     initInvestigationClinicalEvaluationAssociations();
     initInvestigationVaccinationContextAssociations();
+    initInvestigationVaccineAdministeredAssociations();
     initEvaluationInstitutionAssociations();
     initSystemConfigAssociations();
 }

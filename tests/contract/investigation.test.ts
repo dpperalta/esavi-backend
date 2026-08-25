@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationVaccineAdministered, Patient, VaccineWhodrug } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -1396,6 +1396,110 @@ describe('investigation contract', () => {
             for( const model of satellites ) {
                 expect((await model.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).toBeNull();
             }
+        });
+    });
+    // SPEC F37 hangs the seventh of the fourteen satellites off the same three operations, and it is
+    // the FIRST one since F31 that is deliberately left OUT of common/satelliteCascade.service.ts.
+    // What is checked here is the effect on the administered vaccines, seen from the side of the
+    // investigation: the detailed behaviour of the entity lives in
+    // tests/contract/investigationVaccineAdministered.test.ts.
+    // investigationVaccineAdministered DOES have an isActive column, and that is the whole point of
+    // these three cases: investigation.service.ts leaves the satellites with state of their own out
+    // of the cascadeSealSatellite loop, so deactivating and reactivating the investigation must not
+    // move a single one of their columns. Their visibility is inherited through the include of every
+    // read, never written into the row. Only the physical purge reaches them, and it does so through
+    // the ON DELETE CASCADE of Postgres and not through any service
+    describe('the cascade over investigationVaccineAdministered', () => {
+
+        const logPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
+        let whodrugCounter = 0;
+
+        const createWhodrug = async (): Promise<string> => {
+            whodrugCounter += 1;
+            return (await VaccineWhodrug.create({
+                drugCode: `INVCASC${ whodrugCounter }${ Date.now().toString(36).toUpperCase() }`,
+                drugName: `Cascade vaccine ${ whodrugCounter }`,
+                isActive: true
+            })).getDataValue('vaccineWhodrugId');
+        };
+
+        const createVaccineAdministered = async (investigationId: string, payload: Record<string, unknown> = {}) =>
+            request(app).post('/api/investigation-vaccines-administered')
+                .set(authHeader('USER'))
+                .send({ investigationId, vaccineWhodrugId: await createWhodrug(), ...payload });
+
+        const readVaccine = (id: string) =>
+            InvestigationVaccineAdministered.findByPk(id, { paranoid: false });
+
+        it('deactivating the investigation does NOT touch its administered vaccines', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            const vaccine = await createVaccineAdministered(id, { doseNumber: 1, notes: 'untouched' });
+            expect(vaccine.status).toBe(201);
+            const vaccineId = vaccine.body.data.vaccineAdministeredId;
+
+            const before = (await readVaccine(vaccineId))!.get({ plain: true }) as Record<string, unknown>;
+
+            expect((await deactivate(id)).status).toBe(200);
+
+            const after = (await readVaccine(vaccineId))!.get({ plain: true }) as Record<string, unknown>;
+            expect(after.isActive).toBe(true);
+            expect(after.deletedAt).toBeNull();
+            expect(after.sortOrder).toBe(before.sortOrder);
+            expect(after.updatedAt).toEqual(before.updatedAt);
+            expect(after.appDetails).toEqual(before.appDetails);
+        });
+
+        it('reactivating it does not touch them either', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            const vaccineId = (await createVaccineAdministered(id, { notes: 'still untouched' })).body.data.vaccineAdministeredId;
+
+            await deactivate(id);
+            const before = (await readVaccine(vaccineId))!.get({ plain: true }) as Record<string, unknown>;
+
+            expect((await activate(id)).status).toBe(200);
+
+            const after = (await readVaccine(vaccineId))!.get({ plain: true }) as Record<string, unknown>;
+            expect(after.isActive).toBe(true);
+            expect(after.deletedAt).toBeNull();
+            expect(after.notes).toBe('still untouched');
+            expect(after.updatedAt).toEqual(before.updatedAt);
+            // No ESAVI-INVESTGN-005A or 005B entry ever lands here, unlike the five satellites
+            // without isActive
+            expect((after.appDetails as { method: string }[]).map(entry => entry.method))
+                .toEqual(['ESAVI-INVVACAD-001']);
+        });
+
+        it('purging the investigation destroys the administered vaccines by Postgres cascade without erroring', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            const first = await createVaccineAdministered(id, { doseNumber: 1 });
+            const second = await createVaccineAdministered(id, { doseNumber: 2 });
+
+            // One of the two retired: the count of the dump uses paranoid false, because the cascade
+            // destroys the sealed ones all the same
+            await request(app).delete(`/api/investigation-vaccines-administered/${ second.body.data.vaccineAdministeredId }`)
+                .set(authHeader('ADMIN'));
+
+            await deactivate(id);
+
+            const logBefore = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf-8').length : 0;
+
+            expect((await purge(id)).status).toBe(200);
+
+            expect(await readVaccine(first.body.data.vaccineAdministeredId)).toBeNull();
+            expect(await readVaccine(second.body.data.vaccineAdministeredId)).toBeNull();
+            expect(await Investigation.findByPk(id, { paranoid: false })).toBeNull();
+
+            // log4js buffers, so give the appender a tick to flush
+            await new Promise(resolve => setTimeout(resolve, 250));
+            const added = fs.readFileSync(logPath, 'utf-8').slice(logBefore);
+            const vaccineLine = added.split('\n')
+                .find(line => line.includes('ESAVI-INVESTGN-005C') && line.includes('vaccine(s) administered'));
+
+            expect(vaccineLine).toBeDefined();
+            expect(vaccineLine).toContain('2 investigation vaccine(s) administered');
         });
     });
 });

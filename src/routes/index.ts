@@ -36,6 +36,7 @@ import investigationPregnancyConditionRoutes from './investigationPregnancyCondi
 import investigationClinicalEvaluationRoutes from './investigationClinicalEvaluation.routes';
 import investigationVaccinationContextRoutes from './investigationVaccinationContext.routes';
 import evaluationInstitutionRoutes from './evaluationInstitution.routes';
+import investigationVaccineAdministeredRoutes from './investigationVaccineAdministered.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -114,6 +115,12 @@ router.use('/evaluation-institutions', evaluationInstitutionRoutes);
 // slot, the shared exposure per vial and per batch, and the cluster. It is the first entity of the
 // repository with TWO foreign keys resolved against one and the same catalog, vaccinationMoment
 router.use('/investigation-vaccination-contexts', investigationVaccinationContextRoutes);
+
+// The seventh of the fourteen satellites of investigation with a spec of its own, and the second
+// of them that is a COLLECTION and not a one to one: the vaccines the investigation records as
+// administered, with their dose number. The first satellite of investigation since F31 that has
+// isActive, and therefore the first of them since then with a complete 005A and 005B
+router.use('/investigation-vaccines-administered', investigationVaccineAdministeredRoutes);
 
 router.use('/system-configs', systemConfigRoutes);
 

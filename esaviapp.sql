@@ -1170,6 +1170,7 @@ CREATE TABLE IF NOT EXISTS "investigationVaccineAdministered" (
   CONSTRAINT "FK_investigationVaccineAdministered_investigation" FOREIGN KEY ("investigationId") REFERENCES "investigation" ("investigationId") ON UPDATE CASCADE ON DELETE CASCADE,
   CONSTRAINT "FK_investigationVaccineAdministered_whodrug" FOREIGN KEY ("vaccineWhodrugId") REFERENCES "vaccineWhodrug" ("vaccineWhodrugId") ON UPDATE CASCADE ON DELETE RESTRICT
 );
+CREATE INDEX IF NOT EXISTS "IX_investigationVaccineAdministered_investigation" ON "investigationVaccineAdministered" ("investigationId");
 
 CREATE TABLE IF NOT EXISTS "investigationColdChain" (
   "investigationId" uuid PRIMARY KEY,

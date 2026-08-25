@@ -1,0 +1,783 @@
+import { InferAttributes, Op, Transaction } from 'sequelize';
+import { sequelize } from '../database/connection';
+import { EsaviCase, Investigation, InvestigationVaccineAdministered, VaccineWhodrug } from '../models';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppDetails, AuthUser, CreateInvestigationVaccineAdministeredInput } from '../types';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// There is no CREATE_FIELDS here, and that is a decision and not an omission. In the eight sister
+// tables of the setSortOrderByParent loop the column is NOT NULL, so Sequelize runs its own notNull
+// validation before emitting the INSERT and the create dies without the trigger ever running; the
+// explicit field list was the only way out. In this table sortOrder is nullable and carries no
+// DEFAULT 0 (esaviapp.sql:1160), the validation does not fire, the INSERT carries "sortOrder" = NULL
+// and setSortOrderByParent reads that as "assign it yourself". It is the shape F35 found, and the
+// create is the ordinary one: the service simply does not send the key
+
+// The columns every response carries, listed one by one instead of dropped afterwards. sysDetails is
+// trigger bookkeeping and never leaves the service, and an explicit list is what keeps it out without
+// having to mention it.
+//
+// vaccineWhodrugId travels here as a raw FK *and* resolved in the include below, which is the pattern
+// of F16, F21 and F22: the 004 accepts it in the body, so a PUT that resends the response of its GET
+// has to find it there
+const RESPONSE_ATTRIBUTES: (keyof InferAttributes<InvestigationVaccineAdministered>)[] = [
+    'vaccineAdministeredId',
+    'investigationId',
+    'sortOrder',
+    'vaccineWhodrugId',
+    'doseNumber',
+    'notes',
+    'isActive',
+    'createdAt',
+    'updatedAt',
+    'deletedAt',
+    'appDetails'
+];
+
+// The parent, read on every operation to implement the inherited visibility. A single hop, unlike
+// the two of F35: this table hangs straight off investigation, and the state lives in that one link.
+//
+// It never reaches the response: whoever needs the investigation enters through ESAVI-INVESTGN-003
+const INVESTIGATION_INCLUDE = {
+    model: Investigation,
+    as: 'investigation',
+    attributes: ['investigationId', 'isActive'],
+    required: true
+};
+
+// Three fields of the master and none of the other twenty six columns. An entry retired from the
+// dictionary after the record still says what was administered, so the include NEVER filters by
+// isActive; whoever needs the whole entry enters through ESAVI-WHODRUG-003. It is the decision of
+// F22 §3.7, inherited literally.
+//
+// required: false on purpose. In practice every row created through this API has its FK resolved -
+// the 001 demands it and the 004 cannot empty it - but a row loaded by direct SQL may not, and an
+// INNER JOIN would make it vanish from the listing without a trace
+const WHODRUG_INCLUDE = {
+    model: VaccineWhodrug,
+    as: 'vaccineWhodrug',
+    attributes: ['vaccineWhodrugId', 'drugCode', 'drugName'],
+    required: false
+};
+
+// The parent is dropped here after having done its job in the query, and the master comes back as an
+// explicit null when its key has no value, so a client does not have to tell "empty" from "absent".
+//
+// doseNumber is returned as the number it is: a 0 is never collapsed into a null, because "dose
+// zero" and "the dose is unknown" are different data
+const toInvestigationVaccineAdministeredResponse = (vaccine: InvestigationVaccineAdministered) => {
+    const plain = vaccine.toJSON() as Record<string, unknown>;
+    delete plain.investigation;
+
+    plain.vaccineWhodrug = plain.vaccineWhodrug ?? null;
+
+    return plain;
+}
+
+// The free text is normalized on write with trim, and a text that is blank after trimming is no text
+// at all. There is no code column to constant case nor a name to title case.
+//
+// This is yet another copy of this helper in the repository. Extracting it is overdue since F24 §7
+// and has its own spec pending
+const normalizeText = (value: string | null | undefined): string | null => {
+    if( value === undefined || value === null ) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+// The parent guard of 001, 002A, 002B and 006. A single query over investigation by primary key that
+// fails with 404 if the investigation does not exist or is inactive.
+//
+// The two causes share code and message: telling them apart is of no use to the investigator, since
+// in both the missing link is one level up and the corrective action is the same one.
+//
+// canViewInactive relaxes the isActive check and only in the readings. In the 001 nothing is relaxed,
+// SUPERADMIN included: a retired investigation takes no new vaccines from anyone
+const findValidInvestigation = async (
+    investigationId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    transaction?: Transaction
+) => {
+    const investigation = await Investigation.findOne({
+        where: canViewInactive ? { investigationId } : { investigationId, isActive: true },
+        attributes: ['investigationId'],
+        transaction
+    });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.investigationNotFound', lang),
+            404,
+            `INVVACAD_${ op }_INVESTIGATION_NOT_FOUND`
+        );
+    }
+    return investigation;
+}
+
+// The master must exist and be ACTIVE. Two causes - it does not exist, it is inactive - and a single
+// error, with the shape F22 §3.5 gave it.
+//
+// A findOne over the table itself is enough: vaccineWhodrug hangs off no catalogType, so the double
+// hop F14, F21, F35 and F36 needed does not apply here.
+//
+// It runs BEFORE the diff and with independence of it: an inactive entry is a 404 even if it matches
+// what is stored. And it only runs when the key ends up with a value
+const assertWhodrugIsValid = async (
+    vaccineWhodrugId: string,
+    op: string,
+    lang: string,
+    transaction?: Transaction
+) => {
+    const whodrug = await VaccineWhodrug.findOne({
+        where: { vaccineWhodrugId, isActive: true },
+        attributes: ['vaccineWhodrugId'],
+        transaction
+    });
+    if( !whodrug ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.whodrugNotFound', lang),
+            404,
+            `INVVACAD_${ op }_WHODRUG_NOT_FOUND`
+        );
+    }
+    return whodrug;
+}
+
+// The uniqueness of the triple (investigationId, vaccineWhodrugId, doseNumber), compared against the
+// ACTIVE rows of the same investigation. A row retired by a 005A does not block the create of the
+// same vaccine: the live list is the one that has to stay coherent.
+//
+// doseNumber enters the comparison WITH ITS NULL INCLUDED: two rows of the same vaccine with no dose
+// number are the same row twice. In Sequelize that is a plain { doseNumber: null } in the where,
+// which generates IS NULL and not = NULL - writing it with Op.eq over a null would never find the
+// collision and the duplicate would walk in.
+//
+// Called from three operations and not two: 001, 004 and 005B. The 005B is the third door a
+// duplicate can enter the live list through, because it returns a row whose triple may have been
+// taken while it was retired
+const assertNoDuplicateVaccine = async (
+    investigationId: string,
+    vaccineWhodrugId: string | null,
+    doseNumber: number | null,
+    op: string,
+    lang: string,
+    transaction?: Transaction,
+    excludeId?: string
+) => {
+    const where: Record<string, unknown> = {
+        investigationId,
+        vaccineWhodrugId,
+        doseNumber,
+        isActive: true
+    };
+    if( excludeId ) {
+        where.vaccineAdministeredId = { [Op.ne]: excludeId };
+    }
+
+    const duplicate = await InvestigationVaccineAdministered.findOne({
+        where,
+        attributes: ['vaccineAdministeredId'],
+        transaction
+    });
+    if( duplicate ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.alreadyExists', lang, {
+                doseNumber: doseNumber === null ? '' : String(doseNumber)
+            }),
+            409,
+            `INVVACAD_${ op }_ALREADY_EXISTS`
+        );
+    }
+}
+
+// The read that shapes the response of 001, 003 and 004. The parent travels with required: true and
+// its isActive checked, which is what implements the inherited visibility in the same query the
+// instance comes out of
+const findVaccineAdministeredWithRelations = async (
+    vaccineAdministeredId: string,
+    includeInactive: boolean,
+    transaction?: Transaction
+) => {
+    return InvestigationVaccineAdministered.findOne({
+        where: includeInactive
+            ? { vaccineAdministeredId }
+            : { vaccineAdministeredId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [
+            WHODRUG_INCLUDE,
+            {
+                ...INVESTIGATION_INCLUDE,
+                where: includeInactive ? {} : { isActive: true }
+            }
+        ],
+        transaction
+    });
+}
+
+// The read the 004 works from. Deliberately WITHOUT narrowed attributes: that is the precondition of
+// buildDifferentialUpdate — an instance read with a narrowed attribute list reads back undefined for
+// the columns it left out, and every comparison against undefined counts as a change.
+//
+// The parent include travels here too, so the inherited visibility is checked in the very query the
+// instance comes out of and not in a second one that could see a different snapshot
+const findVaccineAdministeredRow = async (
+    vaccineAdministeredId: string,
+    canViewInactive: boolean,
+    transaction?: Transaction
+) => {
+    return InvestigationVaccineAdministered.findOne({
+        where: canViewInactive
+            ? { vaccineAdministeredId }
+            : { vaccineAdministeredId, isActive: true },
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            where: canViewInactive ? {} : { isActive: true }
+        }],
+        transaction
+    });
+}
+
+// Create Investigation Vaccine Administered Service
+// Code: ESAVI-INVVACAD-001
+// Everything inside a single transaction, so the parent guard, the master validation and the
+// duplicate guard see the same snapshot the INSERT lands on
+const createInvestigationVaccineAdministeredService = async (
+    data: CreateInvestigationVaccineAdministeredInput,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const transaction = await sequelize.transaction();
+    let createdId: string;
+
+    try {
+        // Nothing relaxed here, not even for SUPERADMIN: a retired investigation takes no new
+        // vaccines whoever asks. It is the criterion of F31, F33 and F35 for their 001
+        await findValidInvestigation(data.investigationId, '001', lang, false, transaction);
+
+        // The presence of vaccineWhodrugId is the validator's job and the service does not repeat
+        // it: in the create the body IS the complete resulting state
+        await assertWhodrugIsValid(data.vaccineWhodrugId, '001', lang, transaction);
+
+        // Normalization first, so what the duplicate guard looks at is what is going to be stored
+        const doseNumber = data.doseNumber ?? null;
+        const notes = normalizeText(data.notes);
+
+        await assertNoDuplicateVaccine(
+            data.investigationId,
+            data.vaccineWhodrugId,
+            doseNumber,
+            '001',
+            lang,
+            transaction
+        );
+
+        const newEntry: AppDetails = {
+            createdAt: new Date(),
+            user: authUser?.userId || 'undefined',
+            method: 'ESAVI-INVVACAD-001',
+            detail: 'Investigation vaccine administered created by service'
+        };
+
+        // sortOrder is deliberately absent from the create, and here that is enough on its own: the
+        // column is nullable, so Sequelize emits "sortOrder" = NULL and
+        // TRG_investigationVaccineAdministered_setSortOrder assigns it under the advisory lock that
+        // keeps two concurrent inserts from colliding. No fields list is needed
+        const created = await InvestigationVaccineAdministered.create({
+            investigationId: data.investigationId,
+            vaccineWhodrugId: data.vaccineWhodrugId,
+            doseNumber,
+            notes,
+            appDetails: [newEntry]
+        }, { transaction });
+
+        createdId = created.vaccineAdministeredId;
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    // Re-read so the response carries the master and the sortOrder the trigger assigned, neither of
+    // which the create instance knows
+    const vaccine = await findVaccineAdministeredWithRelations(createdId, true);
+    return vaccine ? toInvestigationVaccineAdministeredResponse(vaccine) : null;
+}
+
+// Get Active Investigation Vaccines Administered By Investigation Service
+// Code: ESAVI-INVVACAD-002A
+// The listing is entered by the foreign key and never by /: an administered vaccine does not exist
+// without its investigation, and a global listing has no reader. Unlike the five one to one
+// satellites, the 003 cannot double as the listing here: the row has a key of its own, so the access
+// by row and the access by investigation are different things.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// vaccineWhodrugId, doseNumber or text over notes — those are out of the scope of this spec.
+//
+// A visible investigation with no vaccines answers 200 with { count: 0, rows: [] }, and only an
+// investigation that fails the guard answers 404
+const getInvestigationVaccinesAdministeredByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await findValidInvestigation(investigationId, '002A', lang, canViewInactive);
+
+    const vaccines = await InvestigationVaccineAdministered.findAndCountAll({
+        where: { investigationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [WHODRUG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: vaccines.count,
+        rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
+    };
+}
+
+// Get All Investigation Vaccines Administered By Investigation Service
+// Code: ESAVI-INVVACAD-002B
+// Identical to the 002A but for the where, which does not filter by isActive: this one returns the
+// retired rows and the ones with a sealed deletedAt too. It is the operation that justifies the new
+// index of §3.1 — the only index covering investigationId today is the partial unique one, which
+// excludes precisely the rows this listing does return
+const getAllInvestigationVaccinesAdministeredByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await findValidInvestigation(investigationId, '002B', lang, canViewInactive);
+
+    const vaccines = await InvestigationVaccineAdministered.findAndCountAll({
+        where: { investigationId },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [WHODRUG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: vaccines.count,
+        rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
+    };
+}
+
+// Get Investigation Vaccine Administered By ID Service
+// Code: ESAVI-INVVACAD-003
+// The :id is the vaccineAdministeredId, and that is the difference with the five one to one
+// satellites of investigation, where the 003 already was the access by investigation.
+//
+// Two conditions govern the 404 and canViewInactive relaxes both: the row's own isActive and the
+// parent's, checked in the same query the instance comes out of. A retired row is a 404 for USER and
+// ADMIN; so is a live row whose investigation was deactivated. Both are 200 for SUPERADMIN
+const getInvestigationVaccineAdministeredByIdService = async (
+    vaccineAdministeredId: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const vaccine = await findVaccineAdministeredWithRelations(vaccineAdministeredId, canViewInactive);
+    if( !vaccine ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.notFound', lang),
+            404,
+            'INVVACAD_003_NOT_FOUND'
+        );
+    }
+    return toInvestigationVaccineAdministeredResponse(vaccine);
+}
+
+// Get Investigation Vaccines Administered By Case ID Service
+// Code: ESAVI-INVVACAD-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It crosses the
+// one to one hop up to the investigation, from which N administered vaccines hang, and returns
+// { count, rows } like the two listings.
+//
+// The two 404 are deliberately distinct, and the difference matters to the client: it needs to know
+// which link of the chain broke — whether the case is not there, or whether it has no visible
+// investigation. Those are two different actions on the user's side, and one generic message would
+// make them indistinguishable.
+//
+// Only the active vaccines come back, with the same criterion as 002A: whoever needs the retired ones
+// enters through 002B, which is the admin door
+const getInvestigationVaccinesAdministeredByCaseIdService = async (
+    caseId: string,
+    lang: string,
+    includeInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.caseNotFound', lang),
+            404,
+            'INVVACAD_006_CASE_NOT_FOUND'
+        );
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationVaccineAdministered.investigationNotFound', lang),
+            404,
+            'INVVACAD_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    // An investigation with no vaccines answers 200 with an empty page and never 404: the last hop
+    // is one to many and the empty list is a legitimate result — the chain is whole, there is simply
+    // nothing recorded yet
+    const vaccines = await InvestigationVaccineAdministered.findAndCountAll({
+        where: { investigationId: investigation.investigationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [WHODRUG_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: vaccines.count,
+        rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
+    };
+}
+
+// Update Investigation Vaccine Administered Service
+// Code: ESAVI-INVVACAD-004
+// Everything inside a single transaction, so the master validation and the duplicate guard see the
+// same snapshot the UPDATE lands on.
+//
+// investigationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// answers 400: the first one is immutable — moving an administered vaccine to another investigation
+// is not updating it, it is creating a different one — and the second one is governed by the database
+const updateInvestigationVaccineAdministeredService = async (
+    id: string,
+    data: Partial<CreateInvestigationVaccineAdministeredInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const vaccine = await findVaccineAdministeredRow(id, canViewInactive, transaction);
+        if( !vaccine ) {
+            throw new AppError(
+                getMessage('investigationVaccineAdministered.notFound', lang),
+                404,
+                'INVVACAD_004_NOT_FOUND'
+            );
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
+        const stored = vaccine.get({ plain: true }) as Record<string, unknown>;
+
+        // The resulting values of the two fields the guards look at, computed once so the
+        // requiredness rule, the master validation, the duplicate guard and the diff all look at the
+        // same thing. An absent key keeps what is stored; a key that travelled — null included —
+        // replaces it
+        const resultingWhodrugId = data.vaccineWhodrugId !== undefined
+            ? ( data.vaccineWhodrugId ?? null )
+            : ( stored.vaccineWhodrugId as string | null );
+        const resultingDoseNumber = data.doseNumber !== undefined
+            ? ( data.doseNumber ?? null )
+            : ( stored.doseNumber as number | null );
+
+        // Evaluated over the RESULTING state and never over the body, which is precisely why it
+        // lives here and not in the validator: "absent" means "do not touch it" and only the service
+        // knows what is stored. An explicit vaccineWhodrugId: null is the one case this rejects, and
+        // it is rejected BEFORE the diff and with independence of it
+        if( !resultingWhodrugId ) {
+            throw new AppError(
+                getMessage('investigationVaccineAdministered.vaccineRequired', lang),
+                400,
+                'INVVACAD_004_VACCINE_REQUIRED'
+            );
+        }
+
+        // Only when the key travelled with a value: an absent vaccineWhodrugId is not revalidated,
+        // and a null one was already rejected above. An inactive entry is a 404 even if it matches
+        // what is stored
+        if( data.vaccineWhodrugId ) {
+            await assertWhodrugIsValid(data.vaccineWhodrugId, '004', lang, transaction);
+        }
+
+        // Also before the diff: a taken triple is a 409 even if the rest of the body changes nothing
+        await assertNoDuplicateVaccine(
+            stored.investigationId as string,
+            resultingWhodrugId,
+            resultingDoseNumber,
+            '004',
+            lang,
+            transaction,
+            id
+        );
+
+        // investigationId, sortOrder and isActive are deliberately absent: the first two are
+        // immutable and the state moves through 005A and 005B.
+        //
+        // NOTHING enters under an if( data.x ). On doseNumber that would be destructive — 0 is a
+        // valid value, the dose zero of a schedule that starts at zero, and a truthiness check would
+        // throw it away leaving no way to store it. On notes it would silently discard the empty
+        // string the field is emptied with.
+        //
+        // vaccineWhodrugId enters as nullable despite being required, and that is deliberate: the
+        // rule is imposed above, before and apart. Writing it as data.x ? data.x : undefined would
+        // make a null that survived be discarded in silence instead of failing, which is exactly
+        // what the rule exists to prevent
+        const candidates: Record<string, unknown> = {
+            vaccineWhodrugId: data.vaccineWhodrugId !== undefined ? ( data.vaccineWhodrugId ?? null ) : undefined,
+            doseNumber: data.doseNumber !== undefined ? ( data.doseNumber ?? null ) : undefined,
+            notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_investigationVaccineAdministered_setSysDetails fires on
+        // every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(vaccine.appDetails)
+                ? vaccine.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-INVVACAD-004',
+                detail: 'Investigation vaccine administered updated by service'
+            };
+            await vaccine.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    // Re-read so the response carries the master with its nested fields, whether or not anything was
+    // written
+    const updated = await findVaccineAdministeredWithRelations(id, true);
+    return updated ? toInvestigationVaccineAdministeredResponse(updated) : null;
+}
+
+// The two guards ESAVI-INVVACAD-005B runs before handing over to setEntityActiveStatusService, in
+// this order and not the other one.
+//
+// The order between the uniqueness guard and the sortOrder reassignment is NOT indifferent:
+// reordering a row that is going to be rejected right afterwards would leave a modification written
+// that no completed operation justifies, and appDetails would record a movement nobody asked for.
+//
+// It revalidates nothing else. Not the parent chain — reactivating a row whose investigation was
+// deactivated in the meantime answers 200, by the reason of F31 §3.5 — and not the master either: an
+// entry retired from the dictionary after the record still says what was administered, as in every
+// read
+const prepareReactivation = async (id: string, lang: string, transaction: Transaction) => {
+    const vaccine = await InvestigationVaccineAdministered.findOne({
+        where: { vaccineAdministeredId: id },
+        paranoid: false,
+        transaction
+    });
+
+    // Absent or already alive: the delegation below raises the 404 and the 409, and it is the only
+    // place those two are produced
+    if( !vaccine || vaccine.isActive ) {
+        return;
+    }
+
+    // The triple is the STORED one: the 005B receives no body. The 005B is the third door a
+    // duplicate can enter the live list through, because it returns a row whose triple may have been
+    // taken while it was retired
+    await assertNoDuplicateVaccine(
+        vaccine.investigationId,
+        vaccine.vaccineWhodrugId ?? null,
+        vaccine.doseNumber ?? null,
+        '005B',
+        lang,
+        transaction,
+        id
+    );
+
+    // While deletedAt stays sealed the row is outside the partial unique index, so the write below is
+    // free. Past that point it is not, and there is nothing safe to reassign
+    if( vaccine.deletedAt === null || vaccine.deletedAt === undefined ) {
+        return;
+    }
+
+    // If the row carries no number there is no collision possible: the partial index excludes the
+    // nulls, and this table is the second one of the family whose column is nullable
+    if( vaccine.sortOrder === null || vaccine.sortOrder === undefined ) {
+        return;
+    }
+
+    const collision = await InvestigationVaccineAdministered.findOne({
+        where: {
+            investigationId: vaccine.investigationId,
+            sortOrder: vaccine.sortOrder as number,
+            deletedAt: null,
+            vaccineAdministeredId: { [Op.ne]: id }
+        },
+        attributes: ['vaccineAdministeredId'],
+        paranoid: false,
+        transaction
+    });
+    if( !collision ) {
+        return;
+    }
+
+    // The same count TRG_investigationVaccineAdministered_setSortOrder does on insert, so the
+    // reactivated vaccine reappears at the END of the list. A static update and not an instance one,
+    // which writes this column and only this column without an explicit field list
+    const highest = await InvestigationVaccineAdministered.max<number, InvestigationVaccineAdministered>('sortOrder', {
+        where: { investigationId: vaccine.investigationId, deletedAt: null },
+        transaction
+    });
+
+    await InvestigationVaccineAdministered.update(
+        { sortOrder: ( Number(highest) || 0 ) + 1 },
+        { where: { vaccineAdministeredId: id }, transaction }
+    );
+}
+
+// Set Investigation Vaccine Administered Activation Service
+// Code: ESAVI-INVVACAD-005A / ESAVI-INVVACAD-005B
+// One service for the two operations, as the rest of the repository does it. Neither is a
+// differential update: they are state writes with an intent of their own, they record a fact even
+// though no data column changes, and that is why they go through setEntityActiveStatusService and
+// never through buildDifferentialUpdate.
+//
+// This is the first satellite of investigation since F31 that can have these two at all: F29, F30,
+// F32, F34 and F36 have no isActive column and therefore no state of their own to withdraw.
+//
+// The 005A seals deletedAt, which FREES the sortOrder from the partial unique index. That is correct
+// and deliberate: the gap stays available for the next vaccine.
+//
+// Neither operation applies the inherited visibility, and that is the criterion of F31, F33 and F35:
+// whoever withdraws or reactivates acts over the row's own state, and that state exists
+// independently of its parent. Retiring a vaccine of an inactive investigation answers 200.
+//
+// The 005A is blocked by nothing. investigationVaccineAdministered is a leaf of the graph: no table
+// of the 45 references it, so there are no children to query and no state to drag
+const setInvestigationVaccineAdministeredActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // Only on the way back: a 005A is what frees the number, so it never collides
+        if( isActive ) {
+            await prepareReactivation(id, lang, transaction);
+        }
+
+        const vaccine = await setEntityActiveStatusService({
+            model: InvestigationVaccineAdministered,
+            where: { vaccineAdministeredId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('investigationVaccineAdministered.notFound', lang),
+            notFoundCode: `INVVACAD_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`investigationVaccineAdministered.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `INVVACAD_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-INVVACAD-${ op }`,
+                detail: `Investigation vaccine administered ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return vaccine;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
+// Purge Investigation Vaccine Administered Service
+// Code: ESAVI-INVVACAD-005C
+// investigationVaccineAdministered is outside the preventPhysicalDelete loop of esaviapp.sql, so the
+// row can really be destroyed.
+//
+// purgeEntityService serves as it is, with no modification: its canonical guard — the row must have
+// been retired with a 005A first, 409 otherwise — applies over the row itself. Here that guard IS
+// effective, unlike in F29, F30, F32, F34 and F36, because this table does have an isActive column.
+// The state of the investigation is deliberately not checked, and nothing from rowSeal.helper.ts is
+// consumed either.
+//
+// This table is a leaf of the graph. None of the 45 tables references vaccineAdministeredId, so
+// destroying a row drags no other one, there is no cascade to count and no ids to dump. The two
+// foreign keys it cites are ON DELETE RESTRICT in the other direction, and both parents are in
+// preventPhysicalDelete anyway.
+//
+// The warn dump carries the WHOLE row and nothing is omitted from it: this entity has no encrypted
+// column and no identifying datum — a foreign key to a dictionary, an integer and a note.
+//
+// No appDetails entry either: the row is destroyed in the same transaction, which is the absence
+// CONVENTIONS.md §6 declares legitimate
+const purgeInvestigationVaccineAdministeredService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: InvestigationVaccineAdministered,
+            where: { vaccineAdministeredId: id },
+            transaction,
+            operationCode: 'ESAVI-INVVACAD-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('investigationVaccineAdministered.notFound', lang),
+            notFoundCode: 'INVVACAD_005C_NOT_FOUND',
+            // alreadyActive and not alreadyInactive: the row this 409 rejects is one that is STILL
+            // ACTIVE and was never retired with a 005A, so the message has to say so. It is the key
+            // F31 uses for the same guard
+            stillActiveMessage: getMessage('investigationVaccineAdministered.alreadyActive', lang, { id }),
+            stillActiveCode: 'INVVACAD_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
+export {
+    createInvestigationVaccineAdministeredService,
+    getInvestigationVaccinesAdministeredByInvestigationService,
+    getAllInvestigationVaccinesAdministeredByInvestigationService,
+    getInvestigationVaccineAdministeredByIdService,
+    getInvestigationVaccinesAdministeredByCaseIdService,
+    updateInvestigationVaccineAdministeredService,
+    setInvestigationVaccineAdministeredActivationService,
+    purgeInvestigationVaccineAdministeredService
+}
