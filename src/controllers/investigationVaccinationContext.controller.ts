@@ -4,6 +4,7 @@ import { AuthUser, InvestigationVaccinationContextListFilters } from '../types';
 import {
     createInvestigationVaccinationContextService,
     getAllInvestigationVaccinationContextsService,
+    getInvestigationVaccinationContextByCaseIdService,
     getInvestigationVaccinationContextByIdService,
     getInvestigationVaccinationContextsService
 } from '../services/investigationVaccinationContext.service';
@@ -106,9 +107,37 @@ const getInvestigationVaccinationContextById = async (req: Request, res: Respons
     }
 }
 
+// Get Investigation Vaccination Context By Case ID Controller
+// Code: ESAVI-INVVACTX-006
+// The only non-canonical operation of the entity. It answers with the record itself and not with a
+// collection: the chain case -> investigation -> vaccination context is one to one on both hops
+const getInvestigationVaccinationContextByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationVaccinationContextByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationVaccinationContext.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVVACTX-006: Error fetching Investigation Vaccination Context by case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationVaccinationContext.getFailed', req.lang), 500, 'INVVACTX_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationVaccinationContext,
     getAllInvestigationVaccinationContexts,
+    getInvestigationVaccinationContextByCaseId,
     getInvestigationVaccinationContextById,
     getInvestigationVaccinationContexts
 };

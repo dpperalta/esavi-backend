@@ -469,9 +469,46 @@ const getInvestigationVaccinationContextByIdService = async (id: string, lang: s
     return toInvestigationVaccinationContextResponse(context);
 }
 
+// Get Investigation Vaccination Context By Case ID Service
+// Code: ESAVI-INVVACTX-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It returns the
+// record itself and not { count, rows } — the chain case -> investigation -> vaccination context is
+// one to one on BOTH hops, imposed by UQ_investigation_case on the first and by the shared primary
+// key on the second, so wrapping a single record in a collection would force unwrapping a
+// one-element array on every screen.
+// THREE DISTINCT 404, and the difference matters to the client: "that case does not exist", "it has
+// no visible investigation" and "its investigation has no vaccination context yet" are three
+// different things to show on screen, and only the third one is fixed by creating a context
+const getInvestigationVaccinationContextByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('investigationVaccinationContext.caseNotFound', lang), 404, 'INVVACTX_006_CASE_NOT_FOUND');
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationVaccinationContext.investigationNotFound', lang),
+            404,
+            'INVVACTX_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    const context = await findInvestigationVaccinationContextWithRelations(investigation.investigationId, includeInactive);
+    if( !context ) {
+        throw new AppError(getMessage('investigationVaccinationContext.notFound', lang), 404, 'INVVACTX_006_NOT_FOUND');
+    }
+    return toInvestigationVaccinationContextResponse(context);
+}
+
 export {
     createInvestigationVaccinationContextService,
     getAllInvestigationVaccinationContextsService,
+    getInvestigationVaccinationContextByCaseIdService,
     getInvestigationVaccinationContextByIdService,
     getInvestigationVaccinationContextsService
 };

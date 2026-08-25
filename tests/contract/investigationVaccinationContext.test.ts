@@ -99,6 +99,9 @@ describe('investigationVaccinationContext contract', () => {
     const getById = (id: string, role: TestRole = 'USER') =>
         request(app).get(`${ basePath }/${ id }`).set(authHeader(role));
 
+    const getByCase = (caseId: string, role: TestRole = 'USER') =>
+        request(app).get(`${ basePath }/case/${ caseId }`).set(authHeader(role));
+
     const list = (query: string = '', role: TestRole = 'USER') =>
         request(app).get(`${ basePath }${ query }`).set(authHeader(role));
 
@@ -650,6 +653,93 @@ describe('investigationVaccinationContext contract', () => {
 
             expect(res.status).toBe(200);
             expect(res.body.data).toHaveProperty('count');
+        });
+    });
+
+    describe('006 — get by case', () => {
+
+        it('returns THE OBJECT and not { count, rows }', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            expect((await create({ investigationId, momentItemId: firstHoursItemId })).status).toBe(201);
+
+            const res = await getByCase(caseId);
+
+            expect(res.status).toBe(200);
+            expect(Array.isArray(res.body.data)).toBe(false);
+            expect(res.body.data).not.toHaveProperty('count');
+            expect(res.body.data).not.toHaveProperty('rows');
+            expect(res.body.data.investigationId).toBe(investigationId);
+            expect(res.body.data.moment.code).toBe('FIRST_HOURS');
+            expect(res.body.data.investigation.case.caseId).toBe(caseId);
+        });
+
+        it('a caseId that does not exist returns 404 CASE_NOT_FOUND', async () => {
+            const res = await getByCase(unknownUuid);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVVACTX_006_CASE_NOT_FOUND');
+        });
+
+        it('an inactive case returns 404 CASE_NOT_FOUND', async () => {
+            const caseId = await createCaseFixture(false);
+            const res = await getByCase(caseId);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVVACTX_006_CASE_NOT_FOUND');
+        });
+
+        it('a case with no investigation returns 404 INVESTIGATION_NOT_FOUND', async () => {
+            const caseId = await createCaseFixture();
+            const res = await getByCase(caseId);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVVACTX_006_INVESTIGATION_NOT_FOUND');
+        });
+
+        it('an investigation with no context returns 404 NOT_FOUND', async () => {
+            const caseId = await createCaseFixture();
+            await createInvestigationForCase(caseId);
+
+            const res = await getByCase(caseId);
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('INVVACTX_006_NOT_FOUND');
+        });
+
+        it('the three codes are distinct from one another', async () => {
+            const noCase = await getByCase(unknownUuid);
+
+            const withoutInvestigation = await createCaseFixture();
+            const noInvestigation = await getByCase(withoutInvestigation);
+
+            const withoutContext = await createCaseFixture();
+            await createInvestigationForCase(withoutContext);
+            const noContext = await getByCase(withoutContext);
+
+            const codes = [noCase.body.code, noInvestigation.body.code, noContext.body.code];
+            expect(new Set(codes).size).toBe(3);
+        });
+
+        it('an inactive investigation hides the context from USER and shows it to SUPERADMIN', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+            expect((await create({ investigationId })).status).toBe(201);
+            await retireInvestigation(investigationId);
+
+            const user = await getByCase(caseId, 'USER');
+            expect(user.status).toBe(404);
+            expect(user.body.code).toBe('INVVACTX_006_INVESTIGATION_NOT_FOUND');
+
+            const superAdmin = await getByCase(caseId, 'SUPERADMIN');
+            expect(superAdmin.status).toBe(200);
+            expect(superAdmin.body.data.investigationId).toBe(investigationId);
+        });
+
+        it('a caseId that is not a UUID returns 400', async () => {
+            const res = await getByCase('no-es-uuid');
+
+            expect(res.status).toBe(400);
         });
     });
 });

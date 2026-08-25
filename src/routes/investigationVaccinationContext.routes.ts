@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationVaccinationContext,
     getAllInvestigationVaccinationContexts,
+    getInvestigationVaccinationContextByCaseId,
     getInvestigationVaccinationContextById,
     getInvestigationVaccinationContexts
 } from '../controllers/investigationVaccinationContext.controller';
 import {
     createInvestigationVaccinationContextValidator,
+    investigationVaccinationContextCaseIdValidator,
     investigationVaccinationContextIdValidator,
     investigationVaccinationContextListValidator
 } from '../validators';
@@ -35,6 +37,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationVaccina
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the vaccination
 // context of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationVaccinationContextListValidator, validateFields, getAllInvestigationVaccinationContexts);
+
+// Get Investigation Vaccination Context by Case
+// Code: ESAVI-INVVACTX-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared before
+// /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationVaccinationContextCaseIdValidator, validateFields, getInvestigationVaccinationContextByCaseId);
 
 // Get Investigation Vaccination Context by ID
 // Code: ESAVI-INVVACTX-003
