@@ -1609,5 +1609,8 @@ CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution ty
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'LABORATORY', 'Laboratory', 'LABORATORY', 3);
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'PRIVATE_PRACTICE', 'Private practice', 'PRIVATE_PRACTICE', 4);
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'OTHER', 'Other', 'OTHER', 5);
+CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', 'FIRST_HOURS', 'First hours of the session', 'FIRST_HOURS', 1);
+CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', 'LAST_HOURS', 'Last hours of the session', 'LAST_HOURS', 2);
+CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', 'UNKNOWN', 'Unknown', 'UNKNOWN', 3);
 
 COMMIT;

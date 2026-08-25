@@ -1,6 +1,6 @@
 # SPEC F35 — CRUD de `evaluationInstitution`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F34 (`investigationClinicalEvaluation` — dependencia dura de modelo: es el padre de la FK, y quien declaró por escrito que esta tabla tendría su propio spec)**, **SPEC F33 (`investigationPregnancyCondition` — gemela estructural: la otra nieta del bloque de investigación, aporta la cadena de dos saltos con el estado solo en el segundo)**, **SPEC F31 (`investigationTeamMember` — hermana de forma: aporta la colección con `isActive` que ninguna cascada pisa y la decisión de no aplicar `toTitleCase` a `institutionName`)**, **SPEC F04 y SPEC F05 (patrón de cifrado PII sobre `appUser` y `patient`)**, SPEC F09 (`healthFacility` — maestro de la FK), SPEC F02 (`catalogItem` — maestro de la FK de tipo), SPEC F16 (`notificationEvent` — origen del hallazgo del `sortOrder` en el `005B`), SPEC F28 (`investigation` — su volcado de purga gana una línea), SPEC F08 (operación `005C` de borrado físico), SPEC F12 (`buildDifferentialUpdate` — el `004` lo usa)
 > **Fecha:** 2026-08-24
 > **Objetivo:** Dar de alta `evaluationInstitution` —las instituciones que participaron en la evaluación clínica del paciente investigado, con su contacto— como la **segunda nieta del bloque de investigación** y la primera que cuelga de `investigationClinicalEvaluation`.
