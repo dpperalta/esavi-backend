@@ -6,7 +6,8 @@ import {
     getAllInvestigationColdChainsService,
     getInvestigationColdChainByCaseIdService,
     getInvestigationColdChainByIdService,
-    getInvestigationColdChainsService
+    getInvestigationColdChainsService,
+    updateInvestigationColdChainService
 } from '../services/investigationColdChain.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
@@ -135,10 +136,40 @@ const getInvestigationColdChainByCaseId = async (req: Request, res: Response, ne
     }
 }
 
+// Update Investigation Cold Chain Controller
+// Code: ESAVI-INVCOLD-004
+// canViewInactive travels for the same reason as in the 003: the entity has no state of its own, so
+// the predicate is applied over the visibility it inherits from its investigation
+const updateInvestigationColdChain = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationColdChainService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationColdChain.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCOLD-004: Error updating Investigation Cold Chain: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationColdChain.updatedFailed', req.lang), 500, 'INVCOLD_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationColdChain,
     getAllInvestigationColdChains,
     getInvestigationColdChainByCaseId,
     getInvestigationColdChainById,
-    getInvestigationColdChains
+    getInvestigationColdChains,
+    updateInvestigationColdChain
 };

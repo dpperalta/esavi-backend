@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { EsaviCase, Investigation, InvestigationColdChain } from '../models';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -63,6 +63,22 @@ const findInvestigationColdChainWithRelations = async (id: string, includeInacti
     return await InvestigationColdChain.findOne({
         where: { investigationId: id },
         attributes: COLD_CHAIN_EXCLUDE,
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// The same read as above without narrowing the attributes of the cold chain, which is the
+// precondition of buildDifferentialUpdate: an instance read with a narrowed `attributes` reads back
+// undefined for the columns it left out, and every comparison against undefined would count as a
+// change. It still carries the investigation include, so the inherited visibility is checked in the
+// same query the update instance comes from
+const findInvestigationColdChainRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationColdChain.findOne({
+        where: { investigationId: id },
         include: [{
             ...INVESTIGATION_INCLUDE,
             required: true,
@@ -216,6 +232,55 @@ const assertTransportContainerConflict = (
         400,
         `INVCOLD_${ op }_TRANSPORT_CONTAINER_CONFLICT`
     );
+}
+
+// THE OTHER TWO CASES OF THE MUTUAL EXCLUSION, the ones that are NOT errors. It returns which of
+// the two container columns has to be forced to 'NO', and it is only ever called from the 004: on
+// create there is no stored state, so only the conflict can happen.
+//
+// It runs AFTER assertTransportContainerConflict, which is what guarantees that if the two result
+// 'YES' here, at most one of them travelled.
+//
+// RELAY — one of the two travels in 'YES' and the other does not travel but is stored in 'YES': the
+// one from the BODY wins and the stored one is forced to 'NO'. The precedence does not intervene
+// here: what the client has just asserted weighs more than what was there. The alternative — a fixed
+// precedence of the thermos also here — would make a PUT { transportUsedColdPack: 'YES' } silently
+// revert the change the client just asked for.
+//
+// INHERITED TIE — neither travels and the two are stored in 'YES': the THERMOS wins by precedence,
+// which is the only place where the declared precedence ends up being applied. It is resolved in
+// silence and deliberately NOT with a 400: a 400 would leave that row FROZEN, with no PUT able to
+// touch it ever again — not even one that only changes notes. This way it repairs itself on the
+// first update it receives.
+//
+// THE THIRD CASE CAN ONLY HAPPEN ON A ROW LOADED BEFORE THIS SPEC OR WRITTEN BY DIRECT SQL: the
+// application never produces it.
+//
+// With any other combination nothing is forced: the two in 'NO', 'UNKNOWN', 'NOT_APPLICABLE',
+// 'NO_ANSWER' or null, or only one in 'YES', are stored exactly as they arrive
+const resolveTransportContainerForcing = (
+    data: Partial<CreateInvestigationColdChainInput>,
+    stored: Record<string, unknown>
+): Record<string, 'NO'> => {
+    const forced: Record<string, 'NO'> = {};
+
+    const bothResultYes = TRANSPORT_CONTAINER_FIELDS.every(
+        field => resultingValue<string>(data, stored, field) === 'YES'
+    );
+    if( !bothResultYes ) return forced;
+
+    // Relay: exactly one travelled, so it is the one from the body that wins
+    const travelling = TRANSPORT_CONTAINER_FIELDS.filter(field => travels(data, field));
+    if( travelling.length === 1 ) {
+        const loser = TRANSPORT_CONTAINER_FIELDS.find(field => !travels(data, field));
+        if( loser ) forced[loser] = 'NO';
+        return forced;
+    }
+
+    // Inherited tie: neither travelled. The FIRST field of the array wins, which is what makes the
+    // order of that constant the precedence and not a mere listing
+    forced[TRANSPORT_CONTAINER_FIELDS[1]] = 'NO';
+    return forced;
 }
 
 // Create Investigation Cold Chain Service
@@ -411,4 +476,140 @@ export const getInvestigationColdChainByCaseIdService = async (caseId: string, l
         throw new AppError(getMessage('investigationColdChain.notFound', lang), 404, 'INVCOLD_006_NOT_FOUND');
     }
     return toInvestigationColdChainResponse(coldChain);
+}
+
+// Update Investigation Cold Chain Service
+// Code: ESAVI-INVCOLD-004
+// The main operation of the entity: the row is opened empty and completed over time, so this is
+// where the form is actually filled in. investigationId is ignored whether or not it arrives in the
+// body — it is the primary key of the row and the foreign key to its investigation at the same time,
+// and a cold chain is not moved between investigations. It does not return 400 either, which is what
+// keeps working the PUT that resends the response of its own GET
+export const updateInvestigationColdChainService = async (
+    id: string,
+    data: Partial<CreateInvestigationColdChainInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const coldChain = await findInvestigationColdChainRow(id, canViewInactive);
+    if( !coldChain ) {
+        throw new AppError(getMessage('investigationColdChain.notFound', lang), 404, 'INVCOLD_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The row is read WITHOUT narrowed attributes, which is the precondition of the helper: with
+    // trimmed attributes an absent field reads back undefined and every comparison against it would
+    // count as "it changed"
+    const stored = coldChain.get({ plain: true }) as Record<string, unknown>;
+
+    // The two rules of the domain, over the RESULTING state: what travels merged with what is
+    // stored. It is the service and not the validator who emits them, because express-validator
+    // cannot see the stored row. They run BEFORE the diff and independently of it
+    assertStorageBlock(data, stored, '004', lang);
+    assertTransportContainerConflict(data, '004', lang);
+
+    // The resulting state of the block key, recomputed here to drive the conditional derivative
+    // below. The comparison is `=== true` for the same reason as in the rule: false and null close
+    // the block alike
+    const blockOpen = isStorageBlockOpen(data, stored);
+
+    // Which container column, if any, has to be forced to 'NO'. It runs after the conflict check, so
+    // by here at most one of the two 'YES' can have travelled
+    const forcedContainers = resolveTransportContainerForcing(data, stored);
+
+    // No candidate is placed under an `if( data.x )`. Over the two booleans that would be outright
+    // destructive: false is a valid value and a truthiness check would throw it away, leaving "it was
+    // monitored and there was no deviation" with no way of being stored. Over the eight answerOption
+    // columns it would work by accident — the five strings of the ENUM are truthy — but would
+    // silently discard the null the field is emptied with
+    const candidates: Record<string, unknown> = {
+        // investigationId does NOT enter: immutable, ignored in silence and with no 400
+
+        // THE KEY OF THE STORAGE BLOCK, and it is NOT part of it: it is the field that decides, not
+        // the one decided. Entering as a conditional derivative would make it annul itself
+        storageTemperatureMonitored: data.storageTemperatureMonitored !== undefined
+            ? ( data.storageTemperatureMonitored ?? null ) : undefined,
+
+        // THE CONDITIONAL DERIVATIVE OF THE BLOCK. With the block closed the null enters candidates
+        // ALWAYS, with no presence check, and it is buildDifferentialUpdate who decides whether it
+        // differs: closing a block that was already closed writes nothing and does not grow
+        // appDetails. A cleanup with a second UPDATE after the diff would write even when nothing
+        // changed
+        storageRangeDeviation: blockOpen
+            ? ( data.storageRangeDeviation !== undefined ? ( data.storageRangeDeviation ?? null ) : undefined )
+            : null,
+
+        // The six independent storage columns. None of them is in the block and none is ever forced
+        storageProcedureFollowed: data.storageProcedureFollowed !== undefined
+            ? ( data.storageProcedureFollowed ?? null ) : undefined,
+        storageOtherObjectPresent: data.storageOtherObjectPresent !== undefined
+            ? ( data.storageOtherObjectPresent ?? null ) : undefined,
+        storagePartiallyReconstitutedVaccine: data.storagePartiallyReconstitutedVaccine !== undefined
+            ? ( data.storagePartiallyReconstitutedVaccine ?? null ) : undefined,
+        storageVaccineNotUsable: data.storageVaccineNotUsable !== undefined
+            ? ( data.storageVaccineNotUsable ?? null ) : undefined,
+        storageDiluentNotUsable: data.storageDiluentNotUsable !== undefined
+            ? ( data.storageDiluentNotUsable ?? null ) : undefined,
+
+        // Normalized before comparing, or a body differing only in surrounding blanks would count
+        // as a change
+        storageKeyFindings: data.storageKeyFindings !== undefined ? normalizeText(data.storageKeyFindings) : undefined,
+
+        // THE TWO CONDITIONAL DERIVATIVES OF THE TRANSPORT EXCLUSION. The forcing to 'NO' enters
+        // candidates with no presence check, exactly like the one of the storage block, and the diff
+        // decides whether it is written: resending 'NO' over a row that already had 'NO' writes
+        // nothing even though the precedence rule recomputed it
+        transportUsedThermos: forcedContainers.transportUsedThermos
+            ?? ( data.transportUsedThermos !== undefined ? ( data.transportUsedThermos ?? null ) : undefined ),
+        transportUsedColdPack: forcedContainers.transportUsedColdPack
+            ?? ( data.transportUsedColdPack !== undefined ? ( data.transportUsedColdPack ?? null ) : undefined ),
+
+        // THE THREE COLUMNS OF THE CONTAINER, NEVER FORCED AND NEVER FORBIDDEN. They apply to
+        // whichever container was used — thermos or cold pack — so hanging them from either flag
+        // would leave a transport in a cold pack unable to record how it was set or what type of
+        // container it was, which is exactly the datum the investigator holds
+        transportSetInThermos: data.transportSetInThermos !== undefined
+            ? ( data.transportSetInThermos ?? null ) : undefined,
+        transportReturnedInThermos: data.transportReturnedInThermos !== undefined
+            ? ( data.transportReturnedInThermos ?? null ) : undefined,
+        transportTypeThermo: data.transportTypeThermo !== undefined ? normalizeText(data.transportTypeThermo) : undefined,
+
+        transportKeyFindings: data.transportKeyFindings !== undefined ? normalizeText(data.transportKeyFindings) : undefined,
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationColdChain_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationColdChainWithRelations(id, true);
+        return unchanged ? toInvestigationColdChainResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the generic
+    // loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(coldChain.appDetails) ? coldChain.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVCOLD-004',
+        detail: 'Investigation cold chain updated by service'
+    };
+    await coldChain.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationColdChainWithRelations(id, true);
+    return updated ? toInvestigationColdChainResponse(updated) : null;
 }

@@ -6,13 +6,15 @@ import {
     getAllInvestigationColdChains,
     getInvestigationColdChainByCaseId,
     getInvestigationColdChainById,
-    getInvestigationColdChains
+    getInvestigationColdChains,
+    updateInvestigationColdChain
 } from '../controllers/investigationColdChain.controller';
 import {
     createInvestigationColdChainValidator,
     investigationColdChainCaseIdValidator,
     investigationColdChainIdValidator,
-    investigationColdChainListValidator
+    investigationColdChainListValidator,
+    updateInvestigationColdChainValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -50,5 +52,11 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // The :id is the investigationId: this entity has no identifier of its own, so this is already the
 // access by investigation
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationColdChainIdValidator, validateFields, getInvestigationColdChainById);
+
+// Update Investigation Cold Chain
+// Code: ESAVI-INVCOLD-004
+// USER for the same reason as 001: completing the cold chain is part of the same operational flow.
+// It is the main operation of the entity — the row is opened with one field and filled in over time
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationColdChainIdValidator, ...updateInvestigationColdChainValidator, validateFields, updateInvestigationColdChain);
 
 export default router;
