@@ -32,6 +32,7 @@ import { InvestigationTeamMember } from './investigationTeamMember.model';
 import { InvestigationMedicalHistory } from './investigationMedicalHistory.model';
 import { InvestigationPregnancyCondition } from './investigationPregnancyCondition.model';
 import { InvestigationClinicalEvaluation } from './investigationClinicalEvaluation.model';
+import { InvestigationVaccinationContext } from './investigationVaccinationContext.model';
 import { EvaluationInstitution } from './evaluationInstitution.model';
 import { SystemConfig } from './systemConfig.model';
 import { SystemConfigHistory } from './systemConfigHistory.model';
@@ -74,6 +75,7 @@ export {
     InvestigationMedicalHistory,
     InvestigationPregnancyCondition,
     InvestigationClinicalEvaluation,
+    InvestigationVaccinationContext,
     EvaluationInstitution,
     SystemConfig,
     SystemConfigHistory

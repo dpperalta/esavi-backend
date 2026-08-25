@@ -31,5 +31,6 @@ export * from './investigationTeamMember.validator';
 export * from './investigationMedicalHistory.validator';
 export * from './investigationPregnancyCondition.validator';
 export * from './investigationClinicalEvaluation.validator';
+export * from './investigationVaccinationContext.validator';
 export * from './evaluationInstitution.validator';
 export * from './systemConfig.validator';

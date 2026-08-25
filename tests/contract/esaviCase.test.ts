@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -1637,6 +1637,117 @@ describe('esaviCase contract', () => {
             expect(( await deleteCase(caseId) ).status).toBe(200);
 
             for( const model of [InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationClinicalEvaluation] ) {
+                expect(( await model.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
+            }
+        });
+
+    });
+
+    /**
+     * SPEC F36 adds the investigation vaccination context as the tenth satellite reached from
+     * here, and the sixth one walked in two hops. It is necessary for the exact reason the four
+     * blocks above document: the mass Investigation.update never goes through
+     * setInvestigationActivationService, so the cascade F36 installed there does not fire from
+     * this side, and without this eleventh sibling the vaccination context would stay unsealed -
+     * invisible but not sealed, and therefore never purgable.
+     * The last case is the one that matters most across the five specs: the five satellites
+     * without isActive are sealed in the same transaction by the same common service, so no
+     * spec may have broken the other four.
+     */
+    describe('005A - the cascade over the investigation vaccination context', () => {
+
+        // Like the source, the medical history and the clinical evaluation, it opens empty
+        const createVaccinationContextChain = async ( caseId: string ): Promise<string> => {
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER'))
+                .send({ investigationId });
+            return investigationId;
+        };
+
+        const readVaccinationContext = async ( id: string ) => {
+            const row = await InvestigationVaccinationContext.findByPk(id);
+            return {
+                deletedAt: row!.getDataValue('deletedAt') as Date | null,
+                appDetails: row!.getDataValue('appDetails') as { method: string }[]
+            };
+        };
+
+        it('seals the vaccination context transitively, in the same transaction that deactivates the investigation', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createVaccinationContextChain(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const context = await readVaccinationContext(investigationId);
+            expect(context.deletedAt).not.toBeNull();
+            // The method is the code of the operation that dragged it, not its own 005A
+            expect(context.appDetails.map(entry => entry.method))
+                .toEqual(['ESAVI-INVVACTX-001', 'ESAVI-CASE-005A']);
+        });
+
+        it('reactivating the case does not clear the seal, coherent with F07, F29, F30, F32 and F34', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createVaccinationContextChain(caseId);
+            await deleteCase(caseId);
+            const sealed = await readVaccinationContext(investigationId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const after = await readVaccinationContext(investigationId);
+            expect(after.deletedAt).toEqual(sealed.deletedAt);
+            expect(after.appDetails).toHaveLength(sealed.appDetails.length);
+        });
+
+        it('does not fail on a case with no investigation, nor on one whose investigation has no vaccination context', async () => {
+            const bare = await createCase();
+            expect(( await deleteCase(bare.body.data.caseId) ).status).toBe(200);
+
+            const withoutContext = await createCase();
+            const caseId = withoutContext.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+            expect(await InvestigationVaccinationContext.findByPk(investigation.body.data.investigationId)).toBeNull();
+        });
+
+        it('seals the FIVE satellites together: the eleventh sibling did not break the four before it', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+
+            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+                .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER'))
+                .send({ investigationId });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+
+            const satellites = [
+                InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory,
+                InvestigationClinicalEvaluation, InvestigationVaccinationContext
+            ];
+            for( const model of satellites ) {
                 expect(( await model.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
             }
         });

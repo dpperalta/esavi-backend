@@ -504,6 +504,24 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'USER',       code: 'ESAVI-EVALINST-004' },
     { method: 'delete', path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'ADMIN',      code: 'ESAVI-EVALINST-005A' },
 
+    // investigationVaccinationContext (SPEC F36) - the sixth satellite of investigation with a spec
+    // of its own: the context of the vaccination session in which the investigated dose was
+    // administered. SEVEN operations and NO 005A or 005B: the table has no isActive column, so there
+    // is no state of its own to activate or deactivate - retiring a vaccination context is retiring
+    // its investigation. Its 006 enters by the caseId and walks case -> investigation -> context.
+    // TWO ROWS DEVIATE from the canonical matrix, the same deviation as F05, F06, F07, F09, F10,
+    // F13, F14 and F28 to F35: 001 and 004 on USER, because the context is captured in the same
+    // operational flow as the case.
+    // Nothing here is encrypted: the eleven data columns are operational data of a session, with no
+    // person's name among them, so no row raises its minimum for that reason
+    { method: 'post',   path: '/api/investigation-vaccination-contexts',                 minRole: 'USER',       code: 'ESAVI-INVVACTX-001' },
+    { method: 'get',    path: '/api/investigation-vaccination-contexts',                 minRole: 'USER',       code: 'ESAVI-INVVACTX-002A' },
+    { method: 'get',    path: '/api/investigation-vaccination-contexts/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVVACTX-002B' },
+    { method: 'delete', path: `/api/investigation-vaccination-contexts/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVVACTX-005C' },
+    { method: 'get',    path: `/api/investigation-vaccination-contexts/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVVACTX-006' },
+    { method: 'get',    path: `/api/investigation-vaccination-contexts/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVVACTX-003' },
+    { method: 'put',    path: `/api/investigation-vaccination-contexts/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVVACTX-004' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -582,7 +600,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(264);
+            expect(ROUTE_RULES).toHaveLength(271);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
