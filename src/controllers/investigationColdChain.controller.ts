@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationColdChainListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationColdChainListFilters } from '../types';
 import {
     createInvestigationColdChainService,
     getAllInvestigationColdChainsService,
+    getInvestigationColdChainByIdService,
     getInvestigationColdChainsService
 } from '../services/investigationColdChain.service';
 
@@ -79,8 +80,36 @@ const getAllInvestigationColdChains = async (req: Request, res: Response, next: 
     }
 }
 
+// Get Investigation Cold Chain By ID Controller
+// Code: ESAVI-INVCOLD-003
+// canViewInactive is what lets a SUPERADMIN read the cold chain of a retired investigation: the
+// entity has no state of its own, so the predicate is applied over the visibility it inherits
+const getInvestigationColdChainById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationColdChainByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationColdChain.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCOLD-003: Error fetching Investigation Cold Chain: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationColdChain.getFailed', req.lang), 500, 'INVCOLD_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationColdChain,
     getAllInvestigationColdChains,
+    getInvestigationColdChainById,
     getInvestigationColdChains
 };
