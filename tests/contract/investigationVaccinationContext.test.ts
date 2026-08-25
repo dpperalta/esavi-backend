@@ -1193,4 +1193,87 @@ describe('investigationVaccinationContext contract', () => {
             expect(written).toContain('Ibarra');
         });
     });
+
+    // The end to end walkthrough the plan asks for as a single thread: the same row is opened
+    // empty, read by both accesses, found through both listings with each filter, completed by
+    // the update and finally destroyed. The blocks above check each operation in isolation and
+    // its error paths; this one checks that the seven of them compose over ONE row, which is
+    // how the entity is actually used - the context is opened when the investigation starts and
+    // filled in over the days that follow
+    describe('the full walkthrough over one row', () => {
+
+        it('creates empty, reads, lists, updates and purges the same context', async () => {
+            const caseId = await createCaseFixture();
+            const investigationId = await createInvestigationForCase(caseId);
+
+            // 001 - opened empty: the eleven data columns come back null
+            const created = await create({ investigationId });
+            expect(created.status).toBe(201);
+            for( const column of dataColumns ) {
+                expect(created.body.data[column]).toBeNull();
+            }
+
+            // 003 - by its own id, which is the investigationId
+            const byId = await getById(investigationId);
+            expect(byId.status).toBe(200);
+            expect(byId.body.data.investigationId).toBe(investigationId);
+
+            // 006 - by the caseId, walking the two one to one hops
+            const byCase = await getByCase(caseId);
+            expect(byCase.status).toBe(200);
+            expect(byCase.body.data.investigationId).toBe(investigationId);
+
+            // 002A with each filter, and 002B with them too
+            for( const query of [`?investigationId=${ investigationId }`, `?caseId=${ caseId }`] ) {
+                const publicList = await list(query);
+                expect(publicList.status).toBe(200);
+                expect(publicList.body.data.count).toBe(1);
+                expect(publicList.body.data.rows[0].investigationId).toBe(investigationId);
+
+                const adminList = await listAdmin(query);
+                expect(adminList.status).toBe(200);
+                expect(adminList.body.data.count).toBe(1);
+            }
+
+            // 004 - the form is filled in over time: the time slots, the shared exposure and the
+            // cluster, all in one save
+            const updated = await update(investigationId, {
+                momentItemId: firstHoursItemId,
+                multidoseItemId: lastHoursItemId,
+                vaccinatedPerVialCount: 0,
+                vaccinatedPerBatchCount: 120,
+                locations: '  Quito, Ibarra  ',
+                isCluster: 'YES',
+                clusterIdentificationNumber: '  C-42  ',
+                clusterAdditionalCaseCount: 3,
+                clusterUsedSameVial: 'NO',
+                clusterSameVialCount: 2,
+                notes: 'completed on the second visit'
+            });
+            expect(updated.status).toBe(200);
+            expect(updated.body.data.moment.code).toBe('FIRST_HOURS');
+            expect(updated.body.data.multidoseMoment.code).toBe('LAST_HOURS');
+            expect(updated.body.data.vaccinatedPerVialCount).toBe(0);
+            expect(updated.body.data.vaccinatedPerBatchCount).toBe(120);
+            expect(updated.body.data.locations).toBe('Quito, Ibarra');
+            expect(updated.body.data.clusterIdentificationNumber).toBe('C-42');
+            expect(updated.body.data.clusterSameVialCount).toBe(2);
+            expect(await appDetailsOf(investigationId)).toHaveLength(2);
+
+            // Saving again without changing anything writes nothing
+            const versionAfterUpdate = await versionOf(investigationId);
+            expect((await update(investigationId, {})).status).toBe(200);
+            expect(await versionOf(investigationId)).toBe(versionAfterUpdate);
+
+            // 005C - the seal first, because the purge only reaches what was retired before
+            expect((await purge(investigationId)).status).toBe(409);
+            await seal(investigationId);
+            expect((await purge(investigationId)).status).toBe(200);
+
+            // Gone, and the slot released: the same investigation admits a new context
+            expect(await readRow(investigationId)).toBeNull();
+            expect((await getById(investigationId)).status).toBe(404);
+            expect((await create({ investigationId })).status).toBe(201);
+        });
+    });
 });
