@@ -107,6 +107,17 @@ const findFinalClassificationWithRelations = async (id: string, includeInactive:
     });
 }
 
+// The same read as above, entered through the foreign key instead of the primary one. It needs no
+// LIMIT beyond findOne because UQ_finalClassification_case guarantees there is at most one row
+const findFinalClassificationByCaseId = async (caseId: string, includeInactive: boolean = false) => {
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    return await FinalClassification.findOne({
+        where,
+        attributes: DETAIL_EXCLUDE,
+        include: DETAIL_INCLUDE
+    });
+}
+
 // The case must exist and be active: FK_finalClassification_case declares ON DELETE CASCADE, but
 // TRG_esaviCase_preventPhysicalDelete forbids every physical delete of esaviCase, so that cascade
 // never fires and nothing in the DDL stops a final classification from pointing at a retired case
@@ -361,9 +372,28 @@ const getFinalClassificationByIdService = async (id: string, lang: string, canVi
     return toFinalClassificationResponse(finalClassification);
 }
 
+// Get Final Classification By Case ID Service
+// Code: ESAVI-FINCLASS-006
+// The real query of the domain: the client holds the caseId, not the finalClassificationId, and
+// has never seen the latter. It returns the record itself and not { count, rows } — the relation
+// is one to one, and wrapping a single record in a collection would force unwrapping a
+// one-element array on every screen.
+// The two 404 are deliberately distinct: a case that does not exist is a broken link, a case
+// without a final classification is a pending verdict, and the client acts differently on each
+const getFinalClassificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+    await assertCaseIsValid(caseId, '006', lang);
+
+    const finalClassification = await findFinalClassificationByCaseId(caseId, canViewInactive);
+    if( !finalClassification ) {
+        throw new AppError(getMessage('finalClassification.notFound', lang), 404, 'FINCLASS_006_NOT_FOUND');
+    }
+    return toFinalClassificationResponse(finalClassification);
+}
+
 export {
     createFinalClassificationService,
     getFinalClassificationsService,
     getAllFinalClassificationsService,
-    getFinalClassificationByIdService
+    getFinalClassificationByIdService,
+    getFinalClassificationByCaseIdService
 }

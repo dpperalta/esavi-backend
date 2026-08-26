@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createFinalClassification,
     getAllFinalClassifications,
+    getFinalClassificationByCaseId,
     getFinalClassificationById,
     getFinalClassifications
 } from '../controllers/finalClassification.controller';
 import {
     createFinalClassificationValidator,
+    finalClassificationCaseIdValidator,
     finalClassificationIdValidator,
     finalClassificationListValidator
 } from '../validators';
@@ -31,6 +33,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...finalClassificationL
 // Code: ESAVI-FINCLASS-002B
 // Declared before /:id so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...finalClassificationListValidator, validateFields, getAllFinalClassifications);
+
+// Get Final Classification by Case
+// Code: ESAVI-FINCLASS-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared
+// before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...finalClassificationCaseIdValidator, validateFields, getFinalClassificationByCaseId);
 
 // Get Final Classification by ID
 // Code: ESAVI-FINCLASS-003

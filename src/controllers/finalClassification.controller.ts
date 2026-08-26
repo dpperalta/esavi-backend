@@ -4,6 +4,7 @@ import { AuthUser, FinalClassificationListFilters } from '../types';
 import {
     createFinalClassificationService,
     getAllFinalClassificationsService,
+    getFinalClassificationByCaseIdService,
     getFinalClassificationByIdService,
     getFinalClassificationsService
 } from '../services/finalClassification.service';
@@ -107,9 +108,35 @@ const getFinalClassificationById = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Get Final Classification By Case ID Controller
+// Code: ESAVI-FINCLASS-006
+const getFinalClassificationByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getFinalClassificationByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('finalClassification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-FINCLASS-006: Error fetching Final Classification by Case ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('finalClassification.getFailed', req.lang), 500, 'FINCLASS_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createFinalClassification,
     getFinalClassifications,
     getAllFinalClassifications,
-    getFinalClassificationById
+    getFinalClassificationById,
+    getFinalClassificationByCaseId
 }
