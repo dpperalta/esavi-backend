@@ -904,6 +904,26 @@
         "purgeSuccess": "Error de administración eliminado permanentemente",
         "purgeFailed": "Error al eliminar permanentemente el error de administración. Por favor, inténtelo de nuevo más tarde."
     },
+    "investigationCommunity": {
+        "notFound": "Registro comunitario no encontrado. Por favor, verifique el ID de la investigación e inténtelo de nuevo.",
+        "idRequired": "El ID de la investigación es obligatorio",
+        "investigationNotFound": "La investigación indicada no existe o está inactiva",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "alreadyExists": "La investigación con ID {{investigationId}} ya tiene un registro comunitario",
+        "similarEventFieldsNotAllowed": "Los datos del evento similar en la comunidad solo se admiten cuando se declara que sí hubo un evento similar",
+        "similarEventDescriptionRequired": "Cuando se declara que hubo un evento similar en la comunidad, debe indicarse su descripción",
+        "notDeleted": "El registro comunitario con ID {{id}} no ha sido retirado. Desactive su investigación antes de eliminarlo permanentemente.",
+        "createdSuccess": "Registro comunitario creado exitosamente",
+        "createdFailed": "Error al crear el registro comunitario. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Registro comunitario obtenido exitosamente",
+        "getFailed": "Error al obtener el registro comunitario. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Listado de registros comunitarios obtenido exitosamente",
+        "getFailedPlural": "Error al obtener el listado de registros comunitarios. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Registro comunitario actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el registro comunitario. Por favor, inténtelo de nuevo más tarde.",
+        "purgeSuccess": "Registro comunitario eliminado permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente el registro comunitario. Por favor, inténtelo de nuevo más tarde."
+    },
     "systemConfig": {
         "createdSuccess": "Configuración creada exitosamente",
         "createdFailed": "Error al crear la configuración. Por favor, inténtelo de nuevo más tarde.",

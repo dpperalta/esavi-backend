@@ -904,6 +904,26 @@
         "purgeSuccess": "Toedieningsfout permanent verwijderd",
         "purgeFailed": "Definitief verwijderen van de toedieningsfout mislukt. Probeer het later opnieuw."
     },
+    "investigationCommunity": {
+        "notFound": "Gemeenschapsregistratie niet gevonden. Controleer de ID van het onderzoek en probeer het opnieuw.",
+        "idRequired": "De ID van het onderzoek is verplicht",
+        "investigationNotFound": "Het opgegeven onderzoek bestaat niet of is inactief",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "alreadyExists": "Het onderzoek met ID {{investigationId}} heeft al een gemeenschapsregistratie",
+        "similarEventFieldsNotAllowed": "De gegevens over de soortgelijke gebeurtenis in de gemeenschap zijn alleen toegestaan wanneer wordt opgegeven dat er een soortgelijke gebeurtenis heeft plaatsgevonden",
+        "similarEventDescriptionRequired": "Wanneer wordt opgegeven dat er een soortgelijke gebeurtenis in de gemeenschap heeft plaatsgevonden, moet de beschrijving daarvan worden vermeld",
+        "notDeleted": "De gemeenschapsregistratie met ID {{id}} is niet ingetrokken. Deactiveer het onderzoek voordat u deze permanent verwijdert.",
+        "createdSuccess": "Gemeenschapsregistratie succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de gemeenschapsregistratie mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Gemeenschapsregistratie succesvol opgehaald",
+        "getFailed": "Ophalen van de gemeenschapsregistratie mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Lijst met gemeenschapsregistraties succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de lijst met gemeenschapsregistraties mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Gemeenschapsregistratie succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de gemeenschapsregistratie mislukt. Probeer het later opnieuw.",
+        "purgeSuccess": "Gemeenschapsregistratie permanent verwijderd",
+        "purgeFailed": "Definitief verwijderen van de gemeenschapsregistratie mislukt. Probeer het later opnieuw."
+    },
     "systemConfig": {
         "createdSuccess": "Configuratie succesvol aangemaakt",
         "createdFailed": "Aanmaken van de configuratie mislukt. Probeer het later opnieuw.",

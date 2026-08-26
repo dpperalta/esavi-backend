@@ -386,7 +386,7 @@ En `src/data/i18n/es.json`, `en.json` y `nl.json`, bajo `investigationCommunity`
 | `investigationCommunity.getSuccess` / `getFailed` | `003` y `006` |
 | `investigationCommunity.getSuccessPlural` / `getFailedPlural` | `002A` y `002B` |
 | `investigationCommunity.updatedSuccess` / `updatedFailed` | `004` |
-| `investigationCommunity.purgedSuccess` / `purgedFailed` | `005C` |
+| `investigationCommunity.purgeSuccess` / `purgeFailed` | `005C` |
 | `investigationCommunity.notFound` | 404 en `003`, `004`, `005C` y `006` |
 | `investigationCommunity.investigationNotFound` | 404 de la investigación en `001` y `006` |
 | `investigationCommunity.caseNotFound` | 404 del caso en `006` |
