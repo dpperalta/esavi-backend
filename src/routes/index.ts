@@ -40,6 +40,7 @@ import investigationVaccineAdministeredRoutes from './investigationVaccineAdmini
 import investigationColdChainRoutes from './investigationColdChain.routes';
 import investigationAdministrationErrorRoutes from './investigationAdministrationError.routes';
 import investigationCommunityRoutes from './investigationCommunity.routes';
+import finalClassificationRoutes from './finalClassification.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -132,6 +133,10 @@ router.use('/investigation-vaccines-administered', investigationVaccineAdministe
 router.use('/investigation-cold-chains', investigationColdChainRoutes);
 router.use('/investigation-administration-errors', investigationAdministrationErrorRoutes);
 router.use('/investigation-communities', investigationCommunityRoutes);
+
+// The causality verdict of the WHO/PAHO algorithm — the fifth and last satellite of esaviCase,
+// and the only entity of the series whose conditional flag closes a block instead of opening it
+router.use('/final-classifications', finalClassificationRoutes);
 
 router.use('/system-configs', systemConfigRoutes);
 
