@@ -6,13 +6,15 @@ import {
     getAllInvestigationCommunities,
     getInvestigationCommunities,
     getInvestigationCommunityByCaseId,
-    getInvestigationCommunityById
+    getInvestigationCommunityById,
+    updateInvestigationCommunity
 } from '../controllers/investigationCommunity.controller';
 import {
     createInvestigationCommunityValidator,
     investigationCommunityCaseIdValidator,
     investigationCommunityIdValidator,
-    investigationCommunityListValidator
+    investigationCommunityListValidator,
+    updateInvestigationCommunityValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -50,5 +52,12 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investig
 // The :id is the investigationId: this entity has no identifier of its own, so this is already the
 // access by investigation
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationCommunityIdValidator, validateFields, getInvestigationCommunityById);
+
+// Update Investigation Community
+// Code: ESAVI-INVCOMM-004
+// USER for the same reason as 001: completing the community record is part of the same operational
+// flow. It is the main operation of the entity — the row is opened with one field and filled in over
+// time
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationCommunityIdValidator, ...updateInvestigationCommunityValidator, validateFields, updateInvestigationCommunity);
 
 export default router;

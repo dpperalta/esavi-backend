@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { EsaviCase, Investigation, InvestigationCommunity } from '../models';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -399,4 +399,142 @@ export const getInvestigationCommunityByCaseIdService = async (caseId: string, l
         throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_006_NOT_FOUND');
     }
     return toInvestigationCommunityResponse(community);
+}
+
+// The same read as findInvestigationCommunityWithRelations without narrowing the attributes of the
+// community record, which is the precondition of buildDifferentialUpdate: an instance read with a
+// narrowed `attributes` reads back undefined for the columns it left out, and every comparison
+// against undefined would count as a change. It still carries the investigation include, so the
+// inherited visibility is checked in the same query the update instance comes from
+const findInvestigationCommunityRow = async (id: string, includeInactive: boolean = false) => {
+    return await InvestigationCommunity.findOne({
+        where: { investigationId: id },
+        include: [{
+            ...INVESTIGATION_INCLUDE,
+            required: true,
+            where: includeInactive ? {} : { isActive: true }
+        }]
+    });
+}
+
+// Update Investigation Community Service
+// Code: ESAVI-INVCOMM-004
+// The main operation of the entity: the row is opened empty and completed over time, so this is
+// where the form is actually filled in. investigationId is ignored whether or not it arrives in the
+// body — it is the primary key of the row and the foreign key to its investigation at the same time,
+// and a community record is not moved between investigations. It does not return 400 either, which
+// is what keeps working the PUT that resends the response of its own GET
+export const updateInvestigationCommunityService = async (
+    id: string,
+    data: Partial<CreateInvestigationCommunityInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const community = await findInvestigationCommunityRow(id, canViewInactive);
+    if( !community ) {
+        throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_004_NOT_FOUND');
+    }
+
+    // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
+    // the record just read with a GET is the normal use of a form, and writing it back would fill
+    // appDetails with entries that record no change and hide the real ones among them.
+    // The row is read WITHOUT narrowed attributes, which is the precondition of the helper: with
+    // trimmed attributes an absent field reads back undefined and every comparison against it would
+    // count as "it changed"
+    const stored = community.get({ plain: true }) as Record<string, unknown>;
+
+    // The two rules of the block, over the RESULTING state: what travels merged with what is stored.
+    // It is the service and not the validator who emits them, because express-validator cannot see
+    // the stored row. They run BEFORE the diff and independently of it. Evaluating the obligation
+    // over the body instead would turn a PUT { notes: 'x' } over a row with the block open and
+    // described into a 400
+    assertSimilarEventBlock(data, stored, '004', lang);
+
+    // The resulting state of the block key, recomputed here to drive the conditional derivatives
+    // below
+    const blockOpen = isSimilarEventBlockOpen(data, stored);
+
+    // No candidate is placed under an `if( data.x )`. Over the four counters that would be outright
+    // destructive: 0 is a valid value — "none of the affected were vaccinated" — and a truthiness
+    // check would throw it away. Over the two coordinates it would throw away a 0 that is a
+    // legitimate point on the equator or the prime meridian. Over hadSimilarEvent it would work by
+    // accident — the five strings of the ENUM are truthy — but would silently discard the null the
+    // field is emptied with
+    const candidates: Record<string, unknown> = {
+        // investigationId does NOT enter: immutable, ignored in silence and with no 400
+
+        // THE TWO COORDINATES, INDEPENDENT OF EACH OTHER AND OF EVERYTHING ELSE. There is no pair
+        // rule: one without the other is a valid row. DECIMAL(10,7) comes back from pg as a string
+        // while the body sends a number, which is what the numeric rule of the helper resolves — so
+        // resending the same latitude the GET returned does NOT count as a change
+        patientLatitude: data.patientLatitude !== undefined ? ( data.patientLatitude ?? null ) : undefined,
+        patientLongitude: data.patientLongitude !== undefined ? ( data.patientLongitude ?? null ) : undefined,
+
+        // THE KEY OF THE SIMILAR EVENT BLOCK, and it is NOT part of it: it is the field that decides,
+        // not the one decided. Entering as a conditional derivative would make it annul itself
+        hadSimilarEvent: data.hadSimilarEvent !== undefined ? ( data.hadSimilarEvent ?? null ) : undefined,
+
+        // THE FIVE CONDITIONAL DERIVATIVES OF THE BLOCK. With the block closed the null enters
+        // candidates ALWAYS, with no presence check, and it is buildDifferentialUpdate who decides
+        // whether it differs: closing a block that was already closed writes nothing and does not
+        // grow appDetails. A cleanup with a second UPDATE after the diff would write even when
+        // nothing changed.
+        // With the block open the description cannot result null — assertSimilarEventBlock has
+        // already refused that above — so the only way of emptying it is closing the flag in this
+        // same request, which is what this line then turns into a null
+        similarEventDescription: blockOpen
+            ? ( data.similarEventDescription !== undefined ? normalizeText(data.similarEventDescription) : undefined )
+            : null,
+        similarEventCount: blockOpen
+            ? ( data.similarEventCount !== undefined ? ( data.similarEventCount ?? null ) : undefined )
+            : null,
+        affectedVaccinated: blockOpen
+            ? ( data.affectedVaccinated !== undefined ? ( data.affectedVaccinated ?? null ) : undefined )
+            : null,
+        affectedUnvaccinated: blockOpen
+            ? ( data.affectedUnvaccinated !== undefined ? ( data.affectedUnvaccinated ?? null ) : undefined )
+            : null,
+        affectedUnknown: blockOpen
+            ? ( data.affectedUnknown !== undefined ? ( data.affectedUnknown ?? null ) : undefined )
+            : null,
+
+        // OUTSIDE THE BLOCK: never forced and never forbidden. Both are stored even when no similar
+        // event was declared at all. Normalized before comparing, or a body differing only in
+        // surrounding blanks would count as a change
+        otherComments: data.otherComments !== undefined ? normalizeText(data.otherComments) : undefined,
+        notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+    };
+
+    const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+    // sysDetails.version bump that TRG_investigationCommunity_setSysDetails fires on every write
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findInvestigationCommunityWithRelations(id, true);
+        return unchanged ? toInvestigationCommunityResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the generic
+    // loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    // The history is extended, never overwritten
+    const currentAppDetails = Array.isArray(community.appDetails) ? community.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-INVCOMM-004',
+        detail: 'Investigation community record updated by service'
+    };
+    await community.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updated = await findInvestigationCommunityWithRelations(id, true);
+    return updated ? toInvestigationCommunityResponse(updated) : null;
 }

@@ -6,7 +6,8 @@ import {
     getAllInvestigationCommunitiesService,
     getInvestigationCommunitiesService,
     getInvestigationCommunityByCaseIdService,
-    getInvestigationCommunityByIdService
+    getInvestigationCommunityByIdService,
+    updateInvestigationCommunityService
 } from '../services/investigationCommunity.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
@@ -138,10 +139,40 @@ const getInvestigationCommunityByCaseId = async (req: Request, res: Response, ne
     }
 }
 
+// Update Investigation Community Controller
+// Code: ESAVI-INVCOMM-004
+// canViewInactive travels for the same reason as in the 003: a community record whose investigation
+// is retired answers 404 to USER and ADMIN, and only a SUPERADMIN can still write on it
+const updateInvestigationCommunity = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationCommunityService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationCommunity.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCOMM-004: Error updating Investigation Community: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationCommunity.updatedFailed', req.lang), 500, 'INVCOMM_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationCommunity,
     getAllInvestigationCommunities,
     getInvestigationCommunities,
     getInvestigationCommunityByCaseId,
-    getInvestigationCommunityById
+    getInvestigationCommunityById,
+    updateInvestigationCommunity
 }
