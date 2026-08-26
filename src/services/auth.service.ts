@@ -4,11 +4,27 @@ import net from 'net';
 import { AppUser } from '../models/appUser.model';
 import { AppRole } from '../models/appRole.model';
 
+import { AppSession } from '../models/appSession.model';
+
 import { getMessage } from '../helpers/i18n.helper';
 import { esaviCrypt, esaviDecrypt } from '../helpers/crypto.helper';
 import { AppError } from '../helpers/appError.helper';
-import { createAppSessionService } from './appSession.service';
-import { LoginOutput } from '../types';
+import { esaviLog } from '../helpers/esaviLogs.helper';
+import { jwtGenerate } from '../helpers/jwt.helper';
+import {
+    composeRefreshToken,
+    generateRefreshSecret,
+    hashRefreshSecret,
+    parseRefreshToken,
+    refreshSecretMatches
+} from '../helpers/refreshToken.helper';
+import {
+    createAppSessionService,
+    revokeAllUserSessionsService,
+    revokeAppSessionService
+} from './appSession.service';
+import { AppDetails, LoginOutput, SessionTokenPair } from '../types';
+import { REFRESH_ABSOLUTE_MAX_IN_MS, REFRESH_TOKEN_EXPIRES_IN_MS } from '../constants/session.constants';
 
 interface LoginInput {
     email: string;
@@ -93,6 +109,126 @@ const loginService = async({ email, password }: LoginInput, lang: string, meta: 
     };  
 };
 
+// ESAVI-AUTH-002 - Refresh Token Service
+/**
+ * Renews the pair of credentials from a refresh token, rotating it.
+ *
+ * The order of the seven checks below is the rule, not an implementation detail (SPEC F42 3.5),
+ * and two of them carry a decision worth naming:
+ *
+ *   - A malformed token and a `sessionId` that does not exist answer with the **same code and the
+ *     same message**. Telling them apart turns the endpoint into an oracle for which sessions
+ *     exist.
+ *   - A secret that does not match a live session is **reuse**: the row already holds a newer
+ *     hash, so the token being spent was rotated away by an earlier call. Both the attacker and
+ *     the victim are logged out, because there is no way to tell which of the two is calling.
+ *
+ * Nothing here goes through `buildDifferentialUpdate`, and 3.5 says why: rotation is a write with
+ * its own intent, recording that this refresh token was spent. The hash always changes by
+ * construction, and `expiresAt` moves even if the computed value matched the stored one.
+ */
+const refreshTokenService = async ( refreshToken: string, lang: string ): Promise<SessionTokenPair> => {
+    try {
+        // 1. Shape. A malformed token never reaches the database
+        const parsed = parseRefreshToken( refreshToken );
+        if ( !parsed ) {
+            throw new AppError(getMessage('auth.invalidRefreshToken', lang), 401, 'AUTH_002_INVALID_REFRESH_TOKEN');
+        }
+
+        // 2. The row, by primary key
+        const session = await AppSession.findOne({
+            where: { sessionId: parsed.sessionId, deletedAt: null }
+        });
+        if ( !session ) {
+            throw new AppError(getMessage('auth.invalidRefreshToken', lang), 401, 'AUTH_002_INVALID_REFRESH_TOKEN');
+        }
+
+        // 3. The secret, in constant time. A mismatch on a session that was still live is reuse.
+        // `revokedAt IS NULL` is what live means here, and it is read before step 4 on purpose:
+        // an already revoked session answers step 4 instead, with no mass revocation behind it
+        const secretMatches = refreshSecretMatches( parsed.secret, session.refreshTokenHash );
+        if ( !secretMatches && session.revokedAt === null ) {
+            await revokeAllUserSessionsService( session.userId, 'REUSE_DETECTED', lang );
+            esaviLog(`ESAVI-AUTH-002 - Refresh token reuse detected on session ${ session.sessionId }; every session of user ${ session.userId } revoked`, 'warn');
+            throw new AppError(getMessage('auth.refreshTokenReused', lang), 401, 'AUTH_002_REFRESH_TOKEN_REUSED');
+        }
+
+        // 4. Revoked
+        if ( session.revokedAt !== null ) {
+            throw new AppError(getMessage('auth.sessionRevoked', lang), 401, 'AUTH_002_SESSION_REVOKED');
+        }
+
+        // A revoked session with a wrong secret leaves step 3 through step 4. Anything still
+        // holding a mismatch here is a live session whose hash was never written
+        if ( !secretMatches ) {
+            throw new AppError(getMessage('auth.invalidRefreshToken', lang), 401, 'AUTH_002_INVALID_REFRESH_TOKEN');
+        }
+
+        const now = new Date();
+
+        // 5. Expired
+        if ( !session.expiresAt || new Date( session.expiresAt ).getTime() <= now.getTime() ) {
+            throw new AppError(getMessage('auth.sessionExpired', lang), 401, 'AUTH_002_SESSION_EXPIRED');
+        }
+
+        // 6. Absolute ceiling. It lives in the application, not in the DDL: there is no
+        // `absoluteExpiresAt` column, the ceiling is `startedAt` plus the configured span. A
+        // session that crossed it is revoked here and now, even with its `expiresAt` still ahead
+        const absoluteDeadline = new Date( session.startedAt ).getTime() + REFRESH_ABSOLUTE_MAX_IN_MS;
+        if ( absoluteDeadline <= now.getTime() ) {
+            await revokeAppSessionService( session.sessionId, 'ABSOLUTE_MAX_REACHED', lang );
+            throw new AppError(getMessage('auth.sessionExpired', lang), 401, 'AUTH_002_SESSION_EXPIRED');
+        }
+
+        // 7. The owner must still exist and be active. Same code as steps 1 and 2: a client
+        // renewing a session of a disabled account learns nothing about why it failed
+        const user = await AppUser.findOne({
+            where: { userId: session.userId, isActive: true },
+            attributes: ['userId']
+        });
+        if ( !user ) {
+            throw new AppError(getMessage('auth.invalidRefreshToken', lang), 401, 'AUTH_002_INVALID_REFRESH_TOKEN');
+        }
+
+        // Rotation. The new secret replaces the spent one and `expiresAt` slides forward without
+        // ever crossing the ceiling. `startedAt` is not touched: it anchors that ceiling, and a
+        // session whose anchor moved on every renewal would never expire
+        const secret = generateRefreshSecret();
+        const expiresAt = new Date( Math.min( now.getTime() + REFRESH_TOKEN_EXPIRES_IN_MS, absoluteDeadline ) );
+
+        const currentAppDetails = Array.isArray( session.appDetails ) ? session.appDetails : [];
+        const newEntry: AppDetails = {
+            createdAt: now,
+            user: session.userId,
+            method: 'ESAVI-AUTH-002',
+            detail: 'Refresh token rotated'
+        };
+
+        await session.update({
+            refreshTokenHash: hashRefreshSecret( secret ),
+            expiresAt,
+            updatedAt: now,
+            appDetails: [ ...currentAppDetails, newEntry ]
+        });
+
+        const token = await jwtGenerate({ userId: session.userId }) as string;
+
+        return {
+            token,
+            refreshToken: composeRefreshToken( session.sessionId, secret ),
+            expiresAt
+        };
+    } catch ( error ) {
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        // The refresh token is deliberately absent from this line: it is a live credential
+        esaviLog('ESAVI-AUTH-002 - Error refreshing session: ' + error, 'error');
+        throw new AppError(getMessage('auth.refreshFailed', lang), 500, 'AUTH_002_REFRESH_FAILED', error);
+    }
+}
+
 export {
-    loginService
+    loginService,
+    refreshTokenService
 }

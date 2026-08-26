@@ -10,3 +10,14 @@ export const loginValidator = [
         .trim()
         .notEmpty().withMessage('Password is required')
 ];
+
+// ESAVI-AUTH-002 - Refresh
+// The body carries the credential and nothing else. No row field of `appSession` is accepted
+// here: `expiresAt`, `revokedAt`, `revokedReason`, `startedAt`, `userId` and `refreshTokenHash`
+// are written by the service, never declared by the client.
+export const refreshTokenValidator = [
+    body('refreshToken')
+        .trim()
+        .notEmpty().withMessage('Refresh token is required')
+        .isString().withMessage('Invalid refresh token format')
+];

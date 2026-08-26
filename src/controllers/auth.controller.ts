@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { loginService } from '../services/auth.service';
+import { loginService, refreshTokenService } from '../services/auth.service';
 import { esaviLog, getMessage, AppError } from '../helpers';
 
 // Execute login process
@@ -27,6 +27,29 @@ const login = async( req: Request, res: Response, next: NextFunction ): Promise<
     }
 }
 
+// Renew the pair of credentials from a refresh token
+// Code: ESAVI-AUTH-002
+const refresh = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try{
+        // Only the tokens: a renewal is not a login, so it does not repeat the `user` block nor
+        // pay for the roles include on what is the most frequent call of the whole mechanism
+        const result = await refreshTokenService(req.body.refreshToken, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('auth.refreshSuccess', req.lang),
+            data: result
+        });
+    } catch( error ) {
+        esaviLog('ESAVI-AUTH-002 - Error during refresh process: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('auth.refreshFailed', req.lang), 500, 'AUTH_002_REFRESH_FAILED', error));
+    }
+}
+
 export {
-    login
+    login,
+    refresh
 }
