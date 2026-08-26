@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import request from 'supertest';
-import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationVaccineAdministered, Patient, VaccineWhodrug } from '../../src/models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationVaccineAdministered, Patient, VaccineWhodrug } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
@@ -1517,6 +1517,145 @@ describe('investigation contract', () => {
             const satellites = [
                 InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory,
                 InvestigationClinicalEvaluation, InvestigationVaccinationContext, InvestigationColdChain
+            ];
+
+            await deactivate(id);
+            for( const model of satellites ) {
+                expect((await model.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).not.toBeNull();
+            }
+
+            await activate(id);
+            for( const model of satellites ) {
+                expect((await model.findByPk(id, { paranoid: false }))!.getDataValue('deletedAt')).toBeNull();
+            }
+        });
+    });
+
+    // SPEC F39 hangs the ninth of the fourteen satellites off the same three operations, and it is
+    // the SEVENTH consumer of common/satelliteCascade.service.ts, which it consumes without
+    // modifying. What is checked here is the effect on the administration error, seen from the side
+    // of the investigation: the detailed behaviour of the entity lives in
+    // tests/contract/investigationAdministrationError.test.ts.
+    // investigationAdministrationError has no isActive column either, so what the cascades move is
+    // its deletedAt. Like investigationColdChain it carries no encrypted column, so its purge dump
+    // is a raw JSON.stringify of the whole row and there is nothing to omit.
+    // The last case is the one that matters most: the SEVEN satellites travel in the same
+    // transaction over the same common service, so no spec may have broken the other six
+    describe('the cascade over investigationAdministrationError', () => {
+
+        // The administration error is created through its own endpoint, which is the only way it is
+        // ever born. Like the source, the medical history, the clinical evaluation, the vaccination
+        // context and the cold chain, it opens empty: { investigationId } is the whole minimum
+        const createAdministrationError = (investigationId: string, payload: Record<string, unknown> = {}) =>
+            request(app).post('/api/investigation-administration-errors')
+                .set(authHeader('USER'))
+                .send({ investigationId, ...payload });
+
+        const administrationErrorLogPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
+
+        const readAdministrationError = async (id: string) =>
+            await InvestigationAdministrationError.findByPk(id, { paranoid: false });
+
+        const administrationErrorMethods = async (id: string): Promise<string[]> =>
+            (((await readAdministrationError(id))!.getDataValue('appDetails') as { method: string }[]) ?? [])
+                .map(entry => entry.method);
+
+        it('deactivating the investigation seals its administration error', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            expect((await createAdministrationError(id, { notes: 'a note' })).status).toBe(201);
+
+            expect((await deactivate(id)).status).toBe(200);
+
+            expect((await readAdministrationError(id))!.getDataValue('deletedAt')).not.toBeNull();
+            expect(await administrationErrorMethods(id)).toEqual(['ESAVI-INVADMER-001', 'ESAVI-INVESTGN-005A']);
+        });
+
+        it('reactivating it returns the administration error, keeping the previous history', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createAdministrationError(id, { notes: 'a note' });
+            await deactivate(id);
+
+            expect((await activate(id)).status).toBe(200);
+
+            const administrationError = (await readAdministrationError(id))!;
+            expect(administrationError.getDataValue('deletedAt')).toBeNull();
+            expect(administrationError.getDataValue('notes')).toBe('a note');
+            expect(await administrationErrorMethods(id)).toEqual([
+                'ESAVI-INVADMER-001', 'ESAVI-INVESTGN-005A', 'ESAVI-INVESTGN-005B'
+            ]);
+        });
+
+        it('a row sealed by hand BEFORE the cascade keeps its original deletedAt and gets no new entry', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createAdministrationError(id);
+
+            const sealedAt = new Date('2024-01-15T10:00:00.000Z');
+            await InvestigationAdministrationError.update({ deletedAt: sealedAt }, { where: { investigationId: id } });
+
+            await deactivate(id);
+
+            const administrationError = (await readAdministrationError(id))!;
+            expect(new Date(administrationError.getDataValue('deletedAt') as Date).toISOString()).toBe(sealedAt.toISOString());
+            expect(await administrationErrorMethods(id)).toEqual(['ESAVI-INVADMER-001']);
+        });
+
+        it('an investigation with no administration error deactivates and reactivates without error', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+
+            expect((await deactivate(id)).status).toBe(200);
+            expect((await activate(id)).status).toBe(200);
+        });
+
+        it('purging the investigation destroys the administration error by Postgres cascade, dumping the whole row', async () => {
+            // The purge is not blocked when the investigation has satellites: it is the decision F13
+            // and F29 declared and F30, F32, F34, F36, F38 and F39 inherited, with the warn dump in
+            // the log as the only mitigation - seven lines now, one per satellite without isActive
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await createAdministrationError(id, {
+                syringesKeyFindings: 'administration error dump probe',
+                hadHandlingError: 'NO'
+            });
+            await deactivate(id);
+
+            const logBefore = fs.existsSync(administrationErrorLogPath)
+                ? fs.readFileSync(administrationErrorLogPath, 'utf-8').length : 0;
+
+            expect((await purge(id)).status).toBe(200);
+
+            expect(await readAdministrationError(id)).toBeNull();
+            expect(await Investigation.findByPk(id, { paranoid: false })).toBeNull();
+
+            // log4js buffers, so give the appender a tick to flush
+            await new Promise(resolve => setTimeout(resolve, 250));
+            const added = fs.readFileSync(administrationErrorLogPath, 'utf-8').slice(logBefore);
+            const administrationErrorLine = added.split('\n')
+                .find(line => line.includes('ESAVI-INVESTGN-005C') && line.includes('administration error'));
+
+            expect(administrationErrorLine).toBeDefined();
+            expect(administrationErrorLine).toContain('administration error dump probe');
+        });
+
+        it('an investigation with the SEVEN satellites without isActive seals and clears the seven in the same transaction', async () => {
+            const created = await createInvestigation({ caseId: await createCaseFixture() });
+            const id = created.body.data.investigationId;
+            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+                .send({ investigationId: id, isDeath: true, deathDate: '2024-06-01' });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-cold-chains').set(authHeader('USER')).send({ investigationId: id });
+            await createAdministrationError(id);
+
+            const satellites = [
+                InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory,
+                InvestigationClinicalEvaluation, InvestigationVaccinationContext, InvestigationColdChain,
+                InvestigationAdministrationError
             ];
 
             await deactivate(id);

@@ -883,6 +883,27 @@
         "purgeSuccess": "Cadena de frío eliminada permanentemente",
         "purgeFailed": "Error al eliminar permanentemente la cadena de frío. Por favor, inténtelo de nuevo más tarde."
     },
+    "investigationAdministrationError": {
+        "notFound": "Error de administración no encontrado. Por favor, verifique el ID de la investigación e inténtelo de nuevo.",
+        "idRequired": "El ID de la investigación es obligatorio",
+        "investigationNotFound": "La investigación indicada no existe o está inactiva",
+        "caseNotFound": "El caso ESAVI indicado no existe o está inactivo",
+        "alreadyExists": "La investigación con ID {{investigationId}} ya tiene un error de administración registrado",
+        "syringeTypeRequired": "Cuando se declara que no se utilizaron jeringas autodesactivables, debe indicarse al menos un tipo de jeringa utilizada",
+        "syringeDetailNotAllowed": "El detalle de las jeringas utilizadas solo se admite cuando se declara que no se utilizaron jeringas autodesactivables",
+        "otherDescriptionNotAllowed": "La descripción de otras jeringas solo se admite cuando se declara que se utilizaron otras jeringas",
+        "notDeleted": "El error de administración con ID {{id}} no ha sido retirado. Desactive su investigación antes de eliminarlo permanentemente.",
+        "createdSuccess": "Error de administración creado exitosamente",
+        "createdFailed": "Error al crear el error de administración. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccess": "Error de administración obtenido exitosamente",
+        "getFailed": "Error al obtener el error de administración. Por favor, inténtelo de nuevo más tarde.",
+        "getSuccessPlural": "Listado de errores de administración obtenido exitosamente",
+        "getFailedPlural": "Error al obtener el listado de errores de administración. Por favor, inténtelo de nuevo más tarde.",
+        "updatedSuccess": "Error de administración actualizado exitosamente",
+        "updatedFailed": "Error al actualizar el error de administración. Por favor, inténtelo de nuevo más tarde.",
+        "purgeSuccess": "Error de administración eliminado permanentemente",
+        "purgeFailed": "Error al eliminar permanentemente el error de administración. Por favor, inténtelo de nuevo más tarde."
+    },
     "systemConfig": {
         "createdSuccess": "Configuración creada exitosamente",
         "createdFailed": "Error al crear la configuración. Por favor, inténtelo de nuevo más tarde.",

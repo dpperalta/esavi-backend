@@ -8,4 +8,5 @@ export * from './investigationClinicalEvaluation.types';
 export * from './investigationVaccinationContext.types';
 export * from './investigationVaccineAdministered.types';
 export * from './investigationColdChain.types';
+export * from './investigationAdministrationError.types';
 export * from './evaluationInstitution.types';

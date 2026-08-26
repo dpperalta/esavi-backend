@@ -1,0 +1,200 @@
+import { Request, Response, NextFunction } from 'express';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationAdministrationErrorListFilters } from '../types';
+import {
+    createInvestigationAdministrationErrorService,
+    getAllInvestigationAdministrationErrorsService,
+    getInvestigationAdministrationErrorByCaseIdService,
+    getInvestigationAdministrationErrorByIdService,
+    getInvestigationAdministrationErrorsService,
+    purgeInvestigationAdministrationErrorService,
+    updateInvestigationAdministrationErrorService
+} from '../services/investigationAdministrationError.service';
+
+// The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
+// absent filter never turns into an `undefined` in the where clause
+const listFilters = (req: Request): InvestigationAdministrationErrorListFilters => ({
+    investigationId: req.query.investigationId as string | undefined,
+    caseId: req.query.caseId as string | undefined
+});
+
+// Create Investigation Administration Error Controller
+// Code: ESAVI-INVADMER-001
+const createInvestigationAdministrationError = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await createInvestigationAdministrationErrorService(req.body, req.user, req.lang);
+        return res.status(201).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.createdSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-001: Error creating Investigation Administration Error: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.createdFailed', req.lang), 500, 'INVADMER_001_CREATION_FAILED', error));
+    }
+}
+
+// Get Investigation Administration Errors Controller
+// Code: ESAVI-INVADMER-002A
+const getInvestigationAdministrationErrors = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getInvestigationAdministrationErrorsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-002A: Error fetching Investigation Administration Errors: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.getFailedPlural', req.lang), 500, 'INVADMER_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Investigation Administration Errors Controller - For Admin
+// Code: ESAVI-INVADMER-002B
+const getAllInvestigationAdministrationErrors = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllInvestigationAdministrationErrorsService(listFilters(req), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-002B: Error fetching all Investigation Administration Errors: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.getFailedPlural', req.lang), 500, 'INVADMER_002B_FETCH_FAILED', error));
+    }
+}
+
+// Get Investigation Administration Error By ID Controller
+// Code: ESAVI-INVADMER-003
+// canViewInactive is what lets a SUPERADMIN read the administration error of a retired
+// investigation: the entity has no state of its own, so the predicate is applied over the visibility
+// it inherits
+const getInvestigationAdministrationErrorById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationAdministrationErrorByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-003: Error fetching Investigation Administration Error: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.getFailed', req.lang), 500, 'INVADMER_003_FETCH_FAILED', error));
+    }
+}
+
+// Get Investigation Administration Error By Case ID Controller
+// Code: ESAVI-INVADMER-006
+// The only non-canonical operation of the entity. It answers with the record itself and not with a
+// collection: the chain case -> investigation -> administration error is one to one on both hops
+const getInvestigationAdministrationErrorByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationAdministrationErrorByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-006: Error fetching Investigation Administration Error by case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.getFailed', req.lang), 500, 'INVADMER_006_FETCH_FAILED', error));
+    }
+}
+
+// Update Investigation Administration Error Controller
+// Code: ESAVI-INVADMER-004
+// canViewInactive travels for the same reason as in the 003: the entity has no state of its own, so
+// whether a retired investigation may be written is decided over the visibility it inherits
+const updateInvestigationAdministrationError = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateInvestigationAdministrationErrorService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-004: Error updating Investigation Administration Error: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.updatedFailed', req.lang), 500, 'INVADMER_004_UPDATE_FAILED', error));
+    }
+}
+
+// Purge Investigation Administration Error Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-INVADMER-005C
+// Responds without `data`: the row no longer exists, so there is nothing to return. It is also the
+// only operation of the entity that writes no appDetails entry, which CONVENTIONS.md declares
+// correct — the row is destroyed in the same transaction any audit would have been written into
+const purgeInvestigationAdministrationError = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeInvestigationAdministrationErrorService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-005C: Error purging Investigation Administration Error: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.purgeFailed', req.lang), 500, 'INVADMER_005C_PURGE_FAILED', error));
+    }
+}
+
+export {
+    createInvestigationAdministrationError,
+    getAllInvestigationAdministrationErrors,
+    getInvestigationAdministrationErrorByCaseId,
+    getInvestigationAdministrationErrorById,
+    getInvestigationAdministrationErrors,
+    purgeInvestigationAdministrationError,
+    updateInvestigationAdministrationError
+};

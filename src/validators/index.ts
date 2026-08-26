@@ -34,5 +34,6 @@ export * from './investigationClinicalEvaluation.validator';
 export * from './investigationVaccinationContext.validator';
 export * from './investigationVaccineAdministered.validator';
 export * from './investigationColdChain.validator';
+export * from './investigationAdministrationError.validator';
 export * from './evaluationInstitution.validator';
 export * from './systemConfig.validator';

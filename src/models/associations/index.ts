@@ -26,6 +26,7 @@ import { initInvestigationClinicalEvaluationAssociations } from './investigation
 import { initInvestigationVaccinationContextAssociations } from './investigationVaccinationContext.associations';
 import { initInvestigationVaccineAdministeredAssociations } from './investigationVaccineAdministered.associations';
 import { initInvestigationColdChainAssociations } from './investigationColdChain.associations';
+import { initInvestigationAdministrationErrorAssociations } from './investigationAdministrationError.associations';
 import { initEvaluationInstitutionAssociations } from './evaluationInstitution.associations';
 import { initSystemConfigAssociations } from './systemConfig.associations';
 
@@ -58,6 +59,7 @@ export const initAssociations = (): void => {
     initInvestigationVaccinationContextAssociations();
     initInvestigationVaccineAdministeredAssociations();
     initInvestigationColdChainAssociations();
+    initInvestigationAdministrationErrorAssociations();
     initEvaluationInstitutionAssociations();
     initSystemConfigAssociations();
 }

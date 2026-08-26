@@ -883,6 +883,27 @@
         "purgeSuccess": "Koudeketen permanent verwijderd",
         "purgeFailed": "Definitief verwijderen van de koudeketen mislukt. Probeer het later opnieuw."
     },
+    "investigationAdministrationError": {
+        "notFound": "Toedieningsfout niet gevonden. Controleer de ID van het onderzoek en probeer het opnieuw.",
+        "idRequired": "De ID van het onderzoek is verplicht",
+        "investigationNotFound": "Het opgegeven onderzoek bestaat niet of is inactief",
+        "caseNotFound": "Het opgegeven ESAVI-geval bestaat niet of is inactief",
+        "alreadyExists": "Het onderzoek met ID {{investigationId}} heeft al een toedieningsfout geregistreerd",
+        "syringeTypeRequired": "Wanneer wordt opgegeven dat er geen zelfdeactiverende spuiten zijn gebruikt, moet ten minste één gebruikt spuittype worden vermeld",
+        "syringeDetailNotAllowed": "De details van de gebruikte spuiten zijn alleen toegestaan wanneer wordt opgegeven dat er geen zelfdeactiverende spuiten zijn gebruikt",
+        "otherDescriptionNotAllowed": "De beschrijving van andere spuiten is alleen toegestaan wanneer wordt opgegeven dat er andere spuiten zijn gebruikt",
+        "notDeleted": "De toedieningsfout met ID {{id}} is niet ingetrokken. Deactiveer het onderzoek voordat u deze permanent verwijdert.",
+        "createdSuccess": "Toedieningsfout succesvol aangemaakt",
+        "createdFailed": "Aanmaken van de toedieningsfout mislukt. Probeer het later opnieuw.",
+        "getSuccess": "Toedieningsfout succesvol opgehaald",
+        "getFailed": "Ophalen van de toedieningsfout mislukt. Probeer het later opnieuw.",
+        "getSuccessPlural": "Lijst met toedieningsfouten succesvol opgehaald",
+        "getFailedPlural": "Ophalen van de lijst met toedieningsfouten mislukt. Probeer het later opnieuw.",
+        "updatedSuccess": "Toedieningsfout succesvol bijgewerkt",
+        "updatedFailed": "Bijwerken van de toedieningsfout mislukt. Probeer het later opnieuw.",
+        "purgeSuccess": "Toedieningsfout permanent verwijderd",
+        "purgeFailed": "Definitief verwijderen van de toedieningsfout mislukt. Probeer het later opnieuw."
+    },
     "systemConfig": {
         "createdSuccess": "Configuratie succesvol aangemaakt",
         "createdFailed": "Aanmaken van de configuratie mislukt. Probeer het later opnieuw.",
