@@ -5,6 +5,7 @@ import {
     createInvestigationCommunityService,
     getAllInvestigationCommunitiesService,
     getInvestigationCommunitiesService,
+    getInvestigationCommunityByCaseIdService,
     getInvestigationCommunityByIdService
 } from '../services/investigationCommunity.service';
 
@@ -109,9 +110,38 @@ const getInvestigationCommunityById = async (req: Request, res: Response, next: 
     }
 }
 
+// Get Investigation Community By Case ID Controller
+// Code: ESAVI-INVCOMM-006
+// canViewInactive travels for the same reason as in the 003: the entity has no state of its own, so
+// the predicate is applied over the visibility it inherits, and here it opens the second hop of the
+// chain as well — a SUPERADMIN reaches the community record of a retired investigation of a live case
+const getInvestigationCommunityByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getInvestigationCommunityByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationCommunity.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCOMM-006: Error fetching Investigation Community by case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationCommunity.getFailed', req.lang), 500, 'INVCOMM_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationCommunity,
     getAllInvestigationCommunities,
     getInvestigationCommunities,
+    getInvestigationCommunityByCaseId,
     getInvestigationCommunityById
 }

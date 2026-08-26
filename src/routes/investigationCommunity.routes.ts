@@ -5,10 +5,12 @@ import {
     createInvestigationCommunity,
     getAllInvestigationCommunities,
     getInvestigationCommunities,
+    getInvestigationCommunityByCaseId,
     getInvestigationCommunityById
 } from '../controllers/investigationCommunity.controller';
 import {
     createInvestigationCommunityValidator,
+    investigationCommunityCaseIdValidator,
     investigationCommunityIdValidator,
     investigationCommunityListValidator
 } from '../validators';
@@ -35,6 +37,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationCommuni
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the community
 // record of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationCommunityListValidator, validateFields, getAllInvestigationCommunities);
+
+// Get Investigation Community by Case
+// Code: ESAVI-INVCOMM-006
+// The real query of the domain, and the only non-canonical operation of the entity. Declared before
+// /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationCommunityCaseIdValidator, validateFields, getInvestigationCommunityByCaseId);
 
 // Get Investigation Community by ID
 // Code: ESAVI-INVCOMM-003

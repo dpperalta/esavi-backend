@@ -1,5 +1,5 @@
 import { WhereOptions } from 'sequelize';
-import { Investigation, InvestigationCommunity } from '../models';
+import { EsaviCase, Investigation, InvestigationCommunity } from '../models';
 import { AppError, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
@@ -361,6 +361,42 @@ export const getInvestigationCommunityByIdService = async (id: string, lang: str
     const community = await findInvestigationCommunityWithRelations(id, includeInactive);
     if( !community ) {
         throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_003_NOT_FOUND');
+    }
+    return toInvestigationCommunityResponse(community);
+}
+
+// Get Investigation Community By Case ID Service
+// Code: ESAVI-INVCOMM-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It returns the
+// record itself and not { count, rows } — the chain case -> investigation -> community record is one
+// to one on BOTH hops, imposed by UQ_investigation_case on the first and by the shared primary key
+// on the second, so wrapping a single record in a collection would force unwrapping a one-element
+// array on every screen.
+// THREE DISTINCT 404, and the difference matters to the client: "that case does not exist", "it has
+// no visible investigation" and "its investigation has no community record yet" are three different
+// things to show on screen, and only the third one is fixed by creating one
+export const getInvestigationCommunityByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(getMessage('investigationCommunity.caseNotFound', lang), 404, 'INVCOMM_006_CASE_NOT_FOUND');
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationCommunity.investigationNotFound', lang),
+            404,
+            'INVCOMM_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    const community = await findInvestigationCommunityWithRelations(investigation.investigationId, includeInactive);
+    if( !community ) {
+        throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_006_NOT_FOUND');
     }
     return toInvestigationCommunityResponse(community);
 }
