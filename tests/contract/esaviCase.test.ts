@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -914,6 +914,86 @@ describe('esaviCase contract', () => {
 
             expect(response.status).toBe(200);
             expect(await Investigation.findOne({ where: { caseId } })).toBeNull();
+        });
+
+    });
+
+    /**
+     * SPEC F41 adds the final classification to the same cascade, at the same point
+     * and inside the same transaction. It is the FOURTH AND LAST invocation added
+     * there, closing the five satellites of esaviCase. It is one to one with the
+     * case through UQ_finalClassification_case, so it is at most one row, and the
+     * asymmetry is unchanged: 005B reactivates nothing.
+     */
+    describe('005A — the cascade over the final classification', () => {
+
+        const createFinalClassification = async ( caseId: string ): Promise<string> => {
+            const response = await request(app)
+                .post('/api/final-classifications')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            return response.body.data.finalClassificationId;
+        };
+
+        it('drags the active final classification of the case, sealing deletedAt', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const finalClassificationId = await createFinalClassification(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const finalClassification = await FinalClassification.findByPk(finalClassificationId);
+            expect(finalClassification?.getDataValue('isActive')).toBe(false);
+            expect(finalClassification?.getDataValue('deletedAt')).not.toBeNull();
+            // The method is the code of the operation that deactivated it, not 005A of finalClassification
+            const appDetails = finalClassification?.getDataValue('appDetails') as { method: string }[];
+            expect(appDetails.map(entry => entry.method)).toEqual([
+                'ESAVI-FINCLASS-001', 'ESAVI-CASE-005A'
+            ]);
+        });
+
+        it('brings the final classification back on no account when the case is reactivated', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const finalClassificationId = await createFinalClassification(caseId);
+            await deleteCase(caseId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const finalClassification = await FinalClassification.findByPk(finalClassificationId);
+            expect(finalClassification?.getDataValue('isActive')).toBe(false);
+            expect(finalClassification?.getDataValue('deletedAt')).not.toBeNull();
+        });
+
+        it('leaves a final classification retired beforehand with its own deletedAt and no new entry', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const finalClassificationId = await createFinalClassification(caseId);
+            await request(app).delete(`/api/final-classifications/${ finalClassificationId }`).set(authHeader('ADMIN'));
+
+            const before = await FinalClassification.findByPk(finalClassificationId);
+            const ownDeletedAt = before?.getDataValue('deletedAt') as Date;
+            const entriesBefore = ( before?.getDataValue('appDetails') as unknown[] ).length;
+
+            // A second apart, so a deletedAt rewritten by the cascade would show
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            await deleteCase(caseId);
+
+            const after = await FinalClassification.findByPk(finalClassificationId);
+            expect(( after?.getDataValue('deletedAt') as Date ).getTime()).toBe(ownDeletedAt.getTime());
+            expect(after?.getDataValue('appDetails') as unknown[]).toHaveLength(entriesBefore);
+        });
+
+        it('a case with no final classification deactivates zero rows and does not fail', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            expect(await FinalClassification.findOne({ where: { caseId } })).toBeNull();
         });
 
     });
