@@ -1,6 +1,13 @@
+import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, FinalClassification } from '../models';
 import { AppError, getMessage } from '../helpers';
-import { AppDetails, AuthUser, CreateFinalClassificationInput } from '../types';
+import {
+    AppDetails,
+    AuthUser,
+    CreateFinalClassificationInput,
+    FinalClassificationListFilters
+} from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // Code of the catalogType that groups the three precedence values, seeded with three items of
 // code and value 1, 2 and 3. Without this check any active catalogItem of the system would enter
@@ -72,6 +79,9 @@ const DETAIL_INCLUDE = [
 const DETAIL_EXCLUDE = {
     exclude: ['sysDetails', 'caseId', ...IMPORTANCE_FIELDS]
 };
+
+// Newest first, the same order as classification and esaviCase
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
 
 // The eight booleans are returned exactly as stored, null included: they are never normalized to
 // false when building the response. A verdict that was never evaluated is not a verdict of "no"
@@ -285,6 +295,61 @@ const createFinalClassificationService = async (
     return createdFinalClassification ? toFinalClassificationResponse(createdFinalClassification) : null;
 }
 
+// The single filter of the listing, by equality. A filter pointing at a caseId that does not
+// exist yields an empty page, never a 404: searching for something absent is an empty search, not
+// a missing resource. There is deliberately no filter by any domain field — not by causality
+// block, not by dIsUnclassifiable, not by importance
+const buildListWhere = (filters: FinalClassificationListFilters = {}): WhereOptions => {
+    const where: Record<string, unknown> = {};
+
+    if( filters.caseId ) where.caseId = filters.caseId;
+
+    return where as WhereOptions;
+}
+
+// Get Active Final Classifications Service
+// Code: ESAVI-FINCLASS-002A
+// The where filters by the isActive of the row ITSELF, not by the one of its case: this entity
+// has a state of its own, unlike the ten satellites of investigation. With the cascade of
+// ESAVI-CASE-005A the final classification of a retired case is already inactive, so the result
+// is the same without conditioning the include with a required: true.
+//
+// Every row travels in the same complete shape as the 003: twelve columns and four includes per
+// element do not justify two different contracts, so there is no reduced listing shape
+const getFinalClassificationsService = async (
+    filters: FinalClassificationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    return await FinalClassification.findAndCountAll({
+        where: { ...buildListWhere(filters), isActive: true },
+        attributes: DETAIL_EXCLUDE,
+        include: DETAIL_INCLUDE,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
+// Get All Final Classifications Service - For Admin
+// Code: ESAVI-FINCLASS-002B
+const getAllFinalClassificationsService = async (
+    filters: FinalClassificationListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    return await FinalClassification.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: DETAIL_EXCLUDE,
+        include: DETAIL_INCLUDE,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+}
+
 export {
-    createFinalClassificationService
+    createFinalClassificationService,
+    getFinalClassificationsService,
+    getAllFinalClassificationsService
 }
