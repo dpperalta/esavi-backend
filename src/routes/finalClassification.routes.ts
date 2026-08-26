@@ -6,13 +6,15 @@ import {
     getAllFinalClassifications,
     getFinalClassificationByCaseId,
     getFinalClassificationById,
-    getFinalClassifications
+    getFinalClassifications,
+    updateFinalClassification
 } from '../controllers/finalClassification.controller';
 import {
     createFinalClassificationValidator,
     finalClassificationCaseIdValidator,
     finalClassificationIdValidator,
-    finalClassificationListValidator
+    finalClassificationListValidator,
+    updateFinalClassificationValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -45,5 +47,10 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...finalCla
 // Declared after the literal paths so Express does not capture 'admin' as an :id. The :id is the
 // finalClassificationId, which is why the 006 by case is not redundant with this one
 router.get('/:id', tokenValidation, validateUserRole(USER), ...finalClassificationIdValidator, validateFields, getFinalClassificationById);
+
+// Update Final Classification
+// Code: ESAVI-FINCLASS-004
+// USER for the same reason as 001: correcting the verdict is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(USER), ...finalClassificationIdValidator, ...updateFinalClassificationValidator, validateFields, updateFinalClassification);
 
 export default router;

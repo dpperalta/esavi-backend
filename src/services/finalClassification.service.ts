@@ -1,6 +1,6 @@
 import { WhereOptions } from 'sequelize';
 import { CatalogItem, CatalogType, EsaviCase, FinalClassification } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -390,10 +390,121 @@ const getFinalClassificationByCaseIdService = async (caseId: string, lang: strin
     return toFinalClassificationResponse(finalClassification);
 }
 
+// The state the row would be left in once block D has had its say. With D active the ten forbidden
+// columns are forced to null: marking the case unclassifiable wipes the previous verdict without
+// asking permission and without returning an error. The forcing happens BEFORE the precedence rule
+// and before the catalog lookup, so neither of them works on values that are not going to be stored
+const applyUnclassifiableForcing = (resulting: ResultingState): ResultingState => {
+    if( resulting.dIsUnclassifiable !== true ) {
+        return resulting;
+    }
+    const forced: ResultingState = { ...resulting };
+    for( const field of UNCLASSIFIABLE_FORBIDDEN_FIELDS ) {
+        forced[field] = null;
+    }
+    return forced;
+}
+
+// Update Final Classification Service
+// Code: ESAVI-FINCLASS-004
+// caseId is ignored whether or not it arrives in the body, with no 400: a final classification is
+// not moved between cases. The UNIQUE of the destination would block it anyway if that case
+// already had one, and the origin would be left without a verdict without anything recording it
+const updateFinalClassificationService = async (
+    id: string,
+    data: Partial<CreateFinalClassificationInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    // Read whole, with no narrowed attributes: buildDifferentialUpdate needs the complete row, or
+    // a column left out reads back undefined and every comparison against it counts as a change
+    const where = canViewInactive
+        ? { finalClassificationId: id }
+        : { finalClassificationId: id, isActive: true };
+    const finalClassification = await FinalClassification.findOne({ where });
+    if( !finalClassification ) {
+        throw new AppError(getMessage('finalClassification.notFound', lang), 404, 'FINCLASS_004_NOT_FOUND');
+    }
+
+    const stored = finalClassification.get({ plain: true }) as Record<string, unknown>;
+
+    // The two coherence rules look at the resulting state — what travels merged with what is
+    // stored — and they run BEFORE the diff and independently of it. A PUT { notes: 'x' } over a
+    // row with A=1, B=2 does not fail; a PUT { importanceBItemId: <the item A already holds> }
+    // does, even though importanceAItemId never travels in the body
+    const resulting = resolveResultingState(data, stored);
+
+    // Asymmetric with the 001: the ten that do NOT travel are forced to null further down, and
+    // only the ones that travel WITH A VALUE are a 400. Sending them explicitly null is not an
+    // error — it is the same destination the forcing reaches on its own
+    assertUnclassifiableFieldsNotSent(data, resulting, '004', lang);
+
+    const effective = applyUnclassifiableForcing(resulting);
+    assertImportanceIsNotDuplicated(effective, '004', lang);
+    await assertImportancesAreValid(effective, '004', lang);
+
+    // Differential update: only what really changed reaches the UPDATE. Resending whole the record
+    // just read with a GET is the normal use of a form, and writing it back would fill appDetails
+    // with entries that record no change and hide the real ones among them.
+    //
+    // The ten forbidden columns are conditional derivatives: with D active they enter candidates
+    // ALWAYS with null and with no presence check, and it is buildDifferentialUpdate that decides
+    // whether they differ. Marking D over a row that was already unclassifiable writes nothing.
+    // Compared against undefined and never by truthiness: a boolean arriving false is a value
+    const candidates: Record<string, unknown> = {};
+    const isUnclassifiable = resulting.dIsUnclassifiable === true;
+    for( const field of UNCLASSIFIABLE_FORBIDDEN_FIELDS ) {
+        candidates[field] = isUnclassifiable
+            ? null
+            : ( data[field] !== undefined ? ( data[field] ?? null ) : undefined );
+    }
+
+    const objectToUpdate = buildDifferentialUpdate(stored, {
+        ...candidates,
+        // The flag itself is never forced: it is what decides, not what is decided
+        dIsUnclassifiable: data.dIsUnclassifiable !== undefined
+            ? ( data.dIsUnclassifiable ?? null )
+            : undefined,
+        // Outside the block: never forced and never forbidden, even with D active. The reason a
+        // case is unclassifiable is exactly what has to be writable there
+        notes: data.notes !== undefined ? ( data.notes ? data.notes.trim() : null ) : undefined
+    });
+
+    // Nothing changed: no UPDATE, no updatedAt and no audit entry
+    if( Object.keys(objectToUpdate).length === 0 ) {
+        const unchanged = await findFinalClassificationWithRelations(id, true);
+        return unchanged ? toFinalClassificationResponse(unchanged) : null;
+    }
+
+    // Written by hand so the service does not depend on a trigger for a column it owns: the
+    // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+    objectToUpdate.updatedAt = new Date();
+
+    const currentAppDetails = Array.isArray(finalClassification.appDetails) ? finalClassification.appDetails : [];
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-FINCLASS-004',
+        detail: 'Final classification updated by service'
+    };
+    await finalClassification.update({
+        ...objectToUpdate,
+        appDetails: [
+            ...currentAppDetails,
+            newEntry
+        ]
+    });
+
+    const updatedFinalClassification = await findFinalClassificationWithRelations(id, true);
+    return updatedFinalClassification ? toFinalClassificationResponse(updatedFinalClassification) : null;
+}
+
 export {
     createFinalClassificationService,
     getFinalClassificationsService,
     getAllFinalClassificationsService,
     getFinalClassificationByIdService,
-    getFinalClassificationByCaseIdService
+    getFinalClassificationByCaseIdService,
+    updateFinalClassificationService
 }

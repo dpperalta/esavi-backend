@@ -6,7 +6,8 @@ import {
     getAllFinalClassificationsService,
     getFinalClassificationByCaseIdService,
     getFinalClassificationByIdService,
-    getFinalClassificationsService
+    getFinalClassificationsService,
+    updateFinalClassificationService
 } from '../services/finalClassification.service';
 
 // The single query filter of 002A and 002B. Only what actually arrives travels to the service, so
@@ -133,10 +134,40 @@ const getFinalClassificationByCaseId = async (req: Request, res: Response, next:
     }
 }
 
+// Update Final Classification Controller
+// Code: ESAVI-FINCLASS-004
+// canViewInactive travels for the same reason as in the 003: a retired verdict answers 404 to
+// USER and ADMIN, and only a SUPERADMIN reaches it
+const updateFinalClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await updateFinalClassificationService(
+            id.toString().trim(),
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('finalClassification.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-FINCLASS-004: Error updating Final Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('finalClassification.updatedFailed', req.lang), 500, 'FINCLASS_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createFinalClassification,
     getFinalClassifications,
     getAllFinalClassifications,
     getFinalClassificationById,
-    getFinalClassificationByCaseId
+    getFinalClassificationByCaseId,
+    updateFinalClassification
 }
