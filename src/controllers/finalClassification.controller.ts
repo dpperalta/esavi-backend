@@ -170,11 +170,10 @@ const updateFinalClassification = async (req: Request, res: Response, next: Next
 const deleteFinalClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setFinalClassificationActivationService(id, req.user, req.lang, false);
+        await setFinalClassificationActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
-            message: getMessage('finalClassification.deletedSuccess', req.lang),
-            data
+            message: getMessage('finalClassification.deletedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-FINCLASS-005A: Error deleting Final Classification: ' + error, 'error');
@@ -191,11 +190,10 @@ const deleteFinalClassification = async (req: Request, res: Response, next: Next
 const activateFinalClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setFinalClassificationActivationService(id, req.user, req.lang, true);
+        await setFinalClassificationActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
-            message: getMessage('finalClassification.activatedSuccess', req.lang),
-            data
+            message: getMessage('finalClassification.activatedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-FINCLASS-005B: Error activating Final Classification: ' + error, 'error');

@@ -549,12 +549,6 @@ const setFinalClassificationActivationService = async (
         await transaction.rollback();
         throw error;
     }
-
-    // Re-read outside the transaction so the response carries the row in the same shape as the
-    // 003, which is what §3.7 asks of these two operations. includeInactive is true on purpose:
-    // after a 005A the row is inactive and the read would come back empty otherwise
-    const finalClassification = await findFinalClassificationWithRelations(id, true);
-    return finalClassification ? toFinalClassificationResponse(finalClassification) : null;
 }
 
 // Purging Final Classification Service - For SuperAdmin
