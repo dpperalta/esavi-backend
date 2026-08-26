@@ -20,4 +20,5 @@ export * from './notificationDiluent/index';
 export * from './notificationPregnancy/index';
 export * from './notificationPregnancyComplication/index';
 export * from './investigation/index';
+export * from './finalClassification/index';
 export * from './systemConfig/index';
