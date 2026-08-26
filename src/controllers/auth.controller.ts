@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { loginService, refreshTokenService } from '../services/auth.service';
+import { loginService, refreshTokenService, logoutService } from '../services/auth.service';
 import { esaviLog, getMessage, AppError } from '../helpers';
 
 // Execute login process
@@ -49,7 +49,29 @@ const refresh = async( req: Request, res: Response, next: NextFunction ): Promis
     }
 }
 
+// Close the session the refresh token belongs to
+// Code: ESAVI-AUTH-003
+const logout = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try{
+        await logoutService(req.body.refreshToken, req.lang);
+        // No `data`: closing a session is a state operation, and CONVENTIONS.md 10 keeps those
+        // to the envelope alone
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('auth.logoutSuccess', req.lang)
+        });
+    } catch( error ) {
+        esaviLog('ESAVI-AUTH-003 - Error during logout process: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('auth.logoutFailed', req.lang), 500, 'AUTH_003_LOGOUT_FAILED', error));
+    }
+}
+
 export {
     login,
-    refresh
+    refresh,
+    logout
 }

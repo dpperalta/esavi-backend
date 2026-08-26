@@ -109,6 +109,50 @@ const loginService = async({ email, password }: LoginInput, lang: string, meta: 
     };  
 };
 
+/**
+ * Steps 1 to 3 of SPEC F42 3.5, shared by ESAVI-AUTH-002 and ESAVI-AUTH-003 because both resolve
+ * the row the same way — and because reuse detection must fire identically on either endpoint.
+ *
+ * Returns the row together with whether the secret matched, instead of deciding for the caller:
+ * a mismatch on an already revoked session is a 401 for the refresh and a plain 200 for the
+ * logout, and that difference belongs to each operation, not here.
+ *
+ * `operation` only spells the AppError code. The message keys are the same for both: a client
+ * must not be able to tell a malformed token from a `sessionId` that does not exist.
+ */
+const resolveRefreshTokenSession = async (
+    refreshToken: string,
+    lang: string,
+    operation: 'AUTH_002' | 'AUTH_003'
+): Promise<{ session: AppSession; secretMatches: boolean }> => {
+    // 1. Shape. A malformed token never reaches the database
+    const parsed = parseRefreshToken( refreshToken );
+    if ( !parsed ) {
+        throw new AppError(getMessage('auth.invalidRefreshToken', lang), 401, `${ operation }_INVALID_REFRESH_TOKEN`);
+    }
+
+    // 2. The row, by primary key
+    const session = await AppSession.findOne({
+        where: { sessionId: parsed.sessionId, deletedAt: null }
+    });
+    if ( !session ) {
+        throw new AppError(getMessage('auth.invalidRefreshToken', lang), 401, `${ operation }_INVALID_REFRESH_TOKEN`);
+    }
+
+    // 3. The secret, in constant time. A mismatch on a session that was still live is reuse: the
+    // row already holds a newer hash, so the token being spent was rotated away by an earlier
+    // call. `revokedAt IS NULL` is what live means here, and it matters — without it an attacker
+    // holding a stale token of an already closed session could revoke the rest at will
+    const secretMatches = refreshSecretMatches( parsed.secret, session.refreshTokenHash );
+    if ( !secretMatches && session.revokedAt === null ) {
+        await revokeAllUserSessionsService( session.userId, 'REUSE_DETECTED', lang );
+        esaviLog(`ESAVI-${ operation.replace('_', '-') } - Refresh token reuse detected on session ${ session.sessionId }; every session of user ${ session.userId } revoked`, 'warn');
+        throw new AppError(getMessage('auth.refreshTokenReused', lang), 401, `${ operation }_REFRESH_TOKEN_REUSED`);
+    }
+
+    return { session, secretMatches };
+}
+
 // ESAVI-AUTH-002 - Refresh Token Service
 /**
  * Renews the pair of credentials from a refresh token, rotating it.
@@ -129,29 +173,8 @@ const loginService = async({ email, password }: LoginInput, lang: string, meta: 
  */
 const refreshTokenService = async ( refreshToken: string, lang: string ): Promise<SessionTokenPair> => {
     try {
-        // 1. Shape. A malformed token never reaches the database
-        const parsed = parseRefreshToken( refreshToken );
-        if ( !parsed ) {
-            throw new AppError(getMessage('auth.invalidRefreshToken', lang), 401, 'AUTH_002_INVALID_REFRESH_TOKEN');
-        }
-
-        // 2. The row, by primary key
-        const session = await AppSession.findOne({
-            where: { sessionId: parsed.sessionId, deletedAt: null }
-        });
-        if ( !session ) {
-            throw new AppError(getMessage('auth.invalidRefreshToken', lang), 401, 'AUTH_002_INVALID_REFRESH_TOKEN');
-        }
-
-        // 3. The secret, in constant time. A mismatch on a session that was still live is reuse.
-        // `revokedAt IS NULL` is what live means here, and it is read before step 4 on purpose:
-        // an already revoked session answers step 4 instead, with no mass revocation behind it
-        const secretMatches = refreshSecretMatches( parsed.secret, session.refreshTokenHash );
-        if ( !secretMatches && session.revokedAt === null ) {
-            await revokeAllUserSessionsService( session.userId, 'REUSE_DETECTED', lang );
-            esaviLog(`ESAVI-AUTH-002 - Refresh token reuse detected on session ${ session.sessionId }; every session of user ${ session.userId } revoked`, 'warn');
-            throw new AppError(getMessage('auth.refreshTokenReused', lang), 401, 'AUTH_002_REFRESH_TOKEN_REUSED');
-        }
+        // Steps 1 to 3: shape, row and secret, with reuse detection
+        const { session, secretMatches } = await resolveRefreshTokenSession( refreshToken, lang, 'AUTH_002' );
 
         // 4. Revoked
         if ( session.revokedAt !== null ) {
@@ -228,7 +251,45 @@ const refreshTokenService = async ( refreshToken: string, lang: string ): Promis
     }
 }
 
+// ESAVI-AUTH-003 - Logout Service
+/**
+ * Closes the session the refresh token belongs to.
+ *
+ * **Idempotent**: a session that was already revoked, or already expired, answers 200 as well.
+ * Closing something already closed met its goal, and a logout is not an operation that should
+ * fail — that is the whole difference with ESAVI-AUTH-002, which answers 401 on the same row.
+ *
+ * Reuse detection still fires from step 3: a token whose hash does not match a live session
+ * revokes every session of that user, on this endpoint exactly as on the refresh.
+ *
+ * The write itself is delegated to ESAVI-SESSION-006, which returns how many rows it revoked —
+ * 1 the first time, 0 from then on. Neither number reaches the client: SPEC F42 3.7 makes this
+ * a state operation, and 10 of the conventions says a state operation returns no `data`.
+ */
+const logoutService = async ( refreshToken: string, lang: string ): Promise<void> => {
+    try {
+        // Steps 1 to 3, the same resolution the refresh does
+        const { session, secretMatches } = await resolveRefreshTokenSession( refreshToken, lang, 'AUTH_003' );
+
+        // A mismatch that survived step 3 belongs to an already revoked session: there is nothing
+        // left to close, and reporting it as an error would break the idempotence
+        if ( !secretMatches ) {
+            return;
+        }
+
+        await revokeAppSessionService( session.sessionId, 'LOGOUT', lang );
+    } catch ( error ) {
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        // The refresh token is deliberately absent from this line: it is a live credential
+        esaviLog('ESAVI-AUTH-003 - Error during logout: ' + error, 'error');
+        throw new AppError(getMessage('auth.logoutFailed', lang), 500, 'AUTH_003_LOGOUT_FAILED', error);
+    }
+}
+
 export {
     loginService,
-    refreshTokenService
+    refreshTokenService,
+    logoutService
 }
