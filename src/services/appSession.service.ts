@@ -9,7 +9,7 @@ import {
     hashRefreshSecret
 } from '../helpers/refreshToken.helper';
 import { AppDetails, CreateAppSessionInput, SessionTokenPair } from '../types';
-import { REFRESH_TOKEN_EXPIRES_IN_MS } from '../constants/session.constants';
+import { REFRESH_TOKEN_EXPIRES_IN_MS, SessionRevokeReason } from '../constants/session.constants';
 
 /**
  * appSession persistence (SPEC F42 §3.4).
@@ -87,6 +87,98 @@ const createAppSessionService = async (
     }
 }
 
+// The two revocations below share their whole body except the filter, so it lives here once.
+// Rows are fetched and updated one by one instead of with a bulk UPDATE because every row keeps
+// its own appDetails history, and `[...current, entry]` cannot be expressed as a single SET.
+// The volume justifies it: a user has a handful of live sessions, not thousands.
+const revokeSessions = async (
+    where: { sessionId: string } | { userId: string },
+    reason: SessionRevokeReason,
+    method: string,
+    transaction?: Transaction
+): Promise<number> => {
+    // `revokedAt IS NULL` is what makes a second revocation a no-op: an already revoked row is
+    // outside the filter, so its original timestamp and its original reason are preserved.
+    // `deletedAt IS NULL` keeps a soft-deleted row out of the count
+    const sessions = await AppSession.findAll({
+        where: { ...where, revokedAt: null, deletedAt: null },
+        transaction
+    });
+
+    const revokedAt = new Date();
+
+    for ( const session of sessions ) {
+        const currentAppDetails = Array.isArray( session.appDetails ) ? session.appDetails : [];
+        const newEntry: AppDetails = {
+            createdAt: revokedAt,
+            user: session.userId,
+            method,
+            detail: `Session revoked (${ reason })`
+        };
+        await session.update({
+            revokedAt,
+            revokedReason: reason,
+            updatedAt: revokedAt,
+            appDetails: [ ...currentAppDetails, newEntry ]
+        }, { transaction });
+    }
+
+    return sessions.length;
+}
+
+// ESAVI-SESSION-006 - Revoke App Session Service
+/**
+ * Revokes one session, by primary key.
+ *
+ * Returns the number of rows affected — 1 the first time, 0 from then on — instead of throwing on
+ * a session that is already closed. ESAVI-AUTH-003 is idempotent and needs that distinction to
+ * stay a fact it may report, never an error: closing something already closed met its goal.
+ */
+const revokeAppSessionService = async (
+    sessionId: string,
+    reason: SessionRevokeReason,
+    lang: string,
+    transaction?: Transaction
+): Promise<number> => {
+    try {
+        return await revokeSessions({ sessionId }, reason, 'ESAVI-SESSION-006', transaction);
+    } catch ( error ) {
+        esaviLog(`[ERROR]: ESAVI-SESSION-006 - Error revoking session ${ sessionId }: ${ error }`, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(getMessage('auth.logoutFailed', lang), 500, 'SESSION_006_REVOKE_FAILED', error);
+    }
+}
+
+// ESAVI-SESSION-007 - Revoke All User Sessions Service
+/**
+ * Revokes every live session of one user: logout-all, a detected refresh token reuse, and a
+ * password change all land here.
+ *
+ * The filter leans on IX_appSession_active — ("userId", "expiresAt") WHERE "revokedAt" IS NULL
+ * AND "deletedAt" IS NULL — which is the partial index the DDL has been carrying since the start
+ * for exactly this query.
+ */
+const revokeAllUserSessionsService = async (
+    userId: string,
+    reason: SessionRevokeReason,
+    lang: string,
+    transaction?: Transaction
+): Promise<number> => {
+    try {
+        return await revokeSessions({ userId }, reason, 'ESAVI-SESSION-007', transaction);
+    } catch ( error ) {
+        esaviLog(`[ERROR]: ESAVI-SESSION-007 - Error revoking sessions for user ${ userId }: ${ error }`, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(getMessage('auth.logoutAllFailed', lang), 500, 'SESSION_007_REVOKE_ALL_FAILED', error);
+    }
+}
+
 export {
-    createAppSessionService
+    createAppSessionService,
+    revokeAppSessionService,
+    revokeAllUserSessionsService
 }
