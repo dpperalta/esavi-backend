@@ -6,7 +6,12 @@ import { esaviLog, getMessage, AppError } from '../helpers';
 // Code: ESAVI-AUTH-001
 const login = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void   > => {
     try{
-        const result = await loginService(req.body, req.lang);
+        // Trace of where the session was opened from. Both come from the request, never from the
+        // body: a client must not be able to declare the IP or the User-Agent of its own session
+        const result = await loginService(req.body, req.lang, {
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent']
+        });
         return res.status(200).json({
             ok: true,
             message: getMessage('auth.loginSuccess', req.lang, { name: `${result.user.displayName}` }),
