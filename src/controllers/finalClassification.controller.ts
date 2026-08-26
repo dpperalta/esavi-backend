@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { FinalClassificationListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, FinalClassificationListFilters } from '../types';
 import {
     createFinalClassificationService,
     getAllFinalClassificationsService,
+    getFinalClassificationByIdService,
     getFinalClassificationsService
 } from '../services/finalClassification.service';
 
@@ -79,8 +80,36 @@ const getAllFinalClassifications = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Get Final Classification By ID Controller
+// Code: ESAVI-FINCLASS-003
+// canViewInactive is what lets a SUPERADMIN read a retired verdict: the entity has a state of its
+// own, so the row can be inactive while its case is still alive
+const getFinalClassificationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getFinalClassificationByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('finalClassification.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-FINCLASS-003: Error fetching Final Classification by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('finalClassification.getFailed', req.lang), 500, 'FINCLASS_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createFinalClassification,
     getFinalClassifications,
-    getAllFinalClassifications
+    getAllFinalClassifications,
+    getFinalClassificationById
 }

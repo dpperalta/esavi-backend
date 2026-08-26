@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createFinalClassification,
     getAllFinalClassifications,
+    getFinalClassificationById,
     getFinalClassifications
 } from '../controllers/finalClassification.controller';
 import {
     createFinalClassificationValidator,
+    finalClassificationIdValidator,
     finalClassificationListValidator
 } from '../validators';
 
@@ -29,5 +31,11 @@ router.get('/', tokenValidation, validateUserRole(USER), ...finalClassificationL
 // Code: ESAVI-FINCLASS-002B
 // Declared before /:id so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...finalClassificationListValidator, validateFields, getAllFinalClassifications);
+
+// Get Final Classification by ID
+// Code: ESAVI-FINCLASS-003
+// Declared after the literal paths so Express does not capture 'admin' as an :id. The :id is the
+// finalClassificationId, which is why the 006 by case is not redundant with this one
+router.get('/:id', tokenValidation, validateUserRole(USER), ...finalClassificationIdValidator, validateFields, getFinalClassificationById);
 
 export default router;

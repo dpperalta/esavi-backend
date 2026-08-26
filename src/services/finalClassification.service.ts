@@ -348,8 +348,22 @@ const getAllFinalClassificationsService = async (
     });
 }
 
+// Get Final Classification By ID Service
+// Code: ESAVI-FINCLASS-003
+// The :id is the finalClassificationId and not the caseId — unlike the ten satellites of
+// investigation, where the two were the same value. An inactive row answers 404 for USER and
+// ADMIN, and 200 for SUPERADMIN through canViewInactive
+const getFinalClassificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const finalClassification = await findFinalClassificationWithRelations(id, canViewInactive);
+    if( !finalClassification ) {
+        throw new AppError(getMessage('finalClassification.notFound', lang), 404, 'FINCLASS_003_NOT_FOUND');
+    }
+    return toFinalClassificationResponse(finalClassification);
+}
+
 export {
     createFinalClassificationService,
     getFinalClassificationsService,
-    getAllFinalClassificationsService
+    getAllFinalClassificationsService,
+    getFinalClassificationByIdService
 }
