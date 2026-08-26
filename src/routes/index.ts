@@ -39,6 +39,7 @@ import evaluationInstitutionRoutes from './evaluationInstitution.routes';
 import investigationVaccineAdministeredRoutes from './investigationVaccineAdministered.routes';
 import investigationColdChainRoutes from './investigationColdChain.routes';
 import investigationAdministrationErrorRoutes from './investigationAdministrationError.routes';
+import investigationCommunityRoutes from './investigationCommunity.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -130,6 +131,7 @@ router.use('/investigation-vaccines-administered', investigationVaccineAdministe
 // that does not add a single line to the DDL: it has no foreign key to catalogItem at all
 router.use('/investigation-cold-chains', investigationColdChainRoutes);
 router.use('/investigation-administration-errors', investigationAdministrationErrorRoutes);
+router.use('/investigation-communities', investigationCommunityRoutes);
 
 router.use('/system-configs', systemConfigRoutes);
 

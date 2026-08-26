@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -1978,6 +1978,124 @@ describe('esaviCase contract', () => {
                 InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory,
                 InvestigationClinicalEvaluation, InvestigationVaccinationContext, InvestigationColdChain,
                 InvestigationAdministrationError
+            ];
+            for( const model of satellites ) {
+                expect(( await model.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();
+            }
+        });
+
+    });
+
+    /**
+     * SPEC F40 adds the investigation community record as the thirteenth satellite reached from
+     * here, and the ninth one walked in two hops. It is necessary for the exact reason the seven
+     * blocks above document: the mass Investigation.update never goes through
+     * setInvestigationActivationService, so the cascade F40 installed there does not fire from
+     * this side, and without this fourteenth sibling the community record would stay unsealed -
+     * invisible but not sealed, and therefore never purgable.
+     * The last case is the one that matters most across the eight specs: the eight satellites
+     * without isActive are sealed in the same transaction by the same common service, so no spec
+     * may have broken the other seven.
+     */
+    describe('005A - the cascade over the investigation community record', () => {
+
+        // Like the six satellites before it, it opens empty
+        const createCommunityChain = async ( caseId: string ): Promise<string> => {
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+            await request(app).post('/api/investigation-communities').set(authHeader('USER'))
+                .send({ investigationId });
+            return investigationId;
+        };
+
+        const readCommunity = async ( id: string ) => {
+            const row = await InvestigationCommunity.findByPk(id);
+            return {
+                deletedAt: row!.getDataValue('deletedAt') as Date | null,
+                appDetails: row!.getDataValue('appDetails') as { method: string }[]
+            };
+        };
+
+        it('seals the community record transitively, in the same transaction that deactivates the investigation', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createCommunityChain(caseId);
+
+            const response = await deleteCase(caseId);
+
+            expect(response.status).toBe(200);
+            const community = await readCommunity(investigationId);
+            expect(community.deletedAt).not.toBeNull();
+            // The method is the code of the operation that dragged it, not its own 005A
+            expect(community.appDetails.map(entry => entry.method))
+                .toEqual(['ESAVI-INVCOMM-001', 'ESAVI-CASE-005A']);
+        });
+
+        it('reactivating the case does not clear the seal, coherent with F07, F29, F30, F32, F34, F36, F38 and F39', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigationId = await createCommunityChain(caseId);
+            await deleteCase(caseId);
+            const sealed = await readCommunity(investigationId);
+
+            const response = await activateCase(caseId);
+
+            expect(response.status).toBe(200);
+            const after = await readCommunity(investigationId);
+            expect(after.deletedAt).toEqual(sealed.deletedAt);
+            expect(after.appDetails).toHaveLength(sealed.appDetails.length);
+        });
+
+        it('does not fail on a case with no investigation, nor on one whose investigation has no community record', async () => {
+            const bare = await createCase();
+            expect(( await deleteCase(bare.body.data.caseId) ).status).toBe(200);
+
+            const withoutCommunity = await createCase();
+            const caseId = withoutCommunity.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+            expect(await InvestigationCommunity.findByPk(investigation.body.data.investigationId)).toBeNull();
+        });
+
+        it('seals the EIGHT satellites together: the fourteenth sibling did not break the seven before it', async () => {
+            const created = await createCase();
+            const caseId = created.body.data.caseId;
+            const investigation = await request(app)
+                .post('/api/investigations')
+                .set(authHeader('USER'))
+                .send({ caseId });
+            const investigationId = investigation.body.data.investigationId;
+
+            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+                .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-cold-chains').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-administration-errors').set(authHeader('USER'))
+                .send({ investigationId });
+            await request(app).post('/api/investigation-communities').set(authHeader('USER'))
+                .send({ investigationId });
+
+            expect(( await deleteCase(caseId) ).status).toBe(200);
+
+            const satellites = [
+                InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory,
+                InvestigationClinicalEvaluation, InvestigationVaccinationContext, InvestigationColdChain,
+                InvestigationAdministrationError, InvestigationCommunity
             ];
             for( const model of satellites ) {
                 expect(( await model.findByPk(investigationId) )!.getDataValue('deletedAt')).not.toBeNull();

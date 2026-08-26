@@ -1,6 +1,6 @@
 # SPEC F39 — CRUD de `investigationAdministrationError`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — dependencia dura de modelo: la PK de esta tabla *es* su FK)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), **SPEC F32 (`investigationMedicalHistory` — aporta `satelliteCascade.service.ts`, que este spec consume ya extraído)**, **SPEC F34 (`investigationClinicalEvaluation` — aporta el patrón del bloque condicional con su asimetría `001`/`004`)**, **SPEC F38 (`investigationColdChain` — hermana de forma directa: misma PK-FK, misma ausencia de `isActive`, misma convivencia de `boolean` y `answerOption`, mismo listado dual)**, SPEC F13 y SPEC F14 (patrón de satélite sin `isActive`), SPEC F08 (operación `005C`), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-25
 > **Objetivo:** Dar de alta `investigationAdministrationError` —qué falló en el acto de administrar la vacuna: con qué jeringas se aplicó, cómo se reconstituyó y qué errores concretos hubo en prescripción, preparación, manipulación y aplicación— como la **novena** tabla con FK directa a `investigation` que recibe spec propio.

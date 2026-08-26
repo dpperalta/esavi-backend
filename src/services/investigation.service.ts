@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered, InvestigationColdChain, InvestigationAdministrationError, EvaluationInstitution } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, EvaluationInstitution } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -628,6 +628,30 @@ const cascadeClearInvestigationAdministrationError = (investigationId: string, a
         transaction
     });
 
+// The eighth satellite without isActive to join the cascade, and the eighth consumer of the common
+// service SPEC F32 extracted, which is consumed here WITHOUT being touched.
+// investigationCommunity behaves exactly like the seven above: no state of its own, so what moves is
+// its deletedAt. SPEC F40
+const cascadeSealInvestigationCommunity = (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) =>
+    cascadeSealSatellite({
+        model: InvestigationCommunity,
+        where: { investigationId },
+        method: 'ESAVI-INVESTGN-005A',
+        detail: 'Investigation community record sealed by cascade from its investigation',
+        authUser,
+        transaction
+    });
+
+const cascadeClearInvestigationCommunity = (investigationId: string, authUser: AuthUser | undefined, transaction: Transaction) =>
+    cascadeClearSatellite({
+        model: InvestigationCommunity,
+        where: { investigationId },
+        method: 'ESAVI-INVESTGN-005B',
+        detail: 'Investigation community record returned by cascade from its investigation',
+        authUser,
+        transaction
+    });
+
 // Setting Investigation Active/Inactive Service
 // Code: ESAVI-INVESTGN-005A / ESAVI-INVESTGN-005B
 // It does NOT go through buildDifferentialUpdate, and that is deliberate: these are writes with an
@@ -677,6 +701,7 @@ const setInvestigationActivationService = async (
             await cascadeClearInvestigationVaccinationContext(id, authUser, transaction);
             await cascadeClearInvestigationColdChain(id, authUser, transaction);
             await cascadeClearInvestigationAdministrationError(id, authUser, transaction);
+            await cascadeClearInvestigationCommunity(id, authUser, transaction);
         } else {
             await cascadeSealInvestigationSource(id, authUser, transaction);
             await cascadeSealInvestigationAutopsy(id, authUser, transaction);
@@ -685,6 +710,7 @@ const setInvestigationActivationService = async (
             await cascadeSealInvestigationVaccinationContext(id, authUser, transaction);
             await cascadeSealInvestigationColdChain(id, authUser, transaction);
             await cascadeSealInvestigationAdministrationError(id, authUser, transaction);
+            await cascadeSealInvestigationCommunity(id, authUser, transaction);
         }
 
         await transaction.commit();
@@ -785,6 +811,20 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
         if( administrationError ) {
             esaviLog(
                 `ESAVI-INVESTGN-005C: Investigation administration error dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(administrationError.get({ plain: true })) }`,
+                'warn'
+            );
+        }
+
+        // The tenth satellite, dumped as a snapshot like the other one to one ones and through a
+        // plain JSON.stringify of the WHOLE row. Unlike investigationColdChain and
+        // investigationAdministrationError this table carries no encrypted column EITHER, but it
+        // does carry THE HOME COORDINATES OF THE PATIENT — the closest thing to a personal datum any
+        // satellite of investigation holds. They go to the log in clear because they are stored in
+        // clear: esaviCrypt yields text and the columns are numeric(10,7). SPEC F40
+        const community = await InvestigationCommunity.findByPk(id, { transaction });
+        if( community ) {
+            esaviLog(
+                `ESAVI-INVESTGN-005C: Investigation community record dragged by ON DELETE CASCADE, purged by ${ authUser?.userId || 'undefined' }. Snapshot: ${ JSON.stringify(community.get({ plain: true })) }`,
                 'warn'
             );
         }

@@ -904,6 +904,26 @@
         "purgeSuccess": "Administration error permanently deleted",
         "purgeFailed": "Failed to permanently delete the administration error. Please try again later."
     },
+    "investigationCommunity": {
+        "notFound": "Community record not found. Please check the investigation ID and try again.",
+        "idRequired": "The investigation ID is required",
+        "investigationNotFound": "The given investigation does not exist or is inactive",
+        "caseNotFound": "The given ESAVI case does not exist or is inactive",
+        "alreadyExists": "The investigation with ID {{investigationId}} already has a community record",
+        "similarEventFieldsNotAllowed": "The details of the similar event in the community are only admitted when a similar event is declared to have occurred",
+        "similarEventDescriptionRequired": "When a similar event in the community is declared to have occurred, its description must be stated",
+        "notDeleted": "The community record with ID {{id}} has not been withdrawn. Deactivate its investigation before deleting it permanently.",
+        "createdSuccess": "Community record created successfully",
+        "createdFailed": "Failed to create the community record. Please try again later.",
+        "getSuccess": "Community record fetched successfully",
+        "getFailed": "Failed to fetch the community record. Please try again later.",
+        "getSuccessPlural": "Community record list fetched successfully",
+        "getFailedPlural": "Failed to fetch the community record list. Please try again later.",
+        "updatedSuccess": "Community record updated successfully",
+        "updatedFailed": "Failed to update the community record. Please try again later.",
+        "purgeSuccess": "Community record permanently deleted",
+        "purgeFailed": "Failed to permanently delete the community record. Please try again later."
+    },
     "systemConfig": {
         "createdSuccess": "Configuration created successfully",
         "createdFailed": "Failed to create the configuration. Please try again later.",

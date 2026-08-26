@@ -1,6 +1,6 @@
 # SPEC F40 — CRUD de `investigationCommunity`
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — dependencia dura de modelo: la PK de esta tabla *es* su FK; y precedente de las coordenadas `DECIMAL(10,7)`)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), **SPEC F32 (`investigationMedicalHistory` — aporta `satelliteCascade.service.ts`, que este spec consume ya extraído)**, **SPEC F34 (`investigationClinicalEvaluation` — aporta el patrón del bloque condicional con su asimetría `001`/`004`)**, **SPEC F36 (`investigationVaccinationContext` — aporta el contador `smallint` con techo replicado y la precedencia «prohibición antes que obligación»)**, SPEC F38 y SPEC F39 (hermanas de forma: misma PK-FK, misma ausencia de `isActive`, mismo listado dual, mismo `005C`), SPEC F13 y SPEC F14 (patrón de satélite sin `isActive`), SPEC F08 (operación `005C`), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-25
 > **Objetivo:** Dar de alta `investigationCommunity` —dónde vive el paciente y si la comunidad reportó otros eventos parecidos— como la **décima** tabla con FK directa a `investigation` que recibe spec propio.
@@ -386,7 +386,7 @@ En `src/data/i18n/es.json`, `en.json` y `nl.json`, bajo `investigationCommunity`
 | `investigationCommunity.getSuccess` / `getFailed` | `003` y `006` |
 | `investigationCommunity.getSuccessPlural` / `getFailedPlural` | `002A` y `002B` |
 | `investigationCommunity.updatedSuccess` / `updatedFailed` | `004` |
-| `investigationCommunity.purgedSuccess` / `purgedFailed` | `005C` |
+| `investigationCommunity.purgeSuccess` / `purgeFailed` | `005C` |
 | `investigationCommunity.notFound` | 404 en `003`, `004`, `005C` y `006` |
 | `investigationCommunity.investigationNotFound` | 404 de la investigación en `001` y `006` |
 | `investigationCommunity.caseNotFound` | 404 del caso en `006` |
