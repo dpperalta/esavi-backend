@@ -2,6 +2,7 @@ import { sequelize } from '../database/connection';
 import { AppUser } from './appUser.model';
 import { AppRole } from './appRole.model';
 import { AppUserRole } from './appUserRole.model';
+import { AppSession } from './appSession.model';
 import { GeoLevelType } from './geoLevelType.model';
 import { GeoLocation } from './geoLocation.model';
 import { initAssociations } from './associations';
@@ -51,6 +52,7 @@ export {
     AppUser,
     AppRole,
     AppUserRole,
+    AppSession,
     GeoLevelType,
     GeoLocation,
     CatalogType,
