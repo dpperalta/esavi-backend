@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationCommunity,
     getAllInvestigationCommunities,
-    getInvestigationCommunities
+    getInvestigationCommunities,
+    getInvestigationCommunityById
 } from '../controllers/investigationCommunity.controller';
 import {
     createInvestigationCommunityValidator,
+    investigationCommunityIdValidator,
     investigationCommunityListValidator
 } from '../validators';
 
@@ -33,5 +35,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationCommuni
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the community
 // record of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationCommunityListValidator, validateFields, getAllInvestigationCommunities);
+
+// Get Investigation Community by ID
+// Code: ESAVI-INVCOMM-003
+// Declared after the literal paths so Express does not capture them as an :id.
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationCommunityIdValidator, validateFields, getInvestigationCommunityById);
 
 export default router;

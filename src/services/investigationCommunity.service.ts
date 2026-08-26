@@ -346,3 +346,21 @@ export const getAllInvestigationCommunitiesService = async (
     });
     return { count, rows: rows.map(toInvestigationCommunityResponse) };
 }
+
+// Get Investigation Community By ID Service
+// Code: ESAVI-INVCOMM-003
+// The :id is the investigationId: this entity has no identifier of its own, so this is already the
+// access by investigation and no separate operation is needed for it.
+// Two filters, and the second one is the inherited visibility: the row must exist, and its
+// investigation must be active unless canViewInactive says otherwise — today SUPERADMIN. Both
+// failures answer the same 404 without distinguishing, because telling them apart would confirm to a
+// USER that a community record exists under an investigation it is not allowed to see.
+// The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
+// investigation, which is what makes it possible to consult it before purging it
+export const getInvestigationCommunityByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+    const community = await findInvestigationCommunityWithRelations(id, includeInactive);
+    if( !community ) {
+        throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_003_NOT_FOUND');
+    }
+    return toInvestigationCommunityResponse(community);
+}

@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { InvestigationCommunityListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, InvestigationCommunityListFilters } from '../types';
 import {
     createInvestigationCommunityService,
     getAllInvestigationCommunitiesService,
-    getInvestigationCommunitiesService
+    getInvestigationCommunitiesService,
+    getInvestigationCommunityByIdService
 } from '../services/investigationCommunity.service';
 
 // The two query filters of 002A and 002B. Only what actually arrives travels to the service, so an
@@ -81,8 +82,36 @@ const getAllInvestigationCommunities = async (req: Request, res: Response, next:
     }
 }
 
+// Get Investigation Community By ID Controller
+// Code: ESAVI-INVCOMM-003
+// canViewInactive is what lets a SUPERADMIN read the community record of a retired investigation:
+// the entity has no state of its own, so the predicate is applied over the visibility it inherits
+const getInvestigationCommunityById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getInvestigationCommunityByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationCommunity.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCOMM-003: Error fetching Investigation Community: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationCommunity.getFailed', req.lang), 500, 'INVCOMM_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationCommunity,
     getAllInvestigationCommunities,
-    getInvestigationCommunities
+    getInvestigationCommunities,
+    getInvestigationCommunityById
 }
