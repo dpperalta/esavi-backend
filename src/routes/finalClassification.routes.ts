@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateFinalClassification,
     createFinalClassification,
+    deleteFinalClassification,
     getAllFinalClassifications,
     getFinalClassificationByCaseId,
     getFinalClassificationById,
@@ -17,7 +19,7 @@ import {
     updateFinalClassificationValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -36,6 +38,11 @@ router.get('/', tokenValidation, validateUserRole(USER), ...finalClassificationL
 // Declared before /:id so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...finalClassificationListValidator, validateFields, getAllFinalClassifications);
 
+// Activate Final Classification - For SuperAdmin
+// Code: ESAVI-FINCLASS-005B
+// Declared before /:id so Express does not capture 'activate' as an :id
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...finalClassificationIdValidator, validateFields, activateFinalClassification);
+
 // Get Final Classification by Case
 // Code: ESAVI-FINCLASS-006
 // The real query of the domain, and the only non-canonical operation of the entity. Declared
@@ -52,5 +59,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...finalClassificati
 // Code: ESAVI-FINCLASS-004
 // USER for the same reason as 001: correcting the verdict is part of the same clinical flow
 router.put('/:id', tokenValidation, validateUserRole(USER), ...finalClassificationIdValidator, ...updateFinalClassificationValidator, validateFields, updateFinalClassification);
+
+// Soft delete Final Classification
+// Code: ESAVI-FINCLASS-005A
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...finalClassificationIdValidator, validateFields, deleteFinalClassification);
 
 export default router;

@@ -1,4 +1,5 @@
 import { WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, FinalClassification } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import {
@@ -8,6 +9,7 @@ import {
     FinalClassificationListFilters
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 // Code of the catalogType that groups the three precedence values, seeded with three items of
 // code and value 1, 2 and 3. Without this check any active catalogItem of the system would enter
@@ -500,11 +502,66 @@ const updateFinalClassificationService = async (
     return updatedFinalClassification ? toFinalClassificationResponse(updatedFinalClassification) : null;
 }
 
+// Setting Final Classification Active/Inactive Service
+// Code: ESAVI-FINCLASS-005A / ESAVI-FINCLASS-005B
+// This is the first entity since F26 with activation of its own, and the one thing that most
+// separates it from the ten satellites of investigation: the table has its own isActive column.
+// It goes through setEntityActiveStatusService with no logic of its own.
+//
+// No guard over active children: finalClassification is a leaf of the graph — nothing in the
+// schema references finalClassificationId — so there are none that could block the deactivation.
+//
+// Deactivating the verdict does NOT touch the case. The cascade only goes down, and only down.
+// Reactivating does not require the case to be active either, for the same reason as in
+// classification: whoever reactivates is SUPERADMIN, and there can be no conflict with
+// UQ_finalClassification_case because the caseId was never released — step 2 of the 001 prevents
+// a second final classification from waiting for the slot
+const setFinalClassificationActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        // The where filters by the primary key only: the generic service is the one that tells
+        // 'does not exist' (404) from 'already in that state' (409)
+        await setEntityActiveStatusService({
+            model: FinalClassification,
+            where: { finalClassificationId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('finalClassification.notFound', lang),
+            notFoundCode: `FINCLASS_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`finalClassification.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `FINCLASS_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-FINCLASS-${ op }`,
+                detail: `Final classification ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    // Re-read outside the transaction so the response carries the row in the same shape as the
+    // 003, which is what §3.7 asks of these two operations. includeInactive is true on purpose:
+    // after a 005A the row is inactive and the read would come back empty otherwise
+    const finalClassification = await findFinalClassificationWithRelations(id, true);
+    return finalClassification ? toFinalClassificationResponse(finalClassification) : null;
+}
+
 export {
     createFinalClassificationService,
     getFinalClassificationsService,
     getAllFinalClassificationsService,
     getFinalClassificationByIdService,
     getFinalClassificationByCaseIdService,
-    updateFinalClassificationService
+    updateFinalClassificationService,
+    setFinalClassificationActivationService
 }

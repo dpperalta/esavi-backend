@@ -7,6 +7,7 @@ import {
     getFinalClassificationByCaseIdService,
     getFinalClassificationByIdService,
     getFinalClassificationsService,
+    setFinalClassificationActivationService,
     updateFinalClassificationService
 } from '../services/finalClassification.service';
 
@@ -163,11 +164,55 @@ const updateFinalClassification = async (req: Request, res: Response, next: Next
     }
 }
 
+// Delete Final Classification Controller - Soft delete
+// Code: ESAVI-FINCLASS-005A
+const deleteFinalClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setFinalClassificationActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('finalClassification.deletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-FINCLASS-005A: Error deleting Final Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('finalClassification.deletedFailed', req.lang), 500, 'FINCLASS_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Final Classification Controller - For SuperAdmin
+// Code: ESAVI-FINCLASS-005B
+const activateFinalClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setFinalClassificationActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('finalClassification.activatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-FINCLASS-005B: Error activating Final Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('finalClassification.activatedFailed', req.lang), 500, 'FINCLASS_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createFinalClassification,
     getFinalClassifications,
     getAllFinalClassifications,
     getFinalClassificationById,
     getFinalClassificationByCaseId,
-    updateFinalClassification
+    updateFinalClassification,
+    deleteFinalClassification,
+    activateFinalClassification
 }
