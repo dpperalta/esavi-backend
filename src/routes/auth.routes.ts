@@ -1,8 +1,9 @@
 import { Router } from 'express';
 
-import { login, logout, refresh }  from '../controllers/auth.controller';
+import { login, logout, logoutAll, refresh }  from '../controllers/auth.controller';
 import { loginValidator, refreshTokenValidator } from '../validators';
-import { validateFields } from '../middlewares';
+import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
+import { ROLES } from '../constants/roles.constants';
 
 const router = Router();
 
@@ -14,6 +15,12 @@ router.post('/login', ...loginValidator, validateFields, login);
 // session means whoever needs it most — the one holding an expired token — cannot, and their
 // refresh token stays alive until it expires. SPEC F42 3.4
 router.post('/logout', ...refreshTokenValidator, validateFields, logout);
+
+// POST: /api/auth/logout-all
+// This one does carry tokenValidation: revoking every session of an account demands a proven
+// identity, and the userId comes from req.user. Taking it from the body would make the endpoint a
+// denial of service against any user. SPEC F42 3.4
+router.post('/logout-all', tokenValidation, validateUserRole(ROLES.USER), logoutAll);
 
 // POST: /api/auth/refresh
 // No tokenValidation on purpose: the access token is normally expired exactly when this endpoint

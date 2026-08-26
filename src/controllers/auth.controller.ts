@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { loginService, refreshTokenService, logoutService } from '../services/auth.service';
+import { loginService, refreshTokenService, logoutService, logoutAllService } from '../services/auth.service';
 import { esaviLog, getMessage, AppError } from '../helpers';
 
 // Execute login process
@@ -70,8 +70,31 @@ const logout = async( req: Request, res: Response, next: NextFunction ): Promise
     }
 }
 
+// Close every live session of the authenticated user
+// Code: ESAVI-AUTH-004
+const logoutAll = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try{
+        // The identity comes from the token, never from the body. tokenValidation has already
+        // re-fetched the user from the database, so req.user is a proven identity
+        const result = await logoutAllService(req.user!.userId, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('auth.logoutAllSuccess', req.lang, { count: `${ result.revokedCount }` }),
+            data: result
+        });
+    } catch( error ) {
+        esaviLog('ESAVI-AUTH-004 - Error during logout all process: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('auth.logoutAllFailed', req.lang), 500, 'AUTH_004_LOGOUT_ALL_FAILED', error));
+    }
+}
+
 export {
     login,
     refresh,
-    logout
+    logout,
+    logoutAll
 }

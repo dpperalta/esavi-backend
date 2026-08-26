@@ -288,8 +288,33 @@ const logoutService = async ( refreshToken: string, lang: string ): Promise<void
     }
 }
 
+// ESAVI-AUTH-004 - Logout All Service
+/**
+ * Closes every live session of one user.
+ *
+ * `userId` reaches this service from `req.user`, never from a body. Accepting it from the client
+ * would turn the endpoint into a denial of service against any user of the installation, which is
+ * exactly why this is the only operation of the mechanism that carries `tokenValidation`.
+ *
+ * Idempotent: with no live sessions it returns 0 rather than failing. The count is returned
+ * because the client needs to know how many devices it just closed.
+ */
+const logoutAllService = async ( userId: string, lang: string ): Promise<{ revokedCount: number }> => {
+    try {
+        const revokedCount = await revokeAllUserSessionsService( userId, 'LOGOUT_ALL', lang );
+        return { revokedCount };
+    } catch ( error ) {
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        esaviLog('ESAVI-AUTH-004 - Error during logout all: ' + error, 'error');
+        throw new AppError(getMessage('auth.logoutAllFailed', lang), 500, 'AUTH_004_LOGOUT_ALL_FAILED', error);
+    }
+}
+
 export {
     loginService,
     refreshTokenService,
-    logoutService
+    logoutService,
+    logoutAllService
 }
