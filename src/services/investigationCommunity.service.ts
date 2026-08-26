@@ -1,10 +1,13 @@
+import { WhereOptions } from 'sequelize';
 import { Investigation, InvestigationCommunity } from '../models';
 import { AppError, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
-    CreateInvestigationCommunityInput
+    CreateInvestigationCommunityInput,
+    InvestigationCommunityListFilters
 } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The investigation travels in every response, narrowed to three fields: what the client needs is to
 // know which case the row hangs from and whether its parent is alive. Returning the whole
@@ -258,4 +261,88 @@ export const createInvestigationCommunityService = async (
     // Re-read so the response carries the resolved investigation, not just the raw identifier
     const created = await findInvestigationCommunityWithRelations(data.investigationId, true);
     return created ? toInvestigationCommunityResponse(created) : null;
+}
+
+// The order of the two listings, as in F29, F32, F34, F36, F38 and F39. This entity has no date of
+// the domain that orders it better: its ten columns are where the patient lives and what the
+// community reported, not dated facts. createdAt never moves after the insert, unlike updatedAt,
+// which would shuffle the list on every save
+const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
+
+// Only the filter that lands on the community record itself, and it lands on the primary key — which
+// is already indexed, so no index had to be declared for it. caseId does not belong here: it is a
+// column of the investigation, so it travels in the where of the include instead — the same include
+// that already implements the inherited visibility, so filtering by case costs no extra join.
+// There is no filter over any domain column — the similar event flag, the counters, the home
+// coordinates — and there will not be one: it opens the door to dashboards, and filtering by the
+// coordinates would be the first geospatial query of the repository
+const buildListWhere = (filters: InvestigationCommunityListFilters): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( filters.investigationId ) where.investigationId = filters.investigationId;
+    return where as WhereOptions;
+}
+
+// The where of the investigation include, which carries two things at once: the visibility — the
+// isActive that separates 002A from 002B — and the caseId filter when it arrives. Both conditions
+// live in the same object, so they accumulate with AND
+const buildInvestigationWhere = (filters: InvestigationCommunityListFilters, includeInactive: boolean): WhereOptions => {
+    const where: Record<string, unknown> = {};
+    if( !includeInactive ) where.isActive = true;
+    if( filters.caseId ) where.caseId = filters.caseId;
+    return where as WhereOptions;
+}
+
+// The single include of the two listings, and it is single because this entity has no foreign key to
+// catalogItem: there is no nullable catalog join here that would have to carry required: false. The
+// parent goes required: true, which keeps it an INNER JOIN — what makes the filters above bite and
+// what keeps a community record hanging from a retired investigation out of 002A
+const listInclude = (filters: InvestigationCommunityListFilters, includeInactive: boolean) => [{
+    ...INVESTIGATION_INCLUDE,
+    required: true,
+    where: buildInvestigationWhere(filters, includeInactive)
+}];
+
+// Get Active Investigation Communities Service
+// Code: ESAVI-INVCOMM-002A
+// The dual listing inherited from F29, F30, F32, F34, F36, F38 and F39: the visibility is not a
+// column of its own, it is inherited from investigation.isActive, so the two variants return
+// different sets. Without a 002B an ADMIN would have no way of seeing the community record of a
+// retired investigation
+export const getInvestigationCommunitiesService = async (
+    filters: InvestigationCommunityListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationCommunity.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: COMMUNITY_EXCLUDE,
+        include: listInclude(filters, false),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    // The rows carry the same full shape as the 003, and there is no reduced shape — which is the
+    // difference with F28. Ten columns per element do not justify two distinct contracts, and the
+    // coordinates, which is what F28 took care to keep in its own listing, travel here anyway.
+    // A filter whose UUID matches nothing returns 200 with { count: 0, rows: [] } and never a 404 —
+    // an empty listing is an answer, not a missing resource
+    return { count, rows: rows.map(toInvestigationCommunityResponse) };
+}
+
+// Get All Investigation Communities Service - For Admin
+// Code: ESAVI-INVCOMM-002B
+export const getAllInvestigationCommunitiesService = async (
+    filters: InvestigationCommunityListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const { count, rows } = await InvestigationCommunity.findAndCountAll({
+        where: buildListWhere(filters),
+        attributes: COMMUNITY_EXCLUDE,
+        include: listInclude(filters, true),
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    return { count, rows: rows.map(toInvestigationCommunityResponse) };
 }
