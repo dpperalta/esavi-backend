@@ -607,6 +607,25 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/investigation-communities/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOMM-003' },
     { method: 'put',    path: `/api/investigation-communities/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOMM-004' },
 
+    // finalClassification (SPEC F41) — the causality verdict of the WHO/PAHO algorithm, and the
+    // fifth and last satellite of esaviCase to get a spec. NINE ROWS, and it is the first entity
+    // since F26 with 005A and 005B: the table has an isActive column of its own (esaviapp.sql:1275),
+    // unlike the ten satellites of investigation of F29 to F40. Its twin in shape is classification
+    // (SPEC F09): own primary key, UNIQUE ("caseId"), and a 006 that is NOT redundant with the 003
+    // because the :id here is the finalClassificationId and the client has never seen it.
+    // 001 and 004 in USER, the same deviation from the canonical matrix as F05 to F40: the verdict
+    // is captured in the same operational flow as the case. 005C exists because finalClassification
+    // is outside the preventPhysicalDelete loop of esaviapp.sql:1372-1386
+    { method: 'post',   path: '/api/final-classifications',                     minRole: 'USER',       code: 'ESAVI-FINCLASS-001' },
+    { method: 'get',    path: '/api/final-classifications',                     minRole: 'USER',       code: 'ESAVI-FINCLASS-002A' },
+    { method: 'get',    path: '/api/final-classifications/admin',               minRole: 'ADMIN',      code: 'ESAVI-FINCLASS-002B' },
+    { method: 'patch',  path: `/api/final-classifications/activate/${ UUID }`,  minRole: 'SUPERADMIN', code: 'ESAVI-FINCLASS-005B' },
+    { method: 'delete', path: `/api/final-classifications/purge/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-FINCLASS-005C' },
+    { method: 'get',    path: `/api/final-classifications/case/${ UUID }`,      minRole: 'USER',       code: 'ESAVI-FINCLASS-006' },
+    { method: 'get',    path: `/api/final-classifications/${ UUID }`,           minRole: 'USER',       code: 'ESAVI-FINCLASS-003' },
+    { method: 'put',    path: `/api/final-classifications/${ UUID }`,           minRole: 'USER',       code: 'ESAVI-FINCLASS-004' },
+    { method: 'delete', path: `/api/final-classifications/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-FINCLASS-005A' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -685,7 +704,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(301);
+            expect(ROUTE_RULES).toHaveLength(310);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
