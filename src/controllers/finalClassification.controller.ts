@@ -7,6 +7,7 @@ import {
     getFinalClassificationByCaseIdService,
     getFinalClassificationByIdService,
     getFinalClassificationsService,
+    purgeFinalClassificationService,
     setFinalClassificationActivationService,
     updateFinalClassificationService
 } from '../services/finalClassification.service';
@@ -206,6 +207,28 @@ const activateFinalClassification = async (req: Request, res: Response, next: Ne
     }
 }
 
+// Purge Final Classification Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-FINCLASS-005C
+// Answers with { ok, message } and no data: the row no longer exists, so there is nothing to
+// return. It is the only path that releases the caseId of UQ_finalClassification_case
+const purgeFinalClassification = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeFinalClassificationService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('finalClassification.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-FINCLASS-005C: Error purging Final Classification: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('finalClassification.purgeFailed', req.lang), 500, 'FINCLASS_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createFinalClassification,
     getFinalClassifications,
@@ -214,5 +237,6 @@ export {
     getFinalClassificationByCaseId,
     updateFinalClassification,
     deleteFinalClassification,
-    activateFinalClassification
+    activateFinalClassification,
+    purgeFinalClassification
 }

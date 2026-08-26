@@ -9,6 +9,7 @@ import {
     getFinalClassificationByCaseId,
     getFinalClassificationById,
     getFinalClassifications,
+    purgeFinalClassification,
     updateFinalClassification
 } from '../controllers/finalClassification.controller';
 import {
@@ -42,6 +43,11 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...finalClassific
 // Code: ESAVI-FINCLASS-005B
 // Declared before /:id so Express does not capture 'activate' as an :id
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...finalClassificationIdValidator, validateFields, activateFinalClassification);
+
+// Purge Final Classification - Physical delete, for SuperAdmin
+// Code: ESAVI-FINCLASS-005C
+// Declared before /:id so Express does not capture 'purge' as an :id
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...finalClassificationIdValidator, validateFields, purgeFinalClassification);
 
 // Get Final Classification by Case
 // Code: ESAVI-FINCLASS-006

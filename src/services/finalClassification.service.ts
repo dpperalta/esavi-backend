@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the three precedence values, seeded with three items of
 // code and value 1, 2 and 3. Without this check any active catalogItem of the system would enter
@@ -556,6 +557,38 @@ const setFinalClassificationActivationService = async (
     return finalClassification ? toFinalClassificationResponse(finalClassification) : null;
 }
 
+// Purging Final Classification Service - For SuperAdmin
+// Code: ESAVI-FINCLASS-005C
+// finalClassification is outside the preventPhysicalDelete loop of esaviapp.sql:1372-1386, so the
+// row can really be destroyed. This is the only path that releases the caseId: once the row is
+// gone UQ_finalClassification_case is free and the case admits a new final classification.
+//
+// No cascade dump: the table is a leaf of the graph and drags nothing with it. It does not touch
+// the case either — the foreign key runs from the final classification to the case and not the
+// other way round. The generic service writes the warn dump of the whole row before the destroy,
+// and touches no appDetails: the row disappears in the same transaction, so the operation code
+// lives in four places here and not in five
+const purgeFinalClassificationService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: FinalClassification,
+            where: { finalClassificationId: id },
+            transaction,
+            operationCode: 'ESAVI-FINCLASS-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('finalClassification.notFound', lang),
+            notFoundCode: 'FINCLASS_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('finalClassification.stillActive', lang, { id }),
+            stillActiveCode: 'FINCLASS_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createFinalClassificationService,
     getFinalClassificationsService,
@@ -563,5 +596,6 @@ export {
     getFinalClassificationByIdService,
     getFinalClassificationByCaseIdService,
     updateFinalClassificationService,
-    setFinalClassificationActivationService
+    setFinalClassificationActivationService,
+    purgeFinalClassificationService
 }
