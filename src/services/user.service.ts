@@ -7,6 +7,7 @@ import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { revokeAllUserSessionsService } from './appSession.service';
 
 // Encrypted columns. Normalized before encrypting: normalizing afterwards would produce a
 // different ciphertext for the same value and break the equality lookups the fixed IV allows
@@ -421,7 +422,10 @@ const setUserActivationService = async (id: string, authUser: AuthUser | undefin
 // Change Own Password Service
 // Code: ESAVI-USER-006
 // Always acts on the token holder: no user identifier is accepted, not even from a SUPERADMIN.
-// The token in flight is NOT invalidated — there is no appSession table to revoke it in
+// A successful change now closes every session of the user (SPEC F42): the row update and the
+// revocation share one transaction, because a password changed with surviving sessions is worse
+// than a change that failed. The access token in flight still runs until it expires — up to
+// JWT_EXPIRES_IN — but its refresh token is dead, so the session cannot outlive that window
 const changePasswordService = async (authUser: AuthUser | undefined, data: ChangePasswordInput, lang: string) => {
     const { currentPassword, newPassword } = data;
     const user = authUser?.userId
@@ -448,14 +452,27 @@ const changePasswordService = async (authUser: AuthUser | undefined, data: Chang
         method: 'ESAVI-USER-006',
         detail: 'Password changed by service'
     };
-    await user.update({
-        passwordHash: await bcrypt.hash(newPassword, 10),
-        requiresPasswordChange: false,
-        appDetails: [
-            ...currentAppDetails,
-            newEntry
-        ]
-    });
+    // The transaction opens here and not at the top of the service on purpose: everything above is
+    // reads and guards that throw before any write. What must be atomic is the pair below
+    const transaction = await sequelize.transaction();
+    try {
+        await user.update({
+            passwordHash: await bcrypt.hash(newPassword, 10),
+            requiresPasswordChange: false,
+            appDetails: [
+                ...currentAppDetails,
+                newEntry
+            ]
+        }, { transaction });
+        // ESAVI-SESSION-007. The trigger is the effective write above, never the presence of
+        // `newPassword` in the body: a change that never reached the update — wrong current
+        // password, missing user — revokes nothing, because it threw before getting here
+        await revokeAllUserSessionsService(user.userId, 'PASSWORD_CHANGED', lang, transaction);
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }
 
 export {
