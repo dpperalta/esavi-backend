@@ -190,6 +190,10 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | systemConfig | `006` | leer por el par `(code, scope)` — la aplicación conoce el nombre del parámetro, no su UUID. `GET /code/:code`, USER |
 | systemConfig | `007` | listar el historial de cambios de una configuración — `systemConfigHistory` cuelga del padre y no tiene superficie propia. `GET /:id/history`, SUPERADMIN |
 | systemConfig | `008` | siembra idempotente de las configuraciones iniciales desde el catálogo declarativo — solo-alta, transacción todo o nada. `POST /sync`, SUPERADMIN |
+| appSession | `006` | revocar una sesión — escribe `revokedAt` y `revokedReason` sobre la fila si estaba vigente. **Sin ruta HTTP:** servicio interno que `auth` invoca desde `ESAVI-AUTH-002` y `-003` |
+| appSession | `007` | revocar todas las sesiones de un usuario — mismo filtro por `userId`, se apoya en `IX_appSession_active`. **Sin ruta HTTP:** lo invocan `ESAVI-AUTH-004` y `ESAVI-USER-006` |
+
+`appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4).
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
@@ -331,6 +335,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | vaccineWhodrug | `WHODRUG` |
 | user | `USER` |
 | auth | `AUTH` |
+| appSession | `SESSION` |
 | seed | `SEED` |
 
 Para acuñar una nueva: **4 a 8 letras**, mayúsculas, sin guiones, derivada del nombre de la entidad y única en la tabla. Se registra aquí **antes** de usarse. Abreviaturas de dos letras como `HF` quedan prohibidas por ambiguas.
