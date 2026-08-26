@@ -569,6 +569,23 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/investigation-cold-chains/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOLD-003' },
     { method: 'put',    path: `/api/investigation-cold-chains/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOLD-004' },
 
+    // investigationAdministrationError (SPEC F39) — what went wrong in the act of administering the
+    // vaccine: which syringes it was applied with, how the vial was reconstituted and the six
+    // concrete errors. Ninth satellite of investigation with a spec of its own, and the same seven
+    // operations as its sister investigationColdChain: no 005A and no 005B, because the table has no
+    // isActive column and does not manage its own state — its investigation does.
+    // 001 and 004 stay in USER, the deviation of F05 to F38: the detail is captured in the same
+    // operational flow as the case.
+    // Nothing here is encrypted: sixteen answers and ten free texts, with no person's name among
+    // them, so no row raises its minimum for that reason
+    { method: 'post',   path: '/api/investigation-administration-errors',                 minRole: 'USER',       code: 'ESAVI-INVADMER-001' },
+    { method: 'get',    path: '/api/investigation-administration-errors',                 minRole: 'USER',       code: 'ESAVI-INVADMER-002A' },
+    { method: 'get',    path: '/api/investigation-administration-errors/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVADMER-002B' },
+    { method: 'delete', path: `/api/investigation-administration-errors/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVADMER-005C' },
+    { method: 'get',    path: `/api/investigation-administration-errors/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVADMER-006' },
+    { method: 'get',    path: `/api/investigation-administration-errors/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVADMER-003' },
+    { method: 'put',    path: `/api/investigation-administration-errors/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVADMER-004' },
+
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
     // entity of the auth-and-system block. Seven canonical operations plus three non-canonical ones:
     // 006 reads by the (code, scope) pair, because whoever reads configuration knows the name of the
@@ -647,7 +664,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(287);
+            expect(ROUTE_RULES).toHaveLength(294);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
