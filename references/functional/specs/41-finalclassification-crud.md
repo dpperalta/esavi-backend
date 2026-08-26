@@ -1,6 +1,6 @@
 # SPEC F41 — CRUD completo de `finalClassification`
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F06 (`esaviCase` — dependencia dura: `caseId` es `NOT NULL` y es el único padre de esta tabla)**, **SPEC F09 (`classification` — gemela de forma: PK propia, `UNIQUE ("caseId")`, FK a `catalogItem` validada por `catalogType`, `006` por caso y cascada de `ESAVI-CASE-005A`; además le reservó de palabra la abreviatura `FINCLASS`)**, SPEC F07 (mecanismo de cascada de `ESAVI-CASE-005A`, al que esta entidad se suma), SPEC F08 (operación `005C`), SPEC F12 (update diferencial), **SPEC F34 y SPEC F36 (aportan la asimetría `001`/`004` del bloque condicional y la precedencia entre reglas)**, SPEC F40 (aporta la evaluación sobre el estado resultante)
 > **Fecha:** 2026-08-25
 > **Objetivo:** Dar de alta `finalClassification` —el veredicto de causalidad del algoritmo OMS/OPS sobre un caso ESAVI— con sus siete artefactos, sus siete operaciones canónicas más el borrado físico y el acceso por caso, cerrando el último de los cinco satélites de `esaviCase` que quedaba sin spec.
