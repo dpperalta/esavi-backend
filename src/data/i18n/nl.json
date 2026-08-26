@@ -23,7 +23,17 @@
         "tokenMissing": "Authenticatie ontbreekt. Log in om toegang te krijgen.",
         "forbidden": "U heeft geen toestemming om deze bron te openen.",
         "loginSuccess": "Succesvol ingelogd. Welkom terug, {{name}}!",
-        "loginFailed": "Het inloggen kon niet worden voltooid"
+        "loginFailed": "Het inloggen kon niet worden voltooid",
+        "refreshSuccess": "Sessie succesvol vernieuwd.",
+        "refreshFailed": "De sessie kon niet worden vernieuwd",
+        "invalidRefreshToken": "Ongeldig vernieuwingstoken. Log opnieuw in.",
+        "refreshTokenReused": "Uw sessie is om veiligheidsredenen gesloten. Log opnieuw in.",
+        "sessionRevoked": "Uw sessie is gesloten. Log opnieuw in.",
+        "sessionExpired": "Uw sessie is verlopen. Log opnieuw in.",
+        "logoutSuccess": "Succesvol uitgelogd.",
+        "logoutFailed": "Het uitloggen kon niet worden voltooid",
+        "logoutAllSuccess": "{{count}} sessies zijn succesvol gesloten.",
+        "logoutAllFailed": "De sessies konden niet worden gesloten"
     },
     "crypto": {
         "encryptionFailed": "Versleutelen mislukt. Probeer het later opnieuw.",

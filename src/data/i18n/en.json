@@ -23,7 +23,17 @@
         "tokenMissing": "Authentication is missing. Please log in to obtain access.",
         "forbidden": "You do not have permission to access this resource.",
         "loginSuccess": "Login successful. Welcome back, {{name}}!",
-        "loginFailed": "The login could not be completed"
+        "loginFailed": "The login could not be completed",
+        "refreshSuccess": "Session renewed successfully.",
+        "refreshFailed": "The session could not be renewed",
+        "invalidRefreshToken": "Invalid refresh token. Please log in again.",
+        "refreshTokenReused": "Your session was closed for security reasons. Please log in again.",
+        "sessionRevoked": "Your session was closed. Please log in again.",
+        "sessionExpired": "Your session has expired. Please log in again.",
+        "logoutSuccess": "Logged out successfully.",
+        "logoutFailed": "The logout could not be completed",
+        "logoutAllSuccess": "{{count}} sessions were closed successfully.",
+        "logoutAllFailed": "The sessions could not be closed"
     },
     "crypto": {
         "encryptionFailed": "Encryption failed. Please try again later.",
