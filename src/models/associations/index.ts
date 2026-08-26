@@ -28,6 +28,7 @@ import { initInvestigationVaccineAdministeredAssociations } from './investigatio
 import { initInvestigationColdChainAssociations } from './investigationColdChain.associations';
 import { initInvestigationAdministrationErrorAssociations } from './investigationAdministrationError.associations';
 import { initInvestigationCommunityAssociations } from './investigationCommunity.associations';
+import { initFinalClassificationAssociations } from './finalClassification.associations';
 import { initEvaluationInstitutionAssociations } from './evaluationInstitution.associations';
 import { initSystemConfigAssociations } from './systemConfig.associations';
 
@@ -62,6 +63,7 @@ export const initAssociations = (): void => {
     initInvestigationColdChainAssociations();
     initInvestigationAdministrationErrorAssociations();
     initInvestigationCommunityAssociations();
+    initFinalClassificationAssociations();
     initEvaluationInstitutionAssociations();
     initSystemConfigAssociations();
 }
