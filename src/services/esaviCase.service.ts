@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
+import { Classification, EsaviCase, FinalClassification, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -495,6 +495,32 @@ const cascadeDeactivateInvestigation = async (caseId: string, authUser: AuthUser
     );
 }
 
+// The final classification of the case joins the same cascade, on the same terms and for the same
+// reason as the classification, the notification and the investigation: UQ_finalClassification_case
+// makes it at most one row, but the update is still a mass one filtered by caseId — it takes no
+// decision per row, and a case with no final classification updates zero rows and does not fail.
+// SPEC F41 adds this satellite to the mechanism SPEC F07 left in place, and it is the fourth and
+// last invocation added at this point. The cascade stays downwards only: ESAVI-CASE-005B does not
+// reactivate it
+const cascadeDeactivateFinalClassification = async (caseId: string, authUser: AuthUser | undefined, transaction: Transaction) => {
+    const now = new Date();
+    const newEntry: AppDetails = {
+        createdAt: now,
+        user: authUser?.userId || 'undefined',
+        method: 'ESAVI-CASE-005A',
+        detail: 'Final classification deactivated by cascade from its ESAVI Case'
+    };
+    await FinalClassification.update(
+        {
+            isActive: false,
+            deletedAt: now,
+            updatedAt: now,
+            appDetails: appendedAppDetails(newEntry)
+        },
+        { where: { caseId, isActive: true }, transaction }
+    );
+}
+
 // The severe detail of that notification joins the cascade too, and it is the only satellite
 // reached in two hops. The chain case -> notification -> detail has to be walked explicitly:
 // the mass Notification.update above does not go through notification.service.ts, so the
@@ -857,6 +883,7 @@ const setEsaviCaseActivationService = async (id: string, authUser: AuthUser | un
             await cascadeDeactivateClassification(id, authUser, transaction);
             await cascadeDeactivateNotification(id, authUser, transaction);
             await cascadeDeactivateInvestigation(id, authUser, transaction);
+            await cascadeDeactivateFinalClassification(id, authUser, transaction);
             await cascadeSealSevereNotifications(id, authUser, transaction);
             await cascadeSealNonSevereNotifications(id, authUser, transaction);
             await cascadeSealInvestigationSources(id, authUser, transaction);

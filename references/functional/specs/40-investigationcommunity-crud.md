@@ -1,6 +1,6 @@
 # SPEC F40 — CRUD de `investigationCommunity`
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F28 (`investigation` — dependencia dura de modelo: la PK de esta tabla *es* su FK; y precedente de las coordenadas `DECIMAL(10,7)`)**, SPEC F06 (`esaviCase` — el arrastre entra también desde `ESAVI-CASE-005A`), **SPEC F32 (`investigationMedicalHistory` — aporta `satelliteCascade.service.ts`, que este spec consume ya extraído)**, **SPEC F34 (`investigationClinicalEvaluation` — aporta el patrón del bloque condicional con su asimetría `001`/`004`)**, **SPEC F36 (`investigationVaccinationContext` — aporta el contador `smallint` con techo replicado y la precedencia «prohibición antes que obligación»)**, SPEC F38 y SPEC F39 (hermanas de forma: misma PK-FK, misma ausencia de `isActive`, mismo listado dual, mismo `005C`), SPEC F13 y SPEC F14 (patrón de satélite sin `isActive`), SPEC F08 (operación `005C`), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-25
 > **Objetivo:** Dar de alta `investigationCommunity` —dónde vive el paciente y si la comunidad reportó otros eventos parecidos— como la **décima** tabla con FK directa a `investigation` que recibe spec propio.

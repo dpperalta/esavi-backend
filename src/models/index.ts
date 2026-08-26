@@ -37,6 +37,7 @@ import { InvestigationVaccineAdministered } from './investigationVaccineAdminist
 import { InvestigationColdChain } from './investigationColdChain.model';
 import { InvestigationAdministrationError } from './investigationAdministrationError.model';
 import { InvestigationCommunity } from './investigationCommunity.model';
+import { FinalClassification } from './finalClassification.model';
 import { EvaluationInstitution } from './evaluationInstitution.model';
 import { SystemConfig } from './systemConfig.model';
 import { SystemConfigHistory } from './systemConfigHistory.model';
@@ -84,6 +85,7 @@ export {
     InvestigationColdChain,
     InvestigationAdministrationError,
     InvestigationCommunity,
+    FinalClassification,
     EvaluationInstitution,
     SystemConfig,
     SystemConfigHistory

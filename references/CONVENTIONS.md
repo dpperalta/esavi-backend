@@ -184,6 +184,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | investigationColdChain | `006` | obtener la cadena de frío de un caso — la cadena `caso → investigación → cadena de frío` es uno a uno en los dos saltos |
 | investigationAdministrationError | `006` | obtener el error de administración de un caso — la cadena `caso → investigación → error` es uno a uno en los dos saltos |
 | investigationCommunity | `006` | obtener el registro comunitario de un caso — la cadena `caso → investigación → comunidad` es uno a uno en los dos saltos |
+| finalClassification | `006` | obtener la clasificación final de un caso — la relación es uno a uno y se entra por el `caseId` |
 | vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
 | catalogItem | `006` | importación masiva desde fichero `.xlsx`, con creación de `catalogType` al vuelo — SUPERADMIN, `POST /import` |
 | systemConfig | `006` | leer por el par `(code, scope)` — la aplicación conoce el nombre del parámetro, no su UUID. `GET /code/:code`, USER |
@@ -299,6 +300,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | diluentCatalog | `DILUENT` |
 | esaviCase | `CASE` |
 | evaluationInstitution | `EVALINST` |
+| finalClassification | `FINCLASS` |
 | geoLevelType | `GEOTYPE` |
 | geoLocation | `GEOLOC` |
 | healthFacility | `HFAC` |
