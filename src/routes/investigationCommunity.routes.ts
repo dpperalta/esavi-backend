@@ -7,6 +7,7 @@ import {
     getInvestigationCommunities,
     getInvestigationCommunityByCaseId,
     getInvestigationCommunityById,
+    purgeInvestigationCommunity,
     updateInvestigationCommunity
 } from '../controllers/investigationCommunity.controller';
 import {
@@ -17,7 +18,7 @@ import {
     updateInvestigationCommunityValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -39,6 +40,13 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationCommuni
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the community
 // record of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationCommunityListValidator, validateFields, getAllInvestigationCommunities);
+
+// Purge Investigation Community - Physical delete, for SuperAdmin
+// Code: ESAVI-INVCOMM-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not have an
+// activity flag and does not manage its own state — its investigation does. This is also the only
+// operation that releases the investigationId
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationCommunityIdValidator, validateFields, purgeInvestigationCommunity);
 
 // Get Investigation Community by Case
 // Code: ESAVI-INVCOMM-006

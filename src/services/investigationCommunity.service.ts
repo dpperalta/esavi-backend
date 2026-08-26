@@ -1,6 +1,7 @@
 import { WhereOptions } from 'sequelize';
+import { sequelize } from '../database/connection';
 import { EsaviCase, Investigation, InvestigationCommunity } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -8,6 +9,7 @@ import {
     InvestigationCommunityListFilters
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { purgeEntityService } from './common/entityPurge.service';
 
 // The investigation travels in every response, narrowed to three fields: what the client needs is to
 // know which case the row hangs from and whether its parent is alive. Returning the whole
@@ -537,4 +539,64 @@ export const updateInvestigationCommunityService = async (
 
     const updated = await findInvestigationCommunityWithRelations(id, true);
     return updated ? toInvestigationCommunityResponse(updated) : null;
+}
+
+// Purging Investigation Community Service - For SuperAdmin
+// Code: ESAVI-INVCOMM-005C
+// investigationCommunity is outside the preventPhysicalDelete loop of esaviapp.sql, so the row can
+// really be destroyed. This is also the only path that releases the investigationId: the logical
+// seal of deletedAt does NOT free the slot of the primary key, so after a 005C a POST over that same
+// investigation answers 201 again. And it drags NOTHING: the table is a leaf of the graph —
+// `grep 'REFERENCES "investigationCommunity"' esaviapp.sql` returns nothing — so there is no cascade
+// to count and no dump of children to write.
+// The existence check runs WITHOUT the inherited visibility, on purpose: whoever purges is
+// SUPERADMIN and the row may well hang from a retired investigation — which is precisely the normal
+// state of something about to be purged.
+// The guard by deletedAt is assertRowIsSealed, shared with investigationSource, investigationAutopsy,
+// investigationMedicalHistory, investigationClinicalEvaluation, investigationVaccinationContext,
+// investigationColdChain, investigationAdministrationError and the two notification satellites: it
+// lives in a helper and not in purgeEntityService, whose isActive check is INERT on this table —
+// `undefined !== true`, so every row would be purgable immediately and the only safety net this
+// table has would be gone. The helper is consumed WITHOUT modifying it: it derives the i18n key
+// investigationCommunity.notDeleted from the table name and the id from the primaryKeyAttribute of
+// the model, so this entity registers nothing anywhere.
+// The dump of the WHOLE row in warn is the one purgeEntityService already writes. Here that deserves
+// a note it did not deserve in F38 or F39: this table holds NO encrypted column either, but it does
+// hold THE HOME COORDINATES OF THE PATIENT, which are the closest thing to a personal datum any
+// satellite of investigation carries. They go to the log in clear because they are stored in clear —
+// esaviCrypt yields text and the columns are numeric(10,7) — and hiding them from the dump would
+// only hide them from whoever audits the purge, not from whoever reads the table
+export const purgeInvestigationCommunityService = async (id: string, authUser: AuthUser | undefined, lang: string) => {
+    const transaction = await sequelize.transaction();
+    try {
+        // paranoid: false, because the row about to be purged is precisely one that a 005A sealed
+        const community = await InvestigationCommunity.findByPk(id, {
+            attributes: ['investigationId', 'deletedAt'],
+            paranoid: false,
+            transaction
+        });
+        if( !community ) {
+            throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_005C_NOT_FOUND');
+        }
+
+        assertRowIsSealed(community, 'INVCOMM_005C_NOT_DELETED', lang);
+
+        await purgeEntityService({
+            model: InvestigationCommunity,
+            where: { investigationId: id },
+            transaction,
+            operationCode: 'ESAVI-INVCOMM-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('investigationCommunity.notFound', lang),
+            notFoundCode: 'INVCOMM_005C_NOT_FOUND',
+            // Unreachable on this table: the generic guard compares isActive, a column
+            // investigationCommunity does not have. The real guard is the one above
+            stillActiveMessage: getMessage('investigationCommunity.notDeleted', lang, { id }),
+            stillActiveCode: 'INVCOMM_005C_NOT_DELETED'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 }

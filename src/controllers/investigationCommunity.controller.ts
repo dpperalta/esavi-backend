@@ -7,6 +7,7 @@ import {
     getInvestigationCommunitiesService,
     getInvestigationCommunityByCaseIdService,
     getInvestigationCommunityByIdService,
+    purgeInvestigationCommunityService,
     updateInvestigationCommunityService
 } from '../services/investigationCommunity.service';
 
@@ -168,11 +169,35 @@ const updateInvestigationCommunity = async (req: Request, res: Response, next: N
     }
 }
 
+// Purge Investigation Community Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-INVCOMM-005C
+// Responds without `data`: the row no longer exists, so there is nothing to return. It is also the
+// only operation of the entity that writes no appDetails entry, which CONVENTIONS.md declares
+// correct — the row is destroyed in the same transaction any audit would have been written into
+const purgeInvestigationCommunity = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeInvestigationCommunityService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationCommunity.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVCOMM-005C: Error purging Investigation Community: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationCommunity.purgeFailed', req.lang), 500, 'INVCOMM_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationCommunity,
     getAllInvestigationCommunities,
     getInvestigationCommunities,
     getInvestigationCommunityByCaseId,
     getInvestigationCommunityById,
+    purgeInvestigationCommunity,
     updateInvestigationCommunity
 }
