@@ -7,6 +7,7 @@ import {
     getInvestigationAdministrationErrorByCaseId,
     getInvestigationAdministrationErrorById,
     getInvestigationAdministrationErrors,
+    purgeInvestigationAdministrationError,
     updateInvestigationAdministrationError
 } from '../controllers/investigationAdministrationError.controller';
 import {
@@ -17,7 +18,7 @@ import {
     updateInvestigationAdministrationErrorValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -40,6 +41,13 @@ router.get('/', tokenValidation, validateUserRole(USER), ...investigationAdminis
 // Declared with the literal paths, before /:id. An ADMIN needs some way of reaching the
 // administration error of a retired investigation
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...investigationAdministrationErrorListValidator, validateFields, getAllInvestigationAdministrationErrors);
+
+// Purge Investigation Administration Error - Physical delete, for SuperAdmin
+// Code: ESAVI-INVADMER-005C
+// Declared with the literal paths, before /:id. The entity has no 005A or 005B: it does not have an
+// activity flag and does not manage its own state — its investigation does. This is also the only
+// operation that releases the investigationId
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationAdministrationErrorIdValidator, validateFields, purgeInvestigationAdministrationError);
 
 // Get Investigation Administration Error by Case
 // Code: ESAVI-INVADMER-006

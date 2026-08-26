@@ -7,6 +7,7 @@ import {
     getInvestigationAdministrationErrorByCaseIdService,
     getInvestigationAdministrationErrorByIdService,
     getInvestigationAdministrationErrorsService,
+    purgeInvestigationAdministrationErrorService,
     updateInvestigationAdministrationErrorService
 } from '../services/investigationAdministrationError.service';
 
@@ -165,11 +166,35 @@ const updateInvestigationAdministrationError = async (req: Request, res: Respons
     }
 }
 
+// Purge Investigation Administration Error Controller - Physical delete, for SuperAdmin
+// Code: ESAVI-INVADMER-005C
+// Responds without `data`: the row no longer exists, so there is nothing to return. It is also the
+// only operation of the entity that writes no appDetails entry, which CONVENTIONS.md declares
+// correct — the row is destroyed in the same transaction any audit would have been written into
+const purgeInvestigationAdministrationError = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        await purgeInvestigationAdministrationErrorService(id.toString().trim(), req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationAdministrationError.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVADMER-005C: Error purging Investigation Administration Error: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationAdministrationError.purgeFailed', req.lang), 500, 'INVADMER_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationAdministrationError,
     getAllInvestigationAdministrationErrors,
     getInvestigationAdministrationErrorByCaseId,
     getInvestigationAdministrationErrorById,
     getInvestigationAdministrationErrors,
+    purgeInvestigationAdministrationError,
     updateInvestigationAdministrationError
 };
