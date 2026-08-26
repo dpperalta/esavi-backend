@@ -1577,42 +1577,104 @@ $$ LANGUAGE plpgsql STABLE;
 -- -----------------------------------------------------------------------------
 -- Minimal seed catalog types and items
 -- -----------------------------------------------------------------------------
-CALL "upsertCatalogItem"('ageUnit', 'Age unit', 'YEARS', 'Years', 'YEARS', 1);
-CALL "upsertCatalogItem"('ageUnit', 'Age unit', 'MONTHS', 'Months', 'MONTHS', 2);
-CALL "upsertCatalogItem"('ageUnit', 'Age unit', 'DAYS', 'Days', 'DAYS', 3);
-CALL "upsertCatalogItem"('sex', 'Sex', 'FEMALE', 'Female', 'FEMALE', 1);
-CALL "upsertCatalogItem"('sex', 'Sex', 'MALE', 'Male', 'MALE', 2);
-CALL "upsertCatalogItem"('sex', 'Sex', 'UNKNOWN', 'Unknown', 'UNKNOWN', 3);
+CALL "upsertCatalogItem"('ageUnit', 'Age unit', '1', 'Años', 'YEARS', 1);
+CALL "upsertCatalogItem"('ageUnit', 'Age unit', '2', 'Meses', 'MONTHS', 2);
+CALL "upsertCatalogItem"('ageUnit', 'Age unit', '3', 'Días', 'DAYS', 3);
+
+CALL "upsertCatalogItem"('sex', 'Sex', '2', 'Femenino', 'FEMALE', 1);
+CALL "upsertCatalogItem"('sex', 'Sex', '1', 'Masculino', 'MALE', 2);
+CALL "upsertCatalogItem"('sex', 'Sex', '3', 'Desconocido', 'UNKNOWN', 3);
+
 CALL "upsertCatalogItem"('healthFacilityType', 'Health facility type', 'HOSPITAL', 'Hospital', 'HOSPITAL', 1);
 CALL "upsertCatalogItem"('healthFacilityType', 'Health facility type', 'HEALTH_CENTER', 'Health center', 'HEALTH_CENTER', 2);
 CALL "upsertCatalogItem"('healthFacilityType', 'Health facility type', 'CLINIC', 'Clinic', 'CLINIC', 3);
 CALL "upsertCatalogItem"('healthFacilityType', 'Health facility type', 'LABORATORY', 'Laboratory', 'LABORATORY', 4);
 CALL "upsertCatalogItem"('healthFacilityType', 'Health facility type', 'VACCINATION_POST', 'Vaccination post', 'VACCINATION_POST', 5);
+
 CALL "upsertCatalogItem"('userStatus', 'User status', 'ACTIVE', 'Active', 'ACTIVE', 1);
 CALL "upsertCatalogItem"('userStatus', 'User status', 'INACTIVE', 'Inactive', 'INACTIVE', 2);
 CALL "upsertCatalogItem"('userStatus', 'User status', 'LOCKED', 'Locked', 'LOCKED', 3);
 CALL "upsertCatalogItem"('userStatus', 'User status', 'PENDING_ACTIVATION', 'Pending activation', 'PENDING_ACTIVATION', 4);
+
 CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '0', 'Desconocido', '0', 0);
 CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '1', 'En Recuperación/resolviendo', '1', 1);
 CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '2', 'Recuperado/resuelto', '2', 2);
 CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '3', 'No Recuperado/no Resuelto', '3', 3);
 CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '4', 'Recuperado/resuelto Con Secuelas', '4', 4);
 CALL "upsertCatalogItem"('investigationStatus', 'Investigation status', '5', 'Fallecido', '5', 5);
-CALL "upsertCatalogItem"('outcome', 'Outcome', 'RECOVERED', 'Recovered', 'RECOVERED', 1);
-CALL "upsertCatalogItem"('outcome', 'Outcome', 'RECOVERING', 'Recovering', 'RECOVERING', 2);
-CALL "upsertCatalogItem"('outcome', 'Outcome', 'NOT_RECOVERED', 'Not recovered', 'NOT_RECOVERED', 3);
-CALL "upsertCatalogItem"('outcome', 'Outcome', 'DEATH', 'Death', 'DEATH', 4);
-CALL "upsertCatalogItem"('administrationRoute', 'Administration route', 'INTRAMUSCULAR', 'Intramuscular', 'INTRAMUSCULAR', 1);
-CALL "upsertCatalogItem"('administrationRoute', 'Administration route', 'SUBCUTANEOUS', 'Subcutaneous', 'SUBCUTANEOUS', 2);
-CALL "upsertCatalogItem"('pharmaceuticalForm', 'Pharmaceutical form', 'SOLUTION', 'Solution', 'SOLUTION', 1);
-CALL "upsertCatalogItem"('pharmaceuticalForm', 'Pharmaceutical form', 'SUSPENSION', 'Suspension', 'SUSPENSION', 2);
+
+CALL "upsertCatalogItem"('outcome', 'Outcome', '1', 'Recuperado/resuelto', 'RECOVERED', 1);
+CALL "upsertCatalogItem"('outcome', 'Outcome', '2', 'Recuperando/resolviendo', 'RECOVERING', 2);
+CALL "upsertCatalogItem"('outcome', 'Outcome', '3', 'Recuperando/resuelto con secuelas', 'RECOVERING_WITH_SEQUELAE', 3);
+CALL "upsertCatalogItem"('outcome', 'Outcome', '4', 'No recuperado/no resuelto', 'NOT_RECOVERED', 4);
+CALL "upsertCatalogItem"('outcome', 'Outcome', '5', 'Fallecido', 'DEATH', 5);
+CALL "upsertCatalogItem"('outcome', 'Outcome', '0', 'Desconocido', 'UNKNOWN', 0);
+--CALL "upsertCatalogItem"('administrationRoute', 'Administration route', 'INTRAMUSCULAR', 'Intramuscular', 'INTRAMUSCULAR', 1);
+--CALL "upsertCatalogItem"('administrationRoute', 'Administration route', 'SUBCUTANEOUS', 'Subcutaneous', 'SUBCUTANEOUS', 2);
+--CALL "upsertCatalogItem"('pharmaceuticalForm', 'Pharmaceutical form', 'SOLUTION', 'Solution', 'SOLUTION', 1);
+--CALL "upsertCatalogItem"('pharmaceuticalForm', 'Pharmaceutical form', 'SUSPENSION', 'Suspension', 'SUSPENSION', 2);
+
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'HOSPITAL', 'Hospital', 'HOSPITAL', 1);
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'HEALTH_CENTER', 'Health center', 'HEALTH_CENTER', 2);
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'LABORATORY', 'Laboratory', 'LABORATORY', 3);
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'PRIVATE_PRACTICE', 'Private practice', 'PRIVATE_PRACTICE', 4);
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'OTHER', 'Other', 'OTHER', 5);
-CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', 'FIRST_HOURS', 'First hours of the session', 'FIRST_HOURS', 1);
-CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', 'LAST_HOURS', 'Last hours of the session', 'LAST_HOURS', 2);
-CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', 'UNKNOWN', 'Unknown', 'UNKNOWN', 3);
+
+CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '1', 'En las primeras horas de la jornada', 'FIRST_HOURS', 1);
+CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '2', 'En las últimas horas de la jornada', 'LAST_HOURS', 2);
+CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '3', 'Desconocido', 'UNKNOWN', 3);
+
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '1', '1', '1', 1);
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '2', '2', '2', 2);
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '3', '3', '3', 3);
+
+CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '1', 'Intramuros - Puesto fijo en establecimiento de salud(Centro de salud, consultorio, Hospital público/privado)', 'INTRAMURAL', 1);
+CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '2', 'Extramuros - Puesto móvil', 'EXTRAMURAL_MOVIL', 2);
+CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '3', 'Extramuros - Semi móvil', 'EXTRAMURAL_SEMI_MOVIL', 3);
+CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '4', 'Extramuros - Campaña', 'EXTRAMURAL_CAMPAIGN', 4);
+CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '5', 'Extramuros - Campaña de seguimiento', 'EXTRAMURAL_FOLLOW_UP', 5);
+CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '6', 'Extramuros - Intensificado', 'EXTRAMURAL_INTENSIFIED', 6);
+CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '7', 'Extramuros - Medidas de control', 'EXTRAMURAL_CONTROL_MEASURES', 7);
+CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '99', 'Otros', 'OTHER', 8);
+
+CALL "upsertCatalogItem"('profession', 'Profession', '1', 'Médico', 'MEDICAL DOCTOR', 1);
+CALL "upsertCatalogItem"('profession', 'Profession', '2', 'Farmacéutico', 'PHARMACIST', 2);
+CALL "upsertCatalogItem"('profession', 'Profession', '3', 'Otro profesional de salud', 'OTHER HEALTHPROFESSIONAL', 3);
+CALL "upsertCatalogItem"('profession', 'Profession', '4', 'Abogado', 'LAWYER', 4);
+CALL "upsertCatalogItem"('profession', 'Profession', '5', 'Usuario u otro profesional sanitario', 'USER', 5);
+CALL "upsertCatalogItem"('profession', 'Profession', '6', 'No definido', 'UNDEFINED', 6);
+--CALL "upsertCatalogItem"('profession', 'Profession', '7', 'Enfermero/a', 'NURSE', 7);
+--CALL "upsertCatalogItem"('profession', 'Profession', '8', 'Técnico de laboratorio', 'LABORATORY TECHNICIAN', 8);
+
+CALL "upsertCatalogItem"('pregnancyOutcome', 'Pregnancy outcome', '1', 'Nacido vivo sano', 'LIVE_BORN_HEALTHY', 1);
+CALL "upsertCatalogItem"('pregnancyOutcome', 'Pregnancy outcome', '2', 'Nacido vivo con afección médica al nacer', 'LIVE_BORN_WITH_COMPLICATIONS', 2);
+CALL "upsertCatalogItem"('pregnancyOutcome', 'Pregnancy outcome', '3', 'Muerte fetal', 'FETAL_DEATH', 3);
+CALL "upsertCatalogItem"('pregnancyOutcome', 'Pregnancy outcome', '4', 'Muerte neonatal temprana', 'EARLY_NEONATAL_DEATH', 4);
+CALL "upsertCatalogItem"('pregnancyOutcome', 'Pregnancy outcome', '5', 'Muerte neonatal tardía', 'LATE_NEONATAL_DEATH', 5);
+CALL "upsertCatalogItem"('pregnancyOutcome', 'Pregnancy outcome', '6', 'Aborto', 'ABORTION', 6);
+CALL "upsertCatalogItem"('pregnancyOutcome', 'Pregnancy outcome', '7', 'En evolución', 'ONGOING', 7);
+
+CALL "upsertCatalogItem"('gestationMethod', 'Gestation Method', '1', 'Examen físico', 'PHYSICAL_EXAM', 1);
+CALL "upsertCatalogItem"('gestationMethod', 'Gestation Method', '2', 'Fecha de última menstruación - Confiable', 'LAST_MENSTRUAL_PERIOD_RELIABLE', 2);
+CALL "upsertCatalogItem"('gestationMethod', 'Gestation Method', '3', 'Fecha de última menstruación - No confiable', 'LAST_MENSTRUAL_PERIOD_UNRELIABLE', 3);
+CALL "upsertCatalogItem"('gestationMethod', 'Gestation Method', '4', 'Ultrasonido de primer trimestre', 'ULTRASOUND_FIRST_TRIMESTER', 4);
+CALL "upsertCatalogItem"('gestationMethod', 'Gestation Method', '5', 'Ultrasonido de segundo trimestre', 'ULTRASOUND_SECOND_TRIMESTER', 5);
+CALL "upsertCatalogItem"('gestationMethod', 'Gestation Method', '6', 'Ultrasonido de tercer trimestre', 'ULTRASOUND_THIRD_TRIMESTER', 6);
+CALL "upsertCatalogItem"('gestationMethod', 'Gestation Method', '7', 'Otro', 'OTHER', 7);
+
+CALL "upsertCatalogItem"('pregnancyComplicationType', 'Pregnancy Complication Type', '1', 'Complicaciones del embarazo, parto o puerperio', 'PREGNANCY_COMPLICATION', 1);
+CALL "upsertCatalogItem"('pregnancyComplicationType', 'Pregnancy Complication Type', '2', 'Anomalías congénitas', 'CONGENITAL_ANOMALY', 2);
+CALL "upsertCatalogItem"('pregnancyComplicationType', 'Pregnancy Complication Type', '3',' Complicaciones fetales o neonatales', 'FETAL_OR_NEONATAL_COMPLICATION', 3);
+
+CALL "upsertCatalogItem"('deliveryType', 'Delivery Type', '1', 'Parto normal', 'NORMAL_DELIVERY', 1);
+CALL "upsertCatalogItem"('deliveryType', 'Delivery Type', '2', 'Cesárea', 'C_SECTION', 2);
+CALL "upsertCatalogItem"('deliveryType', 'Delivery Type', '3', 'Parto instrumentado', 'INSTRUMENTAL_DELIVERY', 3);
+CALL "upsertCatalogItem"('deliveryType', 'Delivery Type', '4', 'Parto con complicaciones', 'COMPLICATED_DELIVERY', 4);
+CALL "upsertCatalogItem"('deliveryType', 'Delivery Type', '5', 'No aplica', 'NOT_APPLICABLE', 5);
+
+CALL "upsertCatalogItem"('birthCondition', 'Birth Condition', '1', 'A término', 'FULL_TERM', 1);
+CALL "upsertCatalogItem"('birthCondition', 'Birth Condition', '2', 'Prematuro', 'PRETERM', 2);
+CALL "upsertCatalogItem"('birthCondition', 'Birth Condition', '3', 'Postérmino', 'POSTTERM', 3);
+CALL "upsertCatalogItem"('birthCondition', 'Birth Condition', '4', 'No aplica', 'NOT_APPLICABLE', 4);
 
 COMMIT;
