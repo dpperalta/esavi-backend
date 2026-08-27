@@ -4,7 +4,7 @@ import request from 'supertest';
 import { DiluentCatalog, EsaviCase, HealthFacility, NotificationDiluent, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
-import { closeTestDatabase } from '../setup/database';
+import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
@@ -80,6 +80,9 @@ describe('notificationDiluent contract', () => {
             reportDate: new Date().toISOString().slice(0, 10),
             eventDate
         });
+        // SPEC F44: the case fixture is built on the model, so it needs its workflow row —
+        // without it every POST of a stage answers 404 CASEFLOW_012_NOT_FOUND
+        await seedCaseWorkflow(esaviCase.getDataValue('caseId'));
         return esaviCase.getDataValue('caseId');
     };
 

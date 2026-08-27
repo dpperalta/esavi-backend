@@ -4,7 +4,7 @@ import request from 'supertest';
 import { CatalogItem, CatalogType, EsaviCase, FinalClassification, HealthFacility, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
-import { closeTestDatabase } from '../setup/database';
+import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
@@ -67,6 +67,9 @@ describe('finalClassification contract', () => {
             eventDate: '2024-05-04',
             isActive
         });
+        // SPEC F44: the case fixture is built on the model, so it needs its workflow row —
+        // without it every POST of a stage answers 404 CASEFLOW_012_NOT_FOUND
+        await seedCaseWorkflow(esaviCase.getDataValue('caseId'));
         return esaviCase.getDataValue('caseId');
     };
 

@@ -2,7 +2,7 @@ import request from 'supertest';
 import { DiagnosticTerm, EsaviCase, HealthFacility, Notification, NotificationEvent, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
-import { closeTestDatabase } from '../setup/database';
+import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
@@ -63,6 +63,9 @@ describe('notificationEvent contract', () => {
             reportDate: new Date().toISOString().slice(0, 10),
             eventDate: '2024-05-04'
         });
+        // SPEC F44: the case fixture is built on the model, so it needs its workflow row —
+        // without it every POST of a stage answers 404 CASEFLOW_012_NOT_FOUND
+        await seedCaseWorkflow(esaviCase.getDataValue('caseId'));
         return esaviCase.getDataValue('caseId');
     };
 
