@@ -25,13 +25,14 @@ import {
 } from './appSession.service';
 import {
     createPasswordResetService,
-    invalidateUserPasswordResetsService
+    invalidateUserPasswordResetsService,
+    resolvePasswordResetService
 } from './appPasswordReset.service';
 import { sendMailService } from './common/mail.service';
 import { renderEmailTemplate } from '../helpers/mailer.helper';
 import { getAppConfigString } from '../helpers/appConfig.helper';
 import { sequelize } from '../database/connection';
-import { AppDetails, LoginOutput, SessionTokenPair } from '../types';
+import { AppDetails, LoginOutput, ResetPasswordInput, SessionTokenPair } from '../types';
 import { PASSWORD_RESET_SCOPE, PASSWORD_RESET_URL_CODE } from '../constants/passwordReset.constants';
 import { REFRESH_ABSOLUTE_MAX_IN_MS, REFRESH_TOKEN_EXPIRES_IN_MS } from '../constants/session.constants';
 
@@ -413,10 +414,102 @@ const forgotPasswordService = async ( email: string, lang: string, meta: LoginRe
     }
 }
 
+// ESAVI-AUTH-007 - Reset Password Service
+/**
+ * Consumes a reset token and writes the new password.
+ *
+ * ESAVI-PWDRESET-006 has already run the seven checks of §3.5 and this service repeats none of
+ * them: it either received a live row and its owner, or it never got here. The resolution runs
+ * OUTSIDE the transaction on purpose, because step 4 of those checks — replay of a consumed
+ * token — writes an invalidation that must survive the rejection it answers with.
+ *
+ * Past that point the four writes are ONE transaction, all or nothing:
+ *
+ *   1. `appUser`: the new hash and `requiresPasswordChange` to false, with its audit entry
+ *   2. the consumed row: `usedAt`
+ *   3. every other live request of the user: ESAVI-PWDRESET-007 with `SUPERSEDED`
+ *   4. every live session: ESAVI-SESSION-007 with `PASSWORD_RESET`
+ *
+ * The fourth is the reason SPEC F43 depends hard on SPEC F42: a password reset because the owner
+ * lost control of the account, with the attacker's sessions still open, resets nothing.
+ *
+ * THE NEW PASSWORD IS NOT COMPARED AGAINST THE CURRENT ONE, deliberately against what
+ * ESAVI-USER-006 does with its 409 SAME_PASSWORD. There the check stops an empty change from
+ * clearing `requiresPasswordChange`; here whoever arrives with a valid token is circumventing
+ * nothing, and the extra `bcrypt.compare` would only tell them — or whoever holds their link —
+ * that they guessed the password in force.
+ */
+const resetPasswordService = async ( data: ResetPasswordInput, lang: string ): Promise<void> => {
+    const { token, newPassword } = data;
+
+    // The seven checks. Anything wrong throws a 401 from here, before a transaction is opened —
+    // which is what makes criterion 24 true: a rejected token invalidates nothing and revokes
+    // nothing
+    const { reset, user } = await resolvePasswordResetService( token, lang );
+
+    const currentAppDetails = Array.isArray( user.appDetails ) ? user.appDetails : [];
+    const consumedAt = new Date();
+    const newEntry: AppDetails = {
+        createdAt: consumedAt,
+        // The actor is the owner of the account: a self-service reset has no third party
+        user: user.userId,
+        method: 'ESAVI-AUTH-007',
+        detail: 'Password reset by self-service link'
+    };
+
+    const transaction = await sequelize.transaction();
+    try {
+        await user.update({
+            passwordHash: await bcrypt.hash( newPassword, 10 ),
+            // The new password was chosen by its owner, so nothing is imposed any more. Its value
+            // is fixed by the fact of the write, never by the body: the validator rejects the key
+            requiresPasswordChange: false,
+            appDetails: [
+                ...currentAppDetails,
+                newEntry
+            ]
+        }, { transaction });
+
+        const resetAppDetails = Array.isArray( reset.appDetails ) ? reset.appDetails : [];
+        await reset.update({
+            usedAt: consumedAt,
+            updatedAt: consumedAt,
+            appDetails: [
+                ...resetAppDetails,
+                {
+                    createdAt: consumedAt,
+                    user: user.userId,
+                    method: 'ESAVI-AUTH-007',
+                    detail: 'Password reset token consumed'
+                }
+            ]
+        }, { transaction });
+
+        // Any other link still in a mailbox stops working the moment this one is spent
+        await invalidateUserPasswordResetsService( user.userId, 'SUPERSEDED', lang, transaction );
+
+        // ESAVI-SESSION-007. The trigger is the effective write above, never the presence of
+        // `token` in the body: a reset that never reached the update revokes nothing, because it
+        // threw before getting here
+        await revokeAllUserSessionsService( user.userId, 'PASSWORD_RESET', lang, transaction );
+
+        await transaction.commit();
+    } catch ( error ) {
+        await transaction.rollback();
+        // The token is deliberately absent from this line: it is a live credential
+        esaviLog(`ESAVI-AUTH-007 - Error resetting the password for user ${ user.userId }: ${ error }`, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(getMessage('auth.resetPasswordFailed', lang), 500, 'AUTH_007_RESET_PASSWORD_FAILED', error);
+    }
+}
+
 export {
     loginService,
     refreshTokenService,
     logoutService,
     logoutAllService,
-    forgotPasswordService
+    forgotPasswordService,
+    resetPasswordService
 }

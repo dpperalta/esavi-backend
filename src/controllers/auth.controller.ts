@@ -1,5 +1,12 @@
 import { NextFunction, Request, Response } from 'express';
-import { loginService, refreshTokenService, logoutService, logoutAllService, forgotPasswordService } from '../services/auth.service';
+import {
+    loginService,
+    refreshTokenService,
+    logoutService,
+    logoutAllService,
+    forgotPasswordService,
+    resetPasswordService
+} from '../services/auth.service';
 import { esaviLog, getMessage, AppError } from '../helpers';
 
 // Execute login process
@@ -121,10 +128,35 @@ const forgotPassword = async( req: Request, res: Response, next: NextFunction ):
     }
 }
 
+// Consume a reset token and write the new password
+// Code: ESAVI-AUTH-007
+const resetPassword = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try{
+        // The credential is the token in the body, and the service checks it against
+        // `appPasswordReset`. The controller verifies nothing about it
+        await resetPasswordService(req.body, req.lang);
+        // No `data`: the new password does not come back, neither does the user, and no session
+        // token is issued — after resetting, the client goes to the login like anybody else
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('auth.resetPasswordSuccess', req.lang)
+        });
+    } catch( error ) {
+        // The token is deliberately absent from this line: it is a live credential
+        esaviLog('ESAVI-AUTH-007 - Error during reset password process: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('auth.resetPasswordFailed', req.lang), 500, 'AUTH_007_RESET_PASSWORD_FAILED', error));
+    }
+}
+
 export {
     login,
     refresh,
     logout,
     logoutAll,
-    forgotPassword
+    forgotPassword,
+    resetPassword
 }
