@@ -8,7 +8,9 @@ import {
     getCaseWorkflowByCaseIdService,
     getCaseWorkflowByIdService,
     getCaseWorkflowsService,
-    reopenCaseWorkflowService
+    reopenCaseWorkflowService,
+    requestCaseWorkflowValidationService,
+    resolveCaseWorkflowValidationService
 } from '../services/caseWorkflow.service';
 
 // The four query filters of 002A and 002B. Only what actually arrives travels to the service, so
@@ -203,6 +205,56 @@ const reopenCaseWorkflow = async (req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Request Case Workflow Validation Controller
+// Code: ESAVI-CASEFLOW-010
+const requestCaseWorkflowValidation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await requestCaseWorkflowValidationService(
+            caseId.toString().trim(),
+            req.user as AuthUser,
+            req.lang
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.validationRequestedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-010: Error requesting Case Workflow validation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.validationRequestedFailed', req.lang), 500, 'CASEFLOW_010_REQUEST_FAILED', error));
+    }
+}
+
+// Resolve Case Workflow Validation Controller
+// Code: ESAVI-CASEFLOW-011
+const resolveCaseWorkflowValidation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await resolveCaseWorkflowValidationService(
+            caseId.toString().trim(),
+            req.user as AuthUser,
+            req.lang
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.validationResolvedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-011: Error resolveing Case Workflow validation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.validationResolvedFailed', req.lang), 500, 'CASEFLOW_011_RESOLVE_FAILED', error));
+    }
+}
+
 export {
     getCaseWorkflows,
     getAllCaseWorkflows,
@@ -210,5 +262,7 @@ export {
     getCaseWorkflowByCaseId,
     completeCaseWorkflowStage,
     closeCaseWorkflow,
-    reopenCaseWorkflow
+    reopenCaseWorkflow,
+    requestCaseWorkflowValidation,
+    resolveCaseWorkflowValidation
 }

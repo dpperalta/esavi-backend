@@ -8,7 +8,9 @@ import {
     getCaseWorkflowByCaseId,
     getCaseWorkflowById,
     getCaseWorkflows,
-    reopenCaseWorkflow
+    reopenCaseWorkflow,
+    requestCaseWorkflowValidation,
+    resolveCaseWorkflowValidation
 } from '../controllers/caseWorkflow.controller';
 import {
     caseWorkflowCaseIdValidator,
@@ -60,6 +62,17 @@ router.patch('/case/:caseId/close', tokenValidation, validateUserRole(USER), ...
 // ADMIN. Increments reopenCount and stamps lastReopenedAt; closedAt is NOT cleared. REOPENED is
 // transitory — the next call to 012 takes the file out of it
 router.patch('/case/:caseId/reopen', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowCaseIdValidator, validateFields, reopenCaseWorkflow);
+
+// Request Case Workflow Validation
+// Code: ESAVI-CASEFLOW-010
+// Saves the current status in previousStatusItemId and moves to PENDING_VALIDATION
+router.patch('/case/:caseId/request-validation', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, requestCaseWorkflowValidation);
+
+// Resolve Case Workflow Validation
+// Code: ESAVI-CASEFLOW-011
+// Restores previousStatusItemId and clears it. Entering and leaving are two facts, two codes
+// and two audit entries — never one endpoint that toggles
+router.patch('/case/:caseId/resolve-validation', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, resolveCaseWorkflowValidation);
 
 // Get Case Workflow by ID
 // Code: ESAVI-CASEFLOW-003

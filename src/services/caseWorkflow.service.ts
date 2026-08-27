@@ -777,6 +777,113 @@ const reopenCaseWorkflowService = async (
     }
 }
 
+// ESAVI-CASEFLOW-010 - Request Case Workflow Validation Service
+/**
+ * Flags the file as needing review before it goes any further.
+ *
+ * `PENDING_VALIDATION` is **reversible**, and `previousStatusItemId` is the whole mechanism: it
+ * keeps the status the request was made from, and 011 restores it. It can be asked for from any
+ * open state.
+ *
+ * Entering and leaving are two different facts, so they are two operations with two codes and two
+ * audit entries — not one endpoint that toggles depending on the state. A toggle would save an
+ * endpoint at the cost of the operation code no longer saying what was attempted, which is exactly
+ * what it exists for.
+ */
+const requestCaseWorkflowValidationService = async (
+    caseId: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    try {
+        const workflow = await findWorkflowForTransition(caseId, '010', lang);
+
+        if( workflow.status?.code === STATUS.PENDING_VALIDATION ) {
+            throw new AppError(getMessage('caseWorkflow.alreadyPending', lang), 409, 'CASEFLOW_010_ALREADY_PENDING');
+        }
+
+        if( workflow.status?.code === STATUS.CLOSED ) {
+            throw new AppError(getMessage('caseWorkflow.caseClosed', lang), 409, 'CASEFLOW_010_CASE_CLOSED');
+        }
+
+        const pendingStatus = await resolveStatusItem(STATUS.PENDING_VALIDATION, '010', lang);
+
+        await workflow.update({
+            previousStatusItemId: workflow.statusItemId,
+            statusItemId: pendingStatus.catalogItemId,
+            appDetails: appendAuditEntry(workflow, '010', 'Case validation requested', authUser)
+        });
+
+        const updated = await findCaseWorkflowByCaseId(caseId);
+        return updated ? toCaseWorkflowResponse(updated) : null;
+    } catch ( error ) {
+        esaviLog(`[ERROR]: ESAVI-CASEFLOW-010 - Error requesting validation for case ${ caseId }: ${ error }`, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(
+            getMessage('caseWorkflow.validationRequestedFailed', lang),
+            500,
+            'CASEFLOW_010_REQUEST_FAILED',
+            error
+        );
+    }
+}
+
+// ESAVI-CASEFLOW-011 - Resolve Case Workflow Validation Service
+/**
+ * Takes the file out of `PENDING_VALIDATION`, back to where it actually is.
+ *
+ * The status restored is `previousStatusItemId`, which 010 wrote and which 012 keeps up to date
+ * while the validation is pending: a file that advanced two stages during the review comes back
+ * to the stage it reached, not to the one it was in when somebody asked for the review.
+ *
+ * A NULL `previousStatusItemId` here answers **500** with its own code. It is a data inconsistency
+ * that 010 makes impossible, and failing loudly beats inventing a status to return the file to.
+ */
+const resolveCaseWorkflowValidationService = async (
+    caseId: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    try {
+        const workflow = await findWorkflowForTransition(caseId, '011', lang);
+
+        if( workflow.status?.code !== STATUS.PENDING_VALIDATION ) {
+            throw new AppError(getMessage('caseWorkflow.notPending', lang), 409, 'CASEFLOW_011_NOT_PENDING');
+        }
+
+        const previousStatusItemId = workflow.previousStatusItemId;
+        if( !previousStatusItemId ) {
+            throw new AppError(
+                getMessage('caseWorkflow.previousStatusMissing', lang),
+                500,
+                'CASEFLOW_011_PREVIOUS_STATUS_MISSING'
+            );
+        }
+
+        await workflow.update({
+            statusItemId: previousStatusItemId,
+            previousStatusItemId: null,
+            appDetails: appendAuditEntry(workflow, '011', 'Case validation resolved', authUser)
+        });
+
+        const updated = await findCaseWorkflowByCaseId(caseId);
+        return updated ? toCaseWorkflowResponse(updated) : null;
+    } catch ( error ) {
+        esaviLog(`[ERROR]: ESAVI-CASEFLOW-011 - Error resolving validation for case ${ caseId }: ${ error }`, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(
+            getMessage('caseWorkflow.validationResolvedFailed', lang),
+            500,
+            'CASEFLOW_011_RESOLVE_FAILED',
+            error
+        );
+    }
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -904,6 +1011,8 @@ export {
     completeCaseWorkflowStageService,
     closeCaseWorkflowService,
     reopenCaseWorkflowService,
+    requestCaseWorkflowValidationService,
+    resolveCaseWorkflowValidationService,
     advanceCaseWorkflowStageService,
     toCaseWorkflowResponse,
     DETAIL_INCLUDE,
