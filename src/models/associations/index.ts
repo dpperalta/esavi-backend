@@ -1,5 +1,6 @@
 import { initAuthAssociations } from './auth.associations';
 import { initAppSessionAssociations } from './appSession.associations';
+import { initAppPasswordResetAssociations } from './appPasswordReset.associations';
 import { initCatalogAssociations } from './catalog.associations';
 import { initGeographicAssociations } from './geographic.associations';
 import { initHealthFacilityAssociations } from './healthFacility.associations';
@@ -36,6 +37,7 @@ import { initSystemConfigAssociations } from './systemConfig.associations';
 export const initAssociations = (): void => {
     initAuthAssociations();
     initAppSessionAssociations();
+    initAppPasswordResetAssociations();
     initGeographicAssociations();
     initCatalogAssociations();
     initHealthFacilityAssociations();
