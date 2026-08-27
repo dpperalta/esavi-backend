@@ -1,5 +1,6 @@
 export * from './user/index';
 export * from './session/index';
+export * from './auth/index';
 export * from './geography/index';
 export * from './common/index';
 export * from './catalog/index';
