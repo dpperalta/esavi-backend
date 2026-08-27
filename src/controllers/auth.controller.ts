@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { loginService, refreshTokenService, logoutService, logoutAllService } from '../services/auth.service';
+import { loginService, refreshTokenService, logoutService, logoutAllService, forgotPasswordService } from '../services/auth.service';
 import { esaviLog, getMessage, AppError } from '../helpers';
 
 // Execute login process
@@ -92,9 +92,39 @@ const logoutAll = async( req: Request, res: Response, next: NextFunction ): Prom
     }
 }
 
+// Request a password reset link
+// Code: ESAVI-AUTH-006
+const forgotPassword = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try{
+        // Trace of where the request came from. Both come from the request, never from the body:
+        // a client must not be able to declare the IP or the User-Agent of its own request
+        await forgotPasswordService(req.body.email, req.lang, {
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent']
+        });
+        // THE SAME ANSWER IN EVERY CASE — account or no account, delivery or no delivery. No
+        // `data`: there is nothing to return, and anything returned would tell the two paths
+        // apart. The message is written in the conditional for the same reason
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('auth.forgotPasswordSuccess', req.lang)
+        });
+    } catch( error ) {
+        // Only a failure to WRITE the request reaches here. A failure to deliver it was already
+        // logged by the service and answered 200
+        esaviLog('ESAVI-AUTH-006 - Error during forgot password process: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('auth.forgotPasswordFailed', req.lang), 500, 'AUTH_006_FORGOT_PASSWORD_FAILED', error));
+    }
+}
+
 export {
     login,
     refresh,
     logout,
-    logoutAll
+    logoutAll,
+    forgotPassword
 }

@@ -1,8 +1,8 @@
 import { Router } from 'express';
 
-import { login, logout, logoutAll, refresh }  from '../controllers/auth.controller';
-import { loginValidator, refreshTokenValidator } from '../validators';
-import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
+import { forgotPassword, login, logout, logoutAll, refresh }  from '../controllers/auth.controller';
+import { forgotPasswordValidator, loginValidator, refreshTokenValidator } from '../validators';
+import { validateFields, tokenValidation, validateUserRole, passwordResetLimiter } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
 const router = Router();
@@ -35,5 +35,15 @@ router.post('/logout-all', tokenValidation, validateUserRole(ROLES.USER), logout
 // is needed. The credential is the refresh token in the body, and the service checks it against
 // `appSession`. SPEC F42 3.4
 router.post('/refresh', ...refreshTokenValidator, validateFields, refresh);
+
+
+// Request Password Reset
+// Code: ESAVI-AUTH-006
+// POST: /api/auth/forgot-password
+// Public, and here that means without a previous credential: whoever calls it cannot authenticate,
+// which is the problem it solves. The limiter goes FIRST on purpose — five requests per IP every
+// 15 minutes, against the 100 of the global one — because a limiter that runs after the validators
+// has already paid the cost it exists to avoid. SPEC F43 3.4
+router.post('/forgot-password', passwordResetLimiter, ...forgotPasswordValidator, validateFields, forgotPassword);
 
 export default router;

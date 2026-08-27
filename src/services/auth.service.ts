@@ -23,7 +23,16 @@ import {
     revokeAllUserSessionsService,
     revokeAppSessionService
 } from './appSession.service';
+import {
+    createPasswordResetService,
+    invalidateUserPasswordResetsService
+} from './appPasswordReset.service';
+import { sendMailService } from './common/mail.service';
+import { renderEmailTemplate } from '../helpers/mailer.helper';
+import { getAppConfigString } from '../helpers/appConfig.helper';
+import { sequelize } from '../database/connection';
 import { AppDetails, LoginOutput, SessionTokenPair } from '../types';
+import { PASSWORD_RESET_SCOPE, PASSWORD_RESET_URL_CODE } from '../constants/passwordReset.constants';
 import { REFRESH_ABSOLUTE_MAX_IN_MS, REFRESH_TOKEN_EXPIRES_IN_MS } from '../constants/session.constants';
 
 interface LoginInput {
@@ -312,9 +321,102 @@ const logoutAllService = async ( userId: string, lang: string ): Promise<{ revok
     }
 }
 
+// ESAVI-AUTH-006 - Forgot Password Service
+/**
+ * Opens a password reset request and emails the link that consumes it.
+ *
+ * THE OPERATION RETURNS NOTHING AND FAILS AT NOTHING THE CLIENT CAN SEE. Whether the account
+ * exists, whether it is active, whether SMTP answered — none of it changes the response, because
+ * any difference turns this endpoint into an inventory of the health personnel of the
+ * installation. §3.5 spells the three halves of that decision:
+ *
+ *   - No user: the operation ends, having written nothing and sent nothing. The address is NOT
+ *     logged either — a log line naming it is the same inventory by another door.
+ *   - A user: invalidating the previous requests and opening the new one share ONE transaction.
+ *     Leaving the old ones alive because the new one failed is exactly the state the rule "only
+ *     the last link works" exists to prevent.
+ *   - The email goes out AFTER the commit, never inside the transaction. A send inside a
+ *     transaction that later rolls back leaves a link in the inbox with no row behind it — a
+ *     token that does not exist. Write, commit, send.
+ *
+ * A failed delivery is an `error` log line and still a 200. The timing difference between the two
+ * paths is the enumeration risk §7 declares open and does not close.
+ */
+const forgotPasswordService = async ( email: string, lang: string, meta: LoginRequestMeta = {} ): Promise<void> => {
+    // Normalized exactly like the login does, and for the same reason: the column holds the
+    // ciphertext, so an address typed in uppercase produces a different one
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await AppUser.findOne({
+        where: {
+            email: esaviCrypt( normalizedEmail ),
+            isActive: true
+        }
+    });
+
+    if ( !user ) {
+        // No personal data: not the address, not a hash of it, not its domain
+        esaviLog('ESAVI-AUTH-006 - Password reset requested for an address with no active account', 'info');
+        return;
+    }
+
+    const userId = user.getDataValue('userId');
+
+    // The transaction opens here and not at the top: everything above is a read
+    const transaction = await sequelize.transaction();
+    let resetToken;
+    try {
+        // ESAVI-PWDRESET-007 first: only the last link sent may work
+        await invalidateUserPasswordResetsService( userId, 'SUPERSEDED', lang, transaction );
+        resetToken = await createPasswordResetService({
+            userId,
+            requestedIp: toInetOrNull( meta.ipAddress ),
+            requestedUserAgent: toUserAgentOrNull( meta.userAgent )
+        }, lang, transaction );
+        await transaction.commit();
+    } catch ( error ) {
+        await transaction.rollback();
+        esaviLog('ESAVI-AUTH-006 - Error opening the password reset request: ' + error, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(getMessage('auth.forgotPasswordFailed', lang), 500, 'AUTH_006_FORGOT_PASSWORD_FAILED', error);
+    }
+
+    // Everything below is outside the transaction and outside the client's view: a delivery that
+    // fails is logged and the answer stays 200
+    try {
+        const resetUrl = await getAppConfigString( PASSWORD_RESET_URL_CODE, PASSWORD_RESET_SCOPE, lang );
+        const expiresInMinutes = Math.max(
+            1,
+            Math.round( ( resetToken.expiresAt.getTime() - Date.now() ) / 60000 )
+        );
+
+        // The language is req.lang: `appUser` has no preferred-language column, so whoever asks
+        // from an English browser gets an English email even if they use the app in Spanish
+        const rendered = renderEmailTemplate('passwordReset', lang, {
+            displayName: esaviDecrypt( user.getDataValue('displayName') ),
+            resetUrl: `${ resetUrl }?token=${ resetToken.token }`,
+            expiresInMinutes: `${ expiresInMinutes }`
+        });
+
+        await sendMailService({
+            to: normalizedEmail,
+            subject: getMessage('auth.passwordResetEmailSubject', lang),
+            html: rendered.html,
+            text: rendered.text
+        }, lang );
+    } catch ( error ) {
+        // The link is deliberately absent from this line: it is a live credential, and §3.3
+        // keeps it out of every log in every environment
+        esaviLog(`ESAVI-AUTH-006 - Error sending the password reset email for user ${ userId }: ${ error }`, 'error');
+    }
+}
+
 export {
     loginService,
     refreshTokenService,
     logoutService,
-    logoutAllService
+    logoutAllService,
+    forgotPasswordService
 }
