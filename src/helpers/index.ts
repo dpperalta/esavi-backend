@@ -3,6 +3,7 @@ export * from './appError.helper';
 export * from './appConfig.helper';
 export * from './catalogItemParser.helper';
 export * from './jwt.helper';
+export * from './mailer.helper';
 export * from './esaviLogs.helper';
 export * from './i18n.helper';
 export * from './crypto.helper';
