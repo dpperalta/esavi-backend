@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    closeCaseWorkflow,
     completeCaseWorkflowStage,
     getAllCaseWorkflows,
     getCaseWorkflowByCaseId,
@@ -46,6 +47,12 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...caseWork
 // Code: ESAVI-CASEFLOW-007
 // Seals the end of one stage. It does NOT move the status — that is what 012 does
 router.patch('/case/:caseId/complete-stage', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, ...completeCaseWorkflowStageValidator, validateFields, completeCaseWorkflowStage);
+
+// Close Case Workflow
+// Code: ESAVI-CASEFLOW-008
+// Verifies the four stage preconditions, seals closedAt and moves the status to CLOSED. This is
+// how a case file is finished; 005A only retires the workflow RECORD from view
+router.patch('/case/:caseId/close', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, closeCaseWorkflow);
 
 // Get Case Workflow by ID
 // Code: ESAVI-CASEFLOW-003

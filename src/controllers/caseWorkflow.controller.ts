@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser, CaseWorkflowListFilters, CaseWorkflowStage } from '../types';
 import {
+    closeCaseWorkflowService,
     completeCaseWorkflowStageService,
     getAllCaseWorkflowsService,
     getCaseWorkflowByCaseIdService,
@@ -148,10 +149,38 @@ const completeCaseWorkflowStage = async (req: Request, res: Response, next: Next
     }
 }
 
+// Close Case Workflow Controller
+// Code: ESAVI-CASEFLOW-008
+// Closing the file is NOT the same as deactivating the workflow record, which is 005A. The i18n
+// keys of the two are worded apart on purpose so nobody confuses them
+const closeCaseWorkflow = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await closeCaseWorkflowService(
+            caseId.toString().trim(),
+            req.user as AuthUser,
+            req.lang
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.closedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-008: Error closing Case Workflow: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.closedFailed', req.lang), 500, 'CASEFLOW_008_CLOSE_FAILED', error));
+    }
+}
+
 export {
     getCaseWorkflows,
     getAllCaseWorkflows,
     getCaseWorkflowById,
     getCaseWorkflowByCaseId,
-    completeCaseWorkflowStage
+    completeCaseWorkflowStage,
+    closeCaseWorkflow
 }

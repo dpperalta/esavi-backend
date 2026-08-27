@@ -605,6 +605,134 @@ const completeCaseWorkflowStageService = async (
     }
 }
 
+// ESAVI-CASEFLOW-008 - Close Case Workflow Service
+/**
+ * Closes the case file.
+ *
+ * Closing is a **decision somebody takes**, not a fact deduced from which rows exist — which is
+ * the whole reason this table had to be created. Before writing it, the service checks the four
+ * stage preconditions of §3.5:
+ *
+ * | Stage                | Required when                                                        |
+ * |----------------------|----------------------------------------------------------------------|
+ * | classification       | always                                                               |
+ * | notification         | always                                                               |
+ * | investigation        | `notification.requestInvestigation === true`                          |
+ * | finalClassification  | `isSeriousEvent === true` **or** `requestInvestigation === true`       |
+ *
+ * All four look at **active** rows of the case, unlike the `exists` of §3.7, which counts a
+ * deactivated stage as present: `exists` answers "would a POST collide?", these answer "was this
+ * step of the process actually done?", and a retired row did not do it.
+ *
+ * Seriousness is read from `classification.isSeriousEvent`, where the user declares it, and a
+ * NULL counts as not serious. `notification.notificationType` is deliberately not the source:
+ * it is declared one step later, and making the close depend on data posterior to what originates
+ * it inverts the flow. The two can contradict each other and the schema does not stop them — the
+ * spec records that risk and leaves unifying them to a correction over F09 and F10.
+ */
+const closeCaseWorkflowService = async (
+    caseId: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    try {
+        const workflow = await findWorkflowForTransition(caseId, '008', lang);
+
+        if( workflow.status?.code === STATUS.CLOSED ) {
+            throw new AppError(getMessage('caseWorkflow.alreadyClosed', lang), 409, 'CASEFLOW_008_ALREADY_CLOSED');
+        }
+
+        // Closing a case somebody sent for review without resolving it empties the state of any
+        // meaning: the reviewer would find the file already shut
+        if( workflow.status?.code === STATUS.PENDING_VALIDATION ) {
+            throw new AppError(getMessage('caseWorkflow.pendingValidation', lang), 409, 'CASEFLOW_008_PENDING_VALIDATION');
+        }
+
+        const activeOfCase = { where: { caseId, isActive: true } };
+        const [classification, notification, investigation, finalClassification] = await Promise.all([
+            Classification.findOne({ ...activeOfCase, attributes: ['classificationId', 'isSeriousEvent'] }),
+            Notification.findOne({ ...activeOfCase, attributes: ['notificationId', 'requestInvestigation'] }),
+            Investigation.findOne({ ...activeOfCase, attributes: ['investigationId'] }),
+            FinalClassification.findOne({ ...activeOfCase, attributes: ['finalClassificationId'] })
+        ]);
+
+        if( !classification ) {
+            throw new AppError(
+                getMessage('caseWorkflow.classificationRequired', lang),
+                409,
+                'CASEFLOW_008_CLASSIFICATION_REQUIRED'
+            );
+        }
+
+        if( !notification ) {
+            throw new AppError(
+                getMessage('caseWorkflow.notificationRequired', lang),
+                409,
+                'CASEFLOW_008_NOTIFICATION_REQUIRED'
+            );
+        }
+
+        const investigationRequested = notification.requestInvestigation === true;
+        // A NULL is treated as not serious: the classifier who never marked it did not declare a
+        // serious event, and reading the absence as a yes would block every ordinary close
+        const isSeriousEvent = classification.isSeriousEvent === true;
+
+        if( investigationRequested && !investigation ) {
+            throw new AppError(
+                getMessage('caseWorkflow.investigationRequired', lang),
+                409,
+                'CASEFLOW_008_INVESTIGATION_REQUIRED'
+            );
+        }
+
+        // The two conditions are an OR and cover the four combinations agreed in §3.5: a serious
+        // case is formally classified even if it was never investigated, and a non-serious one
+        // that WAS investigated drags its final classification along
+        if( ( isSeriousEvent || investigationRequested ) && !finalClassification ) {
+            throw new AppError(
+                getMessage('caseWorkflow.finalClassificationRequired', lang),
+                409,
+                'CASEFLOW_008_FINAL_CLASSIFICATION_REQUIRED'
+            );
+        }
+
+        const closedStatus = await resolveStatusItem(STATUS.CLOSED, '008', lang);
+        const now = new Date();
+        const changes: Record<string, unknown> = {
+            closedAt: now,
+            statusItemId: closedStatus.catalogItemId,
+            previousStatusItemId: null
+        };
+
+        // The last stage still open is sealed with the same instant, for the same reason as in
+        // 012: no stamp is left orphaned and every duration stays computable. Only the last one —
+        // sealing them all would invent an end for phases the file may never have entered
+        for( let index = STAGES.length - 1; index >= 0; index-- ) {
+            const stage = STAGES[index];
+            const startedAt = stampOf(workflow, startedAtField(stage));
+            const endedAt = stampOf(workflow, endedAtField(stage));
+            if( startedAt && !endedAt ) {
+                changes[endedAtField(stage)] = now;
+                break;
+            }
+        }
+
+        await workflow.update({
+            ...changes,
+            appDetails: appendAuditEntry(workflow, '008', 'Case file closed', authUser)
+        });
+
+        const updated = await findCaseWorkflowByCaseId(caseId);
+        return updated ? toCaseWorkflowResponse(updated) : null;
+    } catch ( error ) {
+        esaviLog(`[ERROR]: ESAVI-CASEFLOW-008 - Error closing case ${ caseId }: ${ error }`, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(getMessage('caseWorkflow.closedFailed', lang), 500, 'CASEFLOW_008_CLOSE_FAILED', error);
+    }
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -730,6 +858,7 @@ export {
     getCaseWorkflowByIdService,
     getCaseWorkflowByCaseIdService,
     completeCaseWorkflowStageService,
+    closeCaseWorkflowService,
     advanceCaseWorkflowStageService,
     toCaseWorkflowResponse,
     DETAIL_INCLUDE,
