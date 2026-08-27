@@ -3,10 +3,11 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     getAllCaseWorkflows,
+    getCaseWorkflowByCaseId,
     getCaseWorkflowById,
     getCaseWorkflows
 } from '../controllers/caseWorkflow.controller';
-import { caseWorkflowIdValidator, caseWorkflowListValidator } from '../validators';
+import { caseWorkflowCaseIdValidator, caseWorkflowIdValidator, caseWorkflowListValidator } from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -28,6 +29,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...caseWorkflowListVali
 // Code: ESAVI-CASEFLOW-002B
 // Declared before /:id so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowListValidator, validateFields, getAllCaseWorkflows);
+
+// Get Case Workflow by Case
+// Code: ESAVI-CASEFLOW-006
+// The call a client resumes a file with: status, stamps and the identity of the four stages in a
+// single request. Declared before /:id so Express does not capture 'case' as an :id
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, getCaseWorkflowByCaseId);
 
 // Get Case Workflow by ID
 // Code: ESAVI-CASEFLOW-003

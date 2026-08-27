@@ -3,6 +3,7 @@ import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser, CaseWorkflowListFilters } from '../types';
 import {
     getAllCaseWorkflowsService,
+    getCaseWorkflowByCaseIdService,
     getCaseWorkflowByIdService,
     getCaseWorkflowsService
 } from '../services/caseWorkflow.service';
@@ -87,8 +88,37 @@ const getCaseWorkflowById = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+// Get Case Workflow By Case ID Controller
+// Code: ESAVI-CASEFLOW-006
+// The real query of the domain: the client holds the caseId, not the caseWorkflowId, and has
+// never seen the latter. It returns the record itself and not { count, rows } — the relation is
+// one to one, and wrapping a single record in a collection would force unwrapping a list of one
+const getCaseWorkflowByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await getCaseWorkflowByCaseIdService(
+            caseId.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-006: Error fetching Case Workflow by case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.getFailed', req.lang), 500, 'CASEFLOW_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     getCaseWorkflows,
     getAllCaseWorkflows,
-    getCaseWorkflowById
+    getCaseWorkflowById,
+    getCaseWorkflowByCaseId
 }

@@ -202,18 +202,23 @@ const STAGE_SATELLITE: Record<CaseWorkflowStage, { alias: string; primaryKey: st
  * The four satellites, nested under the `case` include and narrowed to their primary key.
  *
  * `required: false` in all four, or a case with no classification would vanish from the listing
- * altogether. `deletedAt: null` is the only filter: a **deactivated** stage still counts as
- * existing and keeps its `id`, because its row is still there and a POST would hit the UNIQUE —
- * what the client needs then is to reactivate it with its 005B, not to create it again.
+ * altogether.
+ *
+ * **There is no filter at all, and that is the point.** A deactivated stage counts as existing and
+ * keeps its `id`: its row is still there and a POST would hit the UNIQUE, so what the client needs
+ * then is to reactivate it with its 005B, not to create it again. Filtering by `isActive` — or by
+ * `deletedAt IS NULL`, which the soft delete of 005A writes together with it — would hide exactly
+ * the row §3.7 wants shown, and send the client into a 409 it cannot explain. Only a physical
+ * delete makes the `id` disappear, and these four tables do not allow one.
  *
  * This is one include and not four `findOne` per row, so the number of queries does not grow with
  * the page size.
  */
 const STAGE_INCLUDES = [
-    { model: Classification, as: 'classification', attributes: ['classificationId'], where: { deletedAt: null }, required: false },
-    { model: Notification, as: 'notification', attributes: ['notificationId'], where: { deletedAt: null }, required: false },
-    { model: Investigation, as: 'investigation', attributes: ['investigationId'], where: { deletedAt: null }, required: false },
-    { model: FinalClassification, as: 'finalClassification', attributes: ['finalClassificationId'], where: { deletedAt: null }, required: false }
+    { model: Classification, as: 'classification', attributes: ['classificationId'], required: false },
+    { model: Notification, as: 'notification', attributes: ['notificationId'], required: false },
+    { model: Investigation, as: 'investigation', attributes: ['investigationId'], required: false },
+    { model: FinalClassification, as: 'finalClassification', attributes: ['finalClassificationId'], required: false }
 ];
 
 const CASE_INCLUDE = {
@@ -446,6 +451,45 @@ const getCaseWorkflowByIdService = async (id: string, lang: string, canViewInact
     return toCaseWorkflowResponse(workflow);
 }
 
+// ESAVI-CASEFLOW-006 - Get Case Workflow By Case ID Service
+/**
+ * The workflow of a case, entered through the `caseId`.
+ *
+ * **This is the call a client resumes a file with.** Together with the status and the stamps it
+ * resolves the primary key of the four stages (`exists` and `id`, §3.7), so one request is enough
+ * to know which step to continue at and whether each stage is created with a POST or updated with
+ * a PUT. The four satellites are resolved by the same `include` that loads the workflow, so it is
+ * one round trip and not five.
+ *
+ * **Two distinct 404s, on purpose.** `CASEFLOW_006_CASE_NOT_FOUND` means the case does not exist;
+ * `CASEFLOW_006_NOT_FOUND` means it exists but has no workflow row, which only happens for cases
+ * created before this spec. That second one is the symptom the backfill will have to resolve, and
+ * folding them into a single code would hide it.
+ *
+ * The lookup needs no LIMIT beyond findOne: UQ_caseWorkflow_case guarantees there is at most one
+ * row per case.
+ */
+const getCaseWorkflowByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+    const where = canViewInactive ? { caseId } : { caseId, isActive: true };
+
+    // The case lookup and the workflow lookup go together: the first one is what tells the two
+    // 404s apart, and neither depends on the other's result
+    const [esaviCase, workflow] = await Promise.all([
+        EsaviCase.findOne({ where: { caseId }, attributes: ['caseId'] }),
+        CaseWorkflow.findOne({ where, include: DETAIL_INCLUDE })
+    ]);
+
+    if( !esaviCase ) {
+        throw new AppError(getMessage('caseWorkflow.caseNotFound', lang), 404, 'CASEFLOW_006_CASE_NOT_FOUND');
+    }
+
+    if( !workflow ) {
+        throw new AppError(getMessage('caseWorkflow.notFound', lang), 404, 'CASEFLOW_006_NOT_FOUND');
+    }
+
+    return toCaseWorkflowResponse(workflow);
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -569,6 +613,7 @@ export {
     getCaseWorkflowsService,
     getAllCaseWorkflowsService,
     getCaseWorkflowByIdService,
+    getCaseWorkflowByCaseIdService,
     advanceCaseWorkflowStageService,
     toCaseWorkflowResponse,
     DETAIL_INCLUDE,
