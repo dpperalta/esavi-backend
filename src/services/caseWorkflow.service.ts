@@ -422,6 +422,30 @@ const getAllCaseWorkflowsService = async (
     return { count, rows: rows.map(toCaseWorkflowResponse) };
 }
 
+// ESAVI-CASEFLOW-003 - Get Case Workflow By ID Service
+/**
+ * The canonical read, by `caseWorkflowId`.
+ *
+ * Inactive rows are only visible to whoever passes `canViewInactive`; for everyone else they are
+ * a 404, exactly as if they did not exist. Note that `isActive` is the state of the **workflow
+ * record** — what 005A and 005B move — and has nothing to do with whether the case file is
+ * closed, which is `status`.
+ */
+const getCaseWorkflowByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+    const where = canViewInactive ? { caseWorkflowId: id } : { caseWorkflowId: id, isActive: true };
+
+    const workflow = await CaseWorkflow.findOne({
+        where,
+        include: DETAIL_INCLUDE
+    });
+
+    if( !workflow ) {
+        throw new AppError(getMessage('caseWorkflow.notFound', lang), 404, 'CASEFLOW_003_NOT_FOUND');
+    }
+
+    return toCaseWorkflowResponse(workflow);
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -544,6 +568,7 @@ export {
     createCaseWorkflowService,
     getCaseWorkflowsService,
     getAllCaseWorkflowsService,
+    getCaseWorkflowByIdService,
     advanceCaseWorkflowStageService,
     toCaseWorkflowResponse,
     DETAIL_INCLUDE,

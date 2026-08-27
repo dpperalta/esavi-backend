@@ -3,9 +3,10 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     getAllCaseWorkflows,
+    getCaseWorkflowById,
     getCaseWorkflows
 } from '../controllers/caseWorkflow.controller';
-import { caseWorkflowListValidator } from '../validators';
+import { caseWorkflowIdValidator, caseWorkflowListValidator } from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -27,5 +28,11 @@ router.get('/', tokenValidation, validateUserRole(USER), ...caseWorkflowListVali
 // Code: ESAVI-CASEFLOW-002B
 // Declared before /:id so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowListValidator, validateFields, getAllCaseWorkflows);
+
+// Get Case Workflow by ID
+// Code: ESAVI-CASEFLOW-003
+// Declared AFTER every literal path so Express does not capture 'admin' as an :id. The :id is
+// the caseWorkflowId, which is why the 006 by case is not redundant with this one
+router.get('/:id', tokenValidation, validateUserRole(USER), ...caseWorkflowIdValidator, validateFields, getCaseWorkflowById);
 
 export default router;

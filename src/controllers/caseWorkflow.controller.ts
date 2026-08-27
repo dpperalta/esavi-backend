@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
-import { CaseWorkflowListFilters } from '../types';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser, CaseWorkflowListFilters } from '../types';
 import {
     getAllCaseWorkflowsService,
+    getCaseWorkflowByIdService,
     getCaseWorkflowsService
 } from '../services/caseWorkflow.service';
 
@@ -61,7 +62,33 @@ const getAllCaseWorkflows = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+// Get Case Workflow By ID Controller
+// Code: ESAVI-CASEFLOW-003
+const getCaseWorkflowById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { id } = req.params;
+    try {
+        const data = await getCaseWorkflowByIdService(
+            id.toString().trim(),
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-003: Error fetching Case Workflow: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.getFailed', req.lang), 500, 'CASEFLOW_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     getCaseWorkflows,
-    getAllCaseWorkflows
+    getAllCaseWorkflows,
+    getCaseWorkflowById
 }
