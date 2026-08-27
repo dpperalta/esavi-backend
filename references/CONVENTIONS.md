@@ -185,6 +185,14 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | investigationAdministrationError | `006` | obtener el error de administración de un caso — la cadena `caso → investigación → error` es uno a uno en los dos saltos |
 | investigationCommunity | `006` | obtener el registro comunitario de un caso — la cadena `caso → investigación → comunidad` es uno a uno en los dos saltos |
 | finalClassification | `006` | obtener la clasificación final de un caso — la relación es uno a uno y se entra por el `caseId` |
+| caseWorkflow | `001` | crear el flujo de un caso en `OPEN`. **Sin ruta HTTP:** servicio interno que `ESAVI-CASE-001` invoca dentro de su transacción |
+| caseWorkflow | `006` | obtener el flujo de un caso — la relación es uno a uno y se entra por el `caseId`; resuelve además `exists` e `id` de las cuatro etapas |
+| caseWorkflow | `007` | cerrar una etapa — sella el `endedAt` de la etapa que viaja en el body y no toca el estado |
+| caseWorkflow | `008` | cerrar el caso — verifica las precondiciones de etapa, sella `closedAt` y pasa el estado a `CLOSED` |
+| caseWorkflow | `009` | reabrir el caso — ADMIN, incrementa `reopenCount` y sella `lastReopenedAt`; `closedAt` no se borra |
+| caseWorkflow | `010` | pedir validación — guarda el estado actual en `previousStatusItemId` y pasa a `PENDING_VALIDATION` |
+| caseWorkflow | `011` | resolver validación — restaura `previousStatusItemId` y lo deja en `null` |
+| caseWorkflow | `012` | avanzar de etapa — sella el inicio de la etapa nueva y el fin de la anterior. **Sin ruta HTTP:** lo invocan los cuatro servicios de creación de etapa dentro de su transacción |
 | vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
 | catalogItem | `006` | importación masiva desde fichero `.xlsx`, con creación de `catalogType` al vuelo — SUPERADMIN, `POST /import` |
 | systemConfig | `006` | leer por el par `(code, scope)` — la aplicación conoce el nombre del parámetro, no su UUID. `GET /code/:code`, USER |
@@ -201,6 +209,8 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 `appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4).
 
 `auth` salta el `005`: en el canon esa cifra significa siempre borrado o activación, y reciclarla para un restablecimiento haría que buscar `ESAVI-AUTH-005` en el log devolviera algo que no es ninguna de las tres. `appPasswordReset` toma `006` y `007` por la misma razón que `appSession` — resolver e invalidar no son ninguna de las siete canónicas, y la tabla no tiene `isActive`. Una solicitud de restablecimiento no se reactiva — se pide otra (SPEC F43 §3.4).
+
+`caseWorkflow` es la entidad que más números no canónicos toma —`006` a `012`— y a la vez la única que **no tiene `004` ni `005C`**. Ninguna de sus columnas la escribe un humano: los sellos los ponen `012` y `007`, el estado lo mueven las transiciones y `reopenCount` es un contador, así que un `PUT` solo podría corromper la fila. El `005C` falta porque la tabla entra en `preventPhysicalDelete`. Las dos ausencias son deliberadas y el checklist de §15 no debe marcarlas (SPEC F44 §3.4).
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
@@ -304,6 +314,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | appRole | `APPROLE` |
 | appUserGeoLocation | `USERGEO` |
 | appUserRole | `USERROLE` |
+| caseWorkflow | `CASEFLOW` |
 | catalogItem | `CATITEM` |
 | catalogType | `CATTYPE` |
 | classification | `CLASSIF` |

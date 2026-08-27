@@ -3,7 +3,7 @@ import path from 'path';
 import { Client } from 'pg';
 import { QueryTypes } from 'sequelize';
 import { sequelize } from '../../src/database/connection';
-import { initModels } from '../../src/models';
+import { initModels, CaseWorkflow, CatalogItem, CatalogType } from '../../src/models';
 import { ROLES, ROLE_LEVELS } from '../../src/constants/roles.constants';
 import { encryptSystemConfigValue } from '../../src/helpers/systemConfigValue.helper';
 import { syncSystemConfigDefaultsService } from '../../src/services/systemConfig.service';
@@ -224,6 +224,45 @@ const openTestConnection = async (): Promise<void> => {
 }
 
 /**
+ * Opens the workflow row of a case fixture, in `OPEN` (SPEC F44).
+ *
+ * Every case created through `ESAVI-CASE-001` gets its workflow inside the same transaction, so
+ * in production the row always exists. The contract suites build their cases straight on the
+ * model to keep the fixture cheap, which leaves them looking exactly like a case created **before**
+ * SPEC F44 — and `ESAVI-CASEFLOW-012` answers those with 404 `CASEFLOW_012_NOT_FOUND`, as §3.5
+ * mandates. This helper restores the invariant for the fixture without weakening that 404, which
+ * is the symptom the backfill of the future spec will have to diagnose.
+ *
+ * Call it right after `EsaviCase.create(...)` in any fixture whose case later reaches a POST of
+ * classification, notification, investigation or final classification.
+ */
+const seedCaseWorkflow = async (caseId: string): Promise<void> => {
+    const openStatus = await CatalogItem.findOne({
+        where: { code: 'OPEN', isActive: true },
+        include: [{
+            model: CatalogType,
+            as: 'catalogType',
+            where: { code: 'caseWorkflowStatus' },
+            attributes: []
+        }]
+    });
+
+    if( !openStatus ) {
+        throw new Error(
+            'The caseWorkflowStatus catalog is not seeded. esaviapp.sql must load before this suite.'
+        );
+    }
+
+    await CaseWorkflow.create({
+        caseId,
+        statusItemId: openStatus.getDataValue('catalogItemId'),
+        openedAt: new Date(),
+        reopenCount: 0,
+        appDetails: []
+    });
+}
+
+/**
  * Closes the pool so Jest exits without open handles.
  */
 const closeTestDatabase = async (): Promise<void> => {
@@ -238,5 +277,6 @@ export {
     seedSystemConfig,
     setupTestDatabase,
     openTestConnection,
+    seedCaseWorkflow,
     closeTestDatabase
 }

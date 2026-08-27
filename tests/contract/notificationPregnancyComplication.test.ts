@@ -14,7 +14,7 @@ import {
 } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
-import { closeTestDatabase } from '../setup/database';
+import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import es from '../../src/data/i18n/es.json';
@@ -134,6 +134,9 @@ describe('notificationPregnancyComplication contract', () => {
             reportDate: new Date().toISOString().slice(0, 10),
             eventDate: '2026-12-31'
         });
+        // SPEC F44: the case fixture is built on the model, so it needs its workflow row —
+        // without it every POST of a stage answers 404 CASEFLOW_012_NOT_FOUND
+        await seedCaseWorkflow(esaviCase.getDataValue('caseId'));
         const notification = await request(app).post('/api/notifications').set(authHeader('USER')).send({
             caseId: esaviCase.getDataValue('caseId'),
             notificationType: 'NON_SEVERE',

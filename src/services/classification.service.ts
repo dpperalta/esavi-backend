@@ -15,6 +15,7 @@ import {
 import { AppDetails, AuthUser, ClassificationListFilters, CreateClassificationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { advanceCaseWorkflowStageService } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the three age units. Without this check any active
@@ -240,28 +241,45 @@ const createClassificationService = async (data: CreateClassificationInput, auth
         method: 'ESAVI-CLASSIF-001',
         detail: 'Classification created by service'
     };
-    // The nine booleans keep the tri-state: what does not arrive is stored null, never false.
-    // Only the two free texts are normalized — this entity has neither `code` nor `name`
-    const newClassification = await Classification.create({
-        caseId: data.caseId,
-        age,
-        ageUnitItemId,
-        firstConsultationDate: data.firstConsultationDate ?? null,
-        isSeriousEvent,
-        causedDeath: data.causedDeath ?? null,
-        causedDisability: data.causedDisability ?? null,
-        causedCongenitalAnomaly: data.causedCongenitalAnomaly ?? null,
-        causedFetalDeath: data.causedFetalDeath ?? null,
-        causedLifeThreatening: data.causedLifeThreatening ?? null,
-        causedHospitalization: data.causedHospitalization ?? null,
-        causedAbortion: data.causedAbortion ?? null,
-        causedOtherCondition: data.causedOtherCondition ?? null,
-        otherSeriousConditionDescription: data.otherSeriousConditionDescription
-            ? data.otherSeriousConditionDescription.trim() : null,
-        notes: data.notes ? data.notes.trim() : null,
-        isActive: data.isActive !== undefined ? data.isActive : true,
-        appDetails: [newEntry]
-    });
+    // Two dependent writes since SPEC F44 — the classification row and the stamp
+    // ESAVI-CASEFLOW-012 puts on the workflow — so this service is transactional. A case whose
+    // workflow cannot be advanced does not get a classification either
+    const transaction = await sequelize.transaction();
+    let newClassification: Classification;
+    try {
+        // The nine booleans keep the tri-state: what does not arrive is stored null, never false.
+        // Only the two free texts are normalized — this entity has neither `code` nor `name`
+        newClassification = await Classification.create({
+            caseId: data.caseId,
+            age,
+            ageUnitItemId,
+            firstConsultationDate: data.firstConsultationDate ?? null,
+            isSeriousEvent,
+            causedDeath: data.causedDeath ?? null,
+            causedDisability: data.causedDisability ?? null,
+            causedCongenitalAnomaly: data.causedCongenitalAnomaly ?? null,
+            causedFetalDeath: data.causedFetalDeath ?? null,
+            causedLifeThreatening: data.causedLifeThreatening ?? null,
+            causedHospitalization: data.causedHospitalization ?? null,
+            causedAbortion: data.causedAbortion ?? null,
+            causedOtherCondition: data.causedOtherCondition ?? null,
+            otherSeriousConditionDescription: data.otherSeriousConditionDescription
+                ? data.otherSeriousConditionDescription.trim() : null,
+            notes: data.notes ? data.notes.trim() : null,
+            isActive: data.isActive !== undefined ? data.isActive : true,
+            appDetails: [newEntry]
+        }, { transaction });
+
+        // ESAVI-CASEFLOW-012: seals classificationStartedAt and moves the file to
+        // IN_CLASSIFICATION. It throws 409 CASEFLOW_012_CASE_CLOSED over a closed case, and the
+        // rollback is what guarantees no classification row survives that 409
+        await advanceCaseWorkflowStageService(data.caseId, 'CLASSIFICATION', authUser, lang, transaction);
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 
     // Re-read so the response carries the resolved case and ageUnit, not their ids
     const createdClassification = await findClassificationWithRelations(newClassification.classificationId, true);

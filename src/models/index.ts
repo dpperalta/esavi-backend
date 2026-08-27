@@ -41,6 +41,7 @@ import { InvestigationAdministrationError } from './investigationAdministrationE
 import { InvestigationCommunity } from './investigationCommunity.model';
 import { FinalClassification } from './finalClassification.model';
 import { EvaluationInstitution } from './evaluationInstitution.model';
+import { CaseWorkflow } from './caseWorkflow.model';
 import { SystemConfig } from './systemConfig.model';
 import { SystemConfigHistory } from './systemConfigHistory.model';
 
@@ -91,6 +92,7 @@ export {
     InvestigationCommunity,
     FinalClassification,
     EvaluationInstitution,
+    CaseWorkflow,
     SystemConfig,
     SystemConfigHistory
 };

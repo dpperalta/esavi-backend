@@ -1,6 +1,6 @@
 # SPEC F44 — Flujo del expediente ESAVI (`caseWorkflow`)
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F06 (`esaviCase` — dependencia dura, la fila nace dentro de su `001`), SPEC F09 (`classification`), SPEC F10 (`notification`), SPEC F12 (update diferencial), SPEC F28 (`investigation`), SPEC F41 (`finalClassification`), **SPEC F43 (`appPasswordReset`) — dependencia de orden, no técnica: se implementa antes que este spec** (ver §1)
 > **Fecha:** 2026-08-26
 > **Objetivo:** Dar de alta `caseWorkflow` —la 47ª tabla del DDL— para registrar en qué punto del proceso está cada expediente, cuánto duró cada etapa, y permitir cerrarlo y reabrirlo.

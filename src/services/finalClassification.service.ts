@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { advanceCaseWorkflowStageService } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the three precedence values, seeded with three items of
@@ -280,26 +281,42 @@ const createFinalClassificationService = async (
         method: 'ESAVI-FINCLASS-001',
         detail: 'Final classification created by service'
     };
-    // The eight booleans keep the tri-state: what does not arrive is stored null, never false.
-    // Only notes is normalized — this entity has neither `code` nor `name`. The minimum create is
-    // { caseId } and it answers 201 with the twelve data columns null: the row opens as a pending
-    // verdict and is completed by PUT
-    const newFinalClassification = await FinalClassification.create({
-        caseId: data.caseId,
-        importanceAItemId: data.importanceAItemId ?? null,
-        importanceBItemId: data.importanceBItemId ?? null,
-        importanceCItemId: data.importanceCItemId ?? null,
-        aIsRelatedToVaccineProduct: data.aIsRelatedToVaccineProduct ?? null,
-        aIsRelatedToQualityDeviation: data.aIsRelatedToQualityDeviation ?? null,
-        aIsRelatedToProgrammaticError: data.aIsRelatedToProgrammaticError ?? null,
-        aIsRelatedToStress: data.aIsRelatedToStress ?? null,
-        bIsConsistentTemporalRelation: data.bIsConsistentTemporalRelation ?? null,
-        bHasDeterminantFactor: data.bHasDeterminantFactor ?? null,
-        cHasCoincidentCause: data.cHasCoincidentCause ?? null,
-        dIsUnclassifiable: data.dIsUnclassifiable ?? null,
-        notes: data.notes ? data.notes.trim() : null,
-        appDetails: [newEntry]
-    });
+    // Two dependent writes since SPEC F44 — the final classification row and the stamp
+    // ESAVI-CASEFLOW-012 puts on the workflow — so this service is transactional. A case whose
+    // workflow cannot be advanced does not get a final classification either
+    const transaction = await sequelize.transaction();
+    let newFinalClassification: FinalClassification;
+    try {
+        // The eight booleans keep the tri-state: what does not arrive is stored null, never false.
+        // Only notes is normalized — this entity has neither `code` nor `name`. The minimum create
+        // is { caseId } and it answers 201 with the twelve data columns null: the row opens as a
+        // pending verdict and is completed by PUT
+        newFinalClassification = await FinalClassification.create({
+            caseId: data.caseId,
+            importanceAItemId: data.importanceAItemId ?? null,
+            importanceBItemId: data.importanceBItemId ?? null,
+            importanceCItemId: data.importanceCItemId ?? null,
+            aIsRelatedToVaccineProduct: data.aIsRelatedToVaccineProduct ?? null,
+            aIsRelatedToQualityDeviation: data.aIsRelatedToQualityDeviation ?? null,
+            aIsRelatedToProgrammaticError: data.aIsRelatedToProgrammaticError ?? null,
+            aIsRelatedToStress: data.aIsRelatedToStress ?? null,
+            bIsConsistentTemporalRelation: data.bIsConsistentTemporalRelation ?? null,
+            bHasDeterminantFactor: data.bHasDeterminantFactor ?? null,
+            cHasCoincidentCause: data.cHasCoincidentCause ?? null,
+            dIsUnclassifiable: data.dIsUnclassifiable ?? null,
+            notes: data.notes ? data.notes.trim() : null,
+            appDetails: [newEntry]
+        }, { transaction });
+
+        // ESAVI-CASEFLOW-012: seals finalClassificationStartedAt, closes the investigation stage
+        // if it was left open and moves the file to IN_FINAL_CLASSIFICATION
+        await advanceCaseWorkflowStageService(data.caseId, 'FINAL_CLASSIFICATION', authUser, lang, transaction);
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 
     // Re-read so the response carries the resolved case and the three importances, not their ids
     const createdFinalClassification = await findFinalClassificationWithRelations(

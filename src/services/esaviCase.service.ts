@@ -7,6 +7,7 @@ import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
 import { cascadeSealSatellite } from './common/satelliteCascade.service';
+import { createCaseWorkflowService } from './caseWorkflow.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -136,9 +137,10 @@ const assertHealthFacilityIsValid = async (healthFacilityId: string, op: string,
 // by healthFacilityId instead would reopen that hole, and it is redundant anyway — localCode is
 // UNIQUE, so the prefix already names one facility, which is exactly what UQ_esaviCase_caseCode
 // protects
-const nextCaseSequence = async (codePrefix: string): Promise<number> => {
+const nextCaseSequence = async (codePrefix: string, transaction?: Transaction): Promise<number> => {
     const maxCaseCode = await EsaviCase.max<string | null, EsaviCase>('caseCode', {
-        where: { caseCode: { [Op.like]: `${ codePrefix }%` } }
+        where: { caseCode: { [Op.like]: `${ codePrefix }%` } },
+        transaction
     });
     if( !maxCaseCode ) return 1;
     const suffix = String(maxCaseCode).split('-').pop();
@@ -156,6 +158,10 @@ const isCaseCodeCollision = (error: unknown): boolean =>
 // caseCode is generated here and never received: whatever the client sent under that name is
 // ignored without an error. If the client chose it, two operators would compete for the same
 // code and the 409 would land on whoever arrived second, for a mistake they did not make
+// Two dependent writes since SPEC F44, so it is transactional: the case and the workflow row of
+// ESAVI-CASEFLOW-001 are born together or not at all. That is the only way to sustain the
+// invariant "every case created after F44 has a workflow", which the 006 of caseWorkflow and the
+// four stage services lean on. A failure opening the workflow leaves no case behind
 const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: AuthUser | undefined, lang: string) => {
     // Resolved here and not left to the DEFAULT current_date of the table, so the row and the
     // response agree on the same value
@@ -198,22 +204,45 @@ const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: Auth
 
     const codePrefix = caseCodePrefix(localCode, registrationDate);
 
+    const transaction = await sequelize.transaction();
     let newEsaviCase: EsaviCase | null = null;
-    for( let attempt = 1; attempt <= CASE_CODE_MAX_ATTEMPTS; attempt++ ) {
-        const sequence = await nextCaseSequence(codePrefix);
-        const caseCode = formatCaseCode(localCode, registrationDate, sequence);
-        try {
-            newEsaviCase = await EsaviCase.create({ ...values, caseCode });
-            break;
-        } catch (error) {
-            if( !isCaseCodeCollision(error) ) throw error;
-            if( attempt === CASE_CODE_MAX_ATTEMPTS ) {
-                throw new AppError(getMessage('esaviCase.caseCodeExists', lang), 409, 'CASE_001_CODE_EXISTS', error);
+    try {
+        for( let attempt = 1; attempt <= CASE_CODE_MAX_ATTEMPTS; attempt++ ) {
+            const sequence = await nextCaseSequence(codePrefix, transaction);
+            const caseCode = formatCaseCode(localCode, registrationDate, sequence);
+            try {
+                // Each attempt runs inside its own SAVEPOINT. Without it the UNIQUE violation of a
+                // colliding code would abort the enclosing transaction, and the retry — which is
+                // the whole point of the loop — would die with "current transaction is aborted"
+                newEsaviCase = await sequelize.transaction(
+                    { transaction },
+                    async (savepoint) => await EsaviCase.create({ ...values, caseCode }, { transaction: savepoint })
+                );
+                break;
+            } catch (error) {
+                if( !isCaseCodeCollision(error) ) throw error;
+                if( attempt === CASE_CODE_MAX_ATTEMPTS ) {
+                    throw new AppError(getMessage('esaviCase.caseCodeExists', lang), 409, 'CASE_001_CODE_EXISTS', error);
+                }
             }
         }
+
+        // ESAVI-CASEFLOW-001, inside the same unit of work. It does not check that the case
+        // exists — it is being created right here — and it is the reason this service opens a
+        // transaction at all
+        if( newEsaviCase ) {
+            await createCaseWorkflowService({ caseId: newEsaviCase.caseId }, authUser, lang, transaction);
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
     }
 
-    // Re-read so the response carries the resolved patient and facility, not just their ids
+    // Re-read so the response carries the resolved patient and facility, not just their ids. It
+    // runs after the commit, outside the transaction, and the HTTP contract of the 001 does not
+    // change: the response carries no workflow data
     const createdEsaviCase = newEsaviCase ? await findEsaviCaseWithRelations(newEsaviCase.caseId, true) : null;
     return createdEsaviCase ? toEsaviCaseResponse(createdEsaviCase) : null;
 }

@@ -41,6 +41,7 @@ import investigationColdChainRoutes from './investigationColdChain.routes';
 import investigationAdministrationErrorRoutes from './investigationAdministrationError.routes';
 import investigationCommunityRoutes from './investigationCommunity.routes';
 import finalClassificationRoutes from './finalClassification.routes';
+import caseWorkflowRoutes from './caseWorkflow.routes';
 import systemConfigRoutes from './systemConfig.routes';
 
 const router = Router();
@@ -137,6 +138,11 @@ router.use('/investigation-communities', investigationCommunityRoutes);
 // The causality verdict of the WHO/PAHO algorithm — the fifth and last satellite of esaviCase,
 // and the only entity of the series whose conditional flag closes a block instead of opening it
 router.use('/final-classifications', finalClassificationRoutes);
+
+// The administrative progress of the case file: which point of the process each case is at, how
+// long each stage took, and whether it is closed. It is NOT the clinical outcome of the patient,
+// which lives in investigation.statusItemId
+router.use('/case-workflows', caseWorkflowRoutes);
 
 router.use('/system-configs', systemConfigRoutes);
 

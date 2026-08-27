@@ -5,6 +5,7 @@ import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../help
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { advanceCaseWorkflowStageService } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the outcomes. Without this check any active catalogItem of
@@ -196,25 +197,41 @@ const createNotificationService = async (data: CreateNotificationInput, authUser
         method: 'ESAVI-NOTIFCN-001',
         detail: 'Notification created by service'
     };
-    // The four tri-state fields keep their null: what does not arrive is stored null, never
-    // NO_ANSWER and never false. requestInvestigation is the exception — the DDL gave it a
-    // DEFAULT false, which is the table saying that here "not informed" and "no" are the same.
-    // Only the two free texts are normalized: this entity has neither `code` nor `name`
-    const newNotification = await Notification.create({
-        caseId: data.caseId,
-        notificationType: data.notificationType,
-        esaviDescription: data.esaviDescription.trim(),
-        hasRelevantMedicalHistory: data.hasRelevantMedicalHistory ?? null,
-        takesMedication: data.takesMedication ?? null,
-        outcomeItemId: data.outcomeItemId ?? null,
-        requestInvestigation: data.requestInvestigation ?? false,
-        deathDate: data.deathDate ?? null,
-        autopsyRequested: data.autopsyRequested ?? null,
-        verbalAutopsyPerformed: data.verbalAutopsyPerformed ?? null,
-        notes: data.notes ? data.notes.trim() : null,
-        isActive: data.isActive !== undefined ? data.isActive : true,
-        appDetails: [newEntry]
-    });
+    // Two dependent writes since SPEC F44 — the notification row and the stamp
+    // ESAVI-CASEFLOW-012 puts on the workflow — so this service is transactional. A case whose
+    // workflow cannot be advanced does not get a notification either
+    const transaction = await sequelize.transaction();
+    let newNotification: Notification;
+    try {
+        // The four tri-state fields keep their null: what does not arrive is stored null, never
+        // NO_ANSWER and never false. requestInvestigation is the exception — the DDL gave it a
+        // DEFAULT false, which is the table saying that here "not informed" and "no" are the same.
+        // Only the two free texts are normalized: this entity has neither `code` nor `name`
+        newNotification = await Notification.create({
+            caseId: data.caseId,
+            notificationType: data.notificationType,
+            esaviDescription: data.esaviDescription.trim(),
+            hasRelevantMedicalHistory: data.hasRelevantMedicalHistory ?? null,
+            takesMedication: data.takesMedication ?? null,
+            outcomeItemId: data.outcomeItemId ?? null,
+            requestInvestigation: data.requestInvestigation ?? false,
+            deathDate: data.deathDate ?? null,
+            autopsyRequested: data.autopsyRequested ?? null,
+            verbalAutopsyPerformed: data.verbalAutopsyPerformed ?? null,
+            notes: data.notes ? data.notes.trim() : null,
+            isActive: data.isActive !== undefined ? data.isActive : true,
+            appDetails: [newEntry]
+        }, { transaction });
+
+        // ESAVI-CASEFLOW-012: seals notificationStartedAt, closes the classification stage if it
+        // was left open and moves the file to IN_NOTIFICATION
+        await advanceCaseWorkflowStageService(data.caseId, 'NOTIFICATION', authUser, lang, transaction);
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 
     // Re-read so the response carries the resolved case and outcome, not their ids
     const createdNotification = await findNotificationWithRelations(newNotification.notificationId, true);

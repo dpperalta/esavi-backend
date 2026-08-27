@@ -10,6 +10,7 @@ import {
     VACCINATION_SITE_CATALOG_CODE
 } from '../constants/investigation.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { advanceCaseWorkflowStageService } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { cascadeClearSatellite, cascadeSealSatellite } from './common/satelliteCascade.service';
 import { clinicalEvaluationLogSnapshot } from './investigationClinicalEvaluation.service';
@@ -265,23 +266,40 @@ const createInvestigationService = async (data: CreateInvestigationInput, authUs
         method: 'ESAVI-INVESTGN-001',
         detail: 'Investigation created by service'
     };
-    // Only notes is normalized — this entity has neither `code` nor `name`, so neither
-    // toConstantCase nor toTitleCase apply. Every other field is stored as it arrived, with an
-    // absent one becoming null: all the data columns of the table are nullable
-    const newInvestigation = await Investigation.create({
-        caseId: data.caseId,
-        statusItemId,
-        vaccinationSiteItemId: data.vaccinationSiteItemId ?? null,
-        vaccinationHealthFacilityId: data.vaccinationHealthFacilityId ?? null,
-        vaccinationGeoLocationId: data.vaccinationGeoLocationId ?? null,
-        hospitalizationDate: data.hospitalizationDate ?? null,
-        investigationStartDate: data.investigationStartDate ?? null,
-        vaccinationLatitude: data.vaccinationLatitude ?? null,
-        vaccinationLongitude: data.vaccinationLongitude ?? null,
-        notes: data.notes ? data.notes.trim() : null,
-        isActive: data.isActive !== undefined ? data.isActive : true,
-        appDetails: [newEntry]
-    });
+    // Two dependent writes since SPEC F44 — the investigation row and the stamp
+    // ESAVI-CASEFLOW-012 puts on the workflow — so this service is transactional. A case whose
+    // workflow cannot be advanced does not get an investigation either
+    const transaction = await sequelize.transaction();
+    let newInvestigation: Investigation;
+    try {
+        // Only notes is normalized — this entity has neither `code` nor `name`, so neither
+        // toConstantCase nor toTitleCase apply. Every other field is stored as it arrived, with an
+        // absent one becoming null: all the data columns of the table are nullable
+        newInvestigation = await Investigation.create({
+            caseId: data.caseId,
+            statusItemId,
+            vaccinationSiteItemId: data.vaccinationSiteItemId ?? null,
+            vaccinationHealthFacilityId: data.vaccinationHealthFacilityId ?? null,
+            vaccinationGeoLocationId: data.vaccinationGeoLocationId ?? null,
+            hospitalizationDate: data.hospitalizationDate ?? null,
+            investigationStartDate: data.investigationStartDate ?? null,
+            vaccinationLatitude: data.vaccinationLatitude ?? null,
+            vaccinationLongitude: data.vaccinationLongitude ?? null,
+            notes: data.notes ? data.notes.trim() : null,
+            isActive: data.isActive !== undefined ? data.isActive : true,
+            appDetails: [newEntry]
+        }, { transaction });
+
+        // ESAVI-CASEFLOW-012: seals investigationStartedAt — the instant the file entered the
+        // phase, not investigation.investigationStartDate, which is the clinical date above — and
+        // moves the file to IN_INVESTIGATION
+        await advanceCaseWorkflowStageService(data.caseId, 'INVESTIGATION', authUser, lang, transaction);
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 
     // Re-read so the response carries the five resolved relations, not their ids
     const createdInvestigation = await findInvestigationWithRelations(newInvestigation.investigationId, true);

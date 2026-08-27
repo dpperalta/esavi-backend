@@ -663,7 +663,32 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/system-configs/${ UUID }/history`,                   minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-007' },
     { method: 'get',    path: `/api/system-configs/${ UUID }`,                           minRole: 'USER',       code: 'ESAVI-SYSCONF-003' },
     { method: 'put',    path: `/api/system-configs/${ UUID }`,                           minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-004' },
-    { method: 'delete', path: `/api/system-configs/${ UUID }`,                           minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-005A' }
+    { method: 'delete', path: `/api/system-configs/${ UUID }`,                           minRole: 'SUPERADMIN', code: 'ESAVI-SYSCONF-005A' },
+
+    // caseWorkflow (SPEC F44) — the administrative progress of the case file: which point of the
+    // process each case is at, how long each stage took, and whether it is closed. It is NOT the
+    // clinical outcome of the patient, which lives in investigation.statusItemId.
+    // THE SHAPE IS UNLIKE EVERY OTHER ENTITY OF THE REPOSITORY, and the two absences are
+    // deliberate. There is NO 001: the row is born inside ESAVI-CASE-001, through an internal
+    // service with no HTTP surface, the same way ESAVI-SESSION-001 and ESAVI-PWDRESET-001 are. And
+    // there is NO 004: no column of the table is written by a human — the stamps are set by 012
+    // and 007, the status is moved by the transitions, reopenCount is a counter — so a PUT could
+    // only corrupt the row. No 005C either: caseWorkflow is inside the preventPhysicalDelete loop.
+    // The five transitions hang off /case/:caseId and not off /:id because the client running one
+    // knows the case, not the UUID of its workflow. 009 is the only one in ADMIN: reopening undoes
+    // a decision somebody already took. 012, which propagates the stage stamps, has no route —
+    // the four stage services invoke it inside their own transaction
+    { method: 'get',    path: '/api/case-workflows',                                     minRole: 'USER',       code: 'ESAVI-CASEFLOW-002A' },
+    { method: 'get',    path: '/api/case-workflows/admin',                               minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-002B' },
+    { method: 'patch',  path: `/api/case-workflows/activate/${ UUID }`,                  minRole: 'SUPERADMIN', code: 'ESAVI-CASEFLOW-005B' },
+    { method: 'get',    path: `/api/case-workflows/case/${ UUID }`,                      minRole: 'USER',       code: 'ESAVI-CASEFLOW-006' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/complete-stage`,       minRole: 'USER',       code: 'ESAVI-CASEFLOW-007' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/close`,                minRole: 'USER',       code: 'ESAVI-CASEFLOW-008' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/reopen`,               minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-009' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/request-validation`,   minRole: 'USER',       code: 'ESAVI-CASEFLOW-010' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/resolve-validation`,   minRole: 'USER',       code: 'ESAVI-CASEFLOW-011' },
+    { method: 'get',    path: `/api/case-workflows/${ UUID }`,                           minRole: 'USER',       code: 'ESAVI-CASEFLOW-003' },
+    { method: 'delete', path: `/api/case-workflows/${ UUID }`,                           minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-005A' }
 ];
 
 /**
@@ -719,7 +744,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(311);
+            expect(ROUTE_RULES).toHaveLength(322);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

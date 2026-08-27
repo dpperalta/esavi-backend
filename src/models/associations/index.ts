@@ -32,6 +32,7 @@ import { initInvestigationAdministrationErrorAssociations } from './investigatio
 import { initInvestigationCommunityAssociations } from './investigationCommunity.associations';
 import { initFinalClassificationAssociations } from './finalClassification.associations';
 import { initEvaluationInstitutionAssociations } from './evaluationInstitution.associations';
+import { initCaseWorkflowAssociations } from './caseWorkflow.associations';
 import { initSystemConfigAssociations } from './systemConfig.associations';
 
 export const initAssociations = (): void => {
@@ -69,5 +70,6 @@ export const initAssociations = (): void => {
     initInvestigationCommunityAssociations();
     initFinalClassificationAssociations();
     initEvaluationInstitutionAssociations();
+    initCaseWorkflowAssociations();
     initSystemConfigAssociations();
 }
