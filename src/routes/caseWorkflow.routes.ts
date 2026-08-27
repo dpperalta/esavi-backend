@@ -7,7 +7,8 @@ import {
     getAllCaseWorkflows,
     getCaseWorkflowByCaseId,
     getCaseWorkflowById,
-    getCaseWorkflows
+    getCaseWorkflows,
+    reopenCaseWorkflow
 } from '../controllers/caseWorkflow.controller';
 import {
     caseWorkflowCaseIdValidator,
@@ -53,6 +54,12 @@ router.patch('/case/:caseId/complete-stage', tokenValidation, validateUserRole(U
 // Verifies the four stage preconditions, seals closedAt and moves the status to CLOSED. This is
 // how a case file is finished; 005A only retires the workflow RECORD from view
 router.patch('/case/:caseId/close', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, closeCaseWorkflow);
+
+// Reopen Case Workflow
+// Code: ESAVI-CASEFLOW-009
+// ADMIN. Increments reopenCount and stamps lastReopenedAt; closedAt is NOT cleared. REOPENED is
+// transitory — the next call to 012 takes the file out of it
+router.patch('/case/:caseId/reopen', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowCaseIdValidator, validateFields, reopenCaseWorkflow);
 
 // Get Case Workflow by ID
 // Code: ESAVI-CASEFLOW-003

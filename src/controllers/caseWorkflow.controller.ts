@@ -7,7 +7,8 @@ import {
     getAllCaseWorkflowsService,
     getCaseWorkflowByCaseIdService,
     getCaseWorkflowByIdService,
-    getCaseWorkflowsService
+    getCaseWorkflowsService,
+    reopenCaseWorkflowService
 } from '../services/caseWorkflow.service';
 
 // The four query filters of 002A and 002B. Only what actually arrives travels to the service, so
@@ -176,11 +177,38 @@ const closeCaseWorkflow = async (req: Request, res: Response, next: NextFunction
     }
 }
 
+// Reopen Case Workflow Controller
+// Code: ESAVI-CASEFLOW-009
+// ADMIN, unlike the other four transitions: reopening undoes a decision somebody already took
+const reopenCaseWorkflow = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    try {
+        const data = await reopenCaseWorkflowService(
+            caseId.toString().trim(),
+            req.user as AuthUser,
+            req.lang
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.reopenedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-009: Error reopening Case Workflow: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.reopenedFailed', req.lang), 500, 'CASEFLOW_009_REOPEN_FAILED', error));
+    }
+}
+
 export {
     getCaseWorkflows,
     getAllCaseWorkflows,
     getCaseWorkflowById,
     getCaseWorkflowByCaseId,
     completeCaseWorkflowStage,
-    closeCaseWorkflow
+    closeCaseWorkflow,
+    reopenCaseWorkflow
 }

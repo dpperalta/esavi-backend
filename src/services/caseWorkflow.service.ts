@@ -733,6 +733,50 @@ const closeCaseWorkflowService = async (
     }
 }
 
+// ESAVI-CASEFLOW-009 - Reopen Case Workflow Service
+/**
+ * Reopens a closed case file. ADMIN.
+ *
+ * `REOPENED` is **transitory**: the next call to 012 takes the file out of it and into the status
+ * of whatever stage was created. If it lasted until the next close, a reopened case under
+ * investigation would still show as `REOPENED` and its real progress would be lost. What persists
+ * instead is the trace — `reopenCount` and `lastReopenedAt`.
+ *
+ * **`closedAt` is not cleared.** It keeps the instant of the last close and is overwritten by the
+ * next one, so a file that was closed and reopened twice still says when it was last finished.
+ */
+const reopenCaseWorkflowService = async (
+    caseId: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    try {
+        const workflow = await findWorkflowForTransition(caseId, '009', lang);
+
+        if( workflow.status?.code !== STATUS.CLOSED ) {
+            throw new AppError(getMessage('caseWorkflow.notClosed', lang), 409, 'CASEFLOW_009_NOT_CLOSED');
+        }
+
+        const reopenedStatus = await resolveStatusItem(STATUS.REOPENED, '009', lang);
+
+        await workflow.update({
+            statusItemId: reopenedStatus.catalogItemId,
+            lastReopenedAt: new Date(),
+            reopenCount: ( workflow.reopenCount ?? 0 ) + 1,
+            appDetails: appendAuditEntry(workflow, '009', 'Case file reopened', authUser)
+        });
+
+        const updated = await findCaseWorkflowByCaseId(caseId);
+        return updated ? toCaseWorkflowResponse(updated) : null;
+    } catch ( error ) {
+        esaviLog(`[ERROR]: ESAVI-CASEFLOW-009 - Error reopening case ${ caseId }: ${ error }`, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(getMessage('caseWorkflow.reopenedFailed', lang), 500, 'CASEFLOW_009_REOPEN_FAILED', error);
+    }
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -859,6 +903,7 @@ export {
     getCaseWorkflowByCaseIdService,
     completeCaseWorkflowStageService,
     closeCaseWorkflowService,
+    reopenCaseWorkflowService,
     advanceCaseWorkflowStageService,
     toCaseWorkflowResponse,
     DETAIL_INCLUDE,
