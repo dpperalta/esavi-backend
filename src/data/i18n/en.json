@@ -33,7 +33,16 @@
         "logoutSuccess": "Logged out successfully.",
         "logoutFailed": "The logout could not be completed",
         "logoutAllSuccess": "{{count}} sessions were closed successfully.",
-        "logoutAllFailed": "The sessions could not be closed"
+        "logoutAllFailed": "The sessions could not be closed",
+        "forgotPasswordSuccess": "If an account exists for that email address, you will receive a link to reset your password.",
+        "forgotPasswordFailed": "The password reset request could not be processed",
+        "resetPasswordSuccess": "Your password was reset successfully.",
+        "resetPasswordFailed": "The password could not be reset",
+        "invalidResetToken": "The reset link is not valid. Please request a new one.",
+        "resetTokenUsed": "That reset link has already been used. Please request a new one.",
+        "resetTokenInvalidated": "That reset link is no longer valid. Please use the latest one you received or request a new one.",
+        "resetTokenExpired": "The reset link has expired. Please request a new one.",
+        "passwordResetEmailSubject": "Password reset - ESAVI surveillance system"
     },
     "crypto": {
         "encryptionFailed": "Encryption failed. Please try again later.",

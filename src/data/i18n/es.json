@@ -33,7 +33,16 @@
         "logoutSuccess": "Sesión cerrada correctamente.",
         "logoutFailed": "No se pudo cerrar la sesión",
         "logoutAllSuccess": "Se cerraron {{count}} sesiones correctamente.",
-        "logoutAllFailed": "No se pudieron cerrar las sesiones"
+        "logoutAllFailed": "No se pudieron cerrar las sesiones",
+        "forgotPasswordSuccess": "Si existe una cuenta con ese correo, recibirá un enlace para restablecer su contraseña.",
+        "forgotPasswordFailed": "No se pudo procesar la solicitud de restablecimiento",
+        "resetPasswordSuccess": "Su contraseña fue restablecida correctamente.",
+        "resetPasswordFailed": "No se pudo restablecer la contraseña",
+        "invalidResetToken": "El enlace de restablecimiento no es válido. Por favor, solicite uno nuevo.",
+        "resetTokenUsed": "Ese enlace de restablecimiento ya se utilizó. Por favor, solicite uno nuevo.",
+        "resetTokenInvalidated": "Ese enlace de restablecimiento ya no es válido. Por favor, use el último que recibió o solicite uno nuevo.",
+        "resetTokenExpired": "El enlace de restablecimiento caducó. Por favor, solicite uno nuevo.",
+        "passwordResetEmailSubject": "Restablecimiento de contraseña - Sistema de vigilancia ESAVI"
     },
     "crypto": {
         "encryptionFailed": "Error al encriptar. Por favor, inténtelo de nuevo más tarde.",
