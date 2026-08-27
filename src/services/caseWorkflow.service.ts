@@ -490,6 +490,121 @@ const getCaseWorkflowByCaseIdService = async (caseId: string, lang: string, canV
     return toCaseWorkflowResponse(workflow);
 }
 
+/**
+ * The read every transition ends with, so 007-011 all answer the full record of §3.7.
+ *
+ * It is a re-read and not the instance the write returned: the transitions update a row loaded
+ * without the stage satellites, and the response has to carry `stages` with its `exists` and `id`
+ * resolved. Returning the bare instance would answer a shape the client cannot use to continue.
+ */
+const findCaseWorkflowByCaseId = async (caseId: string, transaction?: Transaction) =>
+    await CaseWorkflow.findOne({ where: { caseId }, include: DETAIL_INCLUDE, transaction });
+
+/**
+ * The row every transition of 007-011 starts from, with its status resolved to a code.
+ *
+ * The `where` filters by `caseId` alone and never by `isActive`: `isActive` is the state of the
+ * workflow **record**, which 005A and 005B move, and refusing a transition because the record was
+ * deactivated would answer a 404 about a case that is plainly there. The operation code travels
+ * in so each of the five keeps its own.
+ */
+const findWorkflowForTransition = async (
+    caseId: string,
+    op: string,
+    lang: string,
+    transaction?: Transaction
+): Promise<CaseWorkflow> => {
+    const workflow = await CaseWorkflow.findOne({
+        where: { caseId },
+        include: [STATUS_INCLUDE],
+        transaction
+    });
+
+    if( !workflow ) {
+        throw new AppError(getMessage('caseWorkflow.notFound', lang), 404, `CASEFLOW_${ op }_NOT_FOUND`);
+    }
+
+    return workflow;
+}
+
+// The audit entry every transition appends. Services must spread the existing array, never
+// replace it, so the history of the row is preserved
+const appendAuditEntry = (workflow: CaseWorkflow, op: string, detail: string, authUser?: AuthUser): AppDetails[] => {
+    const newEntry: AppDetails = {
+        createdAt: new Date(),
+        user: authUser?.userId || 'undefined',
+        method: `ESAVI-CASEFLOW-${ op }`,
+        detail
+    };
+    return [...( ( workflow.appDetails as AppDetails[] | null ) ?? [] ), newEntry];
+}
+
+// ESAVI-CASEFLOW-007 - Complete Case Workflow Stage Service
+/**
+ * Seals the end of one stage.
+ *
+ * The start of a stage is an observable fact, propagated by 012 when the stage row is created;
+ * the **end is a judgement**, and this is where a person makes it. It seals `<stage>EndedAt` and
+ * **does not touch `statusItemId`**: the status is moved by the propagation, never by closing a
+ * stage. A file whose classification is finished has not therefore entered notification.
+ *
+ * Three conflicts, each with its own code: a closed case, a stage that never started, and a stage
+ * already completed. The stage name travels into the two stage messages, so the client is not
+ * left guessing which of the four the server refused.
+ */
+const completeCaseWorkflowStageService = async (
+    caseId: string,
+    stage: CaseWorkflowStage,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    try {
+        const workflow = await findWorkflowForTransition(caseId, '007', lang);
+
+        if( workflow.status?.code === STATUS.CLOSED ) {
+            throw new AppError(getMessage('caseWorkflow.caseClosed', lang), 409, 'CASEFLOW_007_CASE_CLOSED');
+        }
+
+        const startedField = startedAtField(stage);
+        const endedField = endedAtField(stage);
+
+        if( !stampOf(workflow, startedField) ) {
+            throw new AppError(
+                getMessage('caseWorkflow.stageNotStarted', lang, { stage }),
+                409,
+                'CASEFLOW_007_STAGE_NOT_STARTED'
+            );
+        }
+
+        if( stampOf(workflow, endedField) ) {
+            throw new AppError(
+                getMessage('caseWorkflow.stageAlreadyCompleted', lang, { stage }),
+                409,
+                'CASEFLOW_007_STAGE_ALREADY_COMPLETED'
+            );
+        }
+
+        await workflow.update({
+            [endedField]: new Date(),
+            appDetails: appendAuditEntry(workflow, '007', `Workflow stage ${ stage } completed`, authUser)
+        });
+
+        const updated = await findCaseWorkflowByCaseId(caseId);
+        return updated ? toCaseWorkflowResponse(updated) : null;
+    } catch ( error ) {
+        esaviLog(`[ERROR]: ESAVI-CASEFLOW-007 - Error completing stage ${ stage } of case ${ caseId }: ${ error }`, 'error');
+        if ( error instanceof AppError ) {
+            throw error;
+        }
+        throw new AppError(
+            getMessage('caseWorkflow.stageCompletedFailed', lang),
+            500,
+            'CASEFLOW_007_COMPLETE_FAILED',
+            error
+        );
+    }
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -614,6 +729,7 @@ export {
     getAllCaseWorkflowsService,
     getCaseWorkflowByIdService,
     getCaseWorkflowByCaseIdService,
+    completeCaseWorkflowStageService,
     advanceCaseWorkflowStageService,
     toCaseWorkflowResponse,
     DETAIL_INCLUDE,

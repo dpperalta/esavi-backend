@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
-import { AuthUser, CaseWorkflowListFilters } from '../types';
+import { AuthUser, CaseWorkflowListFilters, CaseWorkflowStage } from '../types';
 import {
+    completeCaseWorkflowStageService,
     getAllCaseWorkflowsService,
     getCaseWorkflowByCaseIdService,
     getCaseWorkflowByIdService,
@@ -116,9 +117,41 @@ const getCaseWorkflowByCaseId = async (req: Request, res: Response, next: NextFu
     }
 }
 
+// Complete Case Workflow Stage Controller
+// Code: ESAVI-CASEFLOW-007
+// Answers the full updated record in `data`, like the other four transitions. That does not
+// contradict CONVENTIONS.md §10: the rule that forbids `data` covers the operations that RETIRE
+// the row from view — 005A, 005B and 005C — while this one moves it to a state the client needs
+// to paint immediately, and a follow-up 006 would be one call per transition too many
+const completeCaseWorkflowStage = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const { caseId } = req.params;
+    const { stage } = req.body;
+    try {
+        const data = await completeCaseWorkflowStageService(
+            caseId.toString().trim(),
+            stage as CaseWorkflowStage,
+            req.user as AuthUser,
+            req.lang
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.stageCompletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-007: Error completing Case Workflow stage: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.stageCompletedFailed', req.lang), 500, 'CASEFLOW_007_COMPLETE_FAILED', error));
+    }
+}
+
 export {
     getCaseWorkflows,
     getAllCaseWorkflows,
     getCaseWorkflowById,
-    getCaseWorkflowByCaseId
+    getCaseWorkflowByCaseId,
+    completeCaseWorkflowStage
 }

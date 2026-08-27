@@ -2,12 +2,18 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    completeCaseWorkflowStage,
     getAllCaseWorkflows,
     getCaseWorkflowByCaseId,
     getCaseWorkflowById,
     getCaseWorkflows
 } from '../controllers/caseWorkflow.controller';
-import { caseWorkflowCaseIdValidator, caseWorkflowIdValidator, caseWorkflowListValidator } from '../validators';
+import {
+    caseWorkflowCaseIdValidator,
+    caseWorkflowIdValidator,
+    caseWorkflowListValidator,
+    completeCaseWorkflowStageValidator
+} from '../validators';
 
 const { ADMIN, USER } = ROLES;
 
@@ -35,6 +41,11 @@ router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowLi
 // The call a client resumes a file with: status, stamps and the identity of the four stages in a
 // single request. Declared before /:id so Express does not capture 'case' as an :id
 router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, getCaseWorkflowByCaseId);
+
+// Complete Case Workflow Stage
+// Code: ESAVI-CASEFLOW-007
+// Seals the end of one stage. It does NOT move the status — that is what 012 does
+router.patch('/case/:caseId/complete-stage', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, ...completeCaseWorkflowStageValidator, validateFields, completeCaseWorkflowStage);
 
 // Get Case Workflow by ID
 // Code: ESAVI-CASEFLOW-003

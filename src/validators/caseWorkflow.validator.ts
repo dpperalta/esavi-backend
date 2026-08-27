@@ -1,4 +1,4 @@
-import { param, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
 
 // This validator only checks shapes. None of the state rules of the entity lives here — whether
 // the file is closed, whether a stage has started, whether the four closing preconditions are met
@@ -36,4 +36,13 @@ export const caseWorkflowListValidator = [
         .withMessage('Limit must be an integer between 1 and 100'),
     query('offset').optional().isInt({ min: 0 })
         .withMessage('Offset must be a non-negative integer')
+];
+
+// The single body field of the whole entity: the stage 007 closes. The four values are the ones
+// of CaseWorkflowStage, and validateFields answers 400 for anything else
+export const completeCaseWorkflowStageValidator = [
+    body('stage').notEmpty().withMessage('Stage is required')
+        .isIn(['CLASSIFICATION', 'NOTIFICATION', 'INVESTIGATION', 'FINAL_CLASSIFICATION'])
+        .withMessage('Stage must be one of CLASSIFICATION, NOTIFICATION, INVESTIGATION or FINAL_CLASSIFICATION')
+        .trim()
 ];
