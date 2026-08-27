@@ -5,6 +5,8 @@ import { QueryTypes } from 'sequelize';
 import { sequelize } from '../../src/database/connection';
 import { initModels } from '../../src/models';
 import { ROLES, ROLE_LEVELS } from '../../src/constants/roles.constants';
+import { encryptSystemConfigValue } from '../../src/helpers/systemConfigValue.helper';
+import { syncSystemConfigDefaultsService } from '../../src/services/systemConfig.service';
 
 const SCHEMA_FILE = 'esaviapp.sql';
 
@@ -144,6 +146,49 @@ const seedRoles = async (): Promise<void> => {
     }
 }
 
+
+/**
+ * Seeds the configuration catalogue and loads the eight values SPEC F43 reads at runtime.
+ *
+ * TWO STEPS, AND THE ORDER MATTERS. First the real ESAVI-SYSCONF-008, so every row is created the
+ * way production creates it — with its history row and its audit entry, which is what
+ * `tests/contract/systemConfig.test.ts` asserts about rows an earlier suite may have seeded.
+ * Then the eight values of SPEC F43 are written with a silent update: the declarative catalogue
+ * seeds the six MAIL rows EMPTY on purpose — they are credentials and `systemConfig.defaults.ts`
+ * is versioned in git — so without this the 006 would have no transport and no expiry. The update
+ * is silent, and never the 004, so it leaves no history row behind and the seeding assertions of
+ * that other suite keep seeing exactly one entry with a null previousValue.
+ *
+ * Loading them into the DATABASE and not into the environment is deliberate: it is what makes the
+ * precedence of §3.6 — the database wins, the environment is the fallback — assertable.
+ *
+ * The SMTP host is never dialled: under NODE_ENV=test `buildMailTransport` returns
+ * `jsonTransport`, which serialises the message without opening a connection.
+ */
+const seedSystemConfig = async (): Promise<void> => {
+    await syncSystemConfigDefaultsService(undefined, 'es');
+
+    const values: { code: string; scope: string; value: unknown; isEncrypted: boolean }[] = [
+        { code: 'ESAVI_MAIL_SMTP_HOST',     scope: 'MAIL', value: 'smtp.test.local',          isEncrypted: false },
+        { code: 'ESAVI_MAIL_SMTP_USER',     scope: 'MAIL', value: 'esavi-test',               isEncrypted: false },
+        { code: 'ESAVI_MAIL_SMTP_PASSWORD', scope: 'MAIL', value: 'test-smtp-password',       isEncrypted: true  },
+        { code: 'ESAVI_MAIL_FROM',          scope: 'MAIL', value: 'no-reply@esavi.test',      isEncrypted: false },
+        { code: 'ESAVI_PASSWORD_RESET_URL', scope: 'AUTH', value: 'https://esavi.test/reset', isEncrypted: false }
+    ];
+
+    for( const entry of values ) {
+        const stored = entry.isEncrypted ? encryptSystemConfigValue(entry.value) : entry.value;
+        await sequelize.query(
+            `UPDATE "systemConfig" SET "value" = CAST(:value AS jsonb)
+             WHERE "code" = :code AND "scope" = :scope`,
+            {
+                replacements: { value: JSON.stringify(stored), code: entry.code, scope: entry.scope },
+                type: QueryTypes.UPDATE
+            }
+        );
+    }
+}
+
 /**
  * Full setup: guard, recreate, load schema, seed and register the models.
  * Called once from Jest's `globalSetup`-equivalent entry in each suite.
@@ -156,6 +201,7 @@ const setupTestDatabase = async (): Promise<void> => {
     initModels();
     await sequelize.authenticate();
     await seedRoles();
+    await seedSystemConfig();
 }
 
 let modelsReady = false;
@@ -189,6 +235,7 @@ export {
     recreateTestDatabase,
     loadSchema,
     seedRoles,
+    seedSystemConfig,
     setupTestDatabase,
     openTestConnection,
     closeTestDatabase
