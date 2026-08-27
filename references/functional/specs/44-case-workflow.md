@@ -1,9 +1,9 @@
 # SPEC F44 — Flujo del expediente ESAVI (`caseWorkflow`)
 
 > **Estado:** Borrador
-> **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F06 (`esaviCase` — dependencia dura, la fila nace dentro de su `001`), SPEC F09 (`classification`), SPEC F10 (`notification`), SPEC F12 (update diferencial), SPEC F28 (`investigation`), SPEC F41 (`finalClassification`)
+> **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F06 (`esaviCase` — dependencia dura, la fila nace dentro de su `001`), SPEC F09 (`classification`), SPEC F10 (`notification`), SPEC F12 (update diferencial), SPEC F28 (`investigation`), SPEC F41 (`finalClassification`), **SPEC F43 (`appPasswordReset`) — dependencia de orden, no técnica: se implementa antes que este spec** (ver §1)
 > **Fecha:** 2026-08-26
-> **Objetivo:** Dar de alta `caseWorkflow` —tabla nueva en el DDL— para registrar en qué punto del proceso está cada expediente, cuánto duró cada etapa, y permitir cerrarlo y reabrirlo.
+> **Objetivo:** Dar de alta `caseWorkflow` —la 47ª tabla del DDL— para registrar en qué punto del proceso está cada expediente, cuánto duró cada etapa, y permitir cerrarlo y reabrirlo.
 
 ---
 
@@ -19,7 +19,9 @@ Eso deja tres cosas fuera del alcance del sistema:
 
 **C — No hay estado de validación.** Un caso que necesita revisión antes de continuar no tiene cómo señalarlo. Hoy se queda en el limbo y depende de que alguien lo recuerde.
 
-**Este spec es el primero del repositorio que añade una tabla al DDL.** `esaviapp.sql` es autoritativo y `sequelize.sync()` no se usa; hasta ahora todo spec escribía el modelo para calzar con una tabla ya existente, y el SPEC F06 llegó a declarar literalmente que el DDL no se toca. Aquí no hay alternativa: ninguna de las 45 tablas guarda estado de expediente, y meterlo como columnas de `esaviCase` reabriría una entidad ya implementada para cargarla con un ciclo de vida que no es suyo. La tabla nueva aísla el cambio y deja las 45 existentes intactas.
+**Este spec amplía el DDL, y no es el primero en hacerlo.** `esaviapp.sql` es autoritativo y `sequelize.sync()` no se usa; durante las primeras cuarenta y dos entregas todo spec escribía el modelo para calzar con una tabla ya existente, y el SPEC F06 llegó a declarar literalmente que el DDL no se toca. El [SPEC F43](./43-auth-password-reset.md) rompió esa regla primero, con `appPasswordReset` como tabla 46, y **se implementa antes que éste** — de modo que aquí el precedente ya está sentado y `caseWorkflow` es la **47ª** tabla del esquema. Tampoco había alternativa: ninguna de las 46 tablas guarda estado de expediente, y meterlo como columnas de `esaviCase` reabriría una entidad ya implementada para cargarla con un ciclo de vida que no es suyo. La tabla nueva aísla el cambio y deja las 46 existentes intactas.
+
+**Orden de implementación respecto de F43.** Los dos specs son independientes: no comparten tablas, ni servicios, ni endpoints, ni claves i18n, y sus tablas se insertan en bloques distintos de `esaviapp.sql` —`appPasswordReset` en *Application administration*, justo después de `appSession`; `caseWorkflow` al final, después de `finalClassification`—, así que no compiten por el mismo lugar del archivo. El orden se fijó por riesgo, no por dependencia: F43 toca poco código existente, mientras que este spec convierte en transaccionales cinco servicios ya implementados. La única consecuencia práctica es de referencias: **todos los números de línea de `esaviapp.sql` citados en este spec corresponden al archivo previo a F43**, que inserta su bloque por encima de la mayoría de ellos y los desplaza. Al implementar, localizar por nombre —`CREATE TABLE "finalClassification"`, el `FOREACH t IN ARRAY` de `preventPhysicalDelete`— y no por número.
 
 Un dato de contexto para no confundir dos cosas parecidas: `investigation.statusItemId` (`esaviapp.sql:932`) apunta al catálogo `investigationStatus` sembrado en `esaviapp.sql:1599-1604` —*Recuperado*, *Fallecido*, *No recuperado*—. Ése es el **desenlace clínico del paciente**. El estado que introduce este spec es el **avance administrativo del expediente**. Son ortogonales: un caso cerrado puede tener al paciente sin recuperar, y un paciente recuperado puede tener el expediente abierto.
 
@@ -35,6 +37,7 @@ Un dato de contexto para no confundir dos cosas parecidas: `investigation.status
 - Los siete artefactos completos de `caseWorkflow`: modelo, asociaciones, tipos, validadores, servicio, controlador y ruta.
 - **Once operaciones**: `001` (interno, sin ruta), `002A`, `002B`, `003`, `005A`, `005B`, `006`, `007` cerrar etapa, `008` cerrar caso, `009` reabrir, `010` pedir validación, `011` resolver validación y `012` avanzar de etapa (interno, sin ruta). **No hay `004`**: la fila no tiene ningún campo editable a mano.
 - **Cuatro sellos de inicio y cuatro de fin**, uno por etapa, más `openedAt`, `closedAt` y `lastReopenedAt`. Las duraciones se **calculan al leer**; no hay columna que las guarde.
+- **Resolución de la fila de cada etapa en el `data`** — `exists` e `id` por satélite, para que un cliente que retoma un expediente sepa en una sola llamada si cada etapa se crea con `POST` o se actualiza con `PUT /:id`. Ver §3.7.
 - **Propagación del sello de inicio desde los cuatro servicios de etapa.** `createClassificationService`, `createNotificationService`, `createInvestigationService` y `createFinalClassificationService` sellan su `startedAt` y mueven `statusItemId`. Los cuatro pasan a ser multi-escritura y por tanto transaccionales.
 - **Auto-sellado del fin de la etapa anterior.** Si al arrancar una etapa la anterior tiene su `endedAt` en `NULL`, se sella con el mismo instante. Ningún sello queda huérfano.
 - **Modificación de `createEsaviCaseService` (SPEC F06)** para crear la fila de flujo en `OPEN` dentro de su propia transacción. Es la única forma de garantizar que no existan casos sin flujo.
@@ -65,7 +68,7 @@ Un dato de contexto para no confundir dos cosas parecidas: `investigation.status
 
 ### 3.1 Tabla origen — **nueva**
 
-`caseWorkflow` no existe. Este spec la crea. Se inserta en `esaviapp.sql` **después** de `finalClassification` (`esaviapp.sql:1260-1286`), que es la última tabla del bloque y el último satélite del caso.
+`caseWorkflow` no existe. Este spec la crea como **tabla 47**, después de la 46 que añade el [SPEC F43](./43-auth-password-reset.md). Se inserta en `esaviapp.sql` **después** de `finalClassification` (`esaviapp.sql:1260-1286` en el archivo previo a F43), que es la última tabla del bloque y el último satélite del caso. F43 inserta la suya mucho antes, tras `appSession`, así que las dos altas no se tocan y el `git diff` de cada una es un bloque contiguo distinto.
 
 | Columna | Tipo | Nulo | Nota |
 |---|---|---|---|
@@ -92,7 +95,7 @@ Más las cinco transversales del esquema: `isActive boolean NOT NULL DEFAULT tru
 
 Tres decisiones de forma que el spec deja escritas para que nadie las lea como descuido:
 
-- **`appDetails` lleva `DEFAULT '{}'::jsonb`, no `'[]'`.** Es un array y el objeto vacío no lo representa, pero las 45 tablas del esquema lo declaran así y los servicios siempre insertan el array completo, de modo que el `DEFAULT` no llega a aplicarse nunca. Se mantiene la forma existente por coherencia; corregirla en las 46 tablas es otro spec.
+- **`appDetails` lleva `DEFAULT '{}'::jsonb`, no `'[]'`.** Es un array y el objeto vacío no lo representa, pero las 46 tablas del esquema lo declaran así —las 45 originales y `appPasswordReset`, que F43 alineó con la misma forma— y los servicios siempre insertan el array completo, de modo que el `DEFAULT` no llega a aplicarse nunca. Se mantiene la forma existente por coherencia; corregirla en las 47 tablas es otro spec.
 - **No hay trigger de validación de catálogo.** `healthFacility` tiene `TRG_healthFacility_validateCatalogs`, pero `investigation.statusItemId` —el precedente exacto de este campo— no tiene ninguno y la validación la hace el servicio. Se sigue ese precedente.
 - **Los dos triggers genéricos sí alcanzan a la tabla**, porque el bucle de `esaviapp.sql` los aplica a toda tabla con columna `sysDetails`: `TRG_caseWorkflow_setUpdatedAt` y `TRG_caseWorkflow_setSysDetails` se crean solos. El tercero, `TRG_caseWorkflow_preventPhysicalDelete`, **no**: hay que añadir `'caseWorkflow'` a mano al array del bucle de `esaviapp.sql:1372-1386`.
 
@@ -226,6 +229,8 @@ Sobre el estado: `012` mueve `statusItemId` al estado de la etapa (`IN_CLASSIFIC
 
 **`ESAVI-CASEFLOW-006` — obtener el flujo de un caso.** Por `caseId`, relación 1:1 garantizada por `UQ_caseWorkflow_case`. El caso no existe → 404 `CASEFLOW_006_CASE_NOT_FOUND`; el caso existe pero no tiene flujo → 404 `CASEFLOW_006_NOT_FOUND`. Son dos códigos distintos a propósito: el segundo señala un caso anterior a este spec y es el síntoma que el backfill tendrá que resolver.
 
+Es además **la llamada con la que un cliente retoma un expediente**: junto al estado y los sellos resuelve el PK de las cuatro etapas (`exists` e `id`, §3.7), de modo que una sola petición basta para saber en qué paso continuar y si cada etapa se crea o se actualiza. Los cuatro `findOne` de PK van en el mismo `Promise.all` que la carga del flujo.
+
 **`ESAVI-CASEFLOW-007` — cerrar una etapa.** Body `{ stage }`, validado contra los cuatro valores de `CaseWorkflowStage` → 400 lo emite `validateFields`. Después: flujo inexistente → 404 `CASEFLOW_007_NOT_FOUND`; estado `CLOSED` → 409 `CASEFLOW_007_CASE_CLOSED`; `<stage>StartedAt` en `NULL` → 409 `CASEFLOW_007_STAGE_NOT_STARTED`; `<stage>EndedAt` ya sellado → 409 `CASEFLOW_007_STAGE_ALREADY_COMPLETED`. Sella `<stage>EndedAt = new Date()` y **no toca `statusItemId`**: el estado lo mueve la propagación, nunca el cierre de etapa.
 
 **`ESAVI-CASEFLOW-008` — cerrar el caso.** Flujo inexistente → 404 `CASEFLOW_008_NOT_FOUND`; ya `CLOSED` → 409 `CASEFLOW_008_ALREADY_CLOSED`; en `PENDING_VALIDATION` → 409 `CASEFLOW_008_PENDING_VALIDATION`, porque cerrar un caso que alguien mandó a revisar sin resolverla vacía el estado de sentido.
@@ -322,20 +327,36 @@ Las cuatro claves de precondición de `008` son distintas y no una sola parametr
     previousStatus: { catalogItemId, code, name } | null,
     openedAt, closedAt, lastReopenedAt, reopenCount,
     stages: {
-        classification:      { startedAt, endedAt, durationMinutes },
-        notification:        { startedAt, endedAt, durationMinutes },
-        investigation:       { startedAt, endedAt, durationMinutes },
-        finalClassification: { startedAt, endedAt, durationMinutes }
+        classification:      { exists, id, startedAt, endedAt, durationMinutes },
+        notification:        { exists, id, startedAt, endedAt, durationMinutes },
+        investigation:       { exists, id, startedAt, endedAt, durationMinutes },
+        finalClassification: { exists, id, startedAt, endedAt, durationMinutes }
     },
     totalDurationMinutes,
     isActive, createdAt, updatedAt, deletedAt, appDetails
 } }
 ```
 
+- **`exists` e `id`** resuelven la fila real de cada etapa: `id` es el PK del satélite (`classificationId`, `notificationId`, `investigationId`, `finalClassificationId`) o `null` cuando la etapa no se ha iniciado, y `exists` es `id !== null`. Se explica en detalle abajo.
 - **`durationMinutes`** = `endedAt − startedAt` en minutos enteros. **`null`** si falta cualquiera de los dos sellos. No se guarda en ninguna columna: se calcula al construir la respuesta.
 - **`totalDurationMinutes`** = `closedAt − openedAt`. **`null`** mientras el caso siga abierto. El tiempo transcurrido de un caso vivo lo calcula el cliente contra su propio reloj; el servidor no devuelve un valor que cambia entre dos llamadas idénticas.
 - **`status` y `previousStatus`** viajan como objeto con `code` y `name`, no como UUID suelto. El `name` sale del `catalogItem` y ya está en el idioma del catálogo; **no** pasa por `getMessage`.
 - **`sysDetails` no se expone**, en ninguna operación.
+
+#### `exists` e `id` — por qué el flujo resuelve las filas de las etapas
+
+Sin estos dos campos, un cliente que retoma un expediente a medio capturar **no sabe si debe crear o actualizar cada etapa**, y solo le quedan dos caminos, los dos malos: recordar los PK en su propio estado —que se pierde al recargar y falla en cuanto dos personas trabajan el mismo caso—, o encadenar cuatro `GET /case/:caseId`, uno por satélite, cada vez que abre la pantalla. Este spec ya hace la consulta por `caseId` para saber en qué etapa está el expediente; devolver además el PK que ya tuvo a la vista convierte cuatro llamadas en una y elimina la adivinación del lado del cliente.
+
+La regla que habilita, y que el frontend aplica sin heurística: **`exists: false` → `POST` de la etapa; `exists: true` → `PUT /:id` sobre el `id` devuelto.**
+
+Reglas de resolución:
+
+- Un `findOne` por satélite filtrando `caseId` y `deletedAt IS NULL`, seleccionando **solo el PK**. La relación es 1:1 por el `UNIQUE ("caseId")` de cada tabla (`UQ_classification_case`, `UQ_notification_case`, `UQ_investigation_case`, `UQ_finalClassification_case`), así que no hay ambigüedad posible y cada consulta usa su índice.
+- **Las cuatro consultas van en el mismo `Promise.all`** que la carga del flujo, no en serie.
+- **Una etapa desactivada (`isActive: false`) cuenta como existente**, con su `id`. La fila está ahí y un `POST` chocaría contra el `UNIQUE`; lo que el cliente necesita en ese caso es reactivarla con su `005B`, no crearla de nuevo. Solo el borrado físico —que estas tablas no permiten— haría desaparecer el `id`.
+- **`exists` e `id` son independientes de los sellos.** Un `startedAt` sellado con `id: null` significa que la fila se creó y luego se purgó; un `id` presente sin `startedAt` significa una fila anterior a este spec. Ninguno de los dos es normal, y separarlos hace que el síntoma se vea en vez de esconderse detrás de un solo booleano.
+- **No se incluye el contenido de la etapa, solo su identidad.** Quien quiere los datos llama al `GET /case/:caseId` del satélite, que ya existe. Este bloque responde «¿existe y con qué `id`?», no «¿qué dice?»; embutir cuatro fichas completas aquí convertiría el `006` en un endpoint de agregación que ninguna otra pantalla necesita.
+- **Los mismos cuatro campos viajan en `002A`/`002B`.** Es una consulta por fila del listado; se resuelve con un `include` de los cuatro satélites limitado al PK, no con un `findOne` por fila.
 
 `002A` y `002B` devuelven `data: { count, rows }` de `findAndCountAll`, con cada fila en el mismo formato de arriba. `002A` filtra `isActive: true`; `002B` incluye las inactivas.
 
@@ -351,8 +372,8 @@ Las cuatro claves de precondición de `008` son distintas y no una sola parametr
 
 Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 
-1. **Esquema.** Añadir `CREATE TABLE "caseWorkflow"` a `esaviapp.sql` después de `finalClassification` (`esaviapp.sql:1286`), con sus tres FK, `UQ_caseWorkflow_case`, el `CHECK` de `reopenCount` y los dos índices. Añadir `'caseWorkflow'` al array del bucle `preventPhysicalDelete` (`esaviapp.sql:1372-1386`). Añadir las ocho `CALL "upsertCatalogItem"('caseWorkflowStatus', …)` al bloque de siembra.
-   *Verificación:* cargar `esaviapp.sql` sobre una base limpia termina en 0; `SELECT tgname FROM pg_trigger WHERE tgrelid = '"caseWorkflow"'::regclass` devuelve los tres triggers; `SELECT count(*) FROM "catalogItem" ci JOIN "catalogType" ct USING("catalogTypeId") WHERE ct.code = 'caseWorkflowStatus'` devuelve 8; un `DELETE` directo sobre `caseWorkflow` es rechazado.
+1. **Esquema.** Añadir `CREATE TABLE "caseWorkflow"` a `esaviapp.sql` después del bloque `CREATE TABLE "finalClassification"` (`esaviapp.sql:1286` antes de F43), con sus tres FK, `UQ_caseWorkflow_case`, el `CHECK` de `reopenCount` y los dos índices. Añadir `'caseWorkflow'` al array del bucle `preventPhysicalDelete` (`esaviapp.sql:1372-1386` antes de F43; localizarlo por el `FOREACH t IN ARRAY`, no por la línea, porque F43 ya lo habrá desplazado). Añadir las ocho `CALL "upsertCatalogItem"('caseWorkflowStatus', …)` al bloque de siembra.
+   *Verificación:* cargar `esaviapp.sql` sobre una base limpia termina en 0; `appPasswordReset` sigue existiendo tras la recarga y su trigger `TRG_appPasswordReset_preventPhysicalDelete` sigue **sin** existir —el alta de `caseWorkflow` en el array no debe arrastrar la tabla de F43—; `SELECT tgname FROM pg_trigger WHERE tgrelid = '"caseWorkflow"'::regclass` devuelve los tres triggers; `SELECT count(*) FROM "catalogItem" ci JOIN "catalogType" ct USING("catalogTypeId") WHERE ct.code = 'caseWorkflowStatus'` devuelve 8; un `DELETE` directo sobre `caseWorkflow` es rechazado.
 
 2. **Modelo y asociaciones.** `src/models/caseWorkflow.model.ts` con `timestamps: false`, `freezeTableName: true` y PK `gen_random_uuid()`. `src/models/associations/caseWorkflow.associations.ts` con las cuatro asociaciones de §3.2, registrado en `initAssociations()`. Alta en `src/models/index.ts`.
    *Verificación:* `npm run build` en 0; un `CaseWorkflow.findAll({ include: ['case', 'status', 'previousStatus'] })` desde un script suelto no lanza `EagerLoadingError`.
@@ -384,8 +405,8 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 11. **`ESAVI-CASEFLOW-003` — obtener por ID.** `GET /:id` declarado **después** de todas las literales y del prefijo `/case/`.
     *Verificación:* un ID inexistente devuelve 404; una fila inactiva devuelve 404 para USER y 200 para ADMIN; `GET /api/case-workflows/admin` sigue resolviendo al listado y no al `003`.
 
-12. **`ESAVI-CASEFLOW-006` — el flujo de un caso.** `GET /case/:caseId`, con los dos 404 distinguidos de §3.5.
-    *Verificación:* un `caseId` inexistente devuelve 404 con `CASEFLOW_006_CASE_NOT_FOUND`; un caso creado antes de este spec devuelve 404 con `CASEFLOW_006_NOT_FOUND`.
+12. **`ESAVI-CASEFLOW-006` — el flujo de un caso.** `GET /case/:caseId`, con los dos 404 distinguidos de §3.5 y el bloque `stages` de §3.7 completo, incluidos `exists` e `id` por etapa resueltos en el mismo `Promise.all`.
+    *Verificación:* un `caseId` inexistente devuelve 404 con `CASEFLOW_006_CASE_NOT_FOUND`; un caso creado antes de este spec devuelve 404 con `CASEFLOW_006_NOT_FOUND`; un caso recién creado devuelve las cuatro etapas con `exists: false` e `id: null`; tras un `POST /api/classifications` la etapa `classification` devuelve `exists: true` con el `classificationId` real, y un `PUT` sobre ese `id` responde 200; desactivar la clasificación con su `005A` **no** cambia `exists` ni `id`.
 
 13. **`ESAVI-CASEFLOW-007` — cerrar etapa.** `PATCH /case/:caseId/complete-stage` con `body('stage').isIn([...])`. Sella `endedAt` y no toca el estado.
     *Verificación:* `{ "stage": "FOO" }` devuelve 400; cerrar una etapa sin iniciar devuelve 409 `STAGE_NOT_STARTED`; cerrarla dos veces devuelve 409 `STAGE_ALREADY_COMPLETED`; tras cerrarla, `statusItemId` es el mismo que antes.
@@ -419,6 +440,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] Un `DELETE FROM "caseWorkflow"` directo por SQL es rechazado por el trigger.
 - [ ] El `catalogType` `caseWorkflowStatus` tiene exactamente 8 `catalogItem`, con los `code` de §3.1 en `CONSTANT_CASE`.
 - [ ] Recargar `esaviapp.sql` dos veces seguidas no duplica ítems del catálogo — `upsertCatalogItem` es idempotente.
+- [ ] La tabla `appPasswordReset` del SPEC F43 sigue creándose y **sigue sin** trigger `preventPhysicalDelete`: añadir `'caseWorkflow'` al array no arrastró la tabla de F43 ni alteró su bloque del archivo.
 
 **Invariante del flujo**
 
@@ -454,6 +476,9 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 - [ ] Los cinco puntos de cada código de operación (ruta, controlador, servicio, `AppError`, `appDetails.method`) coinciden.
 - [ ] `005A` y `005B` responden `{ ok, message }` **sin** clave `data`.
 - [ ] `007`–`011` responden con la ficha completa en `data`, incluyendo `stages` y `status`.
+- [ ] Las cuatro entradas de `stages` traen `exists` e `id` en `003`, `006`, `002A`, `002B` y `007`–`011`, y `exists === (id !== null)` en todas.
+- [ ] Un expediente completo devuelve los cuatro `id` y coinciden con los PK que devolvieron los cuatro `POST`.
+- [ ] `002A`/`002B` resuelven los `id` con un `include` limitado al PK: el número de consultas **no** crece con el de filas de la página.
 - [ ] `sysDetails` no aparece en ninguna respuesta.
 - [ ] Las 38 claves nuevas existen en `es`, `en` y `nl`; `npm run i18n:check` sale en 0.
 
@@ -478,17 +503,20 @@ Este spec **no tiene `004`**, y por eso los cinco criterios canónicos de la pla
 
 **Sobre el esquema**
 
-- **Sí:** tabla nueva en `esaviapp.sql`. Es el primer spec del repositorio que amplía el DDL, y se asume conscientemente: ninguna de las 45 tablas guarda estado de expediente, y no hay forma de añadirlo sin tocar el esquema.
+- **Sí:** tabla nueva en `esaviapp.sql`, la 47ª. Ampliar el DDL se asume conscientemente y ya no estrena el camino: el SPEC F43 lo abrió antes con `appPasswordReset`. Ninguna de las 46 tablas existentes guarda estado de expediente, y no hay forma de añadirlo sin tocar el esquema.
 - **No:** columnas de ciclo de vida sobre `esaviCase`. Cargaría una entidad ya implementada con un concepto que no es suyo y obligaría a reabrir el SPEC F06 entero, en vez de añadirle una línea.
 - **No:** derivar el flujo en tiempo de consulta desde los `EXISTS` de las cuatro etapas, sin tabla. Cuesta cero en esquema y no permite cerrar ni reabrir: un cierre es una decisión que alguien toma, no algo deducible de qué filas existen.
 - **Sí:** `caseWorkflow` entra en `preventPhysicalDelete`, y por tanto **no** hay `005C`. Es el rastro del ciclo de vida de un expediente de farmacovigilancia; su padre `esaviCase` ya está protegido y la hija no debería estarlo menos.
 - **No:** trigger de validación de catálogo sobre `statusItemId`. `investigation.statusItemId` es el precedente exacto y no lo tiene; la validación va en el servicio.
-- **Sí:** `appDetails` con `DEFAULT '{}'::jsonb`, igual que las 45 tablas existentes, aunque el valor correcto para un array sea `'[]'`. Los servicios siempre insertan el array completo, así que el `DEFAULT` no llega a aplicarse. Corregirlo en 46 tablas es otro spec.
+- **Sí:** `appDetails` con `DEFAULT '{}'::jsonb`, igual que las 46 tablas existentes, aunque el valor correcto para un array sea `'[]'`. Los servicios siempre insertan el array completo, así que el `DEFAULT` no llega a aplicarse. Corregirlo en 47 tablas es otro spec.
 
 **Sobre la forma de los datos**
 
 - **Sí:** una fila por caso que muta. Responde *«¿en qué estado está el caso 123?»* en un `findOne`, y el historial ya lo conservan `appDetails` y `sysDetails.auditTrail`, que son append-only por trigger.
 - **No:** una tabla de eventos `caseWorkflowEvent` (1:N) en este spec. Es lo correcto a largo plazo y es un spec propio: mezclar cabecera y log aquí produciría un documento que nadie ejecuta.
+- **Sí:** `exists` e `id` de las cuatro etapas dentro de `stages`. Es lo que permite a un cliente retomar un expediente parcial sin adivinar: `exists: false` → `POST`, `exists: true` → `PUT /:id`. La alternativa —cuatro `GET /case/:caseId` a los satélites en cada apertura de pantalla— hace cuatro veces el trabajo que este endpoint ya está haciendo para saber en qué etapa está el caso.
+- **No:** devolver la ficha completa de cada etapa dentro de `stages`. Convertiría el `006` en un endpoint de agregación cuyo `data` crece con cada campo que ganen las cuatro entidades, y ninguna pantalla necesita las cuatro fichas a la vez. Aquí va la identidad de la fila; el contenido lo sirve el `GET /case/:caseId` de cada satélite, que ya existe.
+- **Sí:** una etapa desactivada cuenta como existente y conserva su `id`. Su fila sigue ahí y el `UNIQUE ("caseId")` rechazaría un `POST`; lo que corresponde es reactivarla con su `005B`, y para eso el cliente necesita el `id`.
 - **Sí:** sellos de inicio **y** de fin por etapa. Con solo el inicio, la duración de una etapa sería la distancia hasta el inicio de la siguiente, que confunde «trabajar en la etapa» con «esperar a la siguiente».
 - **No:** guardar `durationMinutes` en columna. Es un derivado puro de dos sellos de la misma fila; almacenarlo obliga a mantenerlo sincronizado sin ganar ninguna consulta.
 - **No:** `totalDurationMinutes` calculado contra el reloj actual mientras el caso sigue abierto. Haría que dos llamadas idénticas devolvieran valores distintos. El transcurrido de un caso vivo lo calcula el cliente.

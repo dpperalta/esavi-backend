@@ -355,6 +355,29 @@ CREATE TABLE IF NOT EXISTS "appSession" (
 CREATE INDEX IF NOT EXISTS "IX_appSession_userId" ON "appSession" ("userId");
 CREATE INDEX IF NOT EXISTS "IX_appSession_active" ON "appSession" ("userId", "expiresAt") WHERE "revokedAt" IS NULL AND "deletedAt" IS NULL;
 
+CREATE TABLE IF NOT EXISTS "appPasswordReset" (
+  "resetId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "userId" uuid NOT NULL,
+  "tokenHash" text NOT NULL,
+  "expiresAt" timestamptz NOT NULL,
+  "usedAt" timestamptz,
+  "invalidatedAt" timestamptz,
+  "invalidatedReason" text,
+  "requestedIp" inet,
+  "requestedUserAgent" text,
+  "createdAt" timestamptz NOT NULL DEFAULT current_timestamp,
+  "updatedAt" timestamptz,
+  "deletedAt" timestamptz,
+  "sysDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT "FK_appPasswordReset_user" FOREIGN KEY ("userId") REFERENCES "appUser" ("userId") ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT "UQ_appPasswordReset_tokenHash" UNIQUE ("tokenHash"),
+  CONSTRAINT "CK_appPasswordReset_dates" CHECK ("expiresAt" > "createdAt")
+);
+CREATE INDEX IF NOT EXISTS "IX_appPasswordReset_userId" ON "appPasswordReset" ("userId");
+CREATE INDEX IF NOT EXISTS "IX_appPasswordReset_pending" ON "appPasswordReset" ("userId", "expiresAt")
+  WHERE "usedAt" IS NULL AND "invalidatedAt" IS NULL AND "deletedAt" IS NULL;
+
 CREATE TABLE IF NOT EXISTS "systemConfig" (
   "systemConfigId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "code" varchar(150) NOT NULL,
