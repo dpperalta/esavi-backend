@@ -33,7 +33,16 @@
         "logoutSuccess": "Succesvol uitgelogd.",
         "logoutFailed": "Het uitloggen kon niet worden voltooid",
         "logoutAllSuccess": "{{count}} sessies zijn succesvol gesloten.",
-        "logoutAllFailed": "De sessies konden niet worden gesloten"
+        "logoutAllFailed": "De sessies konden niet worden gesloten",
+        "forgotPasswordSuccess": "Als er een account met dat e-mailadres bestaat, ontvangt u een link om uw wachtwoord opnieuw in te stellen.",
+        "forgotPasswordFailed": "Het verzoek om het wachtwoord opnieuw in te stellen kon niet worden verwerkt",
+        "resetPasswordSuccess": "Uw wachtwoord is succesvol opnieuw ingesteld.",
+        "resetPasswordFailed": "Het wachtwoord kon niet opnieuw worden ingesteld",
+        "invalidResetToken": "De herstellink is niet geldig. Vraag een nieuwe aan.",
+        "resetTokenUsed": "Die herstellink is al gebruikt. Vraag een nieuwe aan.",
+        "resetTokenInvalidated": "Die herstellink is niet meer geldig. Gebruik de laatste die u heeft ontvangen of vraag een nieuwe aan.",
+        "resetTokenExpired": "De herstellink is verlopen. Vraag een nieuwe aan.",
+        "passwordResetEmailSubject": "Wachtwoord opnieuw instellen - ESAVI-surveillancesysteem"
     },
     "crypto": {
         "encryptionFailed": "Versleutelen mislukt. Probeer het later opnieuw.",

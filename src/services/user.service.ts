@@ -8,6 +8,7 @@ import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants
 import { ROLES } from '../constants/roles.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { revokeAllUserSessionsService } from './appSession.service';
+import { invalidateUserPasswordResetsService } from './appPasswordReset.service';
 
 // Encrypted columns. Normalized before encrypting: normalizing afterwards would produce a
 // different ciphertext for the same value and break the equality lookups the fixed IV allows
@@ -422,10 +423,12 @@ const setUserActivationService = async (id: string, authUser: AuthUser | undefin
 // Change Own Password Service
 // Code: ESAVI-USER-006
 // Always acts on the token holder: no user identifier is accepted, not even from a SUPERADMIN.
-// A successful change now closes every session of the user (SPEC F42): the row update and the
-// revocation share one transaction, because a password changed with surviving sessions is worse
-// than a change that failed. The access token in flight still runs until it expires — up to
-// JWT_EXPIRES_IN — but its refresh token is dead, so the session cannot outlive that window
+// A successful change now closes every session of the user (SPEC F42) AND invalidates every
+// pending password reset request (SPEC F43): the row update, the revocation and the invalidation
+// share one transaction, because a password changed with surviving sessions — or with a live
+// reset link still in an inbox — is worse than a change that failed. The access token in flight
+// still runs until it expires — up to JWT_EXPIRES_IN — but its refresh token is dead, so the
+// session cannot outlive that window
 const changePasswordService = async (authUser: AuthUser | undefined, data: ChangePasswordInput, lang: string) => {
     const { currentPassword, newPassword } = data;
     const user = authUser?.userId
@@ -468,6 +471,12 @@ const changePasswordService = async (authUser: AuthUser | undefined, data: Chang
         // `newPassword` in the body: a change that never reached the update — wrong current
         // password, missing user — revokes nothing, because it threw before getting here
         await revokeAllUserSessionsService(user.userId, 'PASSWORD_CHANGED', lang, transaction);
+        // ESAVI-PWDRESET-007 (SPEC F43 §3.5), inside the same transaction and for the same
+        // reason: without it, a user who changes their password deliberately — often because
+        // they suspect something — leaves a reset link alive for up to thirty minutes in a
+        // mailbox they may not control. Same trigger as above: the effective write, never the
+        // presence of the key
+        await invalidateUserPasswordResetsService(user.userId, 'PASSWORD_CHANGED', lang, transaction);
         await transaction.commit();
     } catch (error) {
         await transaction.rollback();

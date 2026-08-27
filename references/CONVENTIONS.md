@@ -192,8 +192,15 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | systemConfig | `008` | siembra idempotente de las configuraciones iniciales desde el catálogo declarativo — solo-alta, transacción todo o nada. `POST /sync`, SUPERADMIN |
 | appSession | `006` | revocar una sesión — escribe `revokedAt` y `revokedReason` sobre la fila si estaba vigente. **Sin ruta HTTP:** servicio interno que `auth` invoca desde `ESAVI-AUTH-002` y `-003` |
 | appSession | `007` | revocar todas las sesiones de un usuario — mismo filtro por `userId`, se apoya en `IX_appSession_active`. **Sin ruta HTTP:** lo invocan `ESAVI-AUTH-004` y `ESAVI-USER-006` |
+| auth | `006` | solicitar el restablecimiento de la contraseña — público, sin `tokenValidation`. Responde siempre 200, exista o no la cuenta. `POST /forgot-password` |
+| auth | `007` | consumir el token de restablecimiento y escribir la contraseña nueva — público. `POST /reset-password` |
+| appPasswordReset | `001` | abrir una solicitud de restablecimiento. **Sin ruta HTTP:** servicio interno que `ESAVI-AUTH-006` invoca dentro de su transacción |
+| appPasswordReset | `006` | resolver y consumir un token — verifica formato, existencia, hash, consumo, invalidación, caducidad y usuario. **Sin ruta HTTP:** lo invoca `ESAVI-AUTH-007` |
+| appPasswordReset | `007` | invalidar las solicitudes vigentes de un usuario — se apoya en `IX_appPasswordReset_pending`. **Sin ruta HTTP:** lo invocan `ESAVI-AUTH-006`, `ESAVI-AUTH-007` y `ESAVI-USER-006` |
 
 `appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4).
+
+`auth` salta el `005`: en el canon esa cifra significa siempre borrado o activación, y reciclarla para un restablecimiento haría que buscar `ESAVI-AUTH-005` en el log devolviera algo que no es ninguna de las tres. `appPasswordReset` toma `006` y `007` por la misma razón que `appSession` — resolver e invalidar no son ninguna de las siete canónicas, y la tabla no tiene `isActive`. Una solicitud de restablecimiento no se reactiva — se pide otra (SPEC F43 §3.4).
 
 `appUserGeoLocation` es la primera entidad del repositorio que pasa de `005B`. Esconder una reasignación tras una letra de `004` haría que un `PUT` a veces creara registros, y el código de operación dejaría de servir para rastrear qué se intentó.
 
@@ -336,6 +343,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | user | `USER` |
 | auth | `AUTH` |
 | appSession | `SESSION` |
+| appPasswordReset | `PWDRESET` |
 | seed | `SEED` |
 
 Para acuñar una nueva: **4 a 8 letras**, mayúsculas, sin guiones, derivada del nombre de la entidad y única en la tabla. Se registra aquí **antes** de usarse. Abreviaturas de dos letras como `HF` quedan prohibidas por ambiguas.

@@ -3,6 +3,7 @@ import { AppUser } from './appUser.model';
 import { AppRole } from './appRole.model';
 import { AppUserRole } from './appUserRole.model';
 import { AppSession } from './appSession.model';
+import { AppPasswordReset } from './appPasswordReset.model';
 import { GeoLevelType } from './geoLevelType.model';
 import { GeoLocation } from './geoLocation.model';
 import { initAssociations } from './associations';
@@ -53,6 +54,7 @@ export {
     AppRole,
     AppUserRole,
     AppSession,
+    AppPasswordReset,
     GeoLevelType,
     GeoLocation,
     CatalogType,

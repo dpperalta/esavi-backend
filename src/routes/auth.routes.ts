@@ -1,8 +1,8 @@
 import { Router } from 'express';
 
-import { login, logout, logoutAll, refresh }  from '../controllers/auth.controller';
-import { loginValidator, refreshTokenValidator } from '../validators';
-import { validateFields, tokenValidation, validateUserRole } from '../middlewares';
+import { forgotPassword, login, logout, logoutAll, refresh, resetPassword }  from '../controllers/auth.controller';
+import { forgotPasswordValidator, loginValidator, refreshTokenValidator, resetPasswordValidator } from '../validators';
+import { validateFields, tokenValidation, validateUserRole, passwordResetLimiter } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 
 const router = Router();
@@ -35,5 +35,24 @@ router.post('/logout-all', tokenValidation, validateUserRole(ROLES.USER), logout
 // is needed. The credential is the refresh token in the body, and the service checks it against
 // `appSession`. SPEC F42 3.4
 router.post('/refresh', ...refreshTokenValidator, validateFields, refresh);
+
+
+// Request Password Reset
+// Code: ESAVI-AUTH-006
+// POST: /api/auth/forgot-password
+// Public, and here that means without a previous credential: whoever calls it cannot authenticate,
+// which is the problem it solves. The limiter goes FIRST on purpose — five requests per IP every
+// 15 minutes, against the 100 of the global one — because a limiter that runs after the validators
+// has already paid the cost it exists to avoid. SPEC F43 3.4
+router.post('/forgot-password', passwordResetLimiter, ...forgotPasswordValidator, validateFields, forgotPassword);
+
+
+// Reset Password
+// Code: ESAVI-AUTH-007
+// POST: /api/auth/reset-password
+// Public, like the 006: the credential is the token in the body, minted by the 006 and checked by
+// the service against `appPasswordReset`. NO LIMITER HERE — this one demands a valid token, and
+// limiting it would punish the legitimate user who mistypes the link they pasted. SPEC F43 3.4
+router.post('/reset-password', ...resetPasswordValidator, validateFields, resetPassword);
 
 export default router;

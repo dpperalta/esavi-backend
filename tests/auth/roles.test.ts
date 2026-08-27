@@ -28,7 +28,14 @@ const ROUTE_RULES: RouteRule[] = [
     // tokenValidation, because the access token is normally expired exactly when a refresh or a
     // logout is needed — their credential is the refresh token in the body, checked against
     // appSession, not a role. The precedent for an operation without a row is ESAVI-DIAGTERM-006.
-    // ESAVI-SESSION-001, -006 and -007 have no row either: they have no HTTP route at all
+    // ESAVI-SESSION-001, -006 and -007 have no row either: they have no HTTP route at all.
+    // ESAVI-AUTH-006 and -007 (SPEC F43) have no row for the same reason as -002 and -003, taken
+    // one step further: they carry neither tokenValidation nor validateUserRole, because whoever
+    // calls them cannot authenticate — that is the problem a forgotten password is. The
+    // credential of the 007 is the reset token in its body, checked against appPasswordReset, and
+    // the 006 has none at all. Both are exercised in tests/contract/auth.test.ts and their
+    // openness is asserted below, under 'unauthenticated routes'.
+    // ESAVI-PWDRESET-001, -006 and -007 have no row either: they have no HTTP route at all
     { method: 'post',   path: '/api/auth/logout-all',                   minRole: 'USER',       code: 'ESAVI-AUTH-004' },
 
     // catalogItem
@@ -739,6 +746,27 @@ describe('role matrix', () => {
             // Reaches the handler: bad credentials, not a missing token
             expect([400, 401]).toContain(response.status);
             expect(response.body.message).not.toBe(undefined);
+        });
+
+        it('POST /api/auth/forgot-password needs no token', async () => {
+            const response = await request(app)
+                .post('/api/auth/forgot-password')
+                .send({ email: 'nobody@test.local' });
+
+            // Reaches the handler, and always answers 200: whether the account exists is exactly
+            // what this endpoint refuses to disclose (SPEC F43 §3.5)
+            expect(response.status).toBe(200);
+            expect(response.body.message).not.toBe(undefined);
+        });
+
+        it('POST /api/auth/reset-password needs no token', async () => {
+            const response = await request(app)
+                .post('/api/auth/reset-password')
+                .send({ token: 'not-a-token', newPassword: 'IrrelevantPassword123!' });
+
+            // Reaches the handler: an invalid reset token, not a missing access token
+            expect(response.status).toBe(401);
+            expect(response.body.code).toBe('AUTH_007_INVALID_RESET_TOKEN');
         });
 
     });

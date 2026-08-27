@@ -12,12 +12,16 @@ import { SystemConfigDefault } from '../types';
  * reactivated. What is in production wins over the default, and that is the single rule keeping a
  * deploy from silently stepping on a hand-tuned configuration.
  *
- * NOBODY CONSUMES THESE ROWS YET. The startup code keeps reading .env exactly as it did before —
- * `pagination.constants.ts` still reads ESAVI_APP_DEFAULT_LIMIT from the environment, and CORS_ORIGINS
- * is still resolved in app.ts. Deciding which parameters come down to the database, in what order and
- * which source wins while the two coexist is a configuration spec of its own, declared out of scope
- * by SPEC F26 §2. What this catalogue does today is make the rows exist, with their history and their
- * audit trail, so that migration has somewhere to land.
+ * EIGHT OF THESE ROWS ARE NOW CONSUMED AT RUNTIME — the six of scope MAIL and the two of scope AUTH,
+ * read by `src/helpers/appConfig.helper.ts` on every password reset email. SPEC F43 §3.6 is the first
+ * consumer of this table and the one that fixes the precedence for the first time: FOR THOSE EIGHT
+ * CODES THE DATABASE WINS AND .env IS THE FALLBACK, read on every send, without a cache.
+ *
+ * THE REST STILL COMES FROM .env. `pagination.constants.ts` still reads ESAVI_APP_DEFAULT_LIMIT from
+ * the environment and CORS_ORIGINS is still resolved in app.ts. Bringing those down to the database
+ * is the configuration spec of its own that SPEC F26 §2 declared out of scope, and SPEC F43 §2 keeps
+ * out of scope. What this catalogue does for them today is make the rows exist, with their history
+ * and their audit trail, so that migration has somewhere to land.
  *
  * Every field is declared explicitly, without leaning on the DEFAULTs of the DDL. `code` and `scope`
  * are written in the shape toConstantCase would produce, so what is read here is what ends up stored.
@@ -92,6 +96,90 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfigDefault[] = [
         value: 30,
         valueType: 'number',
         scope: 'NOTIFICATION',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MAIL_SMTP_HOST',
+        name: 'Servidor SMTP',
+        description: 'Host del servidor de correo saliente. Lo lee src/helpers/appConfig.helper.ts en cada envío. Se siembra vacío: es configuración de despliegue y se carga con ESAVI-SYSCONF-004.',
+        value: '',
+        valueType: 'string',
+        scope: 'MAIL',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MAIL_SMTP_PORT',
+        name: 'Puerto SMTP',
+        description: 'Puerto del servidor de correo saliente. 587 es el de envío con STARTTLS; 465 va con ESAVI_MAIL_SMTP_SECURE en true.',
+        value: 587,
+        valueType: 'number',
+        scope: 'MAIL',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MAIL_SMTP_SECURE',
+        name: 'SMTP sobre TLS implícito',
+        description: 'true abre la conexión ya cifrada, lo que corresponde al puerto 465. false negocia STARTTLS, que es lo habitual en el 587.',
+        value: false,
+        valueType: 'boolean',
+        scope: 'MAIL',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MAIL_SMTP_USER',
+        name: 'Usuario SMTP',
+        description: 'Usuario de autenticación contra el servidor de correo. Se siembra vacío y se carga con ESAVI-SYSCONF-004.',
+        value: '',
+        valueType: 'string',
+        scope: 'MAIL',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MAIL_SMTP_PASSWORD',
+        name: 'Contraseña SMTP',
+        description: 'Contraseña de autenticación contra el servidor de correo. Es la primera fila cifrada del catálogo: se guarda como { enc: "..." } y solo un SUPERADMIN puede leerla en claro.',
+        value: '',
+        valueType: 'string',
+        scope: 'MAIL',
+        // The only encrypted row of the catalogue. A credential seeded empty in git and loaded
+        // afterwards with the 004, which is precisely what isEncrypted exists for
+        isEncrypted: true,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MAIL_FROM',
+        name: 'Remitente del correo',
+        description: 'Dirección que figura como remitente de los correos que envía la aplicación. Se siembra vacía y se carga con ESAVI-SYSCONF-004.',
+        value: '',
+        valueType: 'string',
+        scope: 'MAIL',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_PASSWORD_RESET_URL',
+        name: 'URL de restablecimiento de contraseña',
+        description: 'Ruta pública del frontend que lee ?token= de la URL y lo manda en el cuerpo de ESAVI-AUTH-007. El enlace del correo es esta URL con ?token=<resetId>.<secreto>.',
+        value: '',
+        valueType: 'string',
+        scope: 'AUTH',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_PASSWORD_RESET_EXPIRES_MINUTES',
+        name: 'Caducidad del enlace de restablecimiento',
+        description: 'Minutos de vida de un enlace de restablecimiento de contraseña. Suficiente para leer un correo, corto para un enlace que autoriza a escribir una contraseña.',
+        value: 30,
+        valueType: 'number',
+        scope: 'AUTH',
+        // Editable, unlike ESAVI_APP_MAX_LIMIT: the reasonable window depends on the deployment,
+        // and whoever can edit it is already SUPERADMIN
         isEncrypted: false,
         isEditable: true
     },

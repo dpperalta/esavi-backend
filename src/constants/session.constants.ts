@@ -70,14 +70,18 @@ export const REFRESH_ABSOLUTE_MAX_IN_MS = parseDurationToMs(
     DEFAULT_REFRESH_ABSOLUTE_MAX_IN
 );
 
-// The four reasons `appSession.revokedReason` may hold. The column is free `text` in the DDL, so
+// The reasons `appSession.revokedReason` may hold. The column is free `text` in the DDL, so
 // this list is the only thing keeping the values from drifting; §3.5 of SPEC F42 assigns one to
 // each writer. ABSOLUTE_MAX_REACHED is not in the spec's §3.1 table but is required by §3.5 step 6.
+// PASSWORD_RESET is added by SPEC F43 §3.5: a password the owner reset through a self-service
+// link is not the same event as one they changed knowing the old one, and only the first one
+// suggests the account had been lost.
 export const SESSION_REVOKE_REASONS = [
     'LOGOUT',
     'LOGOUT_ALL',
     'REUSE_DETECTED',
     'PASSWORD_CHANGED',
+    'PASSWORD_RESET',
     'ABSOLUTE_MAX_REACHED'
 ] as const;
 

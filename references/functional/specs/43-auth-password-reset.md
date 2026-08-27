@@ -1,6 +1,6 @@
 # SPEC F43 — Restablecimiento de contraseña por autoservicio
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` en servicios), SPEC F04 (`appUser`, `ESAVI-USER-006`), SPEC F12 (update diferencial), SPEC F26 (`systemConfig`, `ESAVI-SYSCONF-006` y `-008`), **SPEC F42 (`appSession`, `ESAVI-SESSION-007`) — dependencia dura: este spec no se implementa antes**
 > **Fecha:** 2026-08-26
 > **Objetivo:** Permitir que un usuario que no recuerda su contraseña la restablezca por sí mismo, mediante un enlace de un solo uso enviado a su correo, sin intervención de un administrador y sin revelar qué cuentas existen.
