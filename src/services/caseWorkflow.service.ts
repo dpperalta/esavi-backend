@@ -4,6 +4,8 @@ import { CaseWorkflow, CatalogItem, CatalogType, Classification, EsaviCase, Fina
 import { AppError, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CaseWorkflowListFilters, CaseWorkflowStage, CreateCaseWorkflowInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { sequelize } from '../database/connection';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 /**
  * caseWorkflow — administrative progress of the case file (SPEC F44).
@@ -13,7 +15,7 @@ import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants
  * a closed file can belong to a patient who never recovered, and a recovered patient can have an
  * open file.
  *
- * NO WRITE HERE IS A DIFFERENTIAL UPDATE — `buildDifferentialUpdate` of CONVENTIONS.md §11 is
+ * NO WRITE HERE IS A DIFFERENTIAL UPDATE — the diff helper of CONVENTIONS.md §11 is
  * deliberately absent, and §3.5 of the spec reasons it out one by one: a create never goes
  * through the helper, the transitions are writes with an intent of their own whose value differs
  * from the stored one by construction, and the activations are excluded by §11 itself. There is
@@ -884,6 +886,56 @@ const resolveCaseWorkflowValidationService = async (
     }
 }
 
+// ESAVI-CASEFLOW-005A / 005B - Set Case Workflow Activation Service
+/**
+ * Deactivates or reactivates the workflow **record**.
+ *
+ * **This is not how a case file is closed.** Closing is 008 and reopening is 009; these two are an
+ * administrative operation over the row, the same one every other entity has. Confusing the two is
+ * the mistake this spec most wants to avoid, and it is why the i18n keys of 005A and 005B speak of
+ * "workflow record" and never of "case".
+ *
+ * There is no 005C: `caseWorkflow` is inside the `preventPhysicalDelete` loop of `esaviapp.sql`,
+ * the trigger would reject the DELETE, and the availability rule of CONVENTIONS.md §6 forbids
+ * declaring the endpoint.
+ *
+ * Delegated to `setEntityActiveStatusService` with no logic of its own, and the `where` filters by
+ * the primary key alone: the generic service is what tells "does not exist" (404) from "already in
+ * that state" (409).
+ */
+const setCaseWorkflowActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        await setEntityActiveStatusService({
+            model: CaseWorkflow,
+            where: { caseWorkflowId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('caseWorkflow.notFound', lang),
+            notFoundCode: `CASEFLOW_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`caseWorkflow.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `CASEFLOW_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                // The audit entry keeps the operation code and nothing else: no suffixes added
+                method: `ESAVI-CASEFLOW-${ op }`,
+                detail: `Case workflow record ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -1013,6 +1065,7 @@ export {
     reopenCaseWorkflowService,
     requestCaseWorkflowValidationService,
     resolveCaseWorkflowValidationService,
+    setCaseWorkflowActivationService,
     advanceCaseWorkflowStageService,
     toCaseWorkflowResponse,
     DETAIL_INCLUDE,

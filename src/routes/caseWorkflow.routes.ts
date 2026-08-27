@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateCaseWorkflow,
     closeCaseWorkflow,
+    deleteCaseWorkflow,
     completeCaseWorkflowStage,
     getAllCaseWorkflows,
     getCaseWorkflowByCaseId,
@@ -19,7 +21,7 @@ import {
     completeCaseWorkflowStageValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -39,6 +41,12 @@ router.get('/', tokenValidation, validateUserRole(USER), ...caseWorkflowListVali
 // Code: ESAVI-CASEFLOW-002B
 // Declared before /:id so Express does not capture 'admin' as an :id
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowListValidator, validateFields, getAllCaseWorkflows);
+
+// Activate Case Workflow - For SuperAdmin
+// Code: ESAVI-CASEFLOW-005B
+// Declared before /:id so Express does not capture 'activate' as an :id. It reactivates the
+// workflow RECORD; reopening a closed case file is 009
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...caseWorkflowIdValidator, validateFields, activateCaseWorkflow);
 
 // Get Case Workflow by Case
 // Code: ESAVI-CASEFLOW-006
@@ -79,5 +87,12 @@ router.patch('/case/:caseId/resolve-validation', tokenValidation, validateUserRo
 // Declared AFTER every literal path so Express does not capture 'admin' as an :id. The :id is
 // the caseWorkflowId, which is why the 006 by case is not redundant with this one
 router.get('/:id', tokenValidation, validateUserRole(USER), ...caseWorkflowIdValidator, validateFields, getCaseWorkflowById);
+
+// Soft delete Case Workflow
+// Code: ESAVI-CASEFLOW-005A
+// Retires the workflow RECORD from view; it does NOT close the case file, which is 008.
+// There is no DELETE /purge/:id: caseWorkflow is inside the preventPhysicalDelete loop, so 005C
+// is not declared
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowIdValidator, validateFields, deleteCaseWorkflow);
 
 export default router;

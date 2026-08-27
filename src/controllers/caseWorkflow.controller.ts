@@ -10,7 +10,8 @@ import {
     getCaseWorkflowsService,
     reopenCaseWorkflowService,
     requestCaseWorkflowValidationService,
-    resolveCaseWorkflowValidationService
+    resolveCaseWorkflowValidationService,
+    setCaseWorkflowActivationService
 } from '../services/caseWorkflow.service';
 
 // The four query filters of 002A and 002B. Only what actually arrives travels to the service, so
@@ -255,6 +256,48 @@ const resolveCaseWorkflowValidation = async (req: Request, res: Response, next: 
     }
 }
 
+// Delete Case Workflow Controller - Soft delete
+// Code: ESAVI-CASEFLOW-005A
+// Retires the workflow RECORD from view. It does NOT close the case file — that is 008 — and it
+// answers { ok, message } with no data, as CONVENTIONS.md §10 requires of a state operation
+const deleteCaseWorkflow = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setCaseWorkflowActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.deletedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-005A: Error deleting Case Workflow: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.deletedFailed', req.lang), 500, 'CASEFLOW_005A_DELETE_FAILED', error));
+    }
+}
+
+// Activate Case Workflow Controller - For SuperAdmin
+// Code: ESAVI-CASEFLOW-005B
+const activateCaseWorkflow = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await setCaseWorkflowActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('caseWorkflow.activatedSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CASEFLOW-005B: Error activating Case Workflow: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('caseWorkflow.activatedFailed', req.lang), 500, 'CASEFLOW_005B_ACTIVATE_FAILED', error));
+    }
+}
+
 export {
     getCaseWorkflows,
     getAllCaseWorkflows,
@@ -264,5 +307,7 @@ export {
     closeCaseWorkflow,
     reopenCaseWorkflow,
     requestCaseWorkflowValidation,
-    resolveCaseWorkflowValidation
+    resolveCaseWorkflowValidation,
+    deleteCaseWorkflow,
+    activateCaseWorkflow
 }
