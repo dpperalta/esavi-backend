@@ -1308,6 +1308,40 @@ CREATE TABLE IF NOT EXISTS "finalClassification" (
   CONSTRAINT "UQ_finalClassification_case" UNIQUE ("caseId")
 );
 
+-- Case workflow: administrative progress of the case file (SPEC F44).
+-- Not to be confused with "investigation"."statusItemId", which is the patient's clinical outcome.
+CREATE TABLE IF NOT EXISTS "caseWorkflow" (
+  "caseWorkflowId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "caseId" uuid NOT NULL,
+  "statusItemId" uuid NOT NULL,
+  "previousStatusItemId" uuid,
+  "openedAt" timestamptz NOT NULL DEFAULT current_timestamp,
+  "classificationStartedAt" timestamptz,
+  "classificationEndedAt" timestamptz,
+  "notificationStartedAt" timestamptz,
+  "notificationEndedAt" timestamptz,
+  "investigationStartedAt" timestamptz,
+  "investigationEndedAt" timestamptz,
+  "finalClassificationStartedAt" timestamptz,
+  "finalClassificationEndedAt" timestamptz,
+  "closedAt" timestamptz,
+  "lastReopenedAt" timestamptz,
+  "reopenCount" smallint NOT NULL DEFAULT 0,
+  "isActive" boolean NOT NULL DEFAULT true,
+  "createdAt" timestamptz NOT NULL DEFAULT current_timestamp,
+  "updatedAt" timestamptz,
+  "deletedAt" timestamptz,
+  "sysDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT "FK_caseWorkflow_case" FOREIGN KEY ("caseId") REFERENCES "esaviCase" ("caseId") ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT "FK_caseWorkflow_status" FOREIGN KEY ("statusItemId") REFERENCES "catalogItem" ("catalogItemId") ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT "FK_caseWorkflow_previousStatus" FOREIGN KEY ("previousStatusItemId") REFERENCES "catalogItem" ("catalogItemId") ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT "UQ_caseWorkflow_case" UNIQUE ("caseId"),
+  CONSTRAINT "CK_caseWorkflow_reopenCount" CHECK ("reopenCount" >= 0)
+);
+CREATE INDEX IF NOT EXISTS "IX_caseWorkflow_case" ON "caseWorkflow" ("caseId");
+CREATE INDEX IF NOT EXISTS "IX_caseWorkflow_status" ON "caseWorkflow" ("statusItemId");
+
 -- -----------------------------------------------------------------------------
 -- Triggers
 -- -----------------------------------------------------------------------------
@@ -1401,7 +1435,7 @@ BEGIN
     'catalogType', 'catalogItem', 'geoLevelType', 'geoLocation', 'healthFacility',
     'diagnosticTerm', 'vaccineWhodrug', 'diluentCatalog', 'patient', 'esaviCase',
     'appUser', 'appRole', 'appPermission', 'appUserRole', 'appRolePermission',
-    'appSession', 'systemConfig', 'systemConfigHistory'
+    'appSession', 'systemConfig', 'systemConfigHistory', 'caseWorkflow'
   ] LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', 'TRG_' || t || '_preventPhysicalDelete', t);
     EXECUTE format('CREATE TRIGGER %I BEFORE DELETE ON %I FOR EACH ROW EXECUTE FUNCTION "preventPhysicalDelete"()', 'TRG_' || t || '_preventPhysicalDelete', t);
@@ -1699,5 +1733,14 @@ CALL "upsertCatalogItem"('birthCondition', 'Birth Condition', '1', 'A término',
 CALL "upsertCatalogItem"('birthCondition', 'Birth Condition', '2', 'Prematuro', 'PRETERM', 2);
 CALL "upsertCatalogItem"('birthCondition', 'Birth Condition', '3', 'Postérmino', 'POSTTERM', 3);
 CALL "upsertCatalogItem"('birthCondition', 'Birth Condition', '4', 'No aplica', 'NOT_APPLICABLE', 4);
+
+CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'OPEN', 'Abierto', 'OPEN', 1);
+CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'IN_CLASSIFICATION', 'En clasificación', 'IN_CLASSIFICATION', 2);
+CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'IN_NOTIFICATION', 'En notificación', 'IN_NOTIFICATION', 3);
+CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'IN_INVESTIGATION', 'En investigación', 'IN_INVESTIGATION', 4);
+CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'IN_FINAL_CLASSIFICATION', 'En clasificación final', 'IN_FINAL_CLASSIFICATION', 5);
+CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'PENDING_VALIDATION', 'Pendiente de validación', 'PENDING_VALIDATION', 6);
+CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'CLOSED', 'Cerrado', 'CLOSED', 7);
+CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'REOPENED', 'Reabierto', 'REOPENED', 8);
 
 COMMIT;
