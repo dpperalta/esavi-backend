@@ -32,7 +32,7 @@ import { sendMailService } from './common/mail.service';
 import { renderEmailTemplate } from '../helpers/mailer.helper';
 import { getAppConfigString } from '../helpers/appConfig.helper';
 import { sequelize } from '../database/connection';
-import { AppDetails, LoginOutput, ResetPasswordInput, SessionTokenPair } from '../types';
+import { AppDetails, ForgotPasswordInput, LoginOutput, ResetPasswordInput, SessionTokenPair } from '../types';
 import { PASSWORD_RESET_SCOPE, PASSWORD_RESET_URL_CODE } from '../constants/passwordReset.constants';
 import { REFRESH_ABSOLUTE_MAX_IN_MS, REFRESH_TOKEN_EXPIRES_IN_MS } from '../constants/session.constants';
 
@@ -343,10 +343,10 @@ const logoutAllService = async ( userId: string, lang: string ): Promise<{ revok
  * A failed delivery is an `error` log line and still a 200. The timing difference between the two
  * paths is the enumeration risk §7 declares open and does not close.
  */
-const forgotPasswordService = async ( email: string, lang: string, meta: LoginRequestMeta = {} ): Promise<void> => {
+const forgotPasswordService = async ( data: ForgotPasswordInput, lang: string, meta: LoginRequestMeta = {} ): Promise<void> => {
     // Normalized exactly like the login does, and for the same reason: the column holds the
     // ciphertext, so an address typed in uppercase produces a different one
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = data.email.trim().toLowerCase();
 
     const user = await AppUser.findOne({
         where: {

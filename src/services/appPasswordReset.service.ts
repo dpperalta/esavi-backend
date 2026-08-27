@@ -29,7 +29,8 @@ import {
  * seven operations of the `001`-`005B` range, and `appPasswordReset` has no `isActive` with which
  * to express `005A`/`005B`.
  *
- * Nothing here goes through `buildDifferentialUpdate`, and §3.5 of the spec states why for each
+ * NO WRITE HERE IS A DIFFERENTIAL UPDATE — the helper of CONVENTIONS.md §11 is deliberately not
+ * used, and §3.5 of the spec states why for each
  * write: a create never does, and marking `usedAt` or `invalidatedAt` is a write with its own
  * intent — it records a fact, its instant and its reason, the way an activation does. A second
  * attempt writes nothing because the **filter** excludes the row, not because a diff came out

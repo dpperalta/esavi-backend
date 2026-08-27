@@ -105,7 +105,7 @@ const forgotPassword = async( req: Request, res: Response, next: NextFunction ):
     try{
         // Trace of where the request came from. Both come from the request, never from the body:
         // a client must not be able to declare the IP or the User-Agent of its own request
-        await forgotPasswordService(req.body.email, req.lang, {
+        await forgotPasswordService(req.body, req.lang, {
             ipAddress: req.ip,
             userAgent: req.headers['user-agent']
         });
