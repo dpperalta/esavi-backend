@@ -1,5 +1,6 @@
 export * from './age.helper';
 export * from './appError.helper';
+export * from './appConfig.helper';
 export * from './catalogItemParser.helper';
 export * from './jwt.helper';
 export * from './esaviLogs.helper';
