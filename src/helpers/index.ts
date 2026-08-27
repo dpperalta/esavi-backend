@@ -17,3 +17,4 @@ export * from './stringHandling.helper';
 export * from './systemConfigValue.helper';
 export * from './whodrugParser.helper';
 export * from './refreshToken.helper';
+export * from './passwordResetToken.helper';
