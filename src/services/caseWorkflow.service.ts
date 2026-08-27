@@ -1,8 +1,9 @@
-import { Transaction } from 'sequelize';
+import { Op, Transaction, WhereOptions } from 'sequelize';
 
-import { CaseWorkflow, CatalogItem, CatalogType } from '../models';
+import { CaseWorkflow, CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, Investigation, Notification } from '../models';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { AppDetails, AuthUser, CaseWorkflowStage, CreateCaseWorkflowInput } from '../types';
+import { AppDetails, AuthUser, CaseWorkflowListFilters, CaseWorkflowStage, CreateCaseWorkflowInput } from '../types';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 /**
  * caseWorkflow — administrative progress of the case file (SPEC F44).
@@ -183,6 +184,244 @@ const createCaseWorkflowService = async (
     }
 }
 
+// -----------------------------------------------------------------------------
+// Response shape (SPEC F44 §3.7)
+// -----------------------------------------------------------------------------
+
+// The primary key of each stage satellite, and the alias EsaviCase exposes it under. The four
+// relations are one to one by their own UNIQUE ("caseId"), so each include resolves at most one
+// row and uses its index
+const STAGE_SATELLITE: Record<CaseWorkflowStage, { alias: string; primaryKey: string }> = {
+    CLASSIFICATION: { alias: 'classification', primaryKey: 'classificationId' },
+    NOTIFICATION: { alias: 'notification', primaryKey: 'notificationId' },
+    INVESTIGATION: { alias: 'investigation', primaryKey: 'investigationId' },
+    FINAL_CLASSIFICATION: { alias: 'finalClassification', primaryKey: 'finalClassificationId' }
+};
+
+/**
+ * The four satellites, nested under the `case` include and narrowed to their primary key.
+ *
+ * `required: false` in all four, or a case with no classification would vanish from the listing
+ * altogether. `deletedAt: null` is the only filter: a **deactivated** stage still counts as
+ * existing and keeps its `id`, because its row is still there and a POST would hit the UNIQUE —
+ * what the client needs then is to reactivate it with its 005B, not to create it again.
+ *
+ * This is one include and not four `findOne` per row, so the number of queries does not grow with
+ * the page size.
+ */
+const STAGE_INCLUDES = [
+    { model: Classification, as: 'classification', attributes: ['classificationId'], where: { deletedAt: null }, required: false },
+    { model: Notification, as: 'notification', attributes: ['notificationId'], where: { deletedAt: null }, required: false },
+    { model: Investigation, as: 'investigation', attributes: ['investigationId'], where: { deletedAt: null }, required: false },
+    { model: FinalClassification, as: 'finalClassification', attributes: ['finalClassificationId'], where: { deletedAt: null }, required: false }
+];
+
+const CASE_INCLUDE = {
+    model: EsaviCase,
+    as: 'case',
+    attributes: ['caseId', 'caseCode'],
+    include: STAGE_INCLUDES
+};
+
+const PREVIOUS_STATUS_INCLUDE = {
+    model: CatalogItem,
+    as: 'previousStatus',
+    attributes: ['catalogItemId', 'code', 'name'],
+    required: false
+};
+
+const DETAIL_INCLUDE = [CASE_INCLUDE, STATUS_INCLUDE, PREVIOUS_STATUS_INCLUDE];
+
+// Newest file first. openedAt and not createdAt: the two are written in the same statement, but
+// openedAt is the one that means something in the domain
+const LIST_ORDER: [string, string][] = [['openedAt', 'DESC']];
+
+const MINUTE_IN_MS = 60 * 1000;
+
+// Whole minutes between two stamps, or null when either is missing. It is never stored: it is a
+// pure derivative of two columns of the same row, and keeping it in sync would buy no query
+const durationMinutes = (startedAt: Date | null, endedAt: Date | null): number | null =>
+    startedAt && endedAt
+        ? Math.round(( endedAt.getTime() - startedAt.getTime() ) / MINUTE_IN_MS)
+        : null;
+
+const toIso = (value: Date | null): string | null => value ? value.toISOString() : null;
+
+const toCatalogRef = (item: CatalogItem | undefined | null) =>
+    item ? { catalogItemId: item.catalogItemId, code: item.code, name: item.name } : null;
+
+/**
+ * The `stages` block of §3.7: the two stamps, the duration and the identity of the real row.
+ *
+ * `exists` and `id` are what let a client resume a half-captured file without guessing:
+ * `exists: false` means POST the stage, `exists: true` means PUT over the `id` returned. They are
+ * independent of the stamps on purpose — a `startedAt` with `id: null` and an `id` with no
+ * `startedAt` are both anomalies, and folding them into a single boolean would hide them.
+ */
+const buildStages = (workflow: CaseWorkflow) => {
+    const esaviCase = workflow.case as ( EsaviCase & Record<string, unknown> ) | undefined;
+    const stages: Record<string, unknown> = {};
+
+    for( const stage of STAGES ) {
+        const { alias, primaryKey } = STAGE_SATELLITE[stage];
+        const satellite = esaviCase?.[alias] as Record<string, unknown> | null | undefined;
+        const id = ( satellite?.[primaryKey] as string | undefined ) ?? null;
+
+        const startedAt = stampOf(workflow, startedAtField(stage));
+        const endedAt = stampOf(workflow, endedAtField(stage));
+
+        stages[alias] = {
+            exists: id !== null,
+            id,
+            startedAt: toIso(startedAt),
+            endedAt: toIso(endedAt),
+            durationMinutes: durationMinutes(startedAt, endedAt)
+        };
+    }
+
+    return stages;
+}
+
+/**
+ * The full shape of 003, 006 and 007-011, and of every row of 002A and 002B.
+ *
+ * The eight column stamps are grouped into `stages` instead of travelling loose: eight fields the
+ * client has to pair up by hand are eight chances to pair them wrong. `sysDetails` never leaves
+ * the service, and neither do the three raw foreign keys — the response carries the resolved
+ * `status`, `previousStatus` and the stage identities instead.
+ */
+const toCaseWorkflowResponse = (workflow: CaseWorkflow) => {
+    const openedAt = stampOf(workflow, 'openedAt');
+    const closedAt = stampOf(workflow, 'closedAt');
+
+    return {
+        caseWorkflowId: workflow.caseWorkflowId,
+        caseId: workflow.caseId,
+        status: toCatalogRef(workflow.status),
+        previousStatus: toCatalogRef(workflow.previousStatus),
+        openedAt: toIso(openedAt),
+        closedAt: toIso(closedAt),
+        lastReopenedAt: toIso(stampOf(workflow, 'lastReopenedAt')),
+        reopenCount: workflow.reopenCount,
+        stages: buildStages(workflow),
+        // null while the file is open. The elapsed time of a live case is computed by the client
+        // against its own clock: the server never returns a value that changes between two
+        // identical calls
+        totalDurationMinutes: durationMinutes(openedAt, closedAt),
+        isActive: workflow.isActive,
+        createdAt: toIso(stampOf(workflow, 'createdAt')),
+        updatedAt: toIso(stampOf(workflow, 'updatedAt')),
+        deletedAt: toIso(stampOf(workflow, 'deletedAt')),
+        appDetails: workflow.appDetails ?? []
+    };
+}
+
+/**
+ * The three filters that need no resolution, accumulated with AND. A filter pointing at a row
+ * that does not exist yields an empty page, never a 404: searching for something absent is an
+ * empty search, not a missing resource. `statusCode` is the exception and is resolved by the
+ * caller — it is a name of the catalog, and a name that does not exist IS a 404.
+ */
+const buildListWhere = (filters: CaseWorkflowListFilters, statusItemId?: string): WhereOptions => {
+    const where: Record<string, unknown> = {};
+
+    if( filters.caseId ) where.caseId = filters.caseId;
+    if( statusItemId ) where.statusItemId = statusItemId;
+
+    const from = filters.openedFrom ? new Date(filters.openedFrom) : undefined;
+    const to = filters.openedTo ? new Date(filters.openedTo) : undefined;
+    if( from && to ) {
+        where.openedAt = { [Op.between]: [from, to] };
+    } else if( from ) {
+        where.openedAt = { [Op.gte]: from };
+    } else if( to ) {
+        where.openedAt = { [Op.lte]: to };
+    }
+
+    return where as WhereOptions;
+}
+
+/**
+ * Resolves the `statusCode` filter into the id the where clause needs.
+ *
+ * The filter travels as the `code` of the catalogItem — `IN_INVESTIGATION`, not its UUID —
+ * because the client knows the name of the state, not its identifier. Unlike the 500 of
+ * `resolveStatusItem`, an unknown code here is **404**: the client asked for a state that does
+ * not exist, which is a mistake in the request and not a broken deployment.
+ */
+const resolveStatusFilter = async (statusCode: string | undefined, lang: string): Promise<string | undefined> => {
+    if( !statusCode ) return undefined;
+
+    const statusItem = await CatalogItem.findOne({
+        where: { code: statusCode, isActive: true },
+        attributes: ['catalogItemId'],
+        include: [{
+            model: CatalogType,
+            as: 'catalogType',
+            where: { code: WORKFLOW_STATUS_CATALOG_CODE },
+            attributes: []
+        }]
+    });
+
+    if( !statusItem ) {
+        throw new AppError(
+            getMessage('caseWorkflow.statusNotFound', lang),
+            404,
+            'CASEFLOW_002_STATUS_NOT_FOUND'
+        );
+    }
+
+    return statusItem.catalogItemId;
+}
+
+// ESAVI-CASEFLOW-002A - Get Active Case Workflows Service
+/**
+ * The public listing. Filters by the `isActive` of the workflow row itself, which is the state
+ * 005A and 005B move — not the state of the case file, which is `status`.
+ */
+const getCaseWorkflowsService = async (
+    filters: CaseWorkflowListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET,
+    lang: string
+) => {
+    const statusItemId = await resolveStatusFilter(filters.statusCode, lang);
+
+    const { count, rows } = await CaseWorkflow.findAndCountAll({
+        where: { ...buildListWhere(filters, statusItemId), isActive: true },
+        include: DETAIL_INCLUDE,
+        order: LIST_ORDER,
+        limit,
+        offset,
+        // The four nested satellite includes multiply the rows of the SQL result, so without this
+        // the count would be the number of joined rows and not the number of workflows
+        distinct: true
+    });
+
+    return { count, rows: rows.map(toCaseWorkflowResponse) };
+}
+
+// ESAVI-CASEFLOW-002B - Get All Case Workflows Service - For Admin
+const getAllCaseWorkflowsService = async (
+    filters: CaseWorkflowListFilters = {},
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET,
+    lang: string
+) => {
+    const statusItemId = await resolveStatusFilter(filters.statusCode, lang);
+
+    const { count, rows } = await CaseWorkflow.findAndCountAll({
+        where: buildListWhere(filters, statusItemId),
+        include: DETAIL_INCLUDE,
+        order: LIST_ORDER,
+        limit,
+        offset,
+        distinct: true
+    });
+
+    return { count, rows: rows.map(toCaseWorkflowResponse) };
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -303,7 +542,11 @@ const advanceCaseWorkflowStageService = async (
 
 export {
     createCaseWorkflowService,
+    getCaseWorkflowsService,
+    getAllCaseWorkflowsService,
     advanceCaseWorkflowStageService,
+    toCaseWorkflowResponse,
+    DETAIL_INCLUDE,
     resolveStatusItem,
     startedAtField,
     endedAtField,
