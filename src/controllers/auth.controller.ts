@@ -1,12 +1,17 @@
 import { NextFunction, Request, Response } from 'express';
-import { loginService } from '../services/auth.service';
+import { loginService, refreshTokenService, logoutService, logoutAllService } from '../services/auth.service';
 import { esaviLog, getMessage, AppError } from '../helpers';
 
 // Execute login process
 // Code: ESAVI-AUTH-001
 const login = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void   > => {
     try{
-        const result = await loginService(req.body, req.lang);
+        // Trace of where the session was opened from. Both come from the request, never from the
+        // body: a client must not be able to declare the IP or the User-Agent of its own session
+        const result = await loginService(req.body, req.lang, {
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent']
+        });
         return res.status(200).json({
             ok: true,
             message: getMessage('auth.loginSuccess', req.lang, { name: `${result.user.displayName}` }),
@@ -22,6 +27,74 @@ const login = async( req: Request, res: Response, next: NextFunction ): Promise<
     }
 }
 
+// Renew the pair of credentials from a refresh token
+// Code: ESAVI-AUTH-002
+const refresh = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try{
+        // Only the tokens: a renewal is not a login, so it does not repeat the `user` block nor
+        // pay for the roles include on what is the most frequent call of the whole mechanism
+        const result = await refreshTokenService(req.body.refreshToken, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('auth.refreshSuccess', req.lang),
+            data: result
+        });
+    } catch( error ) {
+        esaviLog('ESAVI-AUTH-002 - Error during refresh process: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('auth.refreshFailed', req.lang), 500, 'AUTH_002_REFRESH_FAILED', error));
+    }
+}
+
+// Close the session the refresh token belongs to
+// Code: ESAVI-AUTH-003
+const logout = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try{
+        await logoutService(req.body.refreshToken, req.lang);
+        // No `data`: closing a session is a state operation, and CONVENTIONS.md 10 keeps those
+        // to the envelope alone
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('auth.logoutSuccess', req.lang)
+        });
+    } catch( error ) {
+        esaviLog('ESAVI-AUTH-003 - Error during logout process: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('auth.logoutFailed', req.lang), 500, 'AUTH_003_LOGOUT_FAILED', error));
+    }
+}
+
+// Close every live session of the authenticated user
+// Code: ESAVI-AUTH-004
+const logoutAll = async( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    try{
+        // The identity comes from the token, never from the body. tokenValidation has already
+        // re-fetched the user from the database, so req.user is a proven identity
+        const result = await logoutAllService(req.user!.userId, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('auth.logoutAllSuccess', req.lang, { count: `${ result.revokedCount }` }),
+            data: result
+        });
+    } catch( error ) {
+        esaviLog('ESAVI-AUTH-004 - Error during logout all process: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('auth.logoutAllFailed', req.lang), 500, 'AUTH_004_LOGOUT_ALL_FAILED', error));
+    }
+}
+
 export {
-    login
+    login,
+    refresh,
+    logout,
+    logoutAll
 }

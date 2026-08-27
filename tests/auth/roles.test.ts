@@ -23,6 +23,14 @@ const UUID = '00000000-0000-4000-8000-000000000000';
  * not. Adding a route without adding it here leaves it unguarded by the suite.
  */
 const ROUTE_RULES: RouteRule[] = [
+    // auth (SPEC F42) — only ESAVI-AUTH-004 has a row here. The other three carry no minimum role:
+    // ESAVI-AUTH-001 never had one, and ESAVI-AUTH-002 and -003 deliberately go without
+    // tokenValidation, because the access token is normally expired exactly when a refresh or a
+    // logout is needed — their credential is the refresh token in the body, checked against
+    // appSession, not a role. The precedent for an operation without a row is ESAVI-DIAGTERM-006.
+    // ESAVI-SESSION-001, -006 and -007 have no row either: they have no HTTP route at all
+    { method: 'post',   path: '/api/auth/logout-all',                   minRole: 'USER',       code: 'ESAVI-AUTH-004' },
+
     // catalogItem
     { method: 'post',   path: '/api/catalog-items',                     minRole: 'ADMIN',      code: 'ESAVI-CATITEM-001' },
     { method: 'get',    path: `/api/catalog-items/type/${ UUID }`,      minRole: 'USER',       code: 'ESAVI-CATITEM-002A' },
@@ -704,7 +712,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(310);
+            expect(ROUTE_RULES).toHaveLength(311);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

@@ -23,7 +23,17 @@
         "tokenMissing": "Falta la autenticación. Por favor, inicie sesión para obtener acceso.",
         "forbidden": "No tiene permisos para acceder a este recurso.",
         "loginSuccess": "Inicio de sesión exitoso. ¡Bienvenido de nuevo, {{name}}!",
-        "loginFailed": "No se pudo completar el inicio de sesión"
+        "loginFailed": "No se pudo completar el inicio de sesión",
+        "refreshSuccess": "Sesión renovada correctamente.",
+        "refreshFailed": "No se pudo renovar la sesión",
+        "invalidRefreshToken": "Token de renovación inválido. Por favor, inicie sesión nuevamente.",
+        "refreshTokenReused": "Su sesión se cerró por seguridad. Por favor, inicie sesión nuevamente.",
+        "sessionRevoked": "Su sesión fue cerrada. Por favor, inicie sesión nuevamente.",
+        "sessionExpired": "Su sesión ha caducado. Por favor, inicie sesión nuevamente.",
+        "logoutSuccess": "Sesión cerrada correctamente.",
+        "logoutFailed": "No se pudo cerrar la sesión",
+        "logoutAllSuccess": "Se cerraron {{count}} sesiones correctamente.",
+        "logoutAllFailed": "No se pudieron cerrar las sesiones"
     },
     "crypto": {
         "encryptionFailed": "Error al encriptar. Por favor, inténtelo de nuevo más tarde.",
