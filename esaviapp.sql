@@ -1,4 +1,4 @@
-﻿
+
 /*
   ESAVI Web Application - OpPostgreSQL schema v9.1.9
   Target: PostgreSQL 12+
@@ -1760,7 +1760,7 @@ CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'CLOSED',
 CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'REOPENED', 'Reabierto', 'REOPENED', 8);
 
 -- -----------------------------------------------------------------------------
--- SPEC F46 â€” Value realignment and lock
+-- SPEC F46 - Value realignment and lock
 --
 -- "code" belongs to the country and may be recoded at any time; "value" belongs
 -- to the source code, which resolves catalog items by it. This block runs after
@@ -1794,7 +1794,7 @@ UPDATE "catalogItem"
  WHERE "value" ~ '\s';
 
 -- 3. Lock the values that src/ resolves items by. A value is locked if and only
---    if some file under src/ names it â€” today five rows in three catalogs.
+--    if some file under src/ names it - today five rows in three catalogs.
 --    "isActive" is forced back on in the same statement: a locked row is alive
 --    by definition, even if someone had withdrawn it before this deployment.
 UPDATE "catalogItem" ci

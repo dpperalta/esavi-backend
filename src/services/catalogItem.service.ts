@@ -1,5 +1,5 @@
 import { CreationAttributes, Op, Transaction } from "sequelize";
-import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toTitleCase } from "../helpers";
+import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toConstantCase, toTitleCase } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
 import {
@@ -113,11 +113,17 @@ const createCatalogItemService = async (data: CreateCatalogItemInput, authUser: 
         method: 'ESAVI-CATITEM-001',
         detail: 'Catalog item created by service'
     };
+    // isValueLocked is deliberately absent from the input: it is not read from the body, so it always
+    // starts false. The lock is placed by the deployment SQL, never by an ADMIN — an item that could
+    // be born locked would let the API create the very thing the lock exists to protect from the API
     const createdItem = await CatalogItem.create({
         catalogTypeId: data.catalogTypeId,
         code,
         name: toTitleCase(data.name.trim()),
-        value: data.value.trim(),
+        // The value belongs to the source code, which resolves items by it, so it is stored in the
+        // shape the source code writes it in. The trim comes first: toConstantCase turns the outer
+        // whitespace into underscores otherwise
+        value: toConstantCase(data.value.trim()),
         description: data.description ? data.description.trim() : null,
         metadata: data.metadata || {},
         sortOrder,
