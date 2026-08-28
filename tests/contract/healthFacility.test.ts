@@ -66,13 +66,15 @@ describe('healthFacility contract', () => {
         geoLocationId = await createGeoLocationFixture(geoLevelTypeId, 'hfacLoc');
 
         // Seeded by esaviapp.sql: HOSPITAL belongs to healthFacilityType, FEMALE to sex.
-        // The second one is the vehicle for the wrong-catalog test
+        // The second one is the vehicle for the wrong-catalog test.
+        // Resolved by value and not by code: sex is one of the 13 catalogs SPEC F46 found seeded
+        // with a numeric code, so 'FEMALE' only matches the value column
         const facilityType = await CatalogItem.findOne({
-            where: { code: 'HOSPITAL' },
+            where: { value: 'HOSPITAL' },
             include: [{ model: CatalogType, as: 'catalogType', where: { code: 'healthFacilityType' }, attributes: [] }]
         });
         const wrongCatalogItem = await CatalogItem.findOne({
-            where: { code: 'FEMALE' },
+            where: { value: 'FEMALE' },
             include: [{ model: CatalogType, as: 'catalogType', where: { code: 'sex' }, attributes: [] }]
         });
         expect(facilityType).not.toBeNull();
