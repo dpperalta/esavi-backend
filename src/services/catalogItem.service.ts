@@ -482,7 +482,10 @@ const importCatalogItemsService = async (
                     catalogTypeId,
                     code: row.code,
                     name: row.name,
-                    value: row.values.value,
+                    // Same shape the 001 and the 004 store: the import is a third way into the column
+                    // and must not be the one that leaves it unnormalized. An inserted item is new, so
+                    // there is no lock to respect — isValueLocked stays with the false of the DDL
+                    value: toConstantCase(row.values.value),
                     description: row.values.description,
                     sortOrder: row.values.sortOrder,
                     isActive: true,
@@ -505,9 +508,13 @@ const importCatalogItemsService = async (
             // catalogTypeId and code stay out — the row was found *by* the pair. metadata stays out —
             // it belongs to the client and must survive a reimport. isActive and deletedAt stay out —
             // the file declares no currency, so a deactivated item stays deactivated
+            // The most dangerous path of the four: a bulk import would rewrite the whole catalog in a
+            // single pass. On a locked target the value is dropped and every other column is applied.
+            // The row is not rejected and does not swell `rejected` — it is not an error in the file,
+            // it is a column that cannot be written
             const objectToUpdate = buildDifferentialUpdate(stored, {
                 name: row.name,
-                value: row.values.value,
+                value: stored.isValueLocked === true ? undefined : toConstantCase(row.values.value),
                 description: row.values.description,
                 sortOrder: row.values.sortOrder
             });

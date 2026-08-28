@@ -360,8 +360,9 @@ describe('catalogItem contract', () => {
 
             // The row is found by the code the file never brought: 'Activo' minted 'activo'
             expect(activo).toMatchObject({ name: 'Activo', value: 'A', description: 'Estado activo', sortOrder: 1 });
-            // The one column that never lands null: an empty cell carries the already normalized name
-            expect(cerrado).toMatchObject({ name: 'Cerrado', value: 'Cerrado', description: 'Estado cerrado' });
+            // The one column that never lands null: an empty cell carries the name, and the name goes
+            // through the same toConstantCase the 001 and the 004 apply — SPEC F46
+            expect(cerrado).toMatchObject({ name: 'Cerrado', value: 'CERRADO', description: 'Estado cerrado' });
         });
 
         it('coerces an invalid sortOrder to 0 instead of losing the row', async () => {
