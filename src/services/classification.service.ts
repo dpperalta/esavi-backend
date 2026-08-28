@@ -30,10 +30,13 @@ const CASE_INCLUDE = {
     attributes: ['caseId', 'caseCode', 'reportDate', 'eventDate']
 };
 
+// `value` travels alongside `code` since SPEC F46: the code is the country's, numeric in the seeded
+// catalog, so a client reading the embedded unit can no longer tell YEARS from DAYS by it. The value
+// is the key this service itself resolves by, and it is what makes the unit legible again
 const AGE_UNIT_INCLUDE = {
     model: CatalogItem,
     as: 'ageUnit',
-    attributes: ['catalogItemId', 'code', 'name']
+    attributes: ['catalogItemId', 'code', 'name', 'value']
 };
 
 // sysDetails is trigger metadata and never leaves the service. The two raw foreign keys go with

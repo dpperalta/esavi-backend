@@ -598,16 +598,16 @@ describe('patient contract', () => {
 
         let recalcCounter = 0;
 
-        // The ageUnit catalogType is a precondition of SPEC F09 and esaviapp.sql does not seed it
-        const seedAgeUnitCatalog = async (): Promise<void> => {
-            const ageUnitType = await CatalogType.findOne({ where: { code: 'ageUnit' } })
-                ?? await CatalogType.create({ code: 'ageUnit', name: 'Age Unit' });
-            const catalogTypeId = ageUnitType.getDataValue('catalogTypeId');
-            for( const code of ['YEARS', 'MONTHS', 'DAYS'] ) {
-                const item = await CatalogItem.findOne({ where: { catalogTypeId, code } });
-                if( !item ) {
-                    await CatalogItem.create({ catalogTypeId, code, name: code, value: code });
-                }
+        // esaviapp.sql DOES seed the three ageUnit items, and since SPEC F46 they are the locked
+        // rows the service resolves by value. This block used to find-or-create its own copies keyed
+        // by code, doubling the catalog behind the official one; it now only asserts they are there
+        const assertAgeUnitCatalogIsSeeded = async (): Promise<void> => {
+            for( const value of ['YEARS', 'MONTHS', 'DAYS'] ) {
+                const item = await CatalogItem.findOne({
+                    where: { value, isValueLocked: true },
+                    include: [{ model: CatalogType, as: 'catalogType', where: { code: 'ageUnit' }, attributes: [] }]
+                });
+                expect(item).not.toBeNull();
             }
         };
 
@@ -660,7 +660,7 @@ describe('patient contract', () => {
                 .set(authHeader('USER'));
 
         beforeAll(async () => {
-            await seedAgeUnitCatalog();
+            await assertAgeUnitCatalogIsSeeded();
         });
 
         it('recalculates every active classification, each against the eventDate of its own case', async () => {
@@ -676,7 +676,7 @@ describe('patient contract', () => {
             const second = await readClassification(caseIds[1]);
             expect(first.body.data.age).toBe(14);
             expect(second.body.data.age).toBe(10);
-            expect(first.body.data.ageUnit.code).toBe('YEARS');
+            expect(first.body.data.ageUnit.value).toBe('YEARS');
 
             // The audit names the operation that moved it, not ESAVI-CLASSIF-004, and the
             // previous entries are still there

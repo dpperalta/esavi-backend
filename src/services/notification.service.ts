@@ -32,10 +32,13 @@ const CASE_INCLUDE = {
     attributes: ['caseId', 'caseCode', 'reportDate', 'eventDate']
 };
 
+// `value` travels alongside `code` since SPEC F46, for the same reason the death rule now reads it:
+// the code belongs to the country and is numeric in the seeded catalog, so it no longer tells a
+// client which outcome this is
 const OUTCOME_INCLUDE = {
     model: CatalogItem,
     as: 'outcome',
-    attributes: ['catalogItemId', 'code', 'name']
+    attributes: ['catalogItemId', 'code', 'name', 'value']
 };
 
 // sysDetails is trigger metadata and never leaves the service. The two raw foreign keys go with
