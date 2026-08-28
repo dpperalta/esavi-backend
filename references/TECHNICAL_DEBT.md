@@ -63,7 +63,7 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-041](#deuda-041) | 🟠 | ✅ Seis servicios de update escriben aunque no cambie ningún dato |
 | [DEUDA-042](#deuda-042) | 🟠 | Tres endpoints rechazan con 400 la respuesta de su propio `GET` |
 | [DEUDA-043](#deuda-043) | 🟡 | `sortOrder: 0` no se puede guardar en tres servicios |
-| [DEUDA-044](#deuda-044) | 🟠 | `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla |
+| [DEUDA-044](#deuda-044) | 🟠 | ✅ `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla |
 
 ## Mapa de resolución
 
@@ -874,7 +874,7 @@ Es la primera de las cuatro precisiones de la sección 11 de [CONVENTIONS.md](./
 ---
 
 <a id="deuda-044"></a>
-## DEUDA-044 🟠 `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla
+## DEUDA-044 🟠 ✅ `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla
 
 **Archivos**: `src/services/esaviCase.service.ts`, `tests/contract/esaviCase.test.ts`
 
@@ -899,3 +899,5 @@ Las dos mitades entraron en el mismo spec y con días de diferencia —el servic
 Hay que decidir cuál de los dos manda. La sección de Normalización de [CONVENTIONS.md](./CONVENTIONS.md) reserva `toConstantCase` para los campos `code` y `toTitleCase` para los `name`, y el nombre de una organización es un nombre propio, no un código: el canon apunta a `toTitleCase`, que es además lo que el test ya afirma. `countryIsoCode` sí es correcto en mayúsculas — un ISO 3166-1 alfa-2 lo es por definición — y su `normalizeCountryIsoCode` se queda como está.
 
 **Aceptación**: `normalizeOrganization` pasa a `toTitleCase`, o el caso de contrato se corrige a mayúsculas si el dominio prefiere ese criterio. `npm run check` sale en 0 sin tocar ningún otro archivo.
+
+**Saldada el 2026-08-28** por el [SPEC F46](./functional/specs/46-catalogitem-value-lock.md), paso 9, por la vía que proponía la «Aceptación»: `normalizeOrganization` pasa a `toTitleCase(value.trim())` en `src/services/esaviCase.service.ts`. Manda el SPEC F06, que lo declara en tres sitios, y es lo que el test ya afirmaba. `normalizeCountryIsoCode` se queda en mayúsculas.

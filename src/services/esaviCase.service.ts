@@ -28,8 +28,13 @@ const todayIsoDate = (): string => {
     return `${ now.getFullYear() }-${ month }-${ day }`;
 }
 
+// An ISO 3166-1 alpha-2 is uppercase by definition, so this one stays as it is
 const normalizeCountryIsoCode = (value: string): string => value.trim().toUpperCase();
-const normalizeOrganization = (value: string): string => value.trim().toUpperCase();
+
+// The name of an organization is a name, and names are normalized with toTitleCase — SPEC F06
+// declares it in three places and DEUDA-044 catalogued the divergence. Uppercasing it was the
+// deviation, not the rule
+const normalizeOrganization = (value: string): string => toTitleCase(value.trim());
 
 const PATIENT_INCLUDE = {
     model: Patient,
