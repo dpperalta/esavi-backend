@@ -9,6 +9,7 @@ export class CatalogItem extends Model<InferAttributes<CatalogItem>, InferCreati
     declare code: string;
     declare name: string;
     declare value: string;
+    declare isValueLocked?: CreationOptional<boolean>;
     declare description?: CreationOptional<string | null>;
     declare sortOrder?: CreationOptional<number | null>
     declare metadata?: CreationOptional<object | null>;
@@ -41,7 +42,12 @@ CatalogItem.init({
     },
     value: {
         type: DataTypes.STRING(250),
-        allowNull: false,    
+        allowNull: false,
+    },
+    isValueLocked: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
     },
     description: {
         type: DataTypes.TEXT,

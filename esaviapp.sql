@@ -216,6 +216,7 @@ CREATE TABLE IF NOT EXISTS "catalogItem" (
   "code" varchar(100) NOT NULL,
   "name" varchar(250) NOT NULL,
   "value" varchar(250),
+  "isValueLocked" boolean NOT NULL DEFAULT false,
   "description" text,
   "sortOrder" smallint NOT NULL DEFAULT 0 CHECK ("sortOrder" >= 0),
   "metadata" jsonb DEFAULT '{}'::jsonb,
@@ -228,8 +229,16 @@ CREATE TABLE IF NOT EXISTS "catalogItem" (
   CONSTRAINT "FK_catalogItem_catalogType" FOREIGN KEY ("catalogTypeId") REFERENCES "catalogType" ("catalogTypeId") ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT "UQ_catalogItem_type_code" UNIQUE ("catalogTypeId", "code")
 );
+-- Kept for databases created before SPEC F46: "CREATE TABLE IF NOT EXISTS" above is a no-op there.
+ALTER TABLE "catalogItem"
+  ADD COLUMN IF NOT EXISTS "isValueLocked" boolean NOT NULL DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS "IX_catalogItem_catalogTypeId" ON "catalogItem" ("catalogTypeId");
 CREATE INDEX IF NOT EXISTS "IX_catalogItem_active" ON "catalogItem" ("isActive") WHERE "deletedAt" IS NULL;
+-- Partial on purpose: uniqueness of "value" is imposed only on the locked rows that src/ resolves by value.
+CREATE UNIQUE INDEX IF NOT EXISTS "UQ_catalogItem_type_lockedValue"
+  ON "catalogItem" ("catalogTypeId", "value")
+  WHERE "isValueLocked";
 
 -- -----------------------------------------------------------------------------
 -- Application administration
@@ -1681,9 +1690,9 @@ CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '1', 'En las
 CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '2', 'En las últimas horas de la jornada', 'LAST_HOURS', 2);
 CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '3', 'Desconocido', 'UNKNOWN', 3);
 
-CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '1', '1', '1', 1);
-CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '2', '2', '2', 2);
-CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '3', '3', '3', 3);
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '1', '1', 'MAX', 1);
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '2', '2', 'MED', 2);
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '3', '3', 'MIN', 3);
 
 CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '1', 'Intramuros - Puesto fijo en establecimiento de salud(Centro de salud, consultorio, Hospital público/privado)', 'INTRAMURAL', 1);
 CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '2', 'Extramuros - Puesto móvil', 'EXTRAMURAL_MOVIL', 2);
