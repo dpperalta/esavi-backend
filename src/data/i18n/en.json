@@ -168,6 +168,7 @@
         "updatedFailed": "Failed to update the catalog item. Please try again later.",
         "alreadyInactive": "The catalog item with ID {{id}} is already inactive",
         "alreadyActive": "The catalog item with ID {{id}} is already active",
+        "valueLocked": "The catalog item with ID {{id}} has its value {{value}} locked because the system relies on it, and cannot be deactivated. Its code can still be changed.",
         "deletedSuccess": "Catalog item deleted successfully",
         "deletedFailed": "Failed to delete the catalog item. Please try again later.",
         "activatedSuccess": "Catalog item activated successfully",

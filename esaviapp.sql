@@ -216,6 +216,7 @@ CREATE TABLE IF NOT EXISTS "catalogItem" (
   "code" varchar(100) NOT NULL,
   "name" varchar(250) NOT NULL,
   "value" varchar(250),
+  "isValueLocked" boolean NOT NULL DEFAULT false,
   "description" text,
   "sortOrder" smallint NOT NULL DEFAULT 0 CHECK ("sortOrder" >= 0),
   "metadata" jsonb DEFAULT '{}'::jsonb,
@@ -228,8 +229,16 @@ CREATE TABLE IF NOT EXISTS "catalogItem" (
   CONSTRAINT "FK_catalogItem_catalogType" FOREIGN KEY ("catalogTypeId") REFERENCES "catalogType" ("catalogTypeId") ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT "UQ_catalogItem_type_code" UNIQUE ("catalogTypeId", "code")
 );
+-- Kept for databases created before SPEC F46: "CREATE TABLE IF NOT EXISTS" above is a no-op there.
+ALTER TABLE "catalogItem"
+  ADD COLUMN IF NOT EXISTS "isValueLocked" boolean NOT NULL DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS "IX_catalogItem_catalogTypeId" ON "catalogItem" ("catalogTypeId");
 CREATE INDEX IF NOT EXISTS "IX_catalogItem_active" ON "catalogItem" ("isActive") WHERE "deletedAt" IS NULL;
+-- Partial on purpose: uniqueness of "value" is imposed only on the locked rows that src/ resolves by value.
+CREATE UNIQUE INDEX IF NOT EXISTS "UQ_catalogItem_type_lockedValue"
+  ON "catalogItem" ("catalogTypeId", "value")
+  WHERE "isValueLocked";
 
 -- -----------------------------------------------------------------------------
 -- Application administration
@@ -498,7 +507,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TABLE public."appUserGeoLocation" (
+CREATE TABLE IF NOT EXISTS public."appUserGeoLocation" (
     "userGeoLocationId" uuid DEFAULT gen_random_uuid() NOT NULL,
     "userId" uuid NOT NULL,
     "geoLocationId" uuid NOT NULL,
@@ -517,16 +526,16 @@ CREATE TABLE public."appUserGeoLocation" (
         CHECK (("validTo" IS NULL) OR ("validTo" > "validFrom"))
 );
 
-CREATE INDEX "IX_appUserGeoLocation_userId"
+CREATE INDEX IF NOT EXISTS "IX_appUserGeoLocation_userId"
 ON public."appUserGeoLocation" USING btree ("userId");
 
-CREATE INDEX "IX_appUserGeoLocation_geoLocationId"
+CREATE INDEX IF NOT EXISTS "IX_appUserGeoLocation_geoLocationId"
 ON public."appUserGeoLocation" USING btree ("geoLocationId");
 
-CREATE INDEX "IX_appUserGeoLocation_assignedByUserId"
+CREATE INDEX IF NOT EXISTS "IX_appUserGeoLocation_assignedByUserId"
 ON public."appUserGeoLocation" USING btree ("assignedByUserId");
 
-CREATE UNIQUE INDEX "UQ_appUserGeoLocation_active_user_geoLocation"
+CREATE UNIQUE INDEX IF NOT EXISTS "UQ_appUserGeoLocation_active_user_geoLocation"
 ON public."appUserGeoLocation"
 USING btree ("userId", "geoLocationId")
 WHERE (
@@ -535,12 +544,15 @@ WHERE (
     AND "validTo" IS NULL
 );
 
+DROP TRIGGER IF EXISTS "TRG_appUserGeoLocation_setSysDetails" ON public."appUserGeoLocation";
 CREATE TRIGGER "TRG_appUserGeoLocation_setSysDetails"
 BEFORE INSERT OR UPDATE
 ON public."appUserGeoLocation"
 FOR EACH ROW
 EXECUTE FUNCTION "setSysDetails"();
 
+ALTER TABLE public."appUserGeoLocation"
+DROP CONSTRAINT IF EXISTS "FK_appUserGeoLocation_user";
 ALTER TABLE public."appUserGeoLocation"
 ADD CONSTRAINT "FK_appUserGeoLocation_user"
 FOREIGN KEY ("userId")
@@ -549,12 +561,16 @@ ON DELETE RESTRICT
 ON UPDATE CASCADE;
 
 ALTER TABLE public."appUserGeoLocation"
+DROP CONSTRAINT IF EXISTS "FK_appUserGeoLocation_geoLocation";
+ALTER TABLE public."appUserGeoLocation"
 ADD CONSTRAINT "FK_appUserGeoLocation_geoLocation"
 FOREIGN KEY ("geoLocationId")
 REFERENCES public."geoLocation"("geoLocationId")
 ON DELETE RESTRICT
 ON UPDATE CASCADE;
 
+ALTER TABLE public."appUserGeoLocation"
+DROP CONSTRAINT IF EXISTS "FK_appUserGeoLocation_assignedByUser";
 ALTER TABLE public."appUserGeoLocation"
 ADD CONSTRAINT "FK_appUserGeoLocation_assignedByUser"
 FOREIGN KEY ("assignedByUserId")
@@ -1543,14 +1559,47 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   v_catalog_type_id uuid;
+  v_item_value varchar;
+  v_locked_item_id uuid;
 BEGIN
   INSERT INTO "catalogType" ("code", "name")
   VALUES ("pCatalogTypeCode", "pCatalogTypeName")
   ON CONFLICT ("code") DO UPDATE SET "name" = EXCLUDED."name"
   RETURNING "catalogTypeId" INTO v_catalog_type_id;
 
+  v_item_value := COALESCE("pItemValue", "pItemCode");
+
+  -- SPEC F46. The ON CONFLICT below resolves by ("catalogTypeId", "code"), and the code belongs to
+  -- the country: the day it recodes an item, the conflict stops matching and the seed inserts a
+  -- second row carrying the same locked value - the very corruption the lock exists to prevent, and
+  -- the unique partial index would reject it at deployment time. So a locked value is resolved by
+  -- first, and it is the code of that row that gets updated
+  SELECT "catalogItemId" INTO v_locked_item_id
+    FROM "catalogItem"
+   WHERE "catalogTypeId" = v_catalog_type_id
+     AND "value" = v_item_value
+     AND "isValueLocked";
+
+  IF v_locked_item_id IS NOT NULL THEN
+    -- The value is not written: it is what the row was found by. The guard keeps a reload that
+    -- changes nothing from moving updatedAt or sysDetails on the five locked rows
+    UPDATE "catalogItem"
+       SET "code" = "pItemCode",
+           "name" = "pItemName",
+           "sortOrder" = COALESCE("pSortOrder", 0),
+           "isActive" = true,
+           "deletedAt" = NULL
+     WHERE "catalogItemId" = v_locked_item_id
+       AND ("code" IS DISTINCT FROM "pItemCode"
+            OR "name" IS DISTINCT FROM "pItemName"
+            OR "sortOrder" IS DISTINCT FROM COALESCE("pSortOrder", 0)
+            OR "isActive" IS DISTINCT FROM true
+            OR "deletedAt" IS NOT NULL);
+    RETURN;
+  END IF;
+
   INSERT INTO "catalogItem" ("catalogTypeId", "code", "name", "value", "sortOrder")
-  VALUES (v_catalog_type_id, "pItemCode", "pItemName", COALESCE("pItemValue", "pItemCode"), COALESCE("pSortOrder", 0))
+  VALUES (v_catalog_type_id, "pItemCode", "pItemName", v_item_value, COALESCE("pSortOrder", 0))
   ON CONFLICT ("catalogTypeId", "code") DO UPDATE
   SET "name" = EXCLUDED."name",
       "value" = EXCLUDED."value",
@@ -1681,9 +1730,9 @@ CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '1', 'En las
 CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '2', 'En las últimas horas de la jornada', 'LAST_HOURS', 2);
 CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '3', 'Desconocido', 'UNKNOWN', 3);
 
-CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '1', '1', '1', 1);
-CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '2', '2', '2', 2);
-CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '3', '3', '3', 3);
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '1', '1', 'MAX', 1);
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '2', '2', 'MED', 2);
+CALL "upsertCatalogItem"('finalClassificationImportance', 'Final classification importance', '3', '3', 'MIN', 3);
 
 CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '1', 'Intramuros - Puesto fijo en establecimiento de salud(Centro de salud, consultorio, Hospital público/privado)', 'INTRAMURAL', 1);
 CALL "upsertCatalogItem"('vaccinationSite', 'Vaccination site', '2', 'Extramuros - Puesto móvil', 'EXTRAMURAL_MOVIL', 2);
@@ -1742,5 +1791,60 @@ CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'IN_FINAL
 CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'PENDING_VALIDATION', 'Pendiente de validación', 'PENDING_VALIDATION', 6);
 CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'CLOSED', 'Cerrado', 'CLOSED', 7);
 CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'REOPENED', 'Reabierto', 'REOPENED', 8);
+
+-- -----------------------------------------------------------------------------
+-- SPEC F46 - Value realignment and lock
+--
+-- "code" belongs to the country and may be recoded at any time; "value" belongs
+-- to the source code, which resolves catalog items by it. This block runs after
+-- the whole catalog is seeded, is idempotent, and writes neither "appDetails"
+-- nor "sysDetails": it is a deployment operation, not an application write, so
+-- there is no authenticated user to record.
+-- -----------------------------------------------------------------------------
+
+-- 1. Mint the semantic "value" of "investigationStatus", the only catalog seeded
+--    numeric on both columns. Aligned with "outcome", which carries the same six
+--    concepts.
+UPDATE "catalogItem" ci SET "value" = v."value"
+  FROM "catalogType" ct, (VALUES
+    ('0', 'UNKNOWN'),
+    ('1', 'RECOVERING'),
+    ('2', 'RECOVERED'),
+    ('3', 'NOT_RECOVERED'),
+    ('4', 'RECOVERED_WITH_SEQUELAE'),
+    ('5', 'DEATH')
+  ) AS v("code", "value")
+ WHERE ci."catalogTypeId" = ct."catalogTypeId"
+   AND ct."code" = 'investigationStatus'
+   AND ci."code" = v."code"
+   AND ci."value" IS DISTINCT FROM v."value";
+
+-- 2. Normalize to CONSTANT_CASE every seeded "value" carrying whitespace
+--    ('MEDICAL DOCTOR' -> 'MEDICAL_DOCTOR'). Today it reaches two "profession"
+--    rows; it stays correct if a future seed introduces another.
+UPDATE "catalogItem"
+   SET "value" = upper(regexp_replace(btrim("value"), '\s+', '_', 'g'))
+ WHERE "value" ~ '\s';
+
+-- 3. Lock the values that src/ resolves items by. A value is locked if and only
+--    if some file under src/ names it - today five rows in three catalogs.
+--    "isActive" is forced back on in the same statement: a locked row is alive
+--    by definition, even if someone had withdrawn it before this deployment.
+UPDATE "catalogItem" ci
+   SET "isValueLocked" = true,
+       "isActive" = true,
+       "deletedAt" = NULL
+  FROM "catalogType" ct
+ WHERE ci."catalogTypeId" = ct."catalogTypeId"
+   AND (ct."code", ci."value") IN (
+     ('ageUnit', 'YEARS'),
+     ('ageUnit', 'MONTHS'),
+     ('ageUnit', 'DAYS'),
+     ('outcome', 'DEATH'),
+     ('investigationStatus', 'UNKNOWN')
+   )
+   AND (ci."isValueLocked" IS DISTINCT FROM true
+        OR ci."isActive" IS DISTINCT FROM true
+        OR ci."deletedAt" IS NOT NULL);
 
 COMMIT;

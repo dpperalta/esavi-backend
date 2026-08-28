@@ -30,10 +30,13 @@ const CASE_INCLUDE = {
     attributes: ['caseId', 'caseCode', 'reportDate', 'eventDate']
 };
 
+// `value` travels alongside `code` since SPEC F46: the code is the country's, numeric in the seeded
+// catalog, so a client reading the embedded unit can no longer tell YEARS from DAYS by it. The value
+// is the key this service itself resolves by, and it is what makes the unit legible again
 const AGE_UNIT_INCLUDE = {
     model: CatalogItem,
     as: 'ageUnit',
-    attributes: ['catalogItemId', 'code', 'name']
+    attributes: ['catalogItemId', 'code', 'name', 'value']
 };
 
 // sysDetails is trigger metadata and never leaves the service. The two raw foreign keys go with
@@ -127,12 +130,16 @@ const assertCaseIsNotClassified = async (caseId: string, op: string, lang: strin
     }
 }
 
-// The unit the calculation resolved, looked up by code inside the ageUnit catalog. A missing
+// The unit the calculation resolved, looked up by value inside the ageUnit catalog. A missing
 // item is a deployment precondition that was not met, not a client mistake, and it has its own
-// i18n key so an installation error does not read like a capture error
-const findAgeUnitItemByCode = async (code: string, op: string, lang: string) => {
+// i18n key so an installation error does not read like a capture error.
+// By value and not by code since SPEC F46: the code belongs to the country and moves with its
+// official catalog, the value belongs to this source code and is frozen by isValueLocked, which is
+// part of the where because only the locked rows are unique on the pair. isActive is not filtered —
+// a withdrawn item still names what it named, and a locked one cannot be withdrawn
+const findAgeUnitItemByValue = async (value: string, op: string, lang: string) => {
     const ageUnitItem = await CatalogItem.findOne({
-        where: { code, isActive: true },
+        where: { value, isValueLocked: true },
         attributes: ['catalogItemId'],
         include: [{
             model: CatalogType,
@@ -142,8 +149,10 @@ const findAgeUnitItemByCode = async (code: string, op: string, lang: string) => 
         }]
     });
     if( !ageUnitItem ) {
+        // The message keeps interpolating {{code}}: it is the identifier the operator has to go
+        // looking for, whichever column now holds it
         throw new AppError(
-            getMessage('classification.ageUnitCatalogMissing', lang, { code }),
+            getMessage('classification.ageUnitCatalogMissing', lang, { code: value }),
             404,
             `CLASSIF_${ op }_AGEUNIT_CATALOG_MISSING`
         );
@@ -207,7 +216,7 @@ const resolveAgeForCase = async (
     }
 
     if( calculated ) {
-        const ageUnitItem = await findAgeUnitItemByCode(calculated.unitCode, op, lang);
+        const ageUnitItem = await findAgeUnitItemByValue(calculated.unitCode, op, lang);
         return { age: calculated.age, ageUnitItemId: ageUnitItem.catalogItemId };
     }
 

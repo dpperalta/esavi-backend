@@ -46,12 +46,15 @@ describe('notificationMedication contract', () => {
     let inactiveRouteItemId: string;
     let otherCatalogItemId: string;
 
-    // Both catalogTypes are seeded by esaviapp.sql itself, so they are looked up and never
-    // created: creating them again would collide with the unique code
+    // pharmaceuticalForm and administrationRoute are the two catalogTypes esaviapp.sql leaves
+    // commented out (esaviapp.sql:1669-1672) — out of scope for SPEC F46 to uncomment, since the
+    // deployment data is not this suite's to change. The fixture is what is made resilient instead:
+    // find-or-create the type, so it works whether a future seed loads it or not
     const itemOfCatalog = async ( code: string, itemCode: string, isActive: boolean = true ): Promise<string> => {
-        const catalogType = await CatalogType.findOne({ where: { code } });
+        const catalogType = await CatalogType.findOne({ where: { code } })
+            ?? await CatalogType.create({ code, name: code });
         const item = await CatalogItem.create({
-            catalogTypeId: catalogType!.getDataValue('catalogTypeId'),
+            catalogTypeId: catalogType.getDataValue('catalogTypeId'),
             code: itemCode,
             name: itemCode,
             value: itemCode,

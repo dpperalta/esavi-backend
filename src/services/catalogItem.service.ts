@@ -1,5 +1,5 @@
 import { CreationAttributes, Op, Transaction } from "sequelize";
-import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toTitleCase } from "../helpers";
+import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toConstantCase, toTitleCase } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
 import {
@@ -113,11 +113,17 @@ const createCatalogItemService = async (data: CreateCatalogItemInput, authUser: 
         method: 'ESAVI-CATITEM-001',
         detail: 'Catalog item created by service'
     };
+    // isValueLocked is deliberately absent from the input: it is not read from the body, so it always
+    // starts false. The lock is placed by the deployment SQL, never by an ADMIN — an item that could
+    // be born locked would let the API create the very thing the lock exists to protect from the API
     const createdItem = await CatalogItem.create({
         catalogTypeId: data.catalogTypeId,
         code,
         name: toTitleCase(data.name.trim()),
-        value: data.value.trim(),
+        // The value belongs to the source code, which resolves items by it, so it is stored in the
+        // shape the source code writes it in. The trim comes first: toConstantCase turns the outer
+        // whitespace into underscores otherwise
+        value: toConstantCase(data.value.trim()),
         description: data.description ? data.description.trim() : null,
         metadata: data.metadata || {},
         sortOrder,
@@ -220,13 +226,21 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
     // buildDifferentialUpdate, whose stored side has to be the whole row — findByPk reads it
     // without narrowed attributes, which is the precondition of the helper
     const stored = catalogItem.get({ plain: true }) as Record<string, unknown>;
+    // A locked value belongs to the source code, which resolves items by it, so no request can move
+    // it: the field never enters the diff, whether it travels or not and whatever it carries. It is a
+    // silent omission and not a 400 or a 409 — the same shape notificationMedication already applies
+    // to sortOrder — and isValueLocked travels in the read responses so a client can tell beforehand.
+    // Everything else stays editable: the country recoding the item is the very scenario this protects
+    const isValueLocked = stored.isValueLocked === true;
     const objectToUpdate = buildDifferentialUpdate(stored, {
         catalogTypeId: targetCatalogTypeId,
         // A field of its own again: it enters the diff exactly when the body carries it, and
         // reaches the UPDATE only if it changed
         code: sentCode ?? undefined,
         name: data.name ? toTitleCase(data.name.trim()) : undefined,
-        value: data.value ? data.value.trim() : undefined,
+        value: isValueLocked
+            ? undefined
+            : ( data.value !== undefined ? ( data.value ? toConstantCase(data.value.trim()) : null ) : undefined ),
         description: data.description ? data.description.trim() : undefined,
         metadata: data.metadata ? data.metadata : undefined,
         sortOrder: data.sortOrder ? data.sortOrder : undefined
@@ -254,6 +268,20 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
 // ESAVI-CATITEM-005A / 005B - Setting Catalog Item Active/Inactive Service - For SuperAdmin
 const setCatalogItemActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
     const op = isActive ? '005B' : '005A';
+    // A locked item cannot be withdrawn: if the source code names it, the source code needs it, and
+    // retiring it is a change of spec rather than an act of administration. The check runs before the
+    // one for alreadyInactive so the message states the real cause, and only on the way out — 005B is
+    // unreachable for a locked item, which by construction never gets to be inactive
+    if( !isActive ) {
+        const stored = await CatalogItem.findByPk(id);
+        if( stored?.isValueLocked ) {
+            throw new AppError(
+                getMessage('catalogItem.valueLocked', lang, { id, value: stored.value }),
+                409,
+                'CATITEM_005A_VALUE_LOCKED'
+            );
+        }
+    }
     const transaction = await sequelize.transaction();
     try {
         const catalogItem = await setEntityActiveStatusService({
@@ -454,7 +482,10 @@ const importCatalogItemsService = async (
                     catalogTypeId,
                     code: row.code,
                     name: row.name,
-                    value: row.values.value,
+                    // Same shape the 001 and the 004 store: the import is a third way into the column
+                    // and must not be the one that leaves it unnormalized. An inserted item is new, so
+                    // there is no lock to respect — isValueLocked stays with the false of the DDL
+                    value: toConstantCase(row.values.value),
                     description: row.values.description,
                     sortOrder: row.values.sortOrder,
                     isActive: true,
@@ -477,9 +508,13 @@ const importCatalogItemsService = async (
             // catalogTypeId and code stay out — the row was found *by* the pair. metadata stays out —
             // it belongs to the client and must survive a reimport. isActive and deletedAt stay out —
             // the file declares no currency, so a deactivated item stays deactivated
+            // The most dangerous path of the four: a bulk import would rewrite the whole catalog in a
+            // single pass. On a locked target the value is dropped and every other column is applied.
+            // The row is not rejected and does not swell `rejected` — it is not an error in the file,
+            // it is a column that cannot be written
             const objectToUpdate = buildDifferentialUpdate(stored, {
                 name: row.name,
-                value: row.values.value,
+                value: stored.isValueLocked === true ? undefined : toConstantCase(row.values.value),
                 description: row.values.description,
                 sortOrder: row.values.sortOrder
             });

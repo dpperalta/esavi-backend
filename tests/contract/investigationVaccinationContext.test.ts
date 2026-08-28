@@ -162,17 +162,28 @@ describe('investigationVaccinationContext contract', () => {
             return item!.getDataValue('catalogItemId');
         };
 
+        // vaccinationMoment and sex are two of the 13 catalogs SPEC F46 found seeded with a numeric
+        // code, so their items are resolved by value and not by itemOf's code
+        const itemOfValue = async (typeCode: string, itemValue: string): Promise<string> => {
+            const item = await CatalogItem.findOne({
+                where: { value: itemValue },
+                include: [{ model: CatalogType, as: 'catalogType', where: { code: typeCode }, attributes: [] }]
+            });
+            return item!.getDataValue('catalogItemId');
+        };
+
+        // investigationStatus keeps a numeric code, '0' to '5', so this still resolves by it
         statusZeroItemId = await itemOf('investigationStatus', '0');
 
         // The three items SPEC F36 step 1 seeds in the DDL. If these throw, the seeding did not
         // reach the schema and every POST carrying a moment would answer 404
-        firstHoursItemId = await itemOf('vaccinationMoment', 'FIRST_HOURS');
-        lastHoursItemId = await itemOf('vaccinationMoment', 'LAST_HOURS');
-        unknownMomentItemId = await itemOf('vaccinationMoment', 'UNKNOWN');
+        firstHoursItemId = await itemOfValue('vaccinationMoment', 'FIRST_HOURS');
+        lastHoursItemId = await itemOfValue('vaccinationMoment', 'LAST_HOURS');
+        unknownMomentItemId = await itemOfValue('vaccinationMoment', 'UNKNOWN');
 
         // An ACTIVE item of a different catalog. It is what proves the double hop is implemented
         // and not merely the existence of the UUID
-        foreignCatalogItemId = await itemOf('sex', 'FEMALE');
+        foreignCatalogItemId = await itemOfValue('sex', 'FEMALE');
     });
 
     afterAll(async () => {
@@ -388,8 +399,8 @@ describe('investigationVaccinationContext contract', () => {
                 });
 
                 expect(res.status).toBe(201);
-                expect(res.body.data.moment.code).toBe('FIRST_HOURS');
-                expect(res.body.data.multidoseMoment.code).toBe('LAST_HOURS');
+                expect(res.body.data.moment.value).toBe('FIRST_HOURS');
+                expect(res.body.data.multidoseMoment.value).toBe('LAST_HOURS');
             });
 
             it('a null foreign key resolves nothing and comes back as a null object', async () => {
@@ -398,7 +409,7 @@ describe('investigationVaccinationContext contract', () => {
 
                 expect(res.status).toBe(201);
                 expect(res.body.data.moment).toBeNull();
-                expect(res.body.data.multidoseMoment.code).toBe('LAST_HOURS');
+                expect(res.body.data.multidoseMoment.value).toBe('LAST_HOURS');
             });
         });
 
@@ -502,8 +513,8 @@ describe('investigationVaccinationContext contract', () => {
 
             const res = await list(`?investigationId=${ investigationId }`);
 
-            expect(res.body.data.rows[0].moment.code).toBe('FIRST_HOURS');
-            expect(res.body.data.rows[0].multidoseMoment.code).toBe('LAST_HOURS');
+            expect(res.body.data.rows[0].moment.value).toBe('FIRST_HOURS');
+            expect(res.body.data.rows[0].multidoseMoment.value).toBe('LAST_HOURS');
         });
 
         it('filters by caseId through the investigation include', async () => {
@@ -601,8 +612,8 @@ describe('investigationVaccinationContext contract', () => {
 
             expect(res.status).toBe(200);
             expect(res.body.data.investigationId).toBe(investigationId);
-            expect(res.body.data.moment.code).toBe('FIRST_HOURS');
-            expect(res.body.data.multidoseMoment.code).toBe('LAST_HOURS');
+            expect(res.body.data.moment.value).toBe('FIRST_HOURS');
+            expect(res.body.data.multidoseMoment.value).toBe('LAST_HOURS');
             expect(res.body.data.vaccinatedPerVialCount).toBe(0);
             expect(res.body.data.investigation.status).not.toBeNull();
             expect(res.body.data.investigation.case.caseId).toBe(caseId);
@@ -686,7 +697,7 @@ describe('investigationVaccinationContext contract', () => {
             expect(res.body.data).not.toHaveProperty('count');
             expect(res.body.data).not.toHaveProperty('rows');
             expect(res.body.data.investigationId).toBe(investigationId);
-            expect(res.body.data.moment.code).toBe('FIRST_HOURS');
+            expect(res.body.data.moment.value).toBe('FIRST_HOURS');
             expect(res.body.data.investigation.case.caseId).toBe(caseId);
         });
 
@@ -1251,8 +1262,8 @@ describe('investigationVaccinationContext contract', () => {
                 notes: 'completed on the second visit'
             });
             expect(updated.status).toBe(200);
-            expect(updated.body.data.moment.code).toBe('FIRST_HOURS');
-            expect(updated.body.data.multidoseMoment.code).toBe('LAST_HOURS');
+            expect(updated.body.data.moment.value).toBe('FIRST_HOURS');
+            expect(updated.body.data.multidoseMoment.value).toBe('LAST_HOURS');
             expect(updated.body.data.vaccinatedPerVialCount).toBe(0);
             expect(updated.body.data.vaccinatedPerBatchCount).toBe(120);
             expect(updated.body.data.locations).toBe('Quito, Ibarra');

@@ -66,19 +66,19 @@ describe('classification contract', () => {
         return esaviCase.getDataValue('caseId');
     };
 
-    // The catalogType coded 'ageUnit' is a precondition of SPEC F09 and is not seeded by
-    // esaviapp.sql, so the suite creates it once with its three items. Without them every
-    // create with both dates present answers 404 ageUnitCatalogMissing
-    const seedAgeUnitCatalog = async (): Promise<void> => {
-        const ageUnitType = await CatalogType.findOne({ where: { code: 'ageUnit' } })
-            ?? await CatalogType.create({ code: 'ageUnit', name: 'Age Unit' });
-        const catalogTypeId = ageUnitType.getDataValue('catalogTypeId');
-
+    // The three ageUnit items ARE seeded by esaviapp.sql, and since SPEC F46 they are the locked
+    // rows the service resolves by value. The suite used to find-or-create its own copies keyed by
+    // code, which left the catalog with six items running in parallel to the official three — it
+    // passed, and it passed by corrupting. It now resolves the seeded rows and creates nothing
+    const resolveAgeUnitCatalog = async (): Promise<void> => {
         const items: Record<string, string> = {};
-        for( const code of ['YEARS', 'MONTHS', 'DAYS'] ) {
-            const item = await CatalogItem.findOne({ where: { catalogTypeId, code } })
-                ?? await CatalogItem.create({ catalogTypeId, code, name: code, value: code });
-            items[code] = item.getDataValue('catalogItemId');
+        for( const value of ['YEARS', 'MONTHS', 'DAYS'] ) {
+            const item = await CatalogItem.findOne({
+                where: { value, isValueLocked: true },
+                include: [{ model: CatalogType, as: 'catalogType', where: { code: 'ageUnit' }, attributes: [] }]
+            });
+            expect(item).not.toBeNull();
+            items[value] = item!.getDataValue('catalogItemId');
         }
         yearsItemId = items.YEARS;
         monthsItemId = items.MONTHS;
@@ -125,7 +125,7 @@ describe('classification contract', () => {
     beforeAll(async () => {
         consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
         await seedTestUsers();
-        await seedAgeUnitCatalog();
+        await resolveAgeUnitCatalog();
 
         inactiveCaseId = await createCaseFixture({ isActive: false });
 
@@ -160,7 +160,7 @@ describe('classification contract', () => {
             expect(data.notes).toBe('A note');
             expect(data.isActive).toBe(true);
             expect(data.case).toEqual(expect.objectContaining({ caseId, eventDate: '2024-05-04' }));
-            expect(data.ageUnit).toEqual(expect.objectContaining({ code: 'YEARS' }));
+            expect(data.ageUnit).toEqual(expect.objectContaining({ value: 'YEARS' }));
             expect(data.appDetails).toHaveLength(1);
             expect(data.appDetails[0].method).toBe('ESAVI-CLASSIF-001');
         });
@@ -228,7 +228,7 @@ describe('classification contract', () => {
 
             expect(response.status).toBe(201);
             expect(response.body.data.age).toBe(3);
-            expect(response.body.data.ageUnit.code).toBe('YEARS');
+            expect(response.body.data.ageUnit.value).toBe('YEARS');
         });
 
         it('resolves seven months in MONTHS', async () => {
@@ -237,7 +237,7 @@ describe('classification contract', () => {
             const response = await createClassification({ caseId });
 
             expect(response.body.data.age).toBe(7);
-            expect(response.body.data.ageUnit.code).toBe('MONTHS');
+            expect(response.body.data.ageUnit.value).toBe('MONTHS');
         });
 
         it('resolves twelve days in DAYS', async () => {
@@ -246,7 +246,7 @@ describe('classification contract', () => {
             const response = await createClassification({ caseId });
 
             expect(response.body.data.age).toBe(12);
-            expect(response.body.data.ageUnit.code).toBe('DAYS');
+            expect(response.body.data.ageUnit.value).toBe('DAYS');
         });
 
         it('uses calendar arithmetic on the borders', async () => {
@@ -261,13 +261,13 @@ describe('classification contract', () => {
             const notAYear = await createClassification({ caseId: leapDay });
 
             expect(twelveMonths.body.data).toEqual(expect.objectContaining({ age: 1 }));
-            expect(twelveMonths.body.data.ageUnit.code).toBe('YEARS');
+            expect(twelveMonths.body.data.ageUnit.value).toBe('YEARS');
             expect(oneMonth.body.data).toEqual(expect.objectContaining({ age: 1 }));
-            expect(oneMonth.body.data.ageUnit.code).toBe('MONTHS');
+            expect(oneMonth.body.data.ageUnit.value).toBe('MONTHS');
             expect(zeroDays.body.data).toEqual(expect.objectContaining({ age: 0 }));
-            expect(zeroDays.body.data.ageUnit.code).toBe('DAYS');
+            expect(zeroDays.body.data.ageUnit.value).toBe('DAYS');
             expect(notAYear.body.data).toEqual(expect.objectContaining({ age: 11 }));
-            expect(notAYear.body.data.ageUnit.code).toBe('MONTHS');
+            expect(notAYear.body.data.ageUnit.value).toBe('MONTHS');
         });
 
         it('falls back to the body when the birth date is missing', async () => {
@@ -277,7 +277,7 @@ describe('classification contract', () => {
 
             expect(response.status).toBe(201);
             expect(response.body.data.age).toBe(40);
-            expect(response.body.data.ageUnit.code).toBe('YEARS');
+            expect(response.body.data.ageUnit.value).toBe('YEARS');
         });
 
         it('falls back to the body when the event date is missing', async () => {
@@ -287,7 +287,7 @@ describe('classification contract', () => {
 
             expect(response.status).toBe(201);
             expect(response.body.data.age).toBe(9);
-            expect(response.body.data.ageUnit.code).toBe('MONTHS');
+            expect(response.body.data.ageUnit.value).toBe('MONTHS');
         });
 
         it('does not use reportDate as a stand-in for eventDate', async () => {
@@ -320,15 +320,30 @@ describe('classification contract', () => {
             expect(response.body.code).toBe('CLASSIF_001_AGEUNIT_NOT_FOUND');
         });
 
-        it('answers 404 with its own code when the ageUnit catalog is not seeded', async () => {
+        // Since SPEC F46 the unit is resolved by { value, isValueLocked: true } with no isActive
+        // filter, so what leaves the catalog unresolvable is the missing lock and not a deactivation
+        it('answers 404 with its own code when the ageUnit catalog is not locked', async () => {
+            await CatalogItem.update({ isValueLocked: false }, { where: { catalogItemId: yearsItemId } });
+            const caseId = await createCaseFixture();
+
+            const response = await createClassification({ caseId });
+
+            await CatalogItem.update({ isValueLocked: true }, { where: { catalogItemId: yearsItemId } });
+            expect(response.status).toBe(404);
+            expect(response.body.code).toBe('CLASSIF_001_AGEUNIT_CATALOG_MISSING');
+        });
+
+        // The counterpart, and the reason that filter was dropped: a withdrawn item still names what
+        // it always named
+        it('resolves the unit even when the seeded item was deactivated', async () => {
             await CatalogItem.update({ isActive: false }, { where: { catalogItemId: yearsItemId } });
             const caseId = await createCaseFixture();
 
             const response = await createClassification({ caseId });
 
             await CatalogItem.update({ isActive: true }, { where: { catalogItemId: yearsItemId } });
-            expect(response.status).toBe(404);
-            expect(response.body.code).toBe('CLASSIF_001_AGEUNIT_CATALOG_MISSING');
+            expect(response.status).toBe(201);
+            expect(response.body.data.ageUnit.value).toBe('YEARS');
         });
 
         it('answers 409 when the event precedes the birth, and stores nothing', async () => {
@@ -491,7 +506,7 @@ describe('classification contract', () => {
             const response = await listClassifications(`?ageUnitItemId=${ daysItemId }&limit=100`);
 
             expect(response.body.data.count).toBeGreaterThan(0);
-            expect(response.body.data.rows.every((row: { ageUnit: { code: string } }) => row.ageUnit.code === 'DAYS')).toBe(true);
+            expect(response.body.data.rows.every((row: { ageUnit: { value: string } }) => row.ageUnit.value === 'DAYS')).toBe(true);
         });
 
         it('answers 200 with an empty page for a foreign key that does not exist', async () => {
@@ -653,7 +668,7 @@ describe('classification contract', () => {
 
             expect(response.status).toBe(200);
             expect(response.body.data.age).toBe(24);
-            expect(response.body.data.ageUnit.code).toBe('YEARS');
+            expect(response.body.data.ageUnit.value).toBe('YEARS');
         });
 
         it('recalculates the age when the birth date of the patient is corrected', async () => {
@@ -669,7 +684,7 @@ describe('classification contract', () => {
 
             expect(created.body.data.age).toBe(24);
             expect(response.body.data.age).toBe(7);
-            expect(response.body.data.ageUnit.code).toBe('MONTHS');
+            expect(response.body.data.ageUnit.value).toBe('MONTHS');
         });
 
         it('keeps the age informed by hand when there is no way to compute it', async () => {
@@ -683,7 +698,7 @@ describe('classification contract', () => {
             const corrected = await updateClassification(id, { age: 41, ageUnitItemId: yearsItemId });
 
             expect(untouched.body.data.age).toBe(40);
-            expect(untouched.body.data.ageUnit.code).toBe('YEARS');
+            expect(untouched.body.data.ageUnit.value).toBe('YEARS');
             expect(corrected.body.data.age).toBe(41);
         });
 
@@ -1027,7 +1042,7 @@ describe('classification contract', () => {
             const after = await getClassificationByCase(caseId);
             expect(after.body.data.age).toBe(11);
             expect(after.body.data.ageUnit.catalogItemId).toBe(daysItemId);
-            expect(after.body.data.ageUnit.code).toBe('DAYS');
+            expect(after.body.data.ageUnit.value).toBe('DAYS');
         });
 
     });

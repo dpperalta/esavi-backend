@@ -38,17 +38,19 @@ const INVESTIGATION_INCLUDE = {
 // recorded time slot would DISAPPEAR from the listing — the classic mistake of a nullable FK
 // resolved with an include. They resolve two DIFFERENT columns against the same vaccinationMoment
 // catalog, which is why the aliases exist and differ
+// `value` travels alongside `code`: vaccinationMoment is one of the catalogs SPEC F46 found seeded
+// with a numeric code, so it is the value that names the item for a reader
 const MOMENT_INCLUDE = {
     model: CatalogItem,
     as: 'moment',
-    attributes: ['catalogItemId', 'code', 'name'],
+    attributes: ['catalogItemId', 'code', 'name', 'value'],
     required: false
 };
 
 const MULTIDOSE_MOMENT_INCLUDE = {
     model: CatalogItem,
     as: 'multidoseMoment',
-    attributes: ['catalogItemId', 'code', 'name'],
+    attributes: ['catalogItemId', 'code', 'name', 'value'],
     required: false
 };
 

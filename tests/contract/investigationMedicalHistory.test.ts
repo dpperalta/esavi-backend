@@ -158,10 +158,14 @@ describe('investigationMedicalHistory contract', () => {
             where: { catalogTypeId: statusType!.getDataValue('catalogTypeId'), code: '0' }
         }))!.getDataValue('catalogItemId');
 
-        // The DDL seeds NONE of the four catalogTypes this entity needs — it is a deployment
-        // precondition of the spec, so the suite carries the seeding itself
+        // The DDL DOES seed the four catalogTypes this entity needs — gestationMethod, deliveryType,
+        // birthCondition and pregnancyOutcome all carry official items since SPEC F41. The suite used
+        // to CatalogType.create() them unconditionally, which violated UQ_catalogType_code the moment
+        // it ran against the seeded database: a collision, not an absence. It now finds the type and
+        // adds only its own item, with a suffix that keeps it from colliding with anything official
         const seedCatalog = async (code: string, name: string, itemCode: string): Promise<[string, string]> => {
-            const type = await CatalogType.create({ code, name });
+            const type = await CatalogType.findOne({ where: { code } })
+                ?? await CatalogType.create({ code, name });
             const item = await CatalogItem.create({
                 catalogTypeId: type.getDataValue('catalogTypeId'),
                 code: itemCode, name, value: itemCode

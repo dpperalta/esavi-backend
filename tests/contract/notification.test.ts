@@ -72,19 +72,19 @@ describe('notification contract', () => {
         return esaviCase.getDataValue('caseId');
     };
 
-    // The catalogType coded 'outcome' is a precondition of SPEC F10 and is not seeded by
-    // esaviapp.sql, so the suite creates it once with the two items the death rule needs.
-    // Without them every outcomeItemId answers 404 outcomeNotFound
-    const seedOutcomeCatalog = async (): Promise<void> => {
-        const outcomeType = await CatalogType.findOne({ where: { code: 'outcome' } })
-            ?? await CatalogType.create({ code: 'outcome', name: 'Outcome' });
-        const catalogTypeId = outcomeType.getDataValue('catalogTypeId');
-
+    // The outcome catalog IS seeded by esaviapp.sql, with six items whose code is the number of the
+    // official catalog and whose value is the semantic key. The suite used to find-or-create its own
+    // DEATH and RECOVERED keyed by code, leaving the catalog with eight items — it passed, and it
+    // passed by corrupting. It now resolves the seeded rows by value and creates nothing
+    const resolveOutcomeCatalog = async (): Promise<void> => {
         const items: Record<string, string> = {};
-        for( const code of ['DEATH', 'RECOVERED'] ) {
-            const item = await CatalogItem.findOne({ where: { catalogTypeId, code } })
-                ?? await CatalogItem.create({ catalogTypeId, code, name: code, value: code });
-            items[code] = item.getDataValue('catalogItemId');
+        for( const value of ['DEATH', 'RECOVERED'] ) {
+            const item = await CatalogItem.findOne({
+                where: { value },
+                include: [{ model: CatalogType, as: 'catalogType', where: { code: 'outcome' }, attributes: [] }]
+            });
+            expect(item).not.toBeNull();
+            items[value] = item!.getDataValue('catalogItemId');
         }
         deathItemId = items.DEATH;
         recoveredItemId = items.RECOVERED;
@@ -136,7 +136,7 @@ describe('notification contract', () => {
     beforeAll(async () => {
         consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
         await seedTestUsers();
-        await seedOutcomeCatalog();
+        await resolveOutcomeCatalog();
 
         inactiveCaseId = await createCaseFixture({ isActive: false });
 
@@ -340,7 +340,9 @@ describe('notification contract', () => {
             expect(response.body.data.deathDate).toBe('2024-05-05');
             expect(response.body.data.autopsyRequested).toBe(true);
             expect(response.body.data.verbalAutopsyPerformed).toBeNull();
-            expect(response.body.data.outcome).toEqual(expect.objectContaining({ code: 'DEATH' }));
+            // The seeded item is code '5', name 'Fallecido', value 'DEATH': it is the value that
+            // fires the death rule since SPEC F46, and the code is the country's to change
+            expect(response.body.data.outcome).toEqual(expect.objectContaining({ value: 'DEATH' }));
         });
 
         it('rejects each of the three death fields when the outcome is not DEATH', async () => {
@@ -703,7 +705,7 @@ describe('notification contract', () => {
             });
 
             expect(response.status).toBe(200);
-            expect(response.body.data.outcome.code).toBe('RECOVERED');
+            expect(response.body.data.outcome.value).toBe('RECOVERED');
             expect(response.body.data.deathDate).toBeNull();
             expect(response.body.data.autopsyRequested).toBeNull();
             expect(response.body.data.verbalAutopsyPerformed).toBeNull();

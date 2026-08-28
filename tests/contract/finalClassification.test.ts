@@ -213,7 +213,9 @@ describe('finalClassification contract', () => {
             const data = response.body.data;
 
             expect(response.status).toBe(201);
-            expect(data.importanceA).toEqual(expect.objectContaining({ code: '1', value: '1' }));
+            // Seeded value is 'MAX', not '1' — the code is the country's number, the value the
+            // source code's key, and this catalog carries both intentionally different from '1'
+            expect(data.importanceA).toEqual(expect.objectContaining({ code: '1', value: 'MAX' }));
             expect(data.importanceB).toEqual(expect.objectContaining({ code: '2' }));
             expect(data.importanceC).toEqual(expect.objectContaining({ code: '3' }));
             expect(data.notes).toBe('Ranked');
@@ -581,7 +583,10 @@ describe('finalClassification contract', () => {
             const data = ( await get(id) ).body.data;
 
             expect(data.case).toEqual(expect.objectContaining({ caseId, isActive: true }));
-            expect(data.importanceA).toEqual(expect.objectContaining({ code: '1', name: 'Importance 1' }));
+            // The seed carries the literal name '1', not 'Importance 1' — finalClassificationImportance
+            // is out of SPEC F46's lock (finalClassification.service.ts validates by type, never
+            // resolves an item by its code or value), so its seeded data is what stands
+            expect(data.importanceA).toEqual(expect.objectContaining({ code: '1', name: '1' }));
             expect(data.importanceB).toEqual(expect.objectContaining({ code: '2' }));
             expect(data.importanceC).toBeNull();
             expect(data.caseId).toBeUndefined();

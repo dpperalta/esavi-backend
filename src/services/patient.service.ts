@@ -25,10 +25,13 @@ const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 // coming from the client cannot shift the day through the server time zone
 const normalizeBirthDate = (value: string): string => value.trim().slice(0, 10);
 
+// `value` travels alongside `code`: sex is one of the catalogs SPEC F46 found seeded with a numeric
+// code, so it is the value that names the item for a reader — even though sex is not among the five
+// rows the spec locks, since only production code resolves an item by its frozen value
 const SEX_INCLUDE = {
     model: CatalogItem,
     as: 'sex',
-    attributes: ['catalogItemId', 'code', 'name']
+    attributes: ['catalogItemId', 'code', 'name', 'value']
 };
 
 const RESIDENCE_INCLUDE = {

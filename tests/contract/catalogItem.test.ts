@@ -360,8 +360,9 @@ describe('catalogItem contract', () => {
 
             // The row is found by the code the file never brought: 'Activo' minted 'activo'
             expect(activo).toMatchObject({ name: 'Activo', value: 'A', description: 'Estado activo', sortOrder: 1 });
-            // The one column that never lands null: an empty cell carries the already normalized name
-            expect(cerrado).toMatchObject({ name: 'Cerrado', value: 'Cerrado', description: 'Estado cerrado' });
+            // The one column that never lands null: an empty cell carries the name, and the name goes
+            // through the same toConstantCase the 001 and the 004 apply — SPEC F46
+            expect(cerrado).toMatchObject({ name: 'Cerrado', value: 'CERRADO', description: 'Estado cerrado' });
         });
 
         it('coerces an invalid sortOrder to 0 instead of losing the row', async () => {
@@ -526,6 +527,280 @@ describe('catalogItem contract', () => {
             // The cut happens before a single data row is read, so neither table grew
             expect(await CatalogItem.count()).toBe(itemsBefore);
             expect(await CatalogType.count()).toBe(typesBefore);
+        });
+
+    });
+
+    /**
+     * SPEC F46 — the value lock. `code` belongs to the country and may be recoded at any time;
+     * `value` belongs to this source code, which resolves items by it, and is frozen by
+     * `isValueLocked` so a recoding cannot silently break the lookup. The lock itself is never
+     * set through the API — it is written only by esaviapp.sql's deployment block — so this
+     * suite reads the five rows the deployment already locked (ageUnit YEARS/MONTHS/DAYS,
+     * outcome DEATH, investigationStatus UNKNOWN) rather than minting its own.
+     */
+    describe('value lock — SPEC F46', () => {
+
+        let lockedId: string;
+        let freeId: string;
+
+        const findLocked = async ( typeCode: string, value: string ): Promise<string> => {
+            const item = await CatalogItem.findOne({
+                where: { value, isValueLocked: true },
+                include: [{ model: CatalogType, as: 'catalogType', where: { code: typeCode }, attributes: [] }]
+            });
+            expect(item).not.toBeNull();
+            return item!.getDataValue('catalogItemId');
+        };
+
+        const readRow = async ( id: string ) => {
+            const row = await CatalogItem.findByPk(id);
+            return row!.get({ plain: true }) as Record<string, unknown>;
+        };
+
+        const appDetailsLength = ( row: Record<string, unknown> ) =>
+            Array.isArray(row.appDetails) ? row.appDetails.length : 0;
+
+        beforeAll(async () => {
+            lockedId = await findLocked('ageUnit', 'YEARS');
+
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: `lock free ${ suffix }`, value: 'FREE_VALUE' });
+            expect(created.status).toBe(201);
+            freeId = created.body.data.catalogItemId;
+        });
+
+        describe('001 — create', () => {
+
+            it('normalizes value to CONSTANT_CASE and ignores isValueLocked from the body', async () => {
+                const response = await request(app)
+                    .post('/api/catalog-items')
+                    .set(authHeader('SUPERADMIN'))
+                    .send({
+                        catalogTypeId,
+                        name: `lock create ${ suffix }`,
+                        value: '  medical doctor ',
+                        isValueLocked: true
+                    });
+
+                expect(response.status).toBe(201);
+                expect(response.body.data.value).toBe('MEDICAL_DOCTOR');
+                expect(response.body.data.isValueLocked).toBe(false);
+            });
+
+        });
+
+        describe('004 — update against a locked item', () => {
+
+            it('a PUT with a new value answers 200 and writes nothing', async () => {
+                const before = await readRow(lockedId);
+
+                const response = await request(app)
+                    .put(`/api/catalog-items/${ lockedId }`)
+                    .set(authHeader('SUPERADMIN'))
+                    .send({ value: 'SOMETHING_ELSE' });
+
+                expect(response.status).toBe(200);
+                expect(response.body.data.value).toBe('YEARS');
+
+                const after = await readRow(lockedId);
+                expect(after.value).toBe('YEARS');
+                expect(after.updatedAt).toEqual(before.updatedAt);
+                expect(appDetailsLength(after)).toBe(appDetailsLength(before));
+                expect(after.sysDetails).toEqual(before.sysDetails);
+            });
+
+            it('a PUT changing the code does write, and leaves value intact', async () => {
+                const before = await readRow(lockedId);
+
+                const response = await request(app)
+                    .put(`/api/catalog-items/${ lockedId }`)
+                    .set(authHeader('SUPERADMIN'))
+                    .send({ code: `recoded${ suffix }`, value: 'SOMETHING_ELSE' });
+
+                expect(response.status).toBe(200);
+                expect(response.body.data.value).toBe('YEARS');
+
+                const after = await readRow(lockedId);
+                expect(after.code).not.toBe(before.code);
+                expect(after.value).toBe('YEARS');
+                expect(appDetailsLength(after)).toBe(appDetailsLength(before) + 1);
+
+                // Restored so the row keeps naming what the rest of the suite, and production,
+                // still resolve it by
+                await request(app)
+                    .put(`/api/catalog-items/${ lockedId }`)
+                    .set(authHeader('SUPERADMIN'))
+                    .send({ code: before.code });
+            });
+
+            it('the same PUT on an unlocked item does write the value', async () => {
+                const response = await request(app)
+                    .put(`/api/catalog-items/${ freeId }`)
+                    .set(authHeader('SUPERADMIN'))
+                    .send({ value: '  something else ' });
+
+                expect(response.status).toBe(200);
+                expect(response.body.data.value).toBe('SOMETHING_ELSE');
+            });
+
+        });
+
+        describe('005A — delete against a locked item', () => {
+
+            it('answers 409 CATITEM_005A_VALUE_LOCKED and leaves the row active', async () => {
+                const response = await request(app)
+                    .delete(`/api/catalog-items/${ lockedId }`)
+                    .set(authHeader('SUPERADMIN'));
+
+                expect(response.status).toBe(409);
+                expect(response.body.ok).toBe(false);
+                expect(response.body.code).toBe('CATITEM_005A_VALUE_LOCKED');
+
+                const stillActive = await CatalogItem.findByPk(lockedId);
+                expect(stillActive!.getDataValue('isActive')).toBe(true);
+            });
+
+            it('the message is served in the three languages and names the value', async () => {
+                for( const lang of [ 'es', 'en', 'nl' ] ) {
+                    const response = await request(app)
+                        .delete(`/api/catalog-items/${ lockedId }?lang=${ lang }`)
+                        .set(authHeader('SUPERADMIN'));
+
+                    expect(response.status).toBe(409);
+                    expect(response.body.message).not.toContain('catalogItem.valueLocked');
+                    expect(response.body.message).toContain('YEARS');
+                }
+            });
+
+            it('an unlocked item still answers 200', async () => {
+                const response = await request(app)
+                    .delete(`/api/catalog-items/${ freeId }`)
+                    .set(authHeader('SUPERADMIN'));
+
+                expect(response.status).toBe(200);
+
+                // Reactivated so the row survives for the rest of the file
+                await request(app)
+                    .patch(`/api/catalog-items/activate/${ freeId }`)
+                    .set(authHeader('SUPERADMIN'));
+            });
+
+        });
+
+        describe('006 — import against a locked item', () => {
+
+            const buildBook = async ( typeCode: string, typeName: string, itemName: string, value: string, description: string, sortOrder: number ) => {
+                const workbook = new ExcelJS.Workbook();
+                const sheet = workbook.addWorksheet('items');
+                sheet.addRow([ 'catalogTypeCode', 'catalogTypeName', 'name', 'value', 'description', 'sortOrder' ]);
+                sheet.addRow([ typeCode, typeName, itemName, value, description, sortOrder ]);
+                return Buffer.from(await workbook.xlsx.writeBuffer());
+            };
+
+            const importBook = ( buffer: Buffer ) => request(app)
+                .post('/api/catalog-items/import')
+                .set(authHeader('SUPERADMIN'))
+                .attach('file', buffer, 'lock-probe.xlsx');
+
+            it('drops the value of a locked row, applies the rest and does not reject the row', async () => {
+                const typeCode = `lockImport${ suffix }`;
+                const itemName = `Bloqueado ${ suffix }`;
+
+                const first = await importBook(await buildBook(typeCode, `Lock Import ${ suffix }`, itemName, 'IMPORT_LOCKED', 'Antes', 1));
+                expect(first.status).toBe(200);
+                expect(first.body.data.inserted).toBe(1);
+
+                const created = await CatalogItem.findOne({ where: { value: 'IMPORT_LOCKED' } });
+                expect(created).not.toBeNull();
+                const importLockedId = created!.getDataValue('catalogItemId');
+                await CatalogItem.update({ isValueLocked: true }, { where: { catalogItemId: importLockedId } });
+
+                const second = await importBook(await buildBook(typeCode, `Lock Import ${ suffix }`, itemName, 'SOMETHING_ELSE', 'Despues', 7));
+
+                expect(second.status).toBe(200);
+                expect(second.body.data.rejected ?? []).toEqual([]);
+                expect(second.body.data.updated).toBe(1);
+
+                const after = await CatalogItem.findByPk(importLockedId);
+                expect(after!.getDataValue('value')).toBe('IMPORT_LOCKED');
+                expect(after!.getDataValue('description')).toBe('Despues');
+                expect(after!.getDataValue('sortOrder')).toBe(7);
+            });
+
+        });
+
+        describe('the partial unique index', () => {
+
+            it('rejects a second locked item with the same (catalogTypeId, value)', async () => {
+                const probeType = await request(app)
+                    .post('/api/catalog-types')
+                    .set(authHeader('SUPERADMIN'))
+                    .send({ code: `lockIndex${ suffix }`, name: `Lock Index ${ suffix }` });
+                const probeTypeId = probeType.body.data.catalogTypeId;
+
+                await CatalogItem.create({
+                    catalogTypeId: probeTypeId, code: 'A', name: 'A', value: 'DUP_LOCKED', isValueLocked: true
+                });
+
+                await expect(CatalogItem.create({
+                    catalogTypeId: probeTypeId, code: 'B', name: 'B', value: 'DUP_LOCKED', isValueLocked: true
+                })).rejects.toThrow();
+            });
+
+            it('accepts two unlocked items with the same (catalogTypeId, value)', async () => {
+                const probeType = await request(app)
+                    .post('/api/catalog-types')
+                    .set(authHeader('SUPERADMIN'))
+                    .send({ code: `lockIndexOpen${ suffix }`, name: `Lock Index Open ${ suffix }` });
+                const probeTypeId = probeType.body.data.catalogTypeId;
+
+                await CatalogItem.create({
+                    catalogTypeId: probeTypeId, code: 'A', name: 'A', value: 'DUP_FREE', isValueLocked: false
+                });
+
+                await expect(CatalogItem.create({
+                    catalogTypeId: probeTypeId, code: 'B', name: 'B', value: 'DUP_FREE', isValueLocked: false
+                })).resolves.toBeDefined();
+            });
+
+        });
+
+        describe('exposure on the three reads', () => {
+
+            it('is present on 003 — get by id', async () => {
+                const response = await request(app)
+                    .get(`/api/catalog-items/${ lockedId }`)
+                    .set(authHeader('SUPERADMIN'));
+
+                expect(response.status).toBe(200);
+                expect(response.body.data).toHaveProperty('isValueLocked', true);
+            });
+
+            it('is present on 002A — list by type', async () => {
+                const type = await CatalogType.findOne({ where: { code: 'ageUnit' } });
+                const response = await request(app)
+                    .get(`/api/catalog-items/type/${ type!.getDataValue('catalogTypeId') }`)
+                    .set(authHeader('USER'));
+
+                expect(response.status).toBe(200);
+                const row = response.body.data.rows.find(( r: { catalogItemId: string } ) => r.catalogItemId === lockedId);
+                expect(row).toHaveProperty('isValueLocked', true);
+            });
+
+            it('is present on 002B — admin list by type', async () => {
+                const type = await CatalogType.findOne({ where: { code: 'ageUnit' } });
+                const response = await request(app)
+                    .get(`/api/catalog-items/admin/type/${ type!.getDataValue('catalogTypeId') }`)
+                    .set(authHeader('SUPERADMIN'));
+
+                expect(response.status).toBe(200);
+                const row = response.body.data.rows.find(( r: { catalogItemId: string } ) => r.catalogItemId === lockedId);
+                expect(row).toHaveProperty('isValueLocked', true);
+            });
+
         });
 
     });

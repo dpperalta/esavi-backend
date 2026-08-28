@@ -5,7 +5,7 @@ import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../help
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import {
-    DEFAULT_INVESTIGATION_STATUS_CODE,
+    DEFAULT_INVESTIGATION_STATUS_VALUE,
     INVESTIGATION_STATUS_CATALOG_CODE,
     VACCINATION_SITE_CATALOG_CODE
 } from '../constants/investigation.constants';
@@ -182,8 +182,10 @@ const resolveStatusItemId = async (
         return statusItem.catalogItemId;
     }
 
+    // By value and locked, the canonical shape of SPEC F46: isValueLocked is what makes the row
+    // unique on the pair, and isActive is not filtered because a locked item cannot be withdrawn
     const defaultStatusItem = await CatalogItem.findOne({
-        where: { code: DEFAULT_INVESTIGATION_STATUS_CODE, isActive: true },
+        where: { value: DEFAULT_INVESTIGATION_STATUS_VALUE, isValueLocked: true },
         attributes: ['catalogItemId'],
         include: [{
             model: CatalogType,
@@ -194,7 +196,9 @@ const resolveStatusItemId = async (
     });
     if( !defaultStatusItem ) {
         throw new AppError(
-            getMessage('investigation.defaultStatusMissing', lang, { code: DEFAULT_INVESTIGATION_STATUS_CODE }),
+            // The message keeps interpolating {{code}}: it is still the identifier the operator has
+            // to go looking for, whichever column now holds it
+            getMessage('investigation.defaultStatusMissing', lang, { code: DEFAULT_INVESTIGATION_STATUS_VALUE }),
             500,
             `INVESTGN_${ op }_DEFAULT_STATUS_MISSING`
         );
