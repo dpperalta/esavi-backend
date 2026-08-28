@@ -226,13 +226,21 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
     // buildDifferentialUpdate, whose stored side has to be the whole row — findByPk reads it
     // without narrowed attributes, which is the precondition of the helper
     const stored = catalogItem.get({ plain: true }) as Record<string, unknown>;
+    // A locked value belongs to the source code, which resolves items by it, so no request can move
+    // it: the field never enters the diff, whether it travels or not and whatever it carries. It is a
+    // silent omission and not a 400 or a 409 — the same shape notificationMedication already applies
+    // to sortOrder — and isValueLocked travels in the read responses so a client can tell beforehand.
+    // Everything else stays editable: the country recoding the item is the very scenario this protects
+    const isValueLocked = stored.isValueLocked === true;
     const objectToUpdate = buildDifferentialUpdate(stored, {
         catalogTypeId: targetCatalogTypeId,
         // A field of its own again: it enters the diff exactly when the body carries it, and
         // reaches the UPDATE only if it changed
         code: sentCode ?? undefined,
         name: data.name ? toTitleCase(data.name.trim()) : undefined,
-        value: data.value ? data.value.trim() : undefined,
+        value: isValueLocked
+            ? undefined
+            : ( data.value !== undefined ? ( data.value ? toConstantCase(data.value.trim()) : null ) : undefined ),
         description: data.description ? data.description.trim() : undefined,
         metadata: data.metadata ? data.metadata : undefined,
         sortOrder: data.sortOrder ? data.sortOrder : undefined
