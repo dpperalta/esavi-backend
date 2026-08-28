@@ -168,6 +168,7 @@
         "updatedFailed": "Bijwerken van het catalogusitem mislukt. Probeer het later opnieuw.",
         "alreadyInactive": "Het catalogusitem met ID {{id}} is al inactief",
         "alreadyActive": "Het catalogusitem met ID {{id}} is al actief",
+        "valueLocked": "Het catalogusitem met ID {{id}} heeft de waarde {{value}} vergrendeld omdat het systeem erop steunt, en kan niet worden gedeactiveerd. De code kan nog wel worden gewijzigd.",
         "deletedSuccess": "Catalogusitem succesvol verwijderd",
         "deletedFailed": "Verwijderen van het catalogusitem mislukt. Probeer het later opnieuw.",
         "activatedSuccess": "Catalogusitem succesvol geactiveerd",

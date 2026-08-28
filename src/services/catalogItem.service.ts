@@ -268,6 +268,20 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
 // ESAVI-CATITEM-005A / 005B - Setting Catalog Item Active/Inactive Service - For SuperAdmin
 const setCatalogItemActivationService = async (id: string, authUser: AuthUser | undefined, lang: string, isActive: boolean = true) => {
     const op = isActive ? '005B' : '005A';
+    // A locked item cannot be withdrawn: if the source code names it, the source code needs it, and
+    // retiring it is a change of spec rather than an act of administration. The check runs before the
+    // one for alreadyInactive so the message states the real cause, and only on the way out — 005B is
+    // unreachable for a locked item, which by construction never gets to be inactive
+    if( !isActive ) {
+        const stored = await CatalogItem.findByPk(id);
+        if( stored?.isValueLocked ) {
+            throw new AppError(
+                getMessage('catalogItem.valueLocked', lang, { id, value: stored.value }),
+                409,
+                'CATITEM_005A_VALUE_LOCKED'
+            );
+        }
+    }
     const transaction = await sequelize.transaction();
     try {
         const catalogItem = await setEntityActiveStatusService({

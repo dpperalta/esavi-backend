@@ -168,6 +168,7 @@
         "updatedFailed": "Error al actualizar el elemento de catálogo. Por favor, inténtelo de nuevo más tarde.",
         "alreadyInactive": "El elemento de catálogo con ID {{id}} ya está inactivo",
         "alreadyActive": "El elemento de catálogo con ID {{id}} ya está activo",
+        "valueLocked": "El elemento de catálogo con ID {{id}} tiene el valor {{value}} congelado porque el sistema lo utiliza, y no se puede desactivar. Su código sí se puede modificar.",
         "deletedSuccess": "Elemento de catálogo eliminado exitosamente",
         "deletedFailed": "Error al eliminar el elemento de catálogo. Por favor, inténtelo de nuevo más tarde.",
         "activatedSuccess": "Elemento de catálogo activado exitosamente",
