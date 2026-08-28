@@ -1559,14 +1559,47 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   v_catalog_type_id uuid;
+  v_item_value varchar;
+  v_locked_item_id uuid;
 BEGIN
   INSERT INTO "catalogType" ("code", "name")
   VALUES ("pCatalogTypeCode", "pCatalogTypeName")
   ON CONFLICT ("code") DO UPDATE SET "name" = EXCLUDED."name"
   RETURNING "catalogTypeId" INTO v_catalog_type_id;
 
+  v_item_value := COALESCE("pItemValue", "pItemCode");
+
+  -- SPEC F46. The ON CONFLICT below resolves by ("catalogTypeId", "code"), and the code belongs to
+  -- the country: the day it recodes an item, the conflict stops matching and the seed inserts a
+  -- second row carrying the same locked value - the very corruption the lock exists to prevent, and
+  -- the unique partial index would reject it at deployment time. So a locked value is resolved by
+  -- first, and it is the code of that row that gets updated
+  SELECT "catalogItemId" INTO v_locked_item_id
+    FROM "catalogItem"
+   WHERE "catalogTypeId" = v_catalog_type_id
+     AND "value" = v_item_value
+     AND "isValueLocked";
+
+  IF v_locked_item_id IS NOT NULL THEN
+    -- The value is not written: it is what the row was found by. The guard keeps a reload that
+    -- changes nothing from moving updatedAt or sysDetails on the five locked rows
+    UPDATE "catalogItem"
+       SET "code" = "pItemCode",
+           "name" = "pItemName",
+           "sortOrder" = COALESCE("pSortOrder", 0),
+           "isActive" = true,
+           "deletedAt" = NULL
+     WHERE "catalogItemId" = v_locked_item_id
+       AND ("code" IS DISTINCT FROM "pItemCode"
+            OR "name" IS DISTINCT FROM "pItemName"
+            OR "sortOrder" IS DISTINCT FROM COALESCE("pSortOrder", 0)
+            OR "isActive" IS DISTINCT FROM true
+            OR "deletedAt" IS NOT NULL);
+    RETURN;
+  END IF;
+
   INSERT INTO "catalogItem" ("catalogTypeId", "code", "name", "value", "sortOrder")
-  VALUES (v_catalog_type_id, "pItemCode", "pItemName", COALESCE("pItemValue", "pItemCode"), COALESCE("pSortOrder", 0))
+  VALUES (v_catalog_type_id, "pItemCode", "pItemName", v_item_value, COALESCE("pSortOrder", 0))
   ON CONFLICT ("catalogTypeId", "code") DO UPDATE
   SET "name" = EXCLUDED."name",
       "value" = EXCLUDED."value",
