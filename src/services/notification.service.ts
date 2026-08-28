@@ -13,9 +13,13 @@ import { purgeEntityService } from './common/entityPurge.service';
 // catalogType codes are stored in camelCase — catalogType.service.ts:12
 const OUTCOME_CATALOG_CODE = 'outcome';
 
-// Code of the outcome item that turns the three death fields from forbidden into required.
-// catalogItem codes are stored in CONSTANT_CASE — catalogItem.service.ts:22
-const DEATH_OUTCOME_CODE = 'DEATH';
+// Value of the outcome item that turns the three death fields from forbidden into required.
+// It is the `value` and not the `code` since SPEC F46: the code belongs to the country and is
+// recoded with its official catalog, at which point this comparison would silently stop matching and
+// the death rule would never fire again — the worst of the three failure modes the spec fixed,
+// because it does not raise, it lies. The value belongs to this source code and is frozen by
+// isValueLocked, so a recoding cannot reach it
+const DEATH_OUTCOME_VALUE = 'DEATH';
 
 // The three fields that only make sense when the outcome is death
 const DEATH_FIELDS = ['deathDate', 'autopsyRequested', 'verbalAutopsyPerformed'] as const;
@@ -122,14 +126,16 @@ const assertCaseIsNotNotified = async (caseId: string, op: string, lang: string)
     }
 }
 
-// Resolves the outcome the client sent and returns its code. The item must exist, be active and
+// Resolves the outcome the client sent and returns its value. The item must exist, be active and
 // belong to the outcome catalog: any other catalogItem would be a valid UUID pointing at a
 // meaningless outcome. An unseeded outcome catalog makes every outcomeItemId fall here, which is
-// the deployment precondition the spec declares
-const resolveOutcomeCode = async (outcomeItemId: string, op: string, lang: string): Promise<string> => {
+// the deployment precondition the spec declares.
+// The lookup itself is by primary key and needs no isValueLocked: what SPEC F46 changed is the
+// column read back, because it is that column the death rule compares against
+const resolveOutcomeValue = async (outcomeItemId: string, op: string, lang: string): Promise<string> => {
     const outcomeItem = await CatalogItem.findOne({
         where: { catalogItemId: outcomeItemId, isActive: true },
-        attributes: ['catalogItemId', 'code'],
+        attributes: ['catalogItemId', 'value'],
         include: [{
             model: CatalogType,
             as: 'catalogType',
@@ -140,11 +146,11 @@ const resolveOutcomeCode = async (outcomeItemId: string, op: string, lang: strin
     if( !outcomeItem ) {
         throw new AppError(getMessage('notification.outcomeNotFound', lang), 404, `NOTIFCN_${ op }_OUTCOME_NOT_FOUND`);
     }
-    return outcomeItem.code ?? '';
+    return outcomeItem.value ?? '';
 }
 
 // The death rule, shared by 001 and 004. It lives here and not in the validator because it hangs
-// on the code of the catalogItem behind outcomeItemId, which the validator cannot see — it only
+// on the value of the catalogItem behind outcomeItemId, which the validator cannot see — it only
 // gets an opaque UUID. It still answers 400: the problem is the combination of fields in the
 // body, which is malformed input however it is checked.
 // Sending the three fields under an outcome that is not death is rejected instead of ignored:
@@ -152,11 +158,11 @@ const resolveOutcomeCode = async (outcomeItemId: string, op: string, lang: strin
 // outcome is a contradiction nobody would ever detect
 const assertDeathRule = (
     state: Partial<CreateNotificationInput>,
-    outcomeCode: string | null,
+    outcomeValue: string | null,
     op: string,
     lang: string
 ) => {
-    const isDeath = outcomeCode === DEATH_OUTCOME_CODE;
+    const isDeath = outcomeValue === DEATH_OUTCOME_VALUE;
     const isInformed = (value: unknown): boolean => value !== undefined && value !== null;
 
     if( isDeath ) {
@@ -188,8 +194,8 @@ const createNotificationService = async (data: CreateNotificationInput, authUser
     await assertCaseIsNotNotified(data.caseId, '001', lang);
 
     // On create the body is the whole resulting state, so the rule is evaluated over it directly
-    const outcomeCode = data.outcomeItemId ? await resolveOutcomeCode(data.outcomeItemId, '001', lang) : null;
-    assertDeathRule(data, outcomeCode, '001', lang);
+    const outcomeValue = data.outcomeItemId ? await resolveOutcomeValue(data.outcomeItemId, '001', lang) : null;
+    assertDeathRule(data, outcomeValue, '001', lang);
 
     const newEntry: AppDetails = {
         createdAt: new Date(),
@@ -317,14 +323,14 @@ const getNotificationByCaseIdService = async (caseId: string, lang: string, canV
     return toNotificationResponse(notification);
 }
 
-// The code of an outcome already stored in the row, read without the active and catalog filters
-// that resolveOutcomeCode applies. It is only needed to evaluate the death rule over the
+// The value of an outcome already stored in the row, read without the active and catalog filters
+// that resolveOutcomeValue applies. It is only needed to evaluate the death rule over the
 // resulting state when the PUT does not touch outcomeItemId: answering 404 there would block
 // correcting a notification whose outcome item was deactivated after the fact, which is not
 // something the client did wrong
-const readStoredOutcomeCode = async (outcomeItemId: string): Promise<string | null> => {
-    const outcomeItem = await CatalogItem.findByPk(outcomeItemId, { attributes: ['code'] });
-    return outcomeItem?.code ?? null;
+const readStoredOutcomeValue = async (outcomeItemId: string): Promise<string | null> => {
+    const outcomeItem = await CatalogItem.findByPk(outcomeItemId, { attributes: ['value'] });
+    return outcomeItem?.value ?? null;
 }
 
 // The three death fields and the outcome of the resulting state: what is stored merged with what
@@ -366,13 +372,13 @@ const updateNotificationService = async (
     const outcomeArrived = data.outcomeItemId !== undefined;
     const resultingOutcomeItemId = outcomeArrived ? ( data.outcomeItemId ?? null ) : notification.outcomeItemId;
 
-    let outcomeCode: string | null = null;
+    let outcomeValue: string | null = null;
     if( resultingOutcomeItemId ) {
-        outcomeCode = outcomeArrived
-            ? await resolveOutcomeCode(resultingOutcomeItemId, '004', lang)
-            : await readStoredOutcomeCode(resultingOutcomeItemId);
+        outcomeValue = outcomeArrived
+            ? await resolveOutcomeValue(resultingOutcomeItemId, '004', lang)
+            : await readStoredOutcomeValue(resultingOutcomeItemId);
     }
-    assertDeathRule(mergeDeathState(notification, data), outcomeCode, '004', lang);
+    assertDeathRule(mergeDeathState(notification, data), outcomeValue, '004', lang);
 
     // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending
     // whole the record just read with a GET is the normal use of a form, and writing it back

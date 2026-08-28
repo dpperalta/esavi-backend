@@ -1,5 +1,7 @@
-// Age unit codes, in toConstantCase because that is how catalogItem.service.ts stores every code.
-// The service resolves them against the catalogType whose code is `ageUnit`
+// Age unit keys, in toConstantCase because that is how catalogItem.service.ts stores every `value`.
+// Since SPEC F46 they are matched against catalogItem.value — frozen by isValueLocked — and no
+// longer against catalogItem.code, which belongs to each country's official catalog and is recoded
+// with it. The two services resolve them inside the catalogType whose code is `ageUnit`
 export type AgeUnitCode = 'YEARS' | 'MONTHS' | 'DAYS';
 
 export interface AgeAtEvent {

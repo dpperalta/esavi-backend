@@ -386,14 +386,31 @@ describe('investigation contract', () => {
             expect(codes.size).toBe(4);
         });
 
-        it('with the item "0" deactivated, creating without statusItemId answers 500 with its own message', async () => {
+        // Since SPEC F46 the default status is resolved by { value: 'UNKNOWN', isValueLocked: true }
+        // and no longer by code '0' with an isActive filter, so what breaks the deployment
+        // precondition is the missing lock and not a deactivation: a withdrawn item still names what
+        // it always named, which is the whole point of resolving without filtering by state
+        it('with the item UNKNOWN unlocked, creating without statusItemId answers 500 with its own message', async () => {
             const caseId = await createCaseFixture();
-            await CatalogItem.update({ isActive: false }, { where: { catalogItemId: statusZeroItemId } });
+            await CatalogItem.update({ isValueLocked: false }, { where: { catalogItemId: statusZeroItemId } });
             try {
                 const response = await createInvestigation({ caseId });
                 expect(response.status).toBe(500);
                 expect(response.body.code).toBe('INVESTGN_001_DEFAULT_STATUS_MISSING');
                 expect(response.body.message).not.toBe('Internal server error');
+            } finally {
+                await CatalogItem.update({ isValueLocked: true }, { where: { catalogItemId: statusZeroItemId } });
+            }
+        });
+
+        // The counterpart of the case above, and the reason the lookup drops the isActive filter
+        it('a deactivated UNKNOWN still resolves as the default status', async () => {
+            const caseId = await createCaseFixture();
+            await CatalogItem.update({ isActive: false }, { where: { catalogItemId: statusZeroItemId } });
+            try {
+                const response = await createInvestigation({ caseId });
+                expect(response.status).toBe(201);
+                expect(response.body.data.status.catalogItemId).toBe(statusZeroItemId);
             } finally {
                 await CatalogItem.update({ isActive: true }, { where: { catalogItemId: statusZeroItemId } });
             }

@@ -7,9 +7,12 @@ import { AppDetails, AuthUser } from '../../types';
 // resolves against: the age recalculated here has to mean exactly what the age computed there means
 const AGE_UNIT_CATALOG_CODE = 'ageUnit';
 
-// The three codes the calculation can resolve to. Fixed and few, which is what allows the catalog
-// to be read once per invocation instead of once per row
-const AGE_UNIT_CODES = ['YEARS', 'MONTHS', 'DAYS'];
+// The three values the calculation can resolve to. Fixed and few, which is what allows the catalog
+// to be read once per invocation instead of once per row.
+// They are values and not codes since SPEC F46: the code of a catalogItem belongs to the country and
+// is recoded whenever its official catalog changes, while the value belongs to this source code and
+// is frozen by isValueLocked, which is what makes this lookup survive a recoding
+const AGE_UNIT_VALUES = ['YEARS', 'MONTHS', 'DAYS'];
 
 // Every case of a patient, or the single classification of one case. The two shapes are exclusive
 // on purpose: a scope that carried both would leave which one wins undefined
@@ -30,12 +33,16 @@ const CAUSE_DETAIL: Record<RecalculationOp, string> = {
     'ESAVI-CASE-004': "Age recalculated after its case's eventDate changed"
 };
 
-// The three units in one query, indexed by code. A missing item does not fail here: it fails on
-// the first row that needs that particular unit, which is what keeps the error about the row
-const findAgeUnitItemsByCode = async (transaction: Transaction): Promise<Map<string, string>> => {
+// The three units in one query, indexed by value. A missing item does not fail here: it fails on
+// the first row that needs that particular unit, which is what keeps the error about the row.
+// isValueLocked is part of the where and not an afterthought: the partial unique index only covers
+// the locked rows, so without it an unlocked item sharing the value would make the lookup ambiguous.
+// isActive is deliberately absent — a withdrawn item still names what it always named, and a locked
+// one cannot be deactivated anyway (ESAVI-CATITEM-005A answers 409)
+const findAgeUnitItemsByValue = async (transaction: Transaction): Promise<Map<string, string>> => {
     const items = await CatalogItem.findAll({
-        where: { code: AGE_UNIT_CODES, isActive: true },
-        attributes: ['catalogItemId', 'code'],
+        where: { value: AGE_UNIT_VALUES, isValueLocked: true },
+        attributes: ['catalogItemId', 'value'],
         include: [{
             model: CatalogType,
             as: 'catalogType',
@@ -44,7 +51,7 @@ const findAgeUnitItemsByCode = async (transaction: Transaction): Promise<Map<str
         }],
         transaction
     });
-    return new Map(items.map((item) => [item.code, item.catalogItemId]));
+    return new Map(items.map((item) => [item.value, item.catalogItemId]));
 }
 
 // The classifications in scope, always read from Classification and never from the patient: there
@@ -116,7 +123,7 @@ const recalculateClassificationAgesService = async (
     }
 
     const entity = ERROR_ENTITY[op];
-    const ageUnitItems = await findAgeUnitItemsByCode(transaction);
+    const ageUnitItems = await findAgeUnitItemsByValue(transaction);
     let changed = 0;
 
     for( const classification of classifications ) {
