@@ -1,4 +1,4 @@
-
+﻿
 /*
   ESAVI Web Application - OpPostgreSQL schema v9.1.9
   Target: PostgreSQL 12+
@@ -507,7 +507,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TABLE public."appUserGeoLocation" (
+CREATE TABLE IF NOT EXISTS public."appUserGeoLocation" (
     "userGeoLocationId" uuid DEFAULT gen_random_uuid() NOT NULL,
     "userId" uuid NOT NULL,
     "geoLocationId" uuid NOT NULL,
@@ -526,16 +526,16 @@ CREATE TABLE public."appUserGeoLocation" (
         CHECK (("validTo" IS NULL) OR ("validTo" > "validFrom"))
 );
 
-CREATE INDEX "IX_appUserGeoLocation_userId"
+CREATE INDEX IF NOT EXISTS "IX_appUserGeoLocation_userId"
 ON public."appUserGeoLocation" USING btree ("userId");
 
-CREATE INDEX "IX_appUserGeoLocation_geoLocationId"
+CREATE INDEX IF NOT EXISTS "IX_appUserGeoLocation_geoLocationId"
 ON public."appUserGeoLocation" USING btree ("geoLocationId");
 
-CREATE INDEX "IX_appUserGeoLocation_assignedByUserId"
+CREATE INDEX IF NOT EXISTS "IX_appUserGeoLocation_assignedByUserId"
 ON public."appUserGeoLocation" USING btree ("assignedByUserId");
 
-CREATE UNIQUE INDEX "UQ_appUserGeoLocation_active_user_geoLocation"
+CREATE UNIQUE INDEX IF NOT EXISTS "UQ_appUserGeoLocation_active_user_geoLocation"
 ON public."appUserGeoLocation"
 USING btree ("userId", "geoLocationId")
 WHERE (
@@ -544,12 +544,15 @@ WHERE (
     AND "validTo" IS NULL
 );
 
+DROP TRIGGER IF EXISTS "TRG_appUserGeoLocation_setSysDetails" ON public."appUserGeoLocation";
 CREATE TRIGGER "TRG_appUserGeoLocation_setSysDetails"
 BEFORE INSERT OR UPDATE
 ON public."appUserGeoLocation"
 FOR EACH ROW
 EXECUTE FUNCTION "setSysDetails"();
 
+ALTER TABLE public."appUserGeoLocation"
+DROP CONSTRAINT IF EXISTS "FK_appUserGeoLocation_user";
 ALTER TABLE public."appUserGeoLocation"
 ADD CONSTRAINT "FK_appUserGeoLocation_user"
 FOREIGN KEY ("userId")
@@ -558,12 +561,16 @@ ON DELETE RESTRICT
 ON UPDATE CASCADE;
 
 ALTER TABLE public."appUserGeoLocation"
+DROP CONSTRAINT IF EXISTS "FK_appUserGeoLocation_geoLocation";
+ALTER TABLE public."appUserGeoLocation"
 ADD CONSTRAINT "FK_appUserGeoLocation_geoLocation"
 FOREIGN KEY ("geoLocationId")
 REFERENCES public."geoLocation"("geoLocationId")
 ON DELETE RESTRICT
 ON UPDATE CASCADE;
 
+ALTER TABLE public."appUserGeoLocation"
+DROP CONSTRAINT IF EXISTS "FK_appUserGeoLocation_assignedByUser";
 ALTER TABLE public."appUserGeoLocation"
 ADD CONSTRAINT "FK_appUserGeoLocation_assignedByUser"
 FOREIGN KEY ("assignedByUserId")
@@ -1751,5 +1758,60 @@ CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'IN_FINAL
 CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'PENDING_VALIDATION', 'Pendiente de validación', 'PENDING_VALIDATION', 6);
 CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'CLOSED', 'Cerrado', 'CLOSED', 7);
 CALL "upsertCatalogItem"('caseWorkflowStatus', 'Case workflow status', 'REOPENED', 'Reabierto', 'REOPENED', 8);
+
+-- -----------------------------------------------------------------------------
+-- SPEC F46 â€” Value realignment and lock
+--
+-- "code" belongs to the country and may be recoded at any time; "value" belongs
+-- to the source code, which resolves catalog items by it. This block runs after
+-- the whole catalog is seeded, is idempotent, and writes neither "appDetails"
+-- nor "sysDetails": it is a deployment operation, not an application write, so
+-- there is no authenticated user to record.
+-- -----------------------------------------------------------------------------
+
+-- 1. Mint the semantic "value" of "investigationStatus", the only catalog seeded
+--    numeric on both columns. Aligned with "outcome", which carries the same six
+--    concepts.
+UPDATE "catalogItem" ci SET "value" = v."value"
+  FROM "catalogType" ct, (VALUES
+    ('0', 'UNKNOWN'),
+    ('1', 'RECOVERING'),
+    ('2', 'RECOVERED'),
+    ('3', 'NOT_RECOVERED'),
+    ('4', 'RECOVERED_WITH_SEQUELAE'),
+    ('5', 'DEATH')
+  ) AS v("code", "value")
+ WHERE ci."catalogTypeId" = ct."catalogTypeId"
+   AND ct."code" = 'investigationStatus'
+   AND ci."code" = v."code"
+   AND ci."value" IS DISTINCT FROM v."value";
+
+-- 2. Normalize to CONSTANT_CASE every seeded "value" carrying whitespace
+--    ('MEDICAL DOCTOR' -> 'MEDICAL_DOCTOR'). Today it reaches two "profession"
+--    rows; it stays correct if a future seed introduces another.
+UPDATE "catalogItem"
+   SET "value" = upper(regexp_replace(btrim("value"), '\s+', '_', 'g'))
+ WHERE "value" ~ '\s';
+
+-- 3. Lock the values that src/ resolves items by. A value is locked if and only
+--    if some file under src/ names it â€” today five rows in three catalogs.
+--    "isActive" is forced back on in the same statement: a locked row is alive
+--    by definition, even if someone had withdrawn it before this deployment.
+UPDATE "catalogItem" ci
+   SET "isValueLocked" = true,
+       "isActive" = true,
+       "deletedAt" = NULL
+  FROM "catalogType" ct
+ WHERE ci."catalogTypeId" = ct."catalogTypeId"
+   AND (ct."code", ci."value") IN (
+     ('ageUnit', 'YEARS'),
+     ('ageUnit', 'MONTHS'),
+     ('ageUnit', 'DAYS'),
+     ('outcome', 'DEATH'),
+     ('investigationStatus', 'UNKNOWN')
+   )
+   AND (ci."isValueLocked" IS DISTINCT FROM true
+        OR ci."isActive" IS DISTINCT FROM true
+        OR ci."deletedAt" IS NOT NULL);
 
 COMMIT;
