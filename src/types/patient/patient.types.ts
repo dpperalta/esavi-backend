@@ -1,9 +1,7 @@
 export interface CreatePatientInput {
-    firstName: string;
-    lastName: string;
+    names: string;
+    lastNames: string;
     documentNumber: string;
-    middleName?: string | null;
-    secondLastName?: string | null;
     birthDate?: string | null;
     passportNumber?: string | null;
     email?: string | null;
