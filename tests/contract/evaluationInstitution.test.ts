@@ -69,8 +69,8 @@ describe('evaluationInstitution contract', () => {
     const createEvaluation = async (investigationActive: boolean = true, sealed: boolean = false): Promise<string> => {
         counter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Inst ${ counter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Inst ${ counter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`EI${ counter }${ suffix }`),
             healthSystemCode: `EI${ counter }${ suffix }`,
             birthDate: '2000-05-04'
@@ -175,7 +175,7 @@ describe('evaluationInstitution contract', () => {
     it('404 EVALINST_001_CLINICAL_EVALUATION_NOT_FOUND in the three cases, SUPERADMIN included', async () => {
         // 1. no clinical evaluation row
         const patient = await Patient.create({
-            firstName: esaviCrypt('No'), lastName: esaviCrypt(`Eval ${ suffix }`),
+            names: esaviCrypt('No'), lastNames: esaviCrypt(`Eval ${ suffix }`),
             documentNumber: esaviCrypt(`NE${ suffix }`), healthSystemCode: `NE${ suffix }`, birthDate: '2000-01-01'
         });
         const esaviCase = await EsaviCase.create({
@@ -305,7 +305,7 @@ describe('evaluationInstitution contract', () => {
 
     it('404 for an investigationId with no clinical evaluation, with any role', async () => {
         const patient = await Patient.create({
-            firstName: esaviCrypt('L'), lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt('L'), lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`LS${ suffix }`), healthSystemCode: `LS${ suffix }`, birthDate: '2000-01-01'
         });
         const esaviCase = await EsaviCase.create({
@@ -969,7 +969,7 @@ describe('evaluationInstitution contract', () => {
 
     it('38 — purging an investigation with no clinical evaluation writes neither of the two lines', async () => {
         const patient = await Patient.create({
-            firstName: esaviCrypt('P'), lastName: esaviCrypt(`Bare ${ suffix }`),
+            names: esaviCrypt('P'), lastNames: esaviCrypt(`Bare ${ suffix }`),
             documentNumber: esaviCrypt(`BR${ suffix }`), healthSystemCode: `BR${ suffix }`, birthDate: '2000-01-01'
         });
         const esaviCase = await EsaviCase.create({

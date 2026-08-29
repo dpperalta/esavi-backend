@@ -42,8 +42,8 @@ describe('classification contract', () => {
         const { birthDate = '2000-05-04', eventDate = '2024-05-04', isActive = true } = options;
         caseCounter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Classification ${ caseCounter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Classification ${ caseCounter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`CL${ caseCounter }${ suffix }`),
             healthSystemCode: `CL${ caseCounter }${ suffix }`,
             birthDate

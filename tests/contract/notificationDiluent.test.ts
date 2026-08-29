@@ -63,8 +63,8 @@ describe('notificationDiluent contract', () => {
     const createCaseFixture = async ( eventDate: string | null = '2026-12-31' ): Promise<string> => {
         caseCounter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Diluent ${ caseCounter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Diluent ${ caseCounter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`DL${ caseCounter }${ suffix }`),
             healthSystemCode: `DL${ caseCounter }${ suffix }`,
             birthDate: '2000-05-04'

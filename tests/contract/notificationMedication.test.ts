@@ -66,8 +66,8 @@ describe('notificationMedication contract', () => {
     const createCaseFixture = async (): Promise<string> => {
         caseCounter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Medication ${ caseCounter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Medication ${ caseCounter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`MD${ caseCounter }${ suffix }`),
             healthSystemCode: `MD${ caseCounter }${ suffix }`,
             birthDate: '2000-05-04'

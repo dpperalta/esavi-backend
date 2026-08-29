@@ -42,8 +42,8 @@ describe('severeNotification contract', () => {
     const createCaseFixture = async (): Promise<string> => {
         caseCounter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Severe ${ caseCounter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Severe ${ caseCounter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`SV${ caseCounter }${ suffix }`),
             healthSystemCode: `SV${ caseCounter }${ suffix }`,
             birthDate: '2000-05-04'

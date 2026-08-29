@@ -48,8 +48,8 @@ describe('notification contract', () => {
         const { isActive = true } = options;
         caseCounter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Notification ${ caseCounter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Notification ${ caseCounter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`NT${ caseCounter }${ suffix }`),
             healthSystemCode: `NT${ caseCounter }${ suffix }`,
             birthDate: '2000-05-04'

@@ -60,8 +60,8 @@ describe('notificationVaccine contract', () => {
     const createCaseFixture = async ( eventDate: string | null = '2024-05-04' ): Promise<string> => {
         caseCounter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Vaccine ${ caseCounter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Vaccine ${ caseCounter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`VC${ caseCounter }${ suffix }`),
             healthSystemCode: `VC${ caseCounter }${ suffix }`,
             birthDate: '2000-05-04'

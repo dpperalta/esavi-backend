@@ -116,8 +116,8 @@ describe('notificationPregnancyComplication contract', () => {
     const notifyNewPregnancy = async (): Promise<{ pregnancyId: string, notificationId: string }> => {
         counter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Complication ${ counter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Complication ${ counter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`PC${ counter }${ suffix }`),
             healthSystemCode: `PC${ counter }${ suffix }`,
             birthDate: '2000-05-04',

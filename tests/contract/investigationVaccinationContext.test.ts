@@ -57,8 +57,8 @@ describe('investigationVaccinationContext contract', () => {
     const createCaseFixture = async (isActive: boolean = true): Promise<string> => {
         counter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Context ${ counter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Context ${ counter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`VC${ counter }${ suffix }`),
             healthSystemCode: `VC${ counter }${ suffix }`,
             birthDate: '2000-05-04'

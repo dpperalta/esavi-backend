@@ -68,8 +68,8 @@ describe('notifier contract', () => {
     const createCaseFixture = async ( label: string, isActive: boolean = true ): Promise<string> => {
         caseCounter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Notifier ${ label }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Notifier ${ label }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`NT${ label }${ suffix }`),
             healthSystemCode: `NT${ label }${ suffix }`
         });

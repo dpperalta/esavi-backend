@@ -71,8 +71,8 @@ describe('investigationVaccineAdministered contract', () => {
     const createCase = async (): Promise<string> => {
         counter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Vac ${ counter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Vac ${ counter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`VA${ counter }${ suffix }`),
             healthSystemCode: `VA${ counter }${ suffix }`,
             birthDate: '2000-05-04'

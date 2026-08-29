@@ -15,7 +15,7 @@ import { createCaseWorkflowService } from './caseWorkflow.service';
 const CASE_CODE_MAX_ATTEMPTS = 3;
 
 // The encrypted columns of the included patient. healthSystemCode is stored in clear text
-const PATIENT_PII_FIELDS = ['firstName', 'lastName', 'documentNumber'];
+const PATIENT_PII_FIELDS = ['names', 'lastNames', 'documentNumber'];
 
 // A report date is a calendar date: only the YYYY-MM-DD part is kept, so a full ISO timestamp
 // coming from the client cannot shift the day — and that day travels inside the case code
@@ -39,7 +39,7 @@ const normalizeOrganization = (value: string): string => toTitleCase(value.trim(
 const PATIENT_INCLUDE = {
     model: Patient,
     as: 'patient',
-    attributes: ['patientId', 'firstName', 'lastName', 'documentNumber', 'healthSystemCode']
+    attributes: ['patientId', 'names', 'lastNames', 'documentNumber', 'healthSystemCode']
 };
 
 const HEALTH_FACILITY_INCLUDE = {
@@ -62,7 +62,7 @@ const LIST_ATTRIBUTES = ['caseId', 'caseCode', 'reportDate', 'eventDate', 'isAct
 const LIST_PATIENT_INCLUDE = {
     model: Patient,
     as: 'patient',
-    attributes: ['patientId', 'firstName', 'lastName', 'healthSystemCode']
+    attributes: ['patientId', 'names', 'lastNames', 'healthSystemCode']
 };
 
 // Newest report first, breaking ties by code. Without the second criterion the cases of the same
