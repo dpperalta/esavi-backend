@@ -1,7 +1,7 @@
 import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, Patient } from '../models';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, normalizeName } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, normalizeName, toNameTokens } from '../helpers';
 import { AppDetails, AuthUser, CreatePatientInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -124,13 +124,16 @@ const assertResidenceIsValid = async (residenceGeoLocationId: string, op: string
 // Code: ESAVI-PATIENT-001
 const createPatientService = async (data: CreatePatientInput, authUser: AuthUser | undefined, lang: string) => {
     // Normalize first, encrypt second: the order is what keeps uniqueness and search working
-    const firstName = esaviCrypt(normalizeName(data.firstName));
-    const lastName = esaviCrypt(normalizeName(data.lastName));
+    const names = esaviCrypt(normalizeName(data.names));
+    const lastNames = esaviCrypt(normalizeName(data.lastNames));
     const documentNumber = esaviCrypt(normalizeDocument(data.documentNumber));
-    const middleName = data.middleName ? esaviCrypt(normalizeName(data.middleName)) : null;
-    const secondLastName = data.secondLastName ? esaviCrypt(normalizeName(data.secondLastName)) : null;
     const passportNumber = data.passportNumber ? esaviCrypt(normalizeDocument(data.passportNumber)) : null;
     const email = data.email ? esaviCrypt(normalizeEmail(data.email)) : null;
+
+    // Tokenized on the raw values, before encryption — toSearchForm does its own normalization,
+    // so title-casing here would only be redundant work. Each token is encrypted on its own so
+    // the GIN index compares ciphertext-to-ciphertext, never plaintext
+    const nameTokens = toNameTokens(data.names, data.lastNames).map((token) => esaviCrypt(token));
 
     // Uniqueness does not filter by isActive: that is what UQ_patient_documentNumber guarantees,
     // and filtering would let through values Postgres rejects with 23505 — a 500 instead of a 409
@@ -160,10 +163,9 @@ const createPatientService = async (data: CreatePatientInput, authUser: AuthUser
         detail: 'Patient created by service'
     };
     const newPatient = await Patient.create({
-        firstName,
-        middleName,
-        lastName,
-        secondLastName,
+        names,
+        lastNames,
+        nameTokens,
         birthDate: data.birthDate ? normalizeBirthDate(data.birthDate) : null,
         documentNumber,
         passportNumber,
