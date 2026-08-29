@@ -281,6 +281,7 @@
         "notFound": "Patient not found. Please check the patient ID and try again.",
         "idRequired": "The patient ID is required",
         "identifierRequired": "The search identifier is required",
+        "namesRequired": "Patient names and last names are required",
         "createdSuccess": "Patient created successfully",
         "createdFailed": "Failed to create the patient. Please try again later.",
         "getSuccess": "Patient fetched successfully",

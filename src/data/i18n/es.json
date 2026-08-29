@@ -281,6 +281,7 @@
         "notFound": "Paciente no encontrado. Por favor, verifique el ID del paciente e inténtelo de nuevo.",
         "idRequired": "El ID del paciente es obligatorio",
         "identifierRequired": "El identificador de búsqueda es obligatorio",
+        "namesRequired": "Los nombres y los apellidos del paciente son obligatorios",
         "createdSuccess": "Paciente creado exitosamente",
         "createdFailed": "Error al crear el paciente. Por favor, inténtelo de nuevo más tarde.",
         "getSuccess": "Paciente obtenido exitosamente",
