@@ -67,12 +67,19 @@ export const toKebabCase = (text: string): string => {
     return text.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 }
 
-// Convert text to Title Case
+// Convert text to Title Case. \p{L} with the 'u' flag matches any Unicode letter, so a word
+// starting with an accented vowel is matched from its first character: 'ángel' -> 'Ángel'.
+// The old /\w\S*/g missed accented vowels ('ángel' -> 'áNgel') because \w is ASCII-only
 export const toTitleCase = (text: string): string => {
-    return text.replace(/\w\S*/g, (txt) => {
+    return text.replace(/\p{L}\S*/gu, (txt) => {
         return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
     });
 }
+
+// Presentation form of a name: trim and title-case. Runs before encryption, so it is part of the
+// stored identity for entities that still search by the shown column — but not for patient once
+// SPEC F47 lands, where search depends on nameTokens (toSearchForm) instead
+export const normalizeName = (value: string): string => toTitleCase(value.trim());
 
 // Convert text to sentence case
 export const toSentenceCase = (text: string): string => {

@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, Notifier } from '../models';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, normalizeName } from '../helpers';
 import { AppDetails, AuthUser, CreateNotifierInput, NotifierListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -17,7 +17,6 @@ const PROFESSION_CATALOG_CODE = 'profession';
 // different and unrecoverable values. phoneNumber, room and details stay in clear text
 const PII_FIELDS = ['firstName', 'lastName', 'email', 'address'];
 
-const normalizeName = (value: string): string => toTitleCase(value.trim());
 const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 
 const CASE_INCLUDE = {

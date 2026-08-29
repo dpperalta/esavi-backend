@@ -1,7 +1,7 @@
 import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, Patient } from '../models';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, normalizeName } from '../helpers';
 import { AppDetails, AuthUser, CreatePatientInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -17,7 +17,6 @@ const SEX_CATALOG_CODE = 'sex';
 // treat '1712345678-k' and '1712345678-K' as two different patients
 const PII_FIELDS = ['firstName', 'middleName', 'lastName', 'secondLastName', 'documentNumber', 'passportNumber', 'email'];
 
-const normalizeName = (value: string): string => toTitleCase(value.trim());
 const normalizeDocument = (value: string): string => value.trim().toUpperCase();
 const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 

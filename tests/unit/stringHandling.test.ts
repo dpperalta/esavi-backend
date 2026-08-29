@@ -1,4 +1,4 @@
-import { toCamelCase, toCodeFromInput, toCodeFromName, toNameTokens, toSearchForm } from '../../src/helpers';
+import { toCamelCase, toCodeFromInput, toCodeFromName, toNameTokens, toSearchForm, toTitleCase } from '../../src/helpers';
 
 /**
  * toCodeFromInput normalizes the code a client sends. What separates it from the two functions that
@@ -42,6 +42,19 @@ describe('toCodeFromInput', () => {
     it('returns an empty string when there is nothing to mint, which the services turn into a 400', () => {
         expect(toCodeFromInput('---')).toBe('');
         expect(toCodeFromInput('   ')).toBe('');
+    });
+
+});
+
+/**
+ * toTitleCase, corrected by SPEC F47 §4 to match on \p{L} instead of the ASCII-only \w, so a word
+ * starting with an accented vowel is title-cased from its actual first letter.
+ */
+describe('toTitleCase', () => {
+
+    it('title-cases a word starting with an accented vowel', () => {
+        expect(toTitleCase('ángel')).toBe('Ángel');
+        expect(toTitleCase('ÁNGEL')).toBe('Ángel');
     });
 
 });
