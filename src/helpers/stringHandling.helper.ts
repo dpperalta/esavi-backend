@@ -108,6 +108,32 @@ export const extractNumbers = (text: string): string => {
     return text.replace(/[^0-9]/g, '');
 }
 
+// The search form of a name: trim, collapse internal whitespace, strip diacritics via NFD
+// decomposition, and uppercase. Idempotent over its own output, which is what lets it feed a
+// differential update without inventing a difference on every read-modify-write. Decomposing also
+// folds 'ñ' into 'n' plus a combining tilde that this then strips — deliberate, see toNameTokens
+export const toSearchForm = (text: string): string => {
+    return text
+        .trim()
+        .replace(/\s+/g, ' ')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase();
+}
+
+// Split one or more name components into their encrypted-index tokens: apply toSearchForm to each,
+// split on spaces, drop empties, and de-duplicate. Particles ('DE', 'DEL', 'LA') are indexed like
+// any other token on purpose — a stop-word list would be one more place the index and the query
+// could disagree. 'Muñoz' mints 'MUNOZ', same as 'Munoz': ñ is folded away by toSearchForm's NFD
+// step, so the two spellings become the same patient for search purposes
+export const toNameTokens = (...values: string[]): string[] => {
+    const tokens = values
+        .flatMap((value) => toSearchForm(value).split(' '))
+        .filter((token) => token.length > 0);
+
+    return [...new Set(tokens)];
+}
+
 // Normalize a time of day into the 'HH:mm:ss' form Postgres returns for a `time` column.
 // Accepts 'HH:mm' and 'HH:mm:ss' and is idempotent over its own output, which is what makes it
 // usable inside a differential update: without it a client sending '14:30' over a stored

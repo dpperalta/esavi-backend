@@ -1,6 +1,6 @@
 # SPEC F47 — Modelo de nombre del paciente y búsqueda por tokens
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` en servicios), SPEC F05 (`patient`), SPEC F12 (update diferencial)
 > **Reemplaza el diseño de:** SPEC F45, que se reescribe encima de este (§9)
 > **Fecha:** 2026-08-28
