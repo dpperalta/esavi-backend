@@ -40,9 +40,9 @@ const RESIDENCE_INCLUDE = {
     attributes: ['geoLocationId', 'name', 'geoLevelTypeId', 'level']
 };
 
-// A list row carries only three of the seven encrypted columns, so the reduced shape must not
-// grow the other four back as nulls: only the fields actually selected are touched
-const LIST_ATTRIBUTES = ['patientId', 'firstName', 'lastName', 'documentNumber', 'birthDate', 'healthSystemCode', 'isActive'];
+// A list row carries only three of the five encrypted columns, so the reduced shape must not
+// grow the other two back as nulls: only the fields actually selected are touched
+const LIST_ATTRIBUTES = ['patientId', 'names', 'lastNames', 'documentNumber', 'birthDate', 'healthSystemCode', 'isActive'];
 
 // The reduced shape drops the level of the residence: a list needs the name, not the hierarchy
 const LIST_RESIDENCE_INCLUDE = {
@@ -51,13 +51,15 @@ const LIST_RESIDENCE_INCLUDE = {
     attributes: ['geoLocationId', 'name']
 };
 
-// Newest first. Alphabetical is impossible: the names are encrypted and ORDER BY "lastName"
+// Newest first. Alphabetical is impossible: the names are encrypted and ORDER BY "lastNames"
 // would sort by the ciphertext — an arbitrary but stable order that looks like it works
 const LIST_ORDER: [string, string][] = [['createdAt', 'DESC']];
 
 // sysDetails is trigger metadata and never leaves the service. The two raw foreign keys go with
-// it: the response carries the resolved sex and residence objects instead
-const DETAIL_EXCLUDE = { exclude: ['sysDetails', 'sexItemId', 'residenceGeoLocationId'] };
+// it: the response carries the resolved sex and residence objects instead. nameTokens is search
+// machinery: exposing it would hand out the encrypted search form of every name, and with it the
+// frequency-analysis surface SPEC F47 §8 accepts only for direct database access, not the API
+const DETAIL_EXCLUDE = { exclude: ['sysDetails', 'sexItemId', 'residenceGeoLocationId', 'nameTokens'] };
 
 const decryptPii = (plain: Record<string, unknown>) => {
     for( const field of PII_FIELDS ) {
