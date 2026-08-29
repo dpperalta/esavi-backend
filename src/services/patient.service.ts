@@ -397,6 +397,49 @@ const searchPatientsByIdentifierService = async (
     return { count, rows: rows.map(toPatientListRow) };
 }
 
+// Search Patients By Name Service
+// Code: ESAVI-PATIENT-007
+// nameTokens holds no provenance of which token came from names or lastNames, so the query can
+// only ask "these tokens, somewhere in the name" — never distinguish a first name from a last
+// name (SPEC F45 §4). Op.contains: [] is true for every row, so a name that tokenizes to zero
+// elements is rejected here even though the validator already rejects an empty string: the guard
+// covers what the validator structurally cannot see — a string that survives notEmpty but still
+// tokenizes to nothing, such as one made only of combining diacritical marks (SPEC F45 §3.2)
+const searchPatientsByNameService = async (
+    name: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const tokens = toNameTokens(name);
+    if( tokens.length === 0 ) {
+        throw new AppError(getMessage('patient.nameRequired', lang), 400, 'PATIENT_007_NAME_REQUIRED');
+    }
+    const encryptedTokens = tokens.map((token) => esaviCrypt(token));
+
+    const tokensWhere = { nameTokens: { [Op.contains]: encryptedTokens } };
+    const { count, rows } = await Patient.findAndCountAll({
+        where: {
+            ...tokensWhere,
+            ...( canViewInactive ? {} : { isActive: true } )
+        },
+        attributes: LIST_ATTRIBUTES,
+        include: [SEX_INCLUDE, LIST_RESIDENCE_INCLUDE],
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+
+    // Always computed, regardless of role: a deactivated patient who matches must surface as a
+    // signal, or a USER who cannot see inactive rows silently duplicates them (SPEC F45 §3.3)
+    const inactiveCount = await Patient.count({
+        where: { ...tokensWhere, isActive: false }
+    });
+
+    return { count, inactiveCount, rows: rows.map(toPatientListRow) };
+}
+
 // Setting Patient Active/Inactive Service
 // Code: ESAVI-PATIENT-005A / ESAVI-PATIENT-005B
 // No incoming reference is checked, not esaviCase nor any other: this is a logical delete, so
@@ -437,5 +480,6 @@ export {
     getPatientByIdService,
     updatePatientService,
     setPatientActivationService,
-    searchPatientsByIdentifierService
+    searchPatientsByIdentifierService,
+    searchPatientsByNameService
 }
