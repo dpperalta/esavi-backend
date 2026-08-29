@@ -12,10 +12,11 @@ import { recalculateClassificationAgesService } from './common/ageRecalculation.
 // catalogItem would be accepted as a sex and nobody would notice
 const SEX_CATALOG_CODE = 'sex';
 
-// The seven encrypted columns. Normalized before encrypting: encrypting first would store the
-// ciphertext of the raw text, and the fixed IV that makes equality lookups possible would then
-// treat '1712345678-k' and '1712345678-K' as two different patients
-const PII_FIELDS = ['firstName', 'middleName', 'lastName', 'secondLastName', 'documentNumber', 'passportNumber', 'email'];
+// The five single-value encrypted columns. Normalized before encrypting: encrypting first would
+// store the ciphertext of the raw text, and the fixed IV that makes equality lookups possible
+// would then treat '1712345678-k' and '1712345678-K' as two different patients. nameTokens is
+// encrypted too, but element by element — it is handled on its own wherever this list is used
+const PII_FIELDS = ['names', 'lastNames', 'documentNumber', 'passportNumber', 'email'];
 
 const normalizeDocument = (value: string): string => value.trim().toUpperCase();
 const normalizeEmail = (value: string): string => value.trim().toLowerCase();
@@ -273,12 +274,26 @@ const updatePatientService = async (id: string, data: Partial<CreatePatientInput
                 stored[field] = esaviDecrypt(value as string);
             }
         }
+        // nameTokens is compared as a list of plain-text tokens, never ciphertext against
+        // ciphertext: each token was encrypted on its own, so the stored array is decrypted
+        // element by element before it reaches buildDifferentialUpdate
+        stored.nameTokens = Array.isArray(stored.nameTokens)
+            ? (stored.nameTokens as string[]).map((token) => esaviDecrypt(token))
+            : [];
+
+        // The names and last names that are about to be stored — the new ones if they came in the
+        // body, the stored ones otherwise. This is what nameTokens is recomputed from, never from
+        // the raw candidate alone, or a PUT that only touches phoneNumber would blank the tokens
+        const resultingNames = data.names ? data.names : (stored.names as string);
+        const resultingLastNames = data.lastNames ? data.lastNames : (stored.lastNames as string);
+
         const changes = buildDifferentialUpdate(stored, {
-            firstName: data.firstName ? normalizeName(data.firstName) : undefined,
-            lastName: data.lastName ? normalizeName(data.lastName) : undefined,
+            names: data.names ? normalizeName(data.names) : undefined,
+            lastNames: data.lastNames ? normalizeName(data.lastNames) : undefined,
+            // Derived, not conditioned by presence: it enters the diff on every update, and it is
+            // buildDifferentialUpdate — not this line — that decides whether it actually changed
+            nameTokens: toNameTokens(resultingNames, resultingLastNames),
             documentNumber: data.documentNumber ? normalizeDocument(data.documentNumber) : undefined,
-            middleName: data.middleName !== undefined ? ( data.middleName ? normalizeName(data.middleName) : null ) : undefined,
-            secondLastName: data.secondLastName !== undefined ? ( data.secondLastName ? normalizeName(data.secondLastName) : null ) : undefined,
             passportNumber: data.passportNumber !== undefined ? ( data.passportNumber ? normalizeDocument(data.passportNumber) : null ) : undefined,
             email: data.email !== undefined ? ( data.email ? normalizeEmail(data.email) : null ) : undefined,
             birthDate: data.birthDate !== undefined ? ( data.birthDate ? normalizeBirthDate(data.birthDate) : null ) : undefined,
@@ -295,6 +310,9 @@ const updatePatientService = async (id: string, data: Partial<CreatePatientInput
                 if( objectToUpdate[field] ) {
                     objectToUpdate[field] = esaviCrypt(objectToUpdate[field] as string);
                 }
+            }
+            if( 'nameTokens' in objectToUpdate ) {
+                objectToUpdate.nameTokens = (objectToUpdate.nameTokens as string[]).map((token) => esaviCrypt(token));
             }
 
             const currentAppDetails = Array.isArray(patient.appDetails) ? patient.appDetails : [];
