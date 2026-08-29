@@ -281,6 +281,7 @@
         "notFound": "Patiënt niet gevonden. Controleer de ID van de patiënt en probeer het opnieuw.",
         "idRequired": "De ID van de patiënt is verplicht",
         "identifierRequired": "De zoekidentificatie is verplicht",
+        "namesRequired": "Voornamen en achternamen van de patiënt zijn verplicht",
         "createdSuccess": "Patiënt succesvol aangemaakt",
         "createdFailed": "Aanmaken van de patiënt mislukt. Probeer het later opnieuw.",
         "getSuccess": "Patiënt succesvol opgehaald",

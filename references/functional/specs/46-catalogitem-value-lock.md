@@ -1,6 +1,6 @@
 # SPEC F46 — Congelado del `value` de `catalogItem` y realineación del seed
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F12 (update diferencial)
 > **Fecha:** 2026-08-27
 > **Objetivo:** Separar el `code` de un `catalogItem` —que pertenece al país— de su `value` —que pertenece al código fuente—, congelando el segundo con una columna nueva y realineando los tres lookups de producción y las nueve suites que hoy dependen del `code`.

@@ -1,6 +1,6 @@
 # SPEC F45 — Búsqueda de paciente por nombre completo
 
-> **Estado:** En revisión
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` en servicios), SPEC F05 (`patient`, `ESAVI-PATIENT-006`), **SPEC F47 (modelo de nombre del paciente)**
 > **Fecha:** 2026-08-27
 > **Objetivo:** Permitir identificar a un paciente ya registrado cuando no se dispone de ningún documento, usando la coincidencia exacta de sus dos nombres y dos apellidos, sin abrir una vía de enumeración del padrón ni degradar la protección de los datos personales.

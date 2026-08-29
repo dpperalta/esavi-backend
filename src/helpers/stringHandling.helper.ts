@@ -67,12 +67,19 @@ export const toKebabCase = (text: string): string => {
     return text.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 }
 
-// Convert text to Title Case
+// Convert text to Title Case. \p{L} with the 'u' flag matches any Unicode letter, so a word
+// starting with an accented vowel is matched from its first character: 'ángel' -> 'Ángel'.
+// The old /\w\S*/g missed accented vowels ('ángel' -> 'áNgel') because \w is ASCII-only
 export const toTitleCase = (text: string): string => {
-    return text.replace(/\w\S*/g, (txt) => {
+    return text.replace(/\p{L}\S*/gu, (txt) => {
         return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
     });
 }
+
+// Presentation form of a name: trim and title-case. Runs before encryption, so it is part of the
+// stored identity for entities that still search by the shown column — but not for patient once
+// SPEC F47 lands, where search depends on nameTokens (toSearchForm) instead
+export const normalizeName = (value: string): string => toTitleCase(value.trim());
 
 // Convert text to sentence case
 export const toSentenceCase = (text: string): string => {
@@ -106,6 +113,32 @@ export const removeNumbers = (text: string): string => {
 // Return only numbers from the text
 export const extractNumbers = (text: string): string => {
     return text.replace(/[^0-9]/g, '');
+}
+
+// The search form of a name: trim, collapse internal whitespace, strip diacritics via NFD
+// decomposition, and uppercase. Idempotent over its own output, which is what lets it feed a
+// differential update without inventing a difference on every read-modify-write. Decomposing also
+// folds 'ñ' into 'n' plus a combining tilde that this then strips — deliberate, see toNameTokens
+export const toSearchForm = (text: string): string => {
+    return text
+        .trim()
+        .replace(/\s+/g, ' ')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase();
+}
+
+// Split one or more name components into their encrypted-index tokens: apply toSearchForm to each,
+// split on spaces, drop empties, and de-duplicate. Particles ('DE', 'DEL', 'LA') are indexed like
+// any other token on purpose — a stop-word list would be one more place the index and the query
+// could disagree. 'Muñoz' mints 'MUNOZ', same as 'Munoz': ñ is folded away by toSearchForm's NFD
+// step, so the two spellings become the same patient for search purposes
+export const toNameTokens = (...values: string[]): string[] => {
+    const tokens = values
+        .flatMap((value) => toSearchForm(value).split(' '))
+        .filter((token) => token.length > 0);
+
+    return [...new Set(tokens)];
 }
 
 // Normalize a time of day into the 'HH:mm:ss' form Postgres returns for a `time` column.

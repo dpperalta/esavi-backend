@@ -9,10 +9,9 @@ export class Patient extends Model<InferAttributes<Patient>, InferCreationAttrib
     declare sexItemId?: ForeignKey<CatalogItem['catalogItemId']> | null;
     declare residenceGeoLocationId?: ForeignKey<GeoLocation['geoLocationId']> | null;
 
-    declare firstName?: CreationOptional<string | null>;
-    declare middleName?: CreationOptional<string | null>;
-    declare lastName?: CreationOptional<string | null>;
-    declare secondLastName?: CreationOptional<string | null>;
+    declare names: string;
+    declare lastNames: string;
+    declare nameTokens?: CreationOptional<string[]>;
     declare birthDate?: CreationOptional<string | null>;
     declare documentNumber?: CreationOptional<string | null>;
     declare passportNumber?: CreationOptional<string | null>;
@@ -47,25 +46,23 @@ Patient.init({
         type: DataTypes.UUID,
         allowNull: true,
     },
-    // TEXT and not STRING(n) on the six encrypted columns: they store the esaviCrypt ciphertext,
+    // TEXT and not STRING(n) on the encrypted columns: they store the esaviCrypt ciphertext,
     // which is about twice the length of the plain text plus block padding. A fixed width here
     // would cap what the user may write at a number nobody could derive. The real limit is in
     // the validator, over the plain text
-    firstName: {
+    names: {
         type: DataTypes.TEXT,
-        allowNull: true,
+        allowNull: false,
     },
-    middleName: {
+    lastNames: {
         type: DataTypes.TEXT,
-        allowNull: true,
+        allowNull: false,
     },
-    lastName: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-    },
-    secondLastName: {
-        type: DataTypes.TEXT,
-        allowNull: true,
+    // Encrypted-index tokens of the search form (SPEC F47 §3.3). Never exposed in a response
+    nameTokens: {
+        type: DataTypes.ARRAY(DataTypes.TEXT),
+        allowNull: false,
+        defaultValue: []
     },
     // DATEONLY and not DATE: the column is `date`, and DATE would carry a time zone
     // and shift the birth date by one day depending on the server offset

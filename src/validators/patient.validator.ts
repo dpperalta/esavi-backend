@@ -31,16 +31,12 @@ export const patientIdentifierValidator = [
 ];
 
 export const createPatientValidator = [
-    body('firstName').trim().notEmpty().withMessage('First Name is required')
-        .isLength({ max: 150 }).withMessage('First Name must be at most 150 characters long'),
-    body('lastName').trim().notEmpty().withMessage('Last Name is required')
-        .isLength({ max: 150 }).withMessage('Last Name must be at most 150 characters long'),
+    body('names').trim().notEmpty().withMessage('Names is required')
+        .isLength({ max: 200 }).withMessage('Names must be at most 200 characters long'),
+    body('lastNames').trim().notEmpty().withMessage('Last Names is required')
+        .isLength({ max: 200 }).withMessage('Last Names must be at most 200 characters long'),
     body('documentNumber').trim().notEmpty().withMessage('Document Number is required')
         .isLength({ max: 100 }).withMessage('Document Number must be at most 100 characters long'),
-    body('middleName').optional({ nullable: true }).trim()
-        .isLength({ max: 150 }).withMessage('Middle Name must be at most 150 characters long'),
-    body('secondLastName').optional({ nullable: true }).trim()
-        .isLength({ max: 150 }).withMessage('Second Last Name must be at most 150 characters long'),
     body('birthDate').optional({ nullable: true }).isISO8601()
         .withMessage('Birth Date must be a valid ISO 8601 date')
         .custom(isNotFutureDate).withMessage('Birth Date cannot be in the future'),
@@ -58,16 +54,12 @@ export const createPatientValidator = [
 ];
 
 export const updatePatientValidator = [
-    body('firstName').optional().trim().notEmpty().withMessage('First Name cannot be empty')
-        .isLength({ max: 150 }).withMessage('First Name must be at most 150 characters long'),
-    body('lastName').optional().trim().notEmpty().withMessage('Last Name cannot be empty')
-        .isLength({ max: 150 }).withMessage('Last Name must be at most 150 characters long'),
+    body('names').optional().trim().notEmpty().withMessage('Names cannot be empty')
+        .isLength({ max: 200 }).withMessage('Names must be at most 200 characters long'),
+    body('lastNames').optional().trim().notEmpty().withMessage('Last Names cannot be empty')
+        .isLength({ max: 200 }).withMessage('Last Names must be at most 200 characters long'),
     body('documentNumber').optional().trim().notEmpty().withMessage('Document Number cannot be empty')
         .isLength({ max: 100 }).withMessage('Document Number must be at most 100 characters long'),
-    body('middleName').optional({ nullable: true }).trim()
-        .isLength({ max: 150 }).withMessage('Middle Name must be at most 150 characters long'),
-    body('secondLastName').optional({ nullable: true }).trim()
-        .isLength({ max: 150 }).withMessage('Second Last Name must be at most 150 characters long'),
     body('birthDate').optional({ nullable: true }).isISO8601()
         .withMessage('Birth Date must be a valid ISO 8601 date')
         .custom(isNotFutureDate).withMessage('Birth Date cannot be in the future'),

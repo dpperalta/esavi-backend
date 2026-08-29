@@ -3,7 +3,7 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationTeamMember } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
-import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, normalizeName } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationTeamMemberInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -166,10 +166,9 @@ const normalizeText = (value: string | null | undefined): string | null => {
     return trimmed.length > 0 ? trimmed : null;
 }
 
-// The name is the one field that does carry toTitleCase, and it is normalized before being compared
+// The name is the one field that does carry title case, and it is normalized before being compared
 // anywhere: the duplicate guard reads the normalized value, and so does the diff of 004. Comparing
 // the raw one would let 'ana pérez' look like a change over a stored 'Ana Pérez'
-const normalizeFullName = (value: string): string => toTitleCase(value.trim());
 
 // Lowercased on top of the trim. The column is citext, so Postgres already ignores case when
 // comparing, but the diff of 004 compares text in the application: without this, 'ANA@X.CL' over a
@@ -224,7 +223,7 @@ const createInvestigationTeamMemberService = async (
     // the value that is going to be stored and not the one the client typed
     await assertInvestigationIsValid(data.investigationId, '001', lang);
 
-    const fullName = normalizeFullName(data.fullName);
+    const fullName = normalizeName(data.fullName);
 
     await assertFullNameIsAvailable(data.investigationId, fullName, '001', lang);
 
@@ -438,7 +437,7 @@ const updateInvestigationTeamMemberService = async (
     // runs only when fullName travels — with no new name there is nothing to check — and it runs
     // BEFORE the diff and independently of it: renaming a row to a name another ACTIVE member of the
     // same investigation already holds is a 409 even if nothing else in the body changes
-    const fullName = data.fullName !== undefined ? normalizeFullName(data.fullName) : undefined;
+    const fullName = data.fullName !== undefined ? normalizeName(data.fullName) : undefined;
     if( fullName !== undefined ) {
         await assertFullNameIsAvailable(member.investigationId, fullName, '004', lang, id);
     }

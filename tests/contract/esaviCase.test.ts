@@ -72,8 +72,8 @@ describe('esaviCase contract', () => {
 
     const createPatientFixture = async ( label: string, isActive: boolean = true ): Promise<string> => {
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Case ${ label }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Case ${ label }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`CS${ label }${ suffix }`),
             healthSystemCode: `CS${ label }${ suffix }`,
             isActive
@@ -132,7 +132,7 @@ describe('esaviCase contract', () => {
             expect(data.notificationOrganization).toBe('Ministerio De Salud');
 
             // The two relations travel resolved, and the patient in clear text
-            expect(data.patient.firstName).toBe('Case A');
+            expect(data.patient.names).toBe('Case A');
             expect(data.patient.documentNumber).toBe(`CSA${ suffix }`);
             expect(data.healthFacility.localCode).toBe(`CSA${ suffix }`);
 
@@ -364,11 +364,11 @@ describe('esaviCase contract', () => {
 
             // The list row names the patient without identifying them
             expect(Object.keys(first.patient).sort()).toEqual(
-                ['firstName', 'healthSystemCode', 'lastName', 'patientId'].sort()
+                ['healthSystemCode', 'lastNames', 'names', 'patientId'].sort()
             );
             const ownRow = response.body.data.rows
                 .find(( row: { patient: { patientId: string } } ) => row.patient.patientId === listPatientId);
-            expect(ownRow.patient.firstName).toBe('Case LST');
+            expect(ownRow.patient.names).toBe('Case LST');
 
             expect(first.reportDate >= second.reportDate).toBe(true);
             expect(first.caseCode > second.caseCode).toBe(true);
@@ -2231,8 +2231,8 @@ describe('esaviCase contract', () => {
         // recalculate: this block needs one of its own, born long before every event date
         const createDatedPatient = async (): Promise<string> => {
             const patient = await Patient.create({
-                firstName: esaviCrypt(`Case Age ${ suffix }`),
-                lastName: esaviCrypt(`Probe ${ suffix }`),
+                names: esaviCrypt(`Case Age ${ suffix }`),
+                lastNames: esaviCrypt(`Probe ${ suffix }`),
                 documentNumber: esaviCrypt(`CSAGE${ suffix }`),
                 healthSystemCode: `CSAGE${ suffix }`,
                 birthDate: '2000-05-04'

@@ -38,8 +38,8 @@ describe('caseWorkflow contract', () => {
     const createCaseFixture = async (): Promise<string> => {
         counter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Workflow ${ counter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Workflow ${ counter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`CW${ counter }${ suffix }`),
             healthSystemCode: `CW${ counter }${ suffix }`
         });
@@ -62,8 +62,8 @@ describe('caseWorkflow contract', () => {
     const createLegacyCaseFixture = async (): Promise<string> => {
         counter += 1;
         const patient = await Patient.create({
-            firstName: esaviCrypt(`Legacy ${ counter }`),
-            lastName: esaviCrypt(`Probe ${ suffix }`),
+            names: esaviCrypt(`Legacy ${ counter }`),
+            lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`CL${ counter }${ suffix }`),
             healthSystemCode: `CL${ counter }${ suffix }`
         });

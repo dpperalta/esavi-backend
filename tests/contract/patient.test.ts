@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { app } from '../../src/app';
 import { CatalogItem, CatalogType, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Patient } from '../../src/models';
-import { esaviCrypt } from '../../src/helpers/crypto.helper';
+import { esaviCrypt, esaviDecrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
@@ -118,10 +118,8 @@ describe('patient contract', () => {
 
         it('001 creates the patient, normalizing before encrypting', async () => {
             const response = await createPatient({
-                firstName: 'juan carlos',
-                middleName: 'de jesus',
-                lastName: 'perez',
-                secondLastName: 'mora',
+                names: 'juan carlos de jesus',
+                lastNames: 'perez mora',
                 birthDate: '1988-03-17',
                 documentNumber: `  ${ documentNumber.toLowerCase() }  `,
                 passportNumber: passportNumber.toLowerCase(),
@@ -138,10 +136,8 @@ describe('patient contract', () => {
             healthSystemCode = response.body.data.healthSystemCode;
 
             // Normalized on the way in, decrypted on the way out
-            expect(response.body.data.firstName).toBe('Juan Carlos');
-            expect(response.body.data.middleName).toBe('De Jesus');
-            expect(response.body.data.lastName).toBe('Perez');
-            expect(response.body.data.secondLastName).toBe('Mora');
+            expect(response.body.data.names).toBe('Juan Carlos De Jesus');
+            expect(response.body.data.lastNames).toBe('Perez Mora');
             expect(response.body.data.documentNumber).toBe(documentNumber);
             expect(response.body.data.passportNumber).toBe(passportNumber);
             expect(response.body.data.email).toBe('juan@correo.ec');
@@ -153,12 +149,19 @@ describe('patient contract', () => {
         it('001 stores the ciphertext of the normalized value, not of the raw one', async () => {
             const stored = await Patient.findByPk(patientId);
 
-            expect(stored!.getDataValue('firstName')).toBe(esaviCrypt('Juan Carlos'));
+            expect(stored!.getDataValue('names')).toBe(esaviCrypt('Juan Carlos De Jesus'));
             expect(stored!.getDataValue('documentNumber')).toBe(esaviCrypt(documentNumber));
             expect(stored!.getDataValue('email')).toBe(esaviCrypt('juan@correo.ec'));
             // Never encrypted
             expect(stored!.getDataValue('phoneNumber')).toBe('0991234567');
             expect(stored!.getDataValue('healthSystemCode')).toBe(healthSystemCode);
+        });
+
+        it('001 computes nameTokens from the pre-encryption value, each token encrypted on its own', async () => {
+            const stored = await Patient.findByPk(patientId);
+            const tokens = (stored!.getDataValue('nameTokens') as string[]).map((token) => esaviDecrypt(token));
+
+            expect(tokens.sort()).toEqual(['CARLOS', 'DE', 'JESUS', 'JUAN', 'MORA', 'PEREZ'].sort());
         });
 
         it('001 generates a healthSystemCode of 12 Crockford characters', () => {
@@ -175,9 +178,11 @@ describe('patient contract', () => {
             expect(response.body.data.residence).toMatchObject({ geoLocationId, level: 1 });
             expect(Object.keys(response.body.data).sort()).toEqual([
                 'appDetails', 'birthDate', 'createdAt', 'deletedAt', 'documentNumber', 'email',
-                'firstName', 'healthSystemCode', 'isActive', 'lastName', 'middleName', 'passportNumber',
-                'patientId', 'phoneNumber', 'residence', 'secondLastName', 'sex', 'updatedAt'
+                'healthSystemCode', 'isActive', 'lastNames', 'names', 'passportNumber',
+                'patientId', 'phoneNumber', 'residence', 'sex', 'updatedAt'
             ]);
+            // nameTokens is search machinery and never leaves the service
+            expect(response.body.data).not.toHaveProperty('nameTokens');
         });
 
         it('006 finds the patient by each of the three identifiers', async () => {
@@ -199,13 +204,13 @@ describe('patient contract', () => {
 
         it('004 updates the patient and leaves healthSystemCode untouched', async () => {
             const response = await updatePatient(patientId, {
-                firstName: 'juan pablo',
+                names: 'juan pablo de jesus',
                 phoneNumber: '0997654321',
                 healthSystemCode: 'MIO'
             });
 
             expect(response.status).toBe(200);
-            expect(response.body.data.firstName).toBe('Juan Pablo');
+            expect(response.body.data.names).toBe('Juan Pablo De Jesus');
             expect(response.body.data.phoneNumber).toBe('0997654321');
             expect(response.body.data.healthSystemCode).toBe(healthSystemCode);
         });
@@ -222,13 +227,13 @@ describe('patient contract', () => {
 
         it('004 leaves the encrypted column byte for byte identical when the value is resent', async () => {
             const before = await Patient.findByPk(patientId);
-            const storedFirstName = before!.getDataValue('firstName');
+            const storedNames = before!.getDataValue('names');
 
-            const response = await updatePatient(patientId, { firstName: 'Juan Pablo' });
+            const response = await updatePatient(patientId, { names: 'Juan Pablo De Jesus' });
             expect(response.status).toBe(200);
 
             const after = await Patient.findByPk(patientId);
-            expect(after!.getDataValue('firstName')).toBe(storedFirstName);
+            expect(after!.getDataValue('names')).toBe(storedNames);
             expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
         });
 
@@ -242,10 +247,10 @@ describe('patient contract', () => {
             const row = response.body.data.rows.find(( r: { patientId: string } ) => r.patientId === patientId);
             expect(row).toBeDefined();
             expect(Object.keys(row).sort()).toEqual([
-                'birthDate', 'documentNumber', 'firstName', 'healthSystemCode',
-                'isActive', 'lastName', 'patientId', 'residence', 'sex'
+                'birthDate', 'documentNumber', 'healthSystemCode',
+                'isActive', 'lastNames', 'names', 'patientId', 'residence', 'sex'
             ]);
-            expect(row.firstName).toBe('Juan Pablo');
+            expect(row.names).toBe('Juan Pablo De Jesus');
         });
 
         it('002B lists the patient for an ADMIN', async () => {
@@ -311,7 +316,7 @@ describe('patient contract', () => {
             const methods = response.body.data.appDetails.map(( entry: { method: string } ) => entry.method);
 
             // One 004 and not two: of the three updates this suite runs, only the first one
-            // carried a real change — the empty body and the resent firstName wrote nothing
+            // carried a real change — the empty body and the resent names wrote nothing
             expect(methods).toEqual([
                 'ESAVI-PATIENT-001',
                 'ESAVI-PATIENT-004',
@@ -329,15 +334,15 @@ describe('patient contract', () => {
     describe('error paths', () => {
 
         it('rejects a create without documentNumber with 400', async () => {
-            const response = await createPatient({ firstName: 'Sin', lastName: 'Documento' });
+            const response = await createPatient({ names: 'Sin', lastNames: 'Documento' });
 
             expect(response.status).toBe(400);
         });
 
-        it.each(['firstName', 'lastName'])('rejects a create without %s with 400', async ( field ) => {
+        it.each(['names', 'lastNames'])('rejects a create without %s with 400', async ( field ) => {
             const payload: Record<string, unknown> = {
-                firstName: 'Falta',
-                lastName: 'Campo',
+                names: 'Falta',
+                lastNames: 'Campo',
                 documentNumber: `MISSING-${ field }-${ suffix }`
             };
             delete payload[field];
@@ -348,9 +353,9 @@ describe('patient contract', () => {
         it('rejects a duplicated documentNumber on create with 409', async () => {
             const documentNumber = `DUP-CREATE-${ suffix }`;
 
-            expect((await createPatient({ firstName: 'Uno', lastName: 'Dup', documentNumber })).status).toBe(201);
+            expect((await createPatient({ names: 'Uno', lastNames: 'Dup', documentNumber })).status).toBe(201);
 
-            const second = await createPatient({ firstName: 'Dos', lastName: 'Dup', documentNumber });
+            const second = await createPatient({ names: 'Dos', lastNames: 'Dup', documentNumber });
             expect(second.status).toBe(409);
             expect(second.body.code).toBe('PATIENT_001_DOCUMENT_EXISTS');
         });
@@ -358,16 +363,16 @@ describe('patient contract', () => {
         it('keeps a documentNumber taken even when its patient is inactive', async () => {
             const documentNumber = `DUP-INACTIVE-${ suffix }`;
 
-            const created = await createPatient({ firstName: 'Inactivo', lastName: 'Dup', documentNumber });
+            const created = await createPatient({ names: 'Inactivo', lastNames: 'Dup', documentNumber });
             await request(app).delete(`/api/patients/${ created.body.data.patientId }`).set(authHeader('ADMIN'));
 
-            const response = await createPatient({ firstName: 'Otro', lastName: 'Dup', documentNumber });
+            const response = await createPatient({ names: 'Otro', lastNames: 'Dup', documentNumber });
             expect(response.status).toBe(409);
         });
 
         it('rejects a duplicated documentNumber on update with 409', async () => {
-            const mine = await createPatient({ firstName: 'Mio', lastName: 'Upd', documentNumber: `UPD-MINE-${ suffix }` });
-            const theirs = await createPatient({ firstName: 'Suyo', lastName: 'Upd', documentNumber: `UPD-THEIRS-${ suffix }` });
+            const mine = await createPatient({ names: 'Mio', lastNames: 'Upd', documentNumber: `UPD-MINE-${ suffix }` });
+            const theirs = await createPatient({ names: 'Suyo', lastNames: 'Upd', documentNumber: `UPD-THEIRS-${ suffix }` });
 
             const response = await updatePatient(mine.body.data.patientId, {
                 documentNumber: `UPD-THEIRS-${ suffix }`
@@ -388,8 +393,8 @@ describe('patient contract', () => {
         ])('rejects a sexItemId from another catalog on %s with 404', async ( operation, code ) => {
             if( operation === 'create' ) {
                 const response = await createPatient({
-                    firstName: 'Mal',
-                    lastName: 'Catalogo',
+                    names: 'Mal',
+                    lastNames: 'Catalogo',
                     documentNumber: `SEX-${ code }-${ suffix }`,
                     sexItemId: wrongCatalogItemId
                 });
@@ -399,8 +404,8 @@ describe('patient contract', () => {
             }
 
             const created = await createPatient({
-                firstName: 'Mal',
-                lastName: 'Catalogo',
+                names: 'Mal',
+                lastNames: 'Catalogo',
                 documentNumber: `SEX-${ code }-${ suffix }`
             });
             const response = await updatePatient(created.body.data.patientId, { sexItemId: wrongCatalogItemId });
@@ -411,8 +416,8 @@ describe('patient contract', () => {
 
         it('rejects an inactive residenceGeoLocationId on create with 404', async () => {
             const response = await createPatient({
-                firstName: 'Geo',
-                lastName: 'Inactiva',
+                names: 'Geo',
+                lastNames: 'Inactiva',
                 documentNumber: `GEO-001-${ suffix }`,
                 residenceGeoLocationId: inactiveGeoLocationId
             });
@@ -423,8 +428,8 @@ describe('patient contract', () => {
 
         it('rejects an inactive residenceGeoLocationId on update with 404', async () => {
             const created = await createPatient({
-                firstName: 'Geo',
-                lastName: 'Inactiva',
+                names: 'Geo',
+                lastNames: 'Inactiva',
                 documentNumber: `GEO-004-${ suffix }`
             });
             const response = await updatePatient(created.body.data.patientId, {
@@ -437,16 +442,16 @@ describe('patient contract', () => {
 
         it('rejects a birthDate of tomorrow with 400 and accepts today', async () => {
             const future = await createPatient({
-                firstName: 'Futuro',
-                lastName: 'Nacimiento',
+                names: 'Futuro',
+                lastNames: 'Nacimiento',
                 documentNumber: `BIRTH-FUT-${ suffix }`,
                 birthDate: isoDate(1)
             });
             expect(future.status).toBe(400);
 
             const today = await createPatient({
-                firstName: 'Hoy',
-                lastName: 'Nacimiento',
+                names: 'Hoy',
+                lastNames: 'Nacimiento',
                 documentNumber: `BIRTH-TODAY-${ suffix }`,
                 birthDate: isoDate(0)
             });
@@ -457,7 +462,7 @@ describe('patient contract', () => {
             const unknown = '00000000-0000-4000-8000-000000000000';
 
             expect((await getPatient(unknown)).body.code).toBe('PATIENT_003_NOT_FOUND');
-            expect((await updatePatient(unknown, { firstName: 'Nadie' })).body.code).toBe('PATIENT_004_NOT_FOUND');
+            expect((await updatePatient(unknown, { names: 'Nadie' })).body.code).toBe('PATIENT_004_NOT_FOUND');
         });
 
         it('answers a search with no matches with 200 and an empty page', async () => {
@@ -480,8 +485,8 @@ describe('patient contract', () => {
         it('allows two patients to share an email', async () => {
             const email = `hermanos-${ suffix }@correo.ec`;
 
-            const first = await createPatient({ firstName: 'Hermano', lastName: 'Uno', documentNumber: `MAIL-1-${ suffix }`, email });
-            const second = await createPatient({ firstName: 'Hermana', lastName: 'Dos', documentNumber: `MAIL-2-${ suffix }`, email });
+            const first = await createPatient({ names: 'Hermano', lastNames: 'Uno', documentNumber: `MAIL-1-${ suffix }`, email });
+            const second = await createPatient({ names: 'Hermana', lastNames: 'Dos', documentNumber: `MAIL-2-${ suffix }`, email });
 
             expect(first.status).toBe(201);
             expect(second.status).toBe(201);
@@ -490,8 +495,8 @@ describe('patient contract', () => {
         it('allows two patients to share a passportNumber and returns both from 006', async () => {
             const passportNumber = `SHARED-PAS-${ suffix }`;
 
-            const first = await createPatient({ firstName: 'Pasa', lastName: 'Uno', documentNumber: `PAS-1-${ suffix }`, passportNumber });
-            const second = await createPatient({ firstName: 'Pasa', lastName: 'Dos', documentNumber: `PAS-2-${ suffix }`, passportNumber });
+            const first = await createPatient({ names: 'Pasa', lastNames: 'Uno', documentNumber: `PAS-1-${ suffix }`, passportNumber });
+            const second = await createPatient({ names: 'Pasa', lastNames: 'Dos', documentNumber: `PAS-2-${ suffix }`, passportNumber });
 
             expect(first.status).toBe(201);
             expect(second.status).toBe(201);
@@ -502,8 +507,8 @@ describe('patient contract', () => {
 
         it('never returns sysDetails from any operation', async () => {
             const created = await createPatient({
-                firstName: 'Sin',
-                lastName: 'SysDetails',
+                names: 'Sin',
+                lastNames: 'SysDetails',
                 documentNumber: `SYS-${ suffix }`
             });
             const id = created.body.data.patientId;
@@ -522,20 +527,18 @@ describe('patient contract', () => {
             }
         });
 
-        it('keeps email, phoneNumber, passportNumber, middleName and secondLastName out of the lists', async () => {
+        it('keeps email, phoneNumber, passportNumber and nameTokens out of the lists', async () => {
             const documentNumber = `REDUCED-${ suffix }`;
             await createPatient({
-                firstName: 'Reducida',
-                middleName: 'Media',
-                lastName: 'Forma',
-                secondLastName: 'Segunda',
+                names: 'Reducida Media',
+                lastNames: 'Forma Segunda',
                 documentNumber,
                 passportNumber: `REDUCED-PAS-${ suffix }`,
                 email: `reducida-${ suffix }@correo.ec`,
                 phoneNumber: '0990000000'
             });
 
-            const hidden = ['email', 'phoneNumber', 'passportNumber', 'middleName', 'secondLastName'];
+            const hidden = ['email', 'phoneNumber', 'passportNumber', 'nameTokens'];
 
             for( const response of [
                 await request(app).get('/api/patients?limit=100').set(authHeader('USER')),
@@ -570,8 +573,8 @@ describe('patient contract', () => {
 
         it('a PUT resending the whole GET response writes nothing', async () => {
             const created = await createPatient({
-                firstName: 'diferencial',
-                lastName: 'paciente',
+                names: 'diferencial',
+                lastNames: 'paciente',
                 documentNumber: `DIFF-004-${ suffix }`,
                 email: 'diferencial@correo.ec',
                 birthDate: '1990-05-04',
@@ -586,6 +589,99 @@ describe('patient contract', () => {
                 id: created.body.data.patientId,
                 model: Patient
             });
+        });
+
+    });
+
+    // -----------------------------------------------------------------------
+    // SPEC F47 — the names/lastNames model and the nameTokens search index
+    // -----------------------------------------------------------------------
+
+    describe('name tokens — SPEC F47', () => {
+
+        it('stores three given names intact and computes the union of tokens from both fields', async () => {
+            const documentNumber = `TOKENS-${ suffix }`;
+            const response = await createPatient({
+                names: '  maría del cisne ',
+                lastNames: 'Torres Vega',
+                documentNumber
+            });
+
+            expect(response.status).toBe(201);
+            expect(response.body.data.names).toBe('María Del Cisne');
+            expect(response.body.data.lastNames).toBe('Torres Vega');
+
+            const stored = await Patient.findByPk(response.body.data.patientId);
+            const tokens = (stored!.getDataValue('nameTokens') as string[]).map((token) => esaviDecrypt(token));
+            expect(tokens.sort()).toEqual(['CISNE', 'DEL', 'MARIA', 'TORRES', 'VEGA'].sort());
+        });
+
+        it('rejects a create without names or lastNames with 400 and patient.namesRequired', async () => {
+            const withoutNames = await createPatient({ lastNames: 'Solo Apellido', documentNumber: `NONAMES-${ suffix }` });
+            expect(withoutNames.status).toBe(400);
+
+            const withoutLastNames = await createPatient({ names: 'Solo Nombre', documentNumber: `NOLASTNAMES-${ suffix }` });
+            expect(withoutLastNames.status).toBe(400);
+        });
+
+        it('changes lastNames but not nameTokens when only diacritics differ, same as "María" over "Maria"', async () => {
+            const created = await createPatient({
+                names: 'Jose',
+                lastNames: 'Perez Mora',
+                documentNumber: `DIACRITIC-${ suffix }`
+            });
+            const patientId = created.body.data.patientId;
+            const before = await Patient.findByPk(patientId);
+            const tokensBefore = before!.getDataValue('nameTokens');
+
+            // 'José' and the stored 'Jose' are different display text — normalizeName keeps the
+            // accent — but the same search form: toSearchForm strips it on both sides
+            const response = await updatePatient(patientId, { names: 'josé' });
+            expect(response.status).toBe(200);
+            expect(response.body.data.names).toBe('José');
+
+            const after = await Patient.findByPk(patientId);
+            expect(after!.getDataValue('names')).not.toBe(before!.getDataValue('names'));
+            expect(after!.getDataValue('nameTokens')).toEqual(tokensBefore);
+        });
+
+        it('does not touch nameTokens when only an unrelated field changes', async () => {
+            const created = await createPatient({
+                names: 'Ana',
+                lastNames: 'Belen',
+                documentNumber: `UNRELATED-${ suffix }`
+            });
+            const patientId = created.body.data.patientId;
+            const before = await Patient.findByPk(patientId);
+            const tokensBefore = before!.getDataValue('nameTokens');
+
+            const response = await updatePatient(patientId, { phoneNumber: '0990001111' });
+            expect(response.status).toBe(200);
+
+            const after = await Patient.findByPk(patientId);
+            expect(after!.getDataValue('nameTokens')).toEqual(tokensBefore);
+        });
+
+        it('never returns nameTokens from 001, 002A, 002B, 003, 004 or 006', async () => {
+            const created = await createPatient({
+                names: 'Nunca',
+                lastNames: 'Expuesto',
+                documentNumber: `HIDDEN-TOKENS-${ suffix }`
+            });
+            const id = created.body.data.patientId;
+
+            const responses = [
+                created,
+                await request(app).get('/api/patients?limit=100').set(authHeader('USER')),
+                await request(app).get('/api/patients/admin?limit=100').set(authHeader('ADMIN')),
+                await getPatient(id),
+                await updatePatient(id, {}),
+                await searchPatients(`HIDDEN-TOKENS-${ suffix }`)
+            ];
+
+            for( const response of responses ) {
+                expect(JSON.stringify(response.body)).not.toContain('nameTokens');
+            }
         });
 
     });
@@ -622,8 +718,8 @@ describe('patient contract', () => {
         ): Promise<{ patientId: string, caseIds: string[] }> => {
             recalcCounter += 1;
             const created = await createPatient({
-                firstName: 'edad',
-                lastName: 'recalculo',
+                names: 'edad',
+                lastNames: 'recalculo',
                 documentNumber: `AGE-${ recalcCounter }-${ suffix }`,
                 birthDate
             });
