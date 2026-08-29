@@ -658,10 +658,9 @@ CREATE TABLE IF NOT EXISTS "diluentCatalog" (
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS "patient" (
   "patientId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  "firstName" text,
-  "middleName" text,
-  "lastName" text,
-  "secondLastName" text,
+  "names" text NOT NULL,
+  "lastNames" text NOT NULL,
+  "nameTokens" text[] NOT NULL DEFAULT '{}',
   "birthDate" date,
   "documentNumber" text,
   "passportNumber" text,
@@ -681,6 +680,7 @@ CREATE TABLE IF NOT EXISTS "patient" (
   CONSTRAINT "UQ_patient_documentNumber" UNIQUE ("documentNumber")
 );
 CREATE INDEX IF NOT EXISTS "IX_patient_residenceGeo" ON "patient" ("residenceGeoLocationId");
+CREATE INDEX IF NOT EXISTS "IX_patient_nameTokens" ON "patient" USING gin ("nameTokens");
 
 CREATE TABLE IF NOT EXISTS "esaviCase" (
   "caseId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
