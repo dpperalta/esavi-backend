@@ -44,6 +44,11 @@ describe('patient contract', () => {
             .get(`/api/patients/search/${ encodeURIComponent(identifier) }`)
             .set(authHeader(role));
 
+    const searchPatientsByName = async ( name: string, role: TestRole = 'USER' ) =>
+        request(app)
+            .get(`/api/patients/search-by-name?name=${ encodeURIComponent(name) }`)
+            .set(authHeader(role));
+
     const updatePatient = async ( id: string, payload: Record<string, unknown> ) =>
         request(app)
             .put(`/api/patients/${ id }`)
@@ -682,6 +687,163 @@ describe('patient contract', () => {
             for( const response of responses ) {
                 expect(JSON.stringify(response.body)).not.toContain('nameTokens');
             }
+        });
+
+    });
+
+    // -----------------------------------------------------------------------
+    // SPEC F45 — search by name over the encrypted nameTokens index
+    // -----------------------------------------------------------------------
+
+    describe('search by name — SPEC F45', () => {
+
+        it('007 responds 200 with { count, inactiveCount, rows }', async () => {
+            const response = await searchPatientsByName(`NF45-EMPTY-${ suffix }`);
+
+            expect(response.status).toBe(200);
+            expect(Object.keys(response.body.data).sort()).toEqual(['count', 'inactiveCount', 'rows']);
+        });
+
+        it('finds a patient by one last name token, with names/lastNames in clear text', async () => {
+            await createPatient({
+                names: 'Maria',
+                lastNames: `Torres${ suffix } Vega${ suffix }`,
+                documentNumber: `NF45-TOR-${ suffix }`
+            });
+
+            const response = await searchPatientsByName(`Torres${ suffix }`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(1);
+            expect(response.body.data.rows[0].names).toBe('Maria');
+            expect(response.body.data.rows[0].lastNames).toBe(`Torres${ suffix.toLowerCase() } Vega${ suffix.toLowerCase() }`);
+        });
+
+        it('narrows with every extra token and finds nothing with a wrong one', async () => {
+            const both = await searchPatientsByName(`Torres${ suffix } Vega${ suffix }`);
+            expect(both.body.data.count).toBe(1);
+
+            const wrong = await searchPatientsByName(`Torres${ suffix } Mendoza${ suffix }`);
+            expect(wrong.body.data.count).toBe(0);
+        });
+
+        it('collapses case and extra spaces to the same match', async () => {
+            const lower = await searchPatientsByName(`torres${ suffix }`);
+            const spaced = await searchPatientsByName(`  Torres${ suffix }  `);
+
+            expect(lower.body.data.count).toBe(1);
+            expect(spaced.body.data.count).toBe(1);
+        });
+
+        it('matches a stored accent against an unaccented query and back', async () => {
+            await createPatient({
+                names: 'Ana',
+                lastNames: `Muñoz${ suffix }`,
+                documentNumber: `NF45-MUNOZ-${ suffix }`
+            });
+
+            expect((await searchPatientsByName(`Munoz${ suffix }`)).body.data.count).toBe(1);
+            expect((await searchPatientsByName(`Muñoz${ suffix }`)).body.data.count).toBe(1);
+        });
+
+        it('does not match a prefix, and answers 200 with count: 0, never 404', async () => {
+            const response = await searchPatientsByName(`Tor${ suffix }`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+        });
+
+        it('answers count: 0 and patient.searchEmpty for a name that does not exist', async () => {
+            const response = await searchPatientsByName(`NF45-NOBODY-${ suffix }`);
+
+            expect(response.body.data.count).toBe(0);
+            expect(response.body.message).toBe('No existen resultados de la búsqueda');
+        });
+
+        it('rejects an absent name with 400', async () => {
+            const response = await request(app)
+                .get('/api/patients/search-by-name')
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(400);
+        });
+
+        it('rejects a name of only spaces with 400, never the whole padrón', async () => {
+            const response = await searchPatientsByName('   ');
+
+            expect(response.status).toBe(400);
+        });
+
+        it('rejects a name made only of combining diacritical marks with PATIENT_007_NAME_REQUIRED', async () => {
+            const response = await searchPatientsByName('́̈');
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('PATIENT_007_NAME_REQUIRED');
+            expect(response.body.message).toBe('Debe indicar al menos un nombre o apellido para la búsqueda');
+        });
+
+        // canViewInactive is SUPERADMIN-only today (permissions.helper.ts:24-26)
+        it('signals an inactive match to a USER without exposing the row, and shows it to a SUPERADMIN', async () => {
+            const created = await createPatient({
+                names: 'Inactivo',
+                lastNames: `Buscado${ suffix }`,
+                documentNumber: `NF45-INACTIVE-${ suffix }`
+            });
+            await request(app)
+                .delete(`/api/patients/${ created.body.data.patientId }`)
+                .set(authHeader('ADMIN'));
+
+            const asUser = await searchPatientsByName(`Buscado${ suffix }`);
+            expect(asUser.body.data.count).toBe(0);
+            expect(asUser.body.data.inactiveCount).toBe(1);
+            expect(asUser.body.data.rows).toEqual([]);
+            expect(asUser.body.message).toBe('No existen resultados activos, pero sí registros desactivados que coinciden');
+
+            const asSuperadmin = await searchPatientsByName(`Buscado${ suffix }`, 'SUPERADMIN');
+            expect(asSuperadmin.body.data.count).toBe(1);
+            expect(asSuperadmin.body.data.inactiveCount).toBe(1);
+            expect(asSuperadmin.body.data.rows[0].patientId).toBe(created.body.data.patientId);
+        });
+
+        it('never returns nameTokens', async () => {
+            const response = await searchPatientsByName(`Torres${ suffix }`);
+            expect(JSON.stringify(response.body)).not.toContain('nameTokens');
+        });
+
+        it('answers 401 without a token and 403 for ANALYTICS', async () => {
+            const noToken = await request(app).get(`/api/patients/search-by-name?name=Torres${ suffix }`);
+            expect(noToken.status).toBe(401);
+
+            const analytics = await searchPatientsByName(`Torres${ suffix }`, 'ANALYTICS');
+            expect(analytics.status).toBe(403);
+        });
+
+        it('is not captured by GET /:id — no invalid-UUID 400', async () => {
+            const response = await searchPatientsByName(`Torres${ suffix }`);
+            expect(response.status).not.toBe(400);
+        });
+
+        it('never writes: appDetails, updatedAt and sysDetails.version stay put across repeated searches', async () => {
+            const created = await createPatient({
+                names: 'NoEscribe',
+                lastNames: `NF45${ suffix }`,
+                documentNumber: `NF45-NOWRITE-${ suffix }`
+            });
+            const patientId = created.body.data.patientId;
+
+            const before = await Patient.findByPk(patientId);
+            const appDetailsBefore = before!.getDataValue('appDetails');
+            const updatedAtBefore = before!.getDataValue('updatedAt');
+            const versionBefore = (before!.getDataValue('sysDetails') as { version?: number } | null)?.version;
+
+            for( let i = 0; i < 5; i++ ) {
+                await searchPatientsByName(`NF45${ suffix }`);
+            }
+
+            const after = await Patient.findByPk(patientId);
+            expect(after!.getDataValue('appDetails')).toEqual(appDetailsBefore);
+            expect(after!.getDataValue('updatedAt')).toEqual(updatedAtBefore);
+            expect((after!.getDataValue('sysDetails') as { version?: number } | null)?.version).toBe(versionBefore);
         });
 
     });
