@@ -289,6 +289,8 @@
         "getSuccessPlural": "Patients fetched successfully",
         "getFailedPlural": "Failed to fetch the patients. Please try again later.",
         "searchEmpty": "No results found for the search",
+        "nameRequired": "At least one name or last name is required for the search",
+        "searchEmptyInactive": "There are no active results, but there are deactivated records that match",
         "updatedSuccess": "Patient updated successfully",
         "updatedFailed": "Failed to update the patient. Please try again later.",
         "alreadyInactive": "The patient with ID {{id}} is already inactive",

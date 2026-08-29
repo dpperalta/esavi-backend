@@ -289,6 +289,8 @@
         "getSuccessPlural": "Patiënten succesvol opgehaald",
         "getFailedPlural": "Ophalen van de patiënten mislukt. Probeer het later opnieuw.",
         "searchEmpty": "Geen zoekresultaten gevonden",
+        "nameRequired": "Minstens één voor- of achternaam is verplicht voor de zoekopdracht",
+        "searchEmptyInactive": "Er zijn geen actieve resultaten, maar er zijn wel gedeactiveerde records die overeenkomen",
         "updatedSuccess": "Patiënt succesvol bijgewerkt",
         "updatedFailed": "Bijwerken van de patiënt mislukt. Probeer het later opnieuw.",
         "alreadyInactive": "De patiënt met ID {{id}} is al inactief",
