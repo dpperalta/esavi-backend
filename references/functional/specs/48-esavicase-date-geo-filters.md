@@ -1,6 +1,6 @@
 # SPEC F48 — Filtros de fecha y unidad geográfica en el listado de casos ESAVI
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 04 (consistencia del contrato), SPEC 05 (códigos de operación), SPEC 08 (`lang` en servicios), **SPEC F06 (`esaviCase`, `ESAVI-CASE-002A`/`002B`, implementado)**, SPEC F01 (`appUserGeoLocation`, `ESAVI-USERGEO-008` — precedente del recorrido recursivo, no dependencia de código)
 > **Fecha:** 2026-08-30
 > **Objetivo:** Permitir acotar el listado de casos ESAVI por cualquiera de sus tres fechas —exacta o por rango— y por la unidad geográfica de la unidad de salud que los reportó, incluyendo todas las unidades que cuelgan de ella.
