@@ -705,6 +705,8 @@ CREATE TABLE IF NOT EXISTS "esaviCase" (
 );
 CREATE INDEX IF NOT EXISTS "IX_esaviCase_patient" ON "esaviCase" ("patientId");
 CREATE INDEX IF NOT EXISTS "IX_esaviCase_reportDate" ON "esaviCase" ("reportDate");
+CREATE INDEX IF NOT EXISTS "IX_esaviCase_eventDate" ON "esaviCase" ("eventDate");
+CREATE INDEX IF NOT EXISTS "IX_esaviCase_reportFillingDate" ON "esaviCase" ("reportFillingDate");
 
 CREATE TABLE IF NOT EXISTS "notifier" (
   "notifierId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
