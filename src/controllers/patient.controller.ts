@@ -7,6 +7,7 @@ import {
     getPatientByIdService,
     getPatientsService,
     searchPatientsByIdentifierService,
+    searchPatientsByNameService,
     setPatientActivationService,
     updatePatientService
 } from '../services/patient.service';
@@ -146,6 +147,36 @@ const searchPatientsByIdentifier = async (req: Request, res: Response, next: Nex
     }
 }
 
+// Search Patients By Name Controller
+// Code: ESAVI-PATIENT-007
+const searchPatientsByName = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const name = (req.query.name as string).toString();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await searchPatientsByNameService(name, req.lang, canViewInactive(req.user as AuthUser), limit, offset);
+        // Three messages, not two: an empty page can still carry a signal of inactive matches.
+        // Both keys are spelled out so i18n-check can verify them statically
+        const message = data.count > 0
+            ? getMessage('patient.getSuccessPlural', req.lang)
+            : ( data.inactiveCount > 0
+                ? getMessage('patient.searchEmptyInactive', req.lang)
+                : getMessage('patient.searchEmpty', req.lang) );
+        return res.status(200).json({
+            ok: true,
+            message,
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-PATIENT-007: Error searching Patients by name: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('patient.getFailedPlural', req.lang), 500, 'PATIENT_007_SEARCH_FAILED', error));
+    }
+}
+
 // Delete Patient Controller - Soft delete
 // Code: ESAVI-PATIENT-005A
 const deletePatient = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -194,5 +225,6 @@ export {
     updatePatient,
     deletePatient,
     activatePatient,
-    searchPatientsByIdentifier
+    searchPatientsByIdentifier,
+    searchPatientsByName
 }

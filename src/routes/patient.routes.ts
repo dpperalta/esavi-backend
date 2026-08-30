@@ -9,6 +9,7 @@ import {
     getPatientById,
     getPatients,
     searchPatientsByIdentifier,
+    searchPatientsByName,
     updatePatient
 } from '../controllers/patient.controller';
 import {
@@ -16,6 +17,7 @@ import {
     patientIdentifierValidator,
     patientIdValidator,
     patientListValidator,
+    patientNameSearchValidator,
     updatePatientValidator
 } from '../validators';
 
@@ -44,6 +46,12 @@ router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...
 // Search Patients by Identifier - documentNumber, passportNumber or healthSystemCode
 // Code: ESAVI-PATIENT-006
 router.get('/search/:identifier', tokenValidation, validateUserRole(USER), ...patientIdentifierValidator, ...patientListValidator, validateFields, searchPatientsByIdentifier);
+
+// Search Patients by Name - conjunctive match over the encrypted name-token index
+// Code: ESAVI-PATIENT-007
+// Declared before GET /:id for the same reason as 'admin' and 'search/:identifier': Express
+// would otherwise capture 'search-by-name' as an :id and patientIdValidator would reject it
+router.get('/search-by-name', tokenValidation, validateUserRole(USER), ...patientNameSearchValidator, ...patientListValidator, validateFields, searchPatientsByName);
 
 // Get Patient by ID
 // Code: ESAVI-PATIENT-003

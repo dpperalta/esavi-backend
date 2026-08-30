@@ -289,6 +289,8 @@
         "getSuccessPlural": "Pacientes obtenidos exitosamente",
         "getFailedPlural": "Error al obtener los pacientes. Por favor, inténtelo de nuevo más tarde.",
         "searchEmpty": "No existen resultados de la búsqueda",
+        "nameRequired": "Debe indicar al menos un nombre o apellido para la búsqueda",
+        "searchEmptyInactive": "No existen resultados activos, pero sí registros desactivados que coinciden",
         "updatedSuccess": "Paciente actualizado exitosamente",
         "updatedFailed": "Error al actualizar el paciente. Por favor, inténtelo de nuevo más tarde.",
         "alreadyInactive": "El paciente con ID {{id}} ya está inactivo",

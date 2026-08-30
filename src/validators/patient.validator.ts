@@ -30,6 +30,11 @@ export const patientIdentifierValidator = [
         .isLength({ max: 100 }).withMessage('Identifier must be at most 100 characters long')
 ];
 
+export const patientNameSearchValidator = [
+    query('name').trim().notEmpty().withMessage('Name is required')
+        .isLength({ max: 200 }).withMessage('Name must be at most 200 characters long')
+];
+
 export const createPatientValidator = [
     body('names').trim().notEmpty().withMessage('Names is required')
         .isLength({ max: 200 }).withMessage('Names must be at most 200 characters long'),
