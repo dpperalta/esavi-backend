@@ -252,24 +252,43 @@ const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: Auth
     return createdEsaviCase ? toEsaviCaseResponse(createdEsaviCase) : null;
 }
 
-// The three filters are accumulated with AND, and each one is optional. A filter pointing at a
-// row that does not exist yields an empty page, never a 404: searching for something absent is an
-// empty search, not a missing resource
+// The condition of one date column: its exact value, or its range with both ends inclusive.
+// The exact form wins over the range within its own column — the validator already rejects the
+// combination, and this precedence is here so the service stays correct when it is called
+// without the middleware chain. A column whose three parameters are absent does not enter the
+// where at all, and a NULL date never satisfies any of these operators: a case without eventDate
+// simply does not show up under any eventDate filter
+const dateCondition = (exact?: string, fromValue?: string, toValue?: string): unknown => {
+    if( exact ) return normalizeIsoDate(exact);
+
+    const from = fromValue ? normalizeIsoDate(fromValue) : undefined;
+    const to = toValue ? normalizeIsoDate(toValue) : undefined;
+    if( from && to ) return { [Op.between]: [from, to] };
+    if( from ) return { [Op.gte]: from };
+    if( to ) return { [Op.lte]: to };
+    return undefined;
+}
+
+// Every filter is optional and they are all accumulated with AND, across columns too. A filter
+// pointing at a row that does not exist yields an empty page, never a 404: searching for
+// something absent is an empty search, not a missing resource. The geographic filter is not
+// resolved here: it is an include, not a where, and it lives in the two listing services
 const buildListWhere = (filters: EsaviCaseListFilters = {}): WhereOptions => {
     const where: Record<string, unknown> = {};
 
     if( filters.patientId ) where.patientId = filters.patientId;
     if( filters.healthFacilityId ) where.healthFacilityId = filters.healthFacilityId;
 
-    const from = filters.reportDateFrom ? normalizeIsoDate(filters.reportDateFrom) : undefined;
-    const to = filters.reportDateTo ? normalizeIsoDate(filters.reportDateTo) : undefined;
-    if( from && to ) {
-        where.reportDate = { [Op.between]: [from, to] };
-    } else if( from ) {
-        where.reportDate = { [Op.gte]: from };
-    } else if( to ) {
-        where.reportDate = { [Op.lte]: to };
-    }
+    const reportDate = dateCondition(filters.reportDate, filters.reportDateFrom, filters.reportDateTo);
+    if( reportDate !== undefined ) where.reportDate = reportDate;
+
+    const eventDate = dateCondition(filters.eventDate, filters.eventDateFrom, filters.eventDateTo);
+    if( eventDate !== undefined ) where.eventDate = eventDate;
+
+    const reportFillingDate = dateCondition(
+        filters.reportFillingDate, filters.reportFillingDateFrom, filters.reportFillingDateTo
+    );
+    if( reportFillingDate !== undefined ) where.reportFillingDate = reportFillingDate;
 
     return where as WhereOptions;
 }
