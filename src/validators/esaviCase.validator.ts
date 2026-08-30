@@ -1,4 +1,4 @@
-import { body, param, query } from 'express-validator';
+import { body, CustomValidator, param, query } from 'express-validator';
 
 // The three date columns are calendar dates, so they are compared as plain YYYY-MM-DD
 // strings: building a Date would drag the server time zone into the comparison and could
@@ -22,6 +22,41 @@ const isNotAfterReportDate = (value: string, reportDate: unknown): boolean => {
     return toIsoDay(value) <= toIsoDay(reportDate);
 }
 
+// The three date columns of the listing, each one filterable by its exact value or by its
+// From/To range. The two cross checks below are written once and applied to the three: doing
+// it six times by hand is where the one comparing the wrong column slips in
+const DATE_FILTER_COLUMNS = [
+    { field: 'reportDate', label: 'Report Date' },
+    { field: 'eventDate', label: 'Event Date' },
+    { field: 'reportFillingDate', label: 'Report Filling Date' }
+] as const;
+
+// Applied on the exact form. Exact and range govern the same column and their combination has
+// no obvious reading, so it is rejected instead of silently giving priority to one of the two.
+// The exclusion is per column: `?reportDate=…&eventDateFrom=…` is a legitimate question
+const hasNoRangeOfSameColumn = (field: string): CustomValidator => (_value, { req }) => {
+    const filters = req.query ?? {};
+    return filters[`${ field }From`] === undefined && filters[`${ field }To`] === undefined;
+}
+
+// Applied on the `To` end, so it only runs when the upper bound of the range travels. Filters
+// do not inherit `isNotFutureDate`: a range left open upwards is a legitimate query
+const isNotEarlierThanItsFrom = (field: string): CustomValidator => (value, { req }) => {
+    const from = (req.query ?? {})[`${ field }From`];
+    if( from === undefined ) return true;
+    return toIsoDay(from) <= toIsoDay(value);
+}
+
+const dateFilterValidators = DATE_FILTER_COLUMNS.flatMap(({ field, label }) => [
+    query(field).optional().isISO8601()
+        .withMessage(`${ label } must be a valid ISO 8601 date`)
+        .custom(hasNoRangeOfSameColumn(field))
+        .withMessage(`${ label } cannot be combined with ${ label } From or ${ label } To`),
+    query(`${ field }To`).optional()
+        .custom(isNotEarlierThanItsFrom(field))
+        .withMessage(`${ label } From cannot be later than ${ label } To`)
+]);
+
 export const esaviCaseIdValidator = [
     param('id').notEmpty().withMessage('ESAVI Case ID is required')
         .isUUID().withMessage('ESAVI Case ID must be a valid UUID')
@@ -37,6 +72,17 @@ export const esaviCaseListValidator = [
         .withMessage('Report Date From must be a valid ISO 8601 date'),
     query('reportDateTo').optional().isISO8601()
         .withMessage('Report Date To must be a valid ISO 8601 date'),
+    query('geoLocationId').optional()
+        .isUUID().withMessage('Geo Location ID must be a valid UUID').trim(),
+    query('eventDateFrom').optional().isISO8601()
+        .withMessage('Event Date From must be a valid ISO 8601 date'),
+    query('eventDateTo').optional().isISO8601()
+        .withMessage('Event Date To must be a valid ISO 8601 date'),
+    query('reportFillingDateFrom').optional().isISO8601()
+        .withMessage('Report Filling Date From must be a valid ISO 8601 date'),
+    query('reportFillingDateTo').optional().isISO8601()
+        .withMessage('Report Filling Date To must be a valid ISO 8601 date'),
+    ...dateFilterValidators,
     query('limit').optional().isInt({ min: 1, max: 100 })
         .withMessage('Limit must be an integer between 1 and 100'),
     query('offset').optional().isInt({ min: 0 })
