@@ -1,6 +1,6 @@
 import { Op, QueryTypes, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, FinalClassification, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
+import { Classification, EsaviCase, FinalClassification, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -59,6 +59,21 @@ const HEALTH_FACILITY_INCLUDE = {
     model: HealthFacility,
     as: 'healthFacility',
     attributes: ['healthFacilityId', 'localCode', 'name']
+};
+
+// The facility include of the two listings carries its geoLocation, and it carries it always,
+// not only when the geographic filter travels: an include conditioned on a query param would
+// give two different shapes of data.rows for the same endpoint. Without `required`, so a
+// facility that is not geolocated still shows up with geoLocation: null instead of vanishing.
+// Only the two fields the row needs: the full path up to the root would multiply the size of
+// the response for a hierarchy the client already knows from the 002 of geoLocation
+const LIST_HEALTH_FACILITY_INCLUDE = {
+    ...HEALTH_FACILITY_INCLUDE,
+    include: [{
+        model: GeoLocation,
+        as: 'geoLocation',
+        attributes: ['geoLocationId', 'name']
+    }]
 };
 
 // sysDetails is trigger metadata and never leaves the service. The two raw foreign keys go with
@@ -345,8 +360,8 @@ const resolveGeoSubtreeIds = async (geoLocationId: string): Promise<string[]> =>
 // was later closed is still a case of that territory
 const buildFacilityInclude = (subtreeIds: string[] | null) => (
     subtreeIds === null
-        ? HEALTH_FACILITY_INCLUDE
-        : { ...HEALTH_FACILITY_INCLUDE, where: { geoLocationId: { [Op.in]: subtreeIds } }, required: true }
+        ? LIST_HEALTH_FACILITY_INCLUDE
+        : { ...LIST_HEALTH_FACILITY_INCLUDE, where: { geoLocationId: { [Op.in]: subtreeIds } }, required: true }
 );
 
 // Resolved once per request, and only when the filter travels
