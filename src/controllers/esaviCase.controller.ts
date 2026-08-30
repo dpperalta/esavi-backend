@@ -10,13 +10,22 @@ import {
     updateEsaviCaseService
 } from '../services/esaviCase.service';
 
-// The three query filters of 002A and 002B. Only what actually arrives travels to the service,
-// so an absent filter never turns into an `undefined` in the where clause
+// The query filters of 002A and 002B. Only what actually arrives travels to the service,
+// so an absent filter never turns into an `undefined` in the where clause. Nothing is
+// validated here: the shape of the query was already checked by esaviCaseListValidator
 const listFilters = (req: Request): EsaviCaseListFilters => ({
     patientId: req.query.patientId as string | undefined,
     healthFacilityId: req.query.healthFacilityId as string | undefined,
+    geoLocationId: req.query.geoLocationId as string | undefined,
+    reportDate: req.query.reportDate as string | undefined,
     reportDateFrom: req.query.reportDateFrom as string | undefined,
-    reportDateTo: req.query.reportDateTo as string | undefined
+    reportDateTo: req.query.reportDateTo as string | undefined,
+    eventDate: req.query.eventDate as string | undefined,
+    eventDateFrom: req.query.eventDateFrom as string | undefined,
+    eventDateTo: req.query.eventDateTo as string | undefined,
+    reportFillingDate: req.query.reportFillingDate as string | undefined,
+    reportFillingDateFrom: req.query.reportFillingDateFrom as string | undefined,
+    reportFillingDateTo: req.query.reportFillingDateTo as string | undefined
 });
 
 // Create ESAVI Case Controller
