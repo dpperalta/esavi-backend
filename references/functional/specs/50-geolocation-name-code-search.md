@@ -1,6 +1,6 @@
 # SPEC F50 — Búsqueda de geoLocation por nombre o código
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios)
 > **Fecha:** 2026-09-01
 > **Objetivo:** Ampliar el listado `ESAVI-GEOLOC-002` con dos filtros opcionales — nombre y código — resueltos con `Op.iLike` sobre `name`, `externalCode` e `isoCode`.
