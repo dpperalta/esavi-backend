@@ -8,7 +8,7 @@ import { setEntityActiveStatusService } from './common/entityActivation.service'
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
 import { cascadeSealSatellite } from './common/satelliteCascade.service';
 import { createCaseWorkflowService } from './caseWorkflow.service';
-import { resolveGeoSubtreeIds } from './common/geoScope.service';
+import { resolveGeoSubtreeIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -327,14 +327,33 @@ const resolveListFacilityInclude = async (filters: EsaviCaseListFilters) => (
     buildFacilityInclude(filters.geoLocationId ? await resolveGeoSubtreeIds([filters.geoLocationId]) : null)
 );
 
+// The intersection of the user's geographic scope and the SPEC F48 explicit filter, over already
+// expanded id lists — SPEC F49 §3.4. null means no restriction on that side; the intersection of
+// null with anything is the other side unchanged
+const intersectSubtreeIds = (a: string[] | null, b: string[] | null): string[] | null => {
+    if( a === null ) return b;
+    if( b === null ) return a;
+    const bSet = new Set(b);
+    return a.filter(( id ) => bSet.has(id));
+}
+
+// Resolved once per request: the user's scope composed with the explicit filter, per SPEC F49
+// §3.4. authUser undefined resolves to an empty scope — never "no restriction"
+const resolveScopedFacilityInclude = async (filters: EsaviCaseListFilters, authUser?: AuthUser) => {
+    const userScope = await resolveUserGeoScopeIds(authUser);
+    const explicitSubtree = filters.geoLocationId ? await resolveGeoSubtreeIds([filters.geoLocationId]) : null;
+    return buildFacilityInclude(intersectSubtreeIds(userScope, explicitSubtree));
+}
+
 // Get Active ESAVI Cases Service
 // Code: ESAVI-CASE-002A
 const getEsaviCasesService = async (
     filters: EsaviCaseListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    authUser?: AuthUser
 ) => {
-    const facilityInclude = await resolveListFacilityInclude(filters);
+    const facilityInclude = await resolveScopedFacilityInclude(filters, authUser);
     const { count, rows } = await EsaviCase.findAndCountAll({
         where: { ...buildListWhere(filters), isActive: true },
         attributes: LIST_ATTRIBUTES,
