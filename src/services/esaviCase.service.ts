@@ -139,15 +139,22 @@ const assertPatientIsValid = async (patientId: string, op: string, lang: string)
     }
 }
 
-// The transaction is optional because 001 writes without one and 004 opens its own
-const assertHealthFacilityIsValid = async (healthFacilityId: string, op: string, lang: string, transaction?: Transaction) => {
+// The transaction is optional because 001 writes without one and 004 opens its own. authUser
+// optional the same way: a facility out of the user's scope behaves like an inactive one — 404,
+// never 403 — closing the vias of creating a case outside the own territory (001) or moving one
+// into it (004). geoLocationId travels only for that check, never in the return value
+const assertHealthFacilityIsValid = async (healthFacilityId: string, op: string, lang: string, transaction?: Transaction, authUser?: AuthUser) => {
     const healthFacility = await HealthFacility.findOne({
         where: { healthFacilityId, isActive: true },
-        attributes: ['healthFacilityId', 'localCode'],
+        attributes: ['healthFacilityId', 'localCode', 'geoLocationId'],
         transaction
     });
     if( !healthFacility ) {
         throw new AppError(getMessage('esaviCase.healthFacilityNotFound', lang), 404, `CASE_${ op }_FACILITY_NOT_FOUND`);
+    }
+    const userScope = await resolveUserGeoScopeIds(authUser);
+    if( userScope !== null && ( !healthFacility.geoLocationId || !userScope.includes(healthFacility.geoLocationId) ) ) {
+        throw new AppError(getMessage('esaviCase.healthFacilityNotFound', lang), 404, `CASE_${ op }_FACILITY_OUT_OF_SCOPE`);
     }
     return healthFacility;
 }
@@ -199,7 +206,7 @@ const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: Auth
     const registrationDate = todayIsoDate();
 
     await assertPatientIsValid(data.patientId, '001', lang);
-    const healthFacility = await assertHealthFacilityIsValid(data.healthFacilityId, '001', lang);
+    const healthFacility = await assertHealthFacilityIsValid(data.healthFacilityId, '001', lang, undefined, authUser);
 
     // 409 and not 400: the client's body is correct, what blocks the insert is the state of a
     // referenced resource. No fallback prefix is invented — a made up prefix would stop
@@ -394,10 +401,9 @@ const getAllEsaviCasesService = async (
 // message, same wrapper. The AppError code is the only trace, and it only reaches the log, never
 // the response. A facility without geoLocationId belongs to no territory, so no non-admin user
 // reaches it either — §3.1
-const assertCaseIsInScope = async (esaviCase: EsaviCase, authUser: AuthUser | undefined, op: string, lang: string): Promise<void> => {
+const assertFacilityGeoLocationInScope = async (facilityGeoLocationId: string | null | undefined, authUser: AuthUser | undefined, op: string, lang: string): Promise<void> => {
     const userScope = await resolveUserGeoScopeIds(authUser);
     if( userScope === null ) return;
-    const facilityGeoLocationId = esaviCase.healthFacility?.geoLocationId ?? null;
     if( !facilityGeoLocationId || !userScope.includes(facilityGeoLocationId) ) {
         throw new AppError(getMessage('esaviCase.notFound', lang), 404, `CASE_${ op }_OUT_OF_SCOPE`);
     }
@@ -410,7 +416,7 @@ const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive
     if( !esaviCase ) {
         throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_003_NOT_FOUND');
     }
-    await assertCaseIsInScope(esaviCase, authUser, '003', lang);
+    await assertFacilityGeoLocationInScope(esaviCase.healthFacility?.geoLocationId, authUser, '003', lang);
     return toEsaviCaseResponse(esaviCase);
 }
 
@@ -435,8 +441,18 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
             throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_004_NOT_FOUND');
         }
 
+        // Ownership of the stored case, checked immediately after it is found and before any other
+        // validation: a caller with no view of a row does not get told anything about its state,
+        // incoherent dates included — SPEC F49 §3.5
+        const savedFacility = await HealthFacility.findOne({
+            where: { healthFacilityId: esaviCase.healthFacilityId },
+            attributes: ['geoLocationId'],
+            transaction
+        });
+        await assertFacilityGeoLocationInScope(savedFacility?.geoLocationId, authUser, '004', lang);
+
         if( data.healthFacilityId ) {
-            await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang, transaction);
+            await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang, transaction, authUser);
         }
 
         // Coherence is checked against the RESULTING state, not against the body: validating only what
