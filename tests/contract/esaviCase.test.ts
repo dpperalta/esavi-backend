@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
@@ -379,6 +379,324 @@ describe('esaviCase contract', () => {
             expect(response.body.data.rows).toHaveLength(2);
             expect(response.body.data.count).toBe(3);
         });
+
+    });
+
+    /**
+     * SPEC F48. The two lists grow by nine date filters and one geographic one. The
+     * fixtures are seeded through the model rather than through 001 because the cases
+     * need fixed calendar dates in the future and a null eventDate, neither of which
+     * the create validator admits — and the filters are what is under test here, not
+     * the writing path.
+     */
+    describe('002A and 002B — date and geographic filters', () => {
+
+        // The two hierarchies of the block. The first is the province -> canton -> two
+        // parishes the geographic criteria walk; the second is unrelated and only exists
+        // to prove that a subtree does not leak into its neighbour
+        let provinceId: string;
+        let cantonId: string;
+        let parishId: string;
+        let siblingParishId: string;
+        let geoPatientId: string;
+
+        const tag = `F48${ suffix }`;
+
+        // Only the rows this block seeded: the table carries the cases of every other block
+        const ownCodes = ( rows: { caseCode: string }[] ): string[] =>
+            rows.filter(( row ) => row.caseCode.startsWith(tag) ).map(( row ) => row.caseCode ).sort();
+
+        const filtered = async ( query: string ): Promise<string[]> => {
+            const response = await listCases(query);
+            expect(response.status).toBe(200);
+            return ownCodes(response.body.data.rows);
+        };
+
+        const createGeoLocation = async (
+            label: string, parent: string | null, level: number
+        ): Promise<string> => {
+            const geoLocation = await GeoLocation.create({
+                geoLevelTypeId: geoLevelTypeId,
+                parentGeoLocationId: parent,
+                code: `${ label }_${ suffix }`,
+                name: `${ label } ${ suffix }`,
+                level
+            });
+            return geoLocation.getDataValue('geoLocationId');
+        };
+
+        let geoLevelTypeId: string;
+
+        // One case on its own facility, so the facility carries the geolocation of the case
+        const seedCase = async (
+            label: string,
+            geoLocationId: string | null,
+            dates: { reportDate: string, eventDate?: string | null, reportFillingDate?: string | null },
+            facilityIsActive: boolean = true
+        ): Promise<string> => {
+            const facility = await HealthFacility.create({
+                localCode: `F48${ label }${ suffix }`,
+                name: `F48 ${ label } ${ suffix }`,
+                geoLocationId,
+                isActive: facilityIsActive
+            });
+            await EsaviCase.create({
+                caseCode: `${ tag }${ label }`,
+                patientId: geoPatientId,
+                healthFacilityId: facility.getDataValue('healthFacilityId'),
+                reportDate: dates.reportDate,
+                eventDate: dates.eventDate ?? null,
+                reportFillingDate: dates.reportFillingDate ?? null,
+                isActive: true
+            });
+            return `${ tag }${ label }`;
+        };
+
+        beforeAll(async () => {
+            geoPatientId = await createPatientFixture('F48');
+
+            // The maximum level is global, so the fixtures are seeded above whatever the
+            // database already holds
+            const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+            const levelType = await GeoLevelType.create({
+                code: `LVL48_${ suffix }`, name: `Level48 ${ suffix }`, sortOrder: 1
+            });
+            geoLevelTypeId = levelType.getDataValue('geoLevelTypeId');
+
+            provinceId = await createGeoLocation('PROV48', null, baseLevel + 1);
+            cantonId = await createGeoLocation('CANT48', provinceId, baseLevel + 2);
+            parishId = await createGeoLocation('PARI48', cantonId, baseLevel + 3);
+            siblingParishId = await createGeoLocation('PAR248', cantonId, baseLevel + 3);
+
+            // A: the whole date matrix, at the deepest level of the tree
+            await seedCase('A', parishId, {
+                reportDate: '2026-03-01', eventDate: '2026-02-15', reportFillingDate: '2026-03-01'
+            });
+            // B: both ends of the March range, on the sibling parish
+            await seedCase('B', siblingParishId, {
+                reportDate: '2026-03-31', eventDate: '2026-03-31', reportFillingDate: '2026-03-31'
+            });
+            // C: no eventDate and no reportFillingDate, literally on the province
+            await seedCase('C', provinceId, { reportDate: '2026-04-10' });
+            // D: a facility that is not geolocated
+            await seedCase('D', null, { reportDate: '2026-03-01', eventDate: '2026-03-01' });
+            // E: an active case on a facility that was later deactivated
+            await seedCase('E', parishId, { reportDate: '2026-03-01', eventDate: '2026-02-15' }, false);
+        });
+
+        it('filters by the exact value of each of the three date columns', async () => {
+            expect(await filtered('?reportDate=2026-04-10')).toEqual([`${ tag }C`]);
+            expect(await filtered('?eventDate=2026-03-31')).toEqual([`${ tag }B`]);
+            expect(await filtered('?reportFillingDate=2026-04-10')).toEqual([]);
+            expect(await filtered('?reportFillingDate=2026-03-31')).toEqual([`${ tag }B`]);
+        });
+
+        it('trims a full ISO timestamp to the calendar day', async () => {
+            expect(await filtered('?reportDate=2026-04-10T18:30:00Z')).toEqual([`${ tag }C`]);
+        });
+
+        it('bounds a range by both ends inclusively, and by each end alone', async () => {
+            expect(await filtered('?eventDateFrom=2026-02-15&eventDateTo=2026-03-31'))
+                .toEqual([`${ tag }A`, `${ tag }B`, `${ tag }D`, `${ tag }E`]);
+            expect(await filtered('?eventDateFrom=2026-03-31')).toEqual([`${ tag }B`]);
+            expect(await filtered('?eventDateTo=2026-02-15')).toEqual([`${ tag }A`, `${ tag }E`]);
+        });
+
+        it('never returns a case whose date column is null', async () => {
+            expect(await filtered('?eventDateFrom=2020-01-01&eventDateTo=2030-01-01'))
+                .not.toContain(`${ tag }C`);
+            expect(await filtered('?reportFillingDateFrom=2020-01-01')).not.toContain(`${ tag }C`);
+            expect(await filtered('?eventDate=2026-04-10')).toEqual([]);
+
+            // And the same case is there when the column is not filtered
+            expect(await filtered('?reportDate=2026-04-10')).toContain(`${ tag }C`);
+        });
+
+        it('accumulates the filters of different columns with AND', async () => {
+            expect(await filtered('?reportDate=2026-03-01&eventDateFrom=2026-02-01'))
+                .toEqual([`${ tag }A`, `${ tag }D`, `${ tag }E`]);
+            expect(await filtered('?reportDate=2026-03-01&eventDateFrom=2026-03-31')).toEqual([]);
+        });
+
+        it('answers 400 when the exact form travels with the range of its own column', async () => {
+            for( const query of [
+                '?reportDate=2026-03-01&reportDateFrom=2026-03-01',
+                '?reportDate=2026-03-01&reportDateTo=2026-03-01',
+                '?eventDate=2026-03-01&eventDateFrom=2026-03-01',
+                '?eventDate=2026-03-01&eventDateTo=2026-03-01',
+                '?reportFillingDate=2026-03-01&reportFillingDateFrom=2026-03-01',
+                '?reportFillingDate=2026-03-01&reportFillingDateTo=2026-03-01'
+            ] ) {
+                const response = await listCases(query);
+                expect(response.status).toBe(400);
+
+                // The 400 of a query shape comes from validateFields, which answers on its
+                // own instead of going through errorHandler, so it carries `errors` and no
+                // `code`. It is how every validator of the repository has always answered
+                expect(response.body).toMatchObject({ ok: false, message: expect.any(String) });
+                expect(typeof response.body.errors).toBe('string');
+                expect(response.body.errors.length).toBeGreaterThan(0);
+            }
+        });
+
+        it('answers 400 when From is later than To', async () => {
+            expect(( await listCases('?eventDateFrom=2026-05-01&eventDateTo=2026-04-01') ).status).toBe(400);
+            expect(( await listCases('?reportDateFrom=2026-05-01&reportDateTo=2026-04-01') ).status).toBe(400);
+            expect(( await listCases('?reportFillingDateFrom=2026-05-01&reportFillingDateTo=2026-04-01') ).status).toBe(400);
+
+            // The two ends being equal is a legitimate single-day range
+            expect(( await listCases('?eventDateFrom=2026-04-01&eventDateTo=2026-04-01') ).status).toBe(200);
+        });
+
+        it('excludes per column, not globally', async () => {
+            expect(( await listCases('?reportDate=2026-03-01&eventDateFrom=2026-02-01') ).status).toBe(200);
+        });
+
+        it('does not inherit isNotFutureDate on the filters', async () => {
+            const response = await listCases('?reportDate=2030-01-01');
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual([]);
+        });
+
+        it('answers 400 for a malformed date and a malformed geoLocationId', async () => {
+            expect(( await listCases('?reportDate=no-es-fecha') ).status).toBe(400);
+            expect(( await listCases('?geoLocationId=abc') ).status).toBe(400);
+        });
+
+        it('expands the geographic filter over the whole active subtree', async () => {
+            // The province itself is not where the facilities hang from: with strict
+            // equality this would be the single case C, and the spec would have no reason
+            expect(await filtered(`?geoLocationId=${ provinceId }`))
+                .toEqual([`${ tag }A`, `${ tag }B`, `${ tag }C`, `${ tag }E`]);
+
+            // A leaf returns only its own, and they are a subset of the province result
+            expect(await filtered(`?geoLocationId=${ parishId }`)).toEqual([`${ tag }A`, `${ tag }E`]);
+            expect(await filtered(`?geoLocationId=${ siblingParishId }`)).toEqual([`${ tag }B`]);
+        });
+
+        it('leaves out a case whose facility is not geolocated, and shows it without the filter', async () => {
+            expect(await filtered(`?geoLocationId=${ provinceId }`)).not.toContain(`${ tag }D`);
+            expect(await filtered('?reportDate=2026-03-01')).toContain(`${ tag }D`);
+        });
+
+        it('does not filter by healthFacility.isActive', async () => {
+            expect(await filtered(`?geoLocationId=${ parishId }`)).toContain(`${ tag }E`);
+        });
+
+        it('answers 200 with count 0 for an unknown geoLocationId, never 404', async () => {
+            const response = await listCases(`?geoLocationId=${ unknownUuid }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+            expect(response.body.data.rows).toEqual([]);
+        });
+
+        it('counts over the join and paginates on top of it', async () => {
+            const response = await listCases(`?geoLocationId=${ provinceId }&limit=2`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows).toHaveLength(2);
+            expect(response.body.data.count).toBe(4);
+        });
+
+        it('combines the thirteen filters without an error', async () => {
+            const response = await listCases(
+                `?patientId=${ geoPatientId }&geoLocationId=${ provinceId }`
+                + '&reportDate=2026-03-01&eventDateFrom=2026-01-01&eventDateTo=2026-12-31'
+                + '&reportFillingDateFrom=2026-01-01&reportFillingDateTo=2026-12-31'
+            );
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual([`${ tag }A`]);
+        });
+
+        it('behaves the same on 002B, which keeps showing inactive cases', async () => {
+            const adminList = await listAdminCases(`?geoLocationId=${ provinceId }`);
+            expect(adminList.status).toBe(200);
+            expect(ownCodes(adminList.body.data.rows))
+                .toEqual([`${ tag }A`, `${ tag }B`, `${ tag }C`, `${ tag }E`]);
+
+            const publicBefore = await filtered(`?geoLocationId=${ parishId }`);
+            const target = await EsaviCase.findOne({ where: { caseCode: `${ tag }A` } });
+            await deleteCase(target!.getDataValue('caseId'));
+
+            expect(await filtered(`?geoLocationId=${ parishId }`)).toEqual([`${ tag }E`]);
+            expect(ownCodes(( await listAdminCases(`?geoLocationId=${ parishId }`) ).body.data.rows))
+                .toEqual([`${ tag }A`, `${ tag }E`]);
+
+            await activateCase(target!.getDataValue('caseId'));
+            expect(await filtered(`?geoLocationId=${ parishId }`)).toEqual(publicBefore);
+        });
+
+        it('carries healthFacility.geoLocation on every row, filtered or not', async () => {
+            const response = await listCases('?reportDate=2026-03-01');
+            const geolocated = response.body.data.rows
+                .find(( row: { caseCode: string } ) => row.caseCode === `${ tag }A` );
+            const plain = response.body.data.rows
+                .find(( row: { caseCode: string } ) => row.caseCode === `${ tag }D` );
+
+            expect(Object.keys(geolocated.healthFacility).sort())
+                .toEqual(['geoLocation', 'healthFacilityId', 'localCode', 'name']);
+            expect(geolocated.healthFacility.geoLocation)
+                .toEqual({ geoLocationId: parishId, name: `PARI48 ${ suffix }` });
+
+            // A facility with no geolocation keeps its row instead of vanishing
+            expect(plain).toBeDefined();
+            expect(plain.healthFacility.geoLocation).toBeNull();
+
+            // And the nested object is there under the geographic filter too
+            const geoFiltered = await listCases(`?geoLocationId=${ parishId }`);
+            expect(geoFiltered.body.data.rows[0].healthFacility.geoLocation).toBeDefined();
+        });
+
+        it('drops no row because of the nested include', async () => {
+            const response = await listCases('?limit=1');
+            expect(response.body.data.count).toBe(await EsaviCase.count({ where: { isActive: true } }));
+        });
+
+        it('cuts the branch when an intermediate geoLocation is deactivated', async () => {
+            await GeoLocation.update({ isActive: false }, { where: { geoLocationId: cantonId } });
+
+            // The parishes are still active, and are no longer reachable from the province
+            expect(await filtered(`?geoLocationId=${ provinceId }`)).toEqual([`${ tag }C`]);
+
+            // An inactive root is an empty subtree, and that is an empty page, not a 404
+            const inactiveRoot = await listCases(`?geoLocationId=${ cantonId }`);
+            expect(inactiveRoot.status).toBe(200);
+            expect(inactiveRoot.body.data.count).toBe(0);
+
+            await GeoLocation.update({ isActive: true }, { where: { geoLocationId: cantonId } });
+        });
+
+        it('terminates on a cycle seeded by hand', async () => {
+            // A -> B -> A, which CK_geoLocation_notSelfParent does not detect. Without the
+            // two guards of the CTE this request never comes back
+            await GeoLocation.update(
+                { parentGeoLocationId: parishId }, { where: { geoLocationId: provinceId } }
+            );
+
+            const response = await listCases(`?geoLocationId=${ provinceId }`);
+            expect(response.status).toBe(200);
+
+            await GeoLocation.update(
+                { parentGeoLocationId: null }, { where: { geoLocationId: provinceId } }
+            );
+        });
+
+        it('writes nothing, however many times it is listed', async () => {
+            const before = await EsaviCase.findOne({ where: { caseCode: `${ tag }A` } });
+            const beforeState = {
+                updatedAt: before!.getDataValue('updatedAt'),
+                appDetails: JSON.stringify(before!.getDataValue('appDetails')),
+                sysDetails: JSON.stringify(before!.getDataValue('sysDetails'))
+            };
+
+            for( let attempt = 0; attempt < 100; attempt++ ) {
+                await listCases(`?geoLocationId=${ provinceId }&reportDate=2026-03-01&limit=1`);
+            }
+
+            const after = await EsaviCase.findOne({ where: { caseCode: `${ tag }A` } });
+            expect(after!.getDataValue('updatedAt')).toEqual(beforeState.updatedAt);
+            expect(JSON.stringify(after!.getDataValue('appDetails'))).toBe(beforeState.appDetails);
+            expect(JSON.stringify(after!.getDataValue('sysDetails'))).toBe(beforeState.sysDetails);
+        }, 30000);
 
     });
 

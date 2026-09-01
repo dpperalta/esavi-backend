@@ -30,10 +30,12 @@ const getGeoLocations = async(req: Request, res: Response, next: NextFunction): 
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     const geoLevelId = req.query.geoLevelId ? (req.query.geoLevelId as string).trim() : undefined;
     const parentId = req.query.parentId ? (req.query.parentId as string).trim() : undefined;
+    const name = req.query.name ? (req.query.name as string).trim() : undefined;
+    const code = req.query.code ? (req.query.code as string).trim() : undefined;
     try {
-        const data = canViewInactive(req.user) 
-            ? await getAllGeoLocationsService( geoLevelId, parentId, limit,  offset ) 
-            : await getActiveGeoLocationsService( geoLevelId, parentId, limit,  offset );
+        const data = canViewInactive(req.user)
+            ? await getAllGeoLocationsService( geoLevelId, parentId, name, code, limit,  offset )
+            : await getActiveGeoLocationsService( geoLevelId, parentId, name, code, limit,  offset );
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLocation.getSuccessPlural', req.lang),
