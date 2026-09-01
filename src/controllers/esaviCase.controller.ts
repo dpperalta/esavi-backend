@@ -97,7 +97,7 @@ const getAllEsaviCases = async (req: Request, res: Response, next: NextFunction)
 const getEsaviCaseById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getEsaviCaseByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getEsaviCaseByIdService(id, req.lang, canViewInactive(req.user as AuthUser), req.user as AuthUser);
         return res.status(200).json({
             ok: true,
             message: getMessage('esaviCase.getSuccess', req.lang),

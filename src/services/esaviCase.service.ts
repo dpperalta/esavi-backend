@@ -43,10 +43,13 @@ const PATIENT_INCLUDE = {
     attributes: ['patientId', 'names', 'lastNames', 'documentNumber', 'healthSystemCode']
 };
 
+// geoLocationId travels here only for the ownership guard of SPEC F49 — it is never part of the
+// response. toEsaviCaseResponse strips it from the nested healthFacility before the data leaves
+// the service, the same way it strips the top-level sysDetails, patientId and healthFacilityId
 const HEALTH_FACILITY_INCLUDE = {
     model: HealthFacility,
     as: 'healthFacility',
-    attributes: ['healthFacilityId', 'localCode', 'name']
+    attributes: ['healthFacilityId', 'localCode', 'name', 'geoLocationId']
 };
 
 // The facility include of the two listings carries its geoLocation, and it carries it always,
@@ -103,6 +106,8 @@ const toEsaviCaseResponse = (esaviCase: EsaviCase) => {
     delete plain.sysDetails;
     delete plain.patientId;
     delete plain.healthFacilityId;
+    const healthFacility = plain.healthFacility as Record<string, unknown> | null | undefined;
+    if( healthFacility ) delete healthFacility.geoLocationId;
     return decryptPatient(plain);
 }
 
@@ -384,13 +389,28 @@ const getAllEsaviCasesService = async (
     return { count, rows: rows.map(toEsaviCaseListRow) };
 }
 
+// The ownership guard of SPEC F49, shared by 003 and 004: a case whose facility geoLocation is
+// outside the user's scope responds exactly like a case that does not exist — same status, same
+// message, same wrapper. The AppError code is the only trace, and it only reaches the log, never
+// the response. A facility without geoLocationId belongs to no territory, so no non-admin user
+// reaches it either — §3.1
+const assertCaseIsInScope = async (esaviCase: EsaviCase, authUser: AuthUser | undefined, op: string, lang: string): Promise<void> => {
+    const userScope = await resolveUserGeoScopeIds(authUser);
+    if( userScope === null ) return;
+    const facilityGeoLocationId = esaviCase.healthFacility?.geoLocationId ?? null;
+    if( !facilityGeoLocationId || !userScope.includes(facilityGeoLocationId) ) {
+        throw new AppError(getMessage('esaviCase.notFound', lang), 404, `CASE_${ op }_OUT_OF_SCOPE`);
+    }
+}
+
 // Get ESAVI Case By ID Service
 // Code: ESAVI-CASE-003
-const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive: boolean = false, authUser?: AuthUser) => {
     const esaviCase = await findEsaviCaseWithRelations(id, canViewInactive);
     if( !esaviCase ) {
         throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_003_NOT_FOUND');
     }
+    await assertCaseIsInScope(esaviCase, authUser, '003', lang);
     return toEsaviCaseResponse(esaviCase);
 }
 
