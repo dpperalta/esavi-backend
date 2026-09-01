@@ -7,11 +7,7 @@ import { AppDetails, AuthUser, BulkAssignGeoLocationsInput, CreateAppUserGeoLoca
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
-
-// Upper bound for the descendant walk of ESAVI-USERGEO-008. Together with UNION it keeps the
-// recursive CTE terminating even if the stored geoLocation tree already contains a cycle,
-// which no SQL constraint can detect
-const MAX_COVERAGE_DEPTH = 50;
+import { MAX_GEO_SUBTREE_DEPTH } from './common/geoScope.service';
 
 // Shape of one row of the recursive CTE. Raw SQL is outside Sequelize's typing,
 // so the contract is declared here rather than inferred
@@ -562,7 +558,7 @@ const resolveUserCoverageService = async (userId: string, lang: string) => {
         ORDER BY "level" ASC, "name" ASC`,
         {
             // Parameterized, never string interpolation
-            replacements: { userId, maxDepth: MAX_COVERAGE_DEPTH },
+            replacements: { userId, maxDepth: MAX_GEO_SUBTREE_DEPTH },
             type: QueryTypes.SELECT
         }
     );

@@ -1,4 +1,4 @@
-import { Op, QueryTypes, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
+import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { Classification, EsaviCase, FinalClassification, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
@@ -8,6 +8,7 @@ import { setEntityActiveStatusService } from './common/entityActivation.service'
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
 import { cascadeSealSatellite } from './common/satelliteCascade.service';
 import { createCaseWorkflowService } from './caseWorkflow.service';
+import { resolveGeoSubtreeIds } from './common/geoScope.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -16,19 +17,6 @@ const CASE_CODE_MAX_ATTEMPTS = 3;
 
 // The encrypted columns of the included patient. healthSystemCode is stored in clear text
 const PATIENT_PII_FIELDS = ['names', 'lastNames', 'documentNumber'];
-
-// Upper bound for the descendant walk of the geographic filter. Same value as MAX_COVERAGE_DEPTH
-// in appUserGeoLocation.service.ts, and the same reason: together with UNION it keeps the
-// recursive CTE terminating even if the stored geoLocation tree already contains a cycle, which
-// no SQL constraint can detect — CK_geoLocation_notSelfParent only rules out A being its own
-// parent, not A -> B -> A. If one of the two guards changes there, it changes here too
-const MAX_GEO_SUBTREE_DEPTH = 50;
-
-// Shape of one row of the recursive CTE. Raw SQL is outside Sequelize's typing,
-// so the contract is declared here rather than inferred
-interface GeoSubtreeRow {
-    geoLocationId: string;
-}
 
 // A report date is a calendar date: only the YYYY-MM-DD part is kept, so a full ISO timestamp
 // coming from the client cannot shift the day — and that day travels inside the case code
@@ -321,36 +309,6 @@ const buildListWhere = (filters: EsaviCaseListFilters = {}): WhereOptions => {
     return where as WhereOptions;
 }
 
-// Expands a geoLocation into itself plus every active descendant, at any depth. healthFacility
-// points at the finest unit of the hierarchy, so strict equality against a province would return
-// zero rows on a perfectly populated database: the filter is only useful hierarchical.
-// Read-only, and deliberately without a transaction: it is a SELECT
-const resolveGeoSubtreeIds = async (geoLocationId: string): Promise<string[]> => {
-    // Two guards against a cycle in the stored data: UNION instead of UNION ALL, and an
-    // explicit depth cap. With a corrupt tree the query still terminates
-    const subtree = await sequelize.query<GeoSubtreeRow>(
-        `WITH RECURSIVE subtree AS (
-            SELECT g."geoLocationId", 1 AS depth
-            FROM "geoLocation" g
-            WHERE g."geoLocationId" = :geoLocationId
-              AND g."isActive" = true
-            UNION
-            SELECT c."geoLocationId", s.depth + 1
-            FROM subtree s
-            JOIN "geoLocation" c ON c."parentGeoLocationId" = s."geoLocationId"
-            WHERE c."isActive" = true
-              AND s.depth < :maxDepth
-        )
-        SELECT "geoLocationId" FROM subtree`,
-        {
-            // Parameterized, never string interpolation
-            replacements: { geoLocationId, maxDepth: MAX_GEO_SUBTREE_DEPTH },
-            type: QueryTypes.SELECT
-        }
-    );
-    return subtree.map(( row ) => row.geoLocationId );
-}
-
 // The facility include of the two listings. Without the geographic filter it stays the LEFT JOIN
 // it has always been; with it, the join becomes required so the count is computed over it. An
 // unknown or inactive root yields an empty list, and Op.in over an empty list matches no row —
@@ -366,7 +324,7 @@ const buildFacilityInclude = (subtreeIds: string[] | null) => (
 
 // Resolved once per request, and only when the filter travels
 const resolveListFacilityInclude = async (filters: EsaviCaseListFilters) => (
-    buildFacilityInclude(filters.geoLocationId ? await resolveGeoSubtreeIds(filters.geoLocationId) : null)
+    buildFacilityInclude(filters.geoLocationId ? await resolveGeoSubtreeIds([filters.geoLocationId]) : null)
 );
 
 // Get Active ESAVI Cases Service

@@ -26,7 +26,7 @@ const resolveGeoSubtreeIds = async (rootIds: string[]): Promise<string[]> => {
         `WITH RECURSIVE subtree AS (
             SELECT g."geoLocationId", 1 AS depth
             FROM "geoLocation" g
-            WHERE g."geoLocationId" = ANY(:rootIds)
+            WHERE g."geoLocationId" IN (:rootIds)
               AND g."isActive" = true
             UNION
             SELECT c."geoLocationId", s.depth + 1
