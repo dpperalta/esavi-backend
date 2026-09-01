@@ -88,14 +88,44 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser: 
     return createdLocation;
 }
 
+const escapeLike = (value: string) => value.replace(/[%_]/g, '\\$&');
+
+const buildTextWhereConditions = (name?: string, code?: string) => {
+    const textConditions: any[] = [];
+    if( name ) {
+        textConditions.push({ name: { [Op.iLike]: `%${ escapeLike(name.trim()) }%` } });
+    }
+    if( code ) {
+        const codePattern = `%${ escapeLike(code.trim()) }%`;
+        textConditions.push({
+            [Op.or]: [
+                { externalCode: { [Op.iLike]: codePattern } },
+                { isoCode: { [Op.iLike]: codePattern } }
+            ]
+        });
+    }
+    return textConditions;
+}
+
 // ESAVI-GEOLOC-002A - Get active Geographic Location service
-const getActiveGeoLocationsService = async (geoLevelTypeId?: string, parentGeoLocationId?: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveGeoLocationsService = async (
+    geoLevelTypeId?: string,
+    parentGeoLocationId?: string,
+    name?: string,
+    code?: string,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
     const whereClause: any = { isActive: true };
     if( geoLevelTypeId ) {
         whereClause.geoLevelTypeId = geoLevelTypeId;
     }
     if( parentGeoLocationId ) {
         whereClause.parentGeoLocationId = parentGeoLocationId;
+    }
+    const textConditions = buildTextWhereConditions(name, code);
+    if( textConditions.length > 0 ) {
+        whereClause[Op.or] = textConditions;
     }
     const geoLocations = await GeoLocation.findAndCountAll({
         where: whereClause,
@@ -107,13 +137,24 @@ const getActiveGeoLocationsService = async (geoLevelTypeId?: string, parentGeoLo
 }
 
 // ESAVI-GEOLOC-002B - Get all Geographic Location service (including inactive) - For SuperAdmin
-const getAllGeoLocationsService = async (geoLevelTypeId?: string, parentGeoLocationId?: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllGeoLocationsService = async (
+    geoLevelTypeId?: string,
+    parentGeoLocationId?: string,
+    name?: string,
+    code?: string,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
     const whereClause: any = {};
     if( geoLevelTypeId ) {
         whereClause.geoLevelTypeId = geoLevelTypeId;
     }
     if( parentGeoLocationId ) {
         whereClause.parentGeoLocationId = parentGeoLocationId;
+    }
+    const textConditions = buildTextWhereConditions(name, code);
+    if( textConditions.length > 0 ) {
+        whereClause[Op.or] = textConditions;
     }
     const geoLocations = await GeoLocation.findAndCountAll({
         where: whereClause,
