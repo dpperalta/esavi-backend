@@ -1,8 +1,8 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, HealthFacility } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, toTitleCase } from '../helpers';
-import { AppDetails, AuthUser, CreateHealthFacilityInput } from '../types';
+import { AppError, buildDifferentialUpdate, escapeLike, getMessage, toConstantCase, toTitleCase } from '../helpers';
+import { AppDetails, AuthUser, CreateHealthFacilityInput, HealthFacilitySearchInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -333,11 +333,82 @@ const setHealthFacilityActivationService = async (id: string, authUser: AuthUser
     }
 }
 
+// ESAVI-HFAC-006 - Search Health Facilities by Name or Code Service
+const searchHealthFacilitiesService = async (
+    filters: HealthFacilitySearchInput,
+    lang: string,
+    includeInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const name = filters.name?.trim();
+    const code = filters.code?.trim();
+
+    // The guard lives here as well as in the validator: the validator declares both criteria
+    // optional() one by one and cannot express 'at least one of the two'. A /search with no
+    // criterion would dump the table, and geoLocationId alone narrows without searching - the
+    // 002A already lists a whole geolocation
+    if (!name && !code) {
+        throw new AppError(getMessage('healthFacility.searchCriteriaRequired', lang), 400, 'HFAC_006_SEARCH_CRITERIA_REQUIRED');
+    }
+
+    const whereClause: any = {};
+
+    if (!includeInactive) {
+        whereClause.isActive = true;
+    }
+    if (filters.geoLocationId) {
+        whereClause.geoLocationId = filters.geoLocationId;
+    }
+
+    // The three name columns enter flat, not nested in their own Op.or: the operator joining
+    // name with code is Op.or too, so nesting would only add a useless parenthesis to the SQL
+    const textConditions: any[] = [];
+    if (name) {
+        const namePattern = `%${ escapeLike(name) }%`;
+        textConditions.push(
+            { name: { [Op.iLike]: namePattern } },
+            { officialName: { [Op.iLike]: namePattern } },
+            { shortName: { [Op.iLike]: namePattern } }
+        );
+    }
+    if (code) {
+        textConditions.push({ localCode: { [Op.iLike]: `%${ escapeLike(code) }%` } });
+    }
+    // No length guard is needed: the criterion guard above already granted at least one element
+    whereClause[Op.or] = textConditions;
+
+    const healthFacilities = await HealthFacility.findAndCountAll({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        include: [
+            {
+                model: GeoLocation,
+                as: 'geoLocation',
+                attributes: ['geoLocationId', 'name']
+            },
+            {
+                // No required: true - facilityTypeItemId is nullable, and a facility with no type
+                // must still show up in the result
+                model: CatalogItem,
+                as: 'facilityType',
+                attributes: ['catalogItemId', 'name']
+            }
+        ],
+        order: [['name', 'ASC']],
+        limit,
+        offset
+    });
+    return healthFacilities;
+}
+
 export {
     createHealthFacilityService,
     getHealthFacilitiesByGeoLocationService,
     getAllHealthFacilitiesByGeoLocationService,
     getHealthFacilityByIdService,
     updateHealthFacilityService,
-    setHealthFacilityActivationService
+    setHealthFacilityActivationService,
+    searchHealthFacilitiesService
 }
