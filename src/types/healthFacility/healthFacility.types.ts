@@ -13,3 +13,12 @@ export interface CreateHealthFacilityInput {
     email?: string | null;
     isActive?: boolean;
 }
+
+// ESAVI-HFAC-006 - Query criteria of the name-or-code search. All three are optional here:
+// the validator declares them one by one and the service holds the 'at least one of name or code'
+// guard, which optional() cannot express
+export interface HealthFacilitySearchInput {
+    name?: string;
+    code?: string;
+    geoLocationId?: string;
+}
