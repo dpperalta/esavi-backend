@@ -1,7 +1,13 @@
 ﻿import { NextFunction, Request, Response } from 'express';
 import { createGeoLevelTypeService, getActiveGeoLevelTypesService, getAllGeoLevelTypesService, getGeoLevelTypeByIdService, setGeoLevelTypeActivationService, updateGeoLevelTypeService } from '../services/geoLevelType.service'
 import { esaviLog, getMessage, canViewInactive, AppError } from '../helpers';
-import { CreateGeoLevelTypeInput } from '../types/geography/geoLevelType.types';
+import { CreateGeoLevelTypeInput, GeoLevelTypeListFilters } from '../types/geography/geoLevelType.types';
+
+// Unwraps the two query filters, identical in both listings
+const readListFilters = (query: Request['query']): GeoLevelTypeListFilters => ({
+    name: query.name ? (query.name as string).trim() : undefined,
+    code: query.code ? (query.code as string).trim() : undefined
+});
 
 // Create Geographic Level Type Controller
 // Code: ESAVI-GEOTYPE-001
@@ -29,7 +35,8 @@ const getGeoLevelTypes = async(req: Request, res: Response, next: NextFunction):
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = canViewInactive(req.user) ? await getAllGeoLevelTypesService( limit,  offset ) : await getActiveGeoLevelTypesService( limit,  offset );
+        const filters = readListFilters(req.query);
+        const data = canViewInactive(req.user) ? await getAllGeoLevelTypesService( filters, limit,  offset ) : await getActiveGeoLevelTypesService( filters, limit,  offset );
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.getSuccessPlural', req.lang),
