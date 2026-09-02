@@ -47,7 +47,7 @@ y hoy ninguna de las dos es buscable por texto parcial.
 - `geoLevelType` no se toca. No tiene filtro de texto en este spec, aunque sí tiene una columna `code` real;
   si hace falta, es un spec propio y minúsculo — repetir este mismo patrón sobre una sola columna.
 - `healthFacility` no se toca. `references/specs/09-healthfacility-crud.md` ya lo dejó fuera de su alcance
-  con la misma razón (`Op.iLike` inexistente); sigue sin resolverse aquí.
+  con la misma razón (`Op.iLike` inexistente); sigue sin resolverse aquí — la resuelve el [SPEC F51](51-healthfacility-name-code-search.md).
 - Búsqueda en `officialName` o `shortName` de `geoLocation`. Se decidió que `name` es la columna que importa
   para el buscador; las otras dos quedan fuera hasta que exista un caso de uso que las pida.
 - Búsqueda tolerante a acentos o a erratas. `Op.iLike` es insensible a mayúsculas pero no a tildes;
@@ -252,7 +252,7 @@ el rol mínimo y el código de operación (`ESAVI-GEOLOC-002`) ya están registr
 - **No:** `geoLevelType`. Tiene una columna `code` real y sería un cambio de una sola columna, pero el usuario
   acotó este spec a `geoLocation` explícitamente. Si hace falta, es un spec propio y pequeño.
 - **No:** `healthFacility`. Ya estaba fuera del alcance de `references/specs/09-healthfacility-crud.md` por la
-  misma razón (`Op.iLike` inexistente) y sigue sin resolverse aquí.
+  misma razón (`Op.iLike` inexistente) y sigue sin resolverse aquí — la resuelve el [SPEC F51](51-healthfacility-name-code-search.md).
 - **No:** normalizar acentos (`unaccent` o columna generada). Es un cambio de esquema y de índice que no está
   justificado por lo que se pidió; queda anotado como limitación conocida en §7.
 - **No:** ordenar por relevancia de la coincidencia. El `order` actual (`sortOrder ASC`) se conserva; ordenar
@@ -276,7 +276,7 @@ el rol mínimo y el código de operación (`ESAVI-GEOLOC-002`) ya están registr
 ## Lo que **no** está en este spec
 
 - Búsqueda por texto en `geoLevelType` (tiene columna `code` real y sería un spec propio y pequeño).
-- Búsqueda por texto en `healthFacility` (ya fuera de alcance en SPEC 09, sigue sin resolverse aquí).
+- Búsqueda por texto en `healthFacility` (ya fuera de alcance en SPEC 09, sigue sin resolverse aquí) — la resuelve el [SPEC F51](51-healthfacility-name-code-search.md).
 - Búsqueda en `officialName` o `shortName` de `geoLocation`.
 - Normalización de acentos o tolerancia a erratas (`unaccent`, `pg_trgm`, columna generada).
 - Ordenación por relevancia de la coincidencia.
