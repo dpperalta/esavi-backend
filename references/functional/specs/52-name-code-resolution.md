@@ -1,6 +1,6 @@
 # SPEC F52 — Resolución por nombre y código
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F50 (patrón `Op.iLike`, implementado)**
 > **Fecha:** 2026-09-01
 > **Objetivo:** Dar a ocho entidades la capacidad de resolverse por nombre o por código, unificar la forma del parámetro de búsqueda y corregir la falta de escape de `%` y `_` en los cuatro servicios que ya usan `Op.iLike`.
