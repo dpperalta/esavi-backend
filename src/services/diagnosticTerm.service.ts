@@ -1,7 +1,7 @@
 import { CreationAttributes, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage, parseMeddraAscFile, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseMeddraAscFile, toConstantCase } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -31,8 +31,9 @@ const MAX_REPORTED_IMPORT_ERRORS = 20;
 // termGroup are exact equality — partial search over them is out of this spec's scope
 const buildDiagnosticTermWhere = (filters: DiagnosticTermListFilters): WhereOptions => {
     const where: Record<string, unknown> = {};
-    if (filters.search) {
-        where.name = { [Op.iLike]: `%${filters.search.trim()}%` };
+    const [nameCondition] = buildTextSearchConditions(filters.search, ['name']);
+    if (nameCondition) {
+        Object.assign(where, nameCondition);
     }
     if (filters.source) {
         where.source = filters.source;
