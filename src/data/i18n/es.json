@@ -196,6 +196,7 @@
         "getFailedPlural": "Error al obtener los establecimientos de salud. Por favor, inténtelo de nuevo más tarde.",
         "getSuccess": "Establecimiento de salud obtenido exitosamente",
         "getSuccessPlural": "Establecimientos de salud obtenidos exitosamente",
+        "searchCriteriaRequired": "Debe indicar un nombre o un código para buscar",
         "updatedSuccess": "Establecimiento de salud actualizado exitosamente",
         "updatedFailed": "Error al actualizar el establecimiento de salud. Por favor, inténtelo de nuevo más tarde.",
         "alreadyInactive": "El establecimiento de salud con ID {{id}} ya está inactivo",

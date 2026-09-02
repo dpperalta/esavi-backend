@@ -196,6 +196,7 @@
         "getFailedPlural": "Failed to fetch the health facilities. Please try again later.",
         "getSuccess": "Health facility fetched successfully",
         "getSuccessPlural": "Health facilities fetched successfully",
+        "searchCriteriaRequired": "A name or a code is required to search",
         "updatedSuccess": "Health facility updated successfully",
         "updatedFailed": "Failed to update the health facility. Please try again later.",
         "alreadyInactive": "The health facility with ID {{id}} is already inactive",
