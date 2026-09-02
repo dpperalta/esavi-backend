@@ -16,6 +16,8 @@ import {
 // 'true' afterwards: a plain cast would turn ?isPreferred=false into a truthy value
 const readListFilters = (query: Request['query']): VaccineWhodrugListFilters => ({
     search: query.search ? (query.search as string).trim() : undefined,
+    name: query.name ? (query.name as string).trim() : undefined,
+    code: query.code ? (query.code as string).trim() : undefined,
     language: query.language ? (query.language as string).trim() : undefined,
     iso3Code: query.iso3Code ? (query.iso3Code as string).trim() : undefined,
     isPreferred: query.isPreferred !== undefined ? query.isPreferred === 'true' : undefined,
