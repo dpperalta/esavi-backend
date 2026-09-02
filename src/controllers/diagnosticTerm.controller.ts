@@ -16,6 +16,8 @@ import {
 // public listing, which never passes it on
 const readListFilters = (query: Request['query']): DiagnosticTermListFilters => ({
     search: query.search ? (query.search as string).trim() : undefined,
+    name: query.name ? (query.name as string).trim() : undefined,
+    code: query.code ? (query.code as string).trim() : undefined,
     source: query.source ? (query.source as DiagnosticTermListFilters['source']) : undefined,
     termGroup: query.termGroup ? (query.termGroup as string).trim() : undefined
 });
