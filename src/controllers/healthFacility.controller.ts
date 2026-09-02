@@ -7,7 +7,8 @@ import {
     getHealthFacilitiesByGeoLocationService,
     getHealthFacilityByIdService,
     updateHealthFacilityService,
-    setHealthFacilityActivationService
+    setHealthFacilityActivationService,
+    searchHealthFacilitiesService
 } from '../services/healthFacility.service';
 
 // Create Health Facility Controller
@@ -158,6 +159,37 @@ const activateHealthFacility = async (req: Request, res: Response, next: NextFun
     }
 }
 
+// Search Health Facilities By Name Or Code Controller
+// Code: ESAVI-HFAC-006
+const searchHealthFacilities = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const name = req.query.name ? (req.query.name as string).trim() : undefined;
+    const code = req.query.code ? (req.query.code as string).trim() : undefined;
+    const geoLocationId = req.query.geoLocationId ? (req.query.geoLocationId as string).trim() : undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await searchHealthFacilitiesService(
+            { name, code, geoLocationId },
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('healthFacility.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-HFAC-006: Error searching Health Facilities by name or code: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('healthFacility.getFailedPlural', req.lang), 500, 'HFAC_006_SEARCH_FAILED', error));
+    }
+}
+
 export {
     createHealthFacility,
     getHealthFacilitiesByLocation,
@@ -165,5 +197,6 @@ export {
     getHealthFacilityById,
     updateHealthFacility,
     deleteHealthFacility,
-    activateHealthFacility
+    activateHealthFacility,
+    searchHealthFacilities
 }
