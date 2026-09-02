@@ -12,6 +12,7 @@ export * from './identifier.helper';
 export * from './meddraParser.helper';
 export * from './permissions.helper';
 export * from './rowSeal.helper';
+export * from './searchConditions.helper';
 export * from './severity.helper';
 export * from './stringHandling.helper';
 export * from './systemConfigValue.helper';
