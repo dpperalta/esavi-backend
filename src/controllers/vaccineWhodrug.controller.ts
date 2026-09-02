@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
-import { ImportVaccineWhodrugsInput, VaccineWhodrugListFilters } from '../types';
+import { ImportVaccineWhodrugsInput, VaccineWhodrugListFilters, VaccineWhodrugTreeFilters } from '../types';
 import {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
@@ -8,7 +8,12 @@ import {
     getVaccineWhodrugByIdService,
     updateVaccineWhodrugService,
     setVaccineWhodrugActivationService,
-    importVaccineWhodrugsService
+    importVaccineWhodrugsService,
+    getWhodrugAbbreviationsService,
+    getWhodrugDrugNamesService,
+    getWhodrugMaHoldersService,
+    getWhodrugFormsService,
+    getWhodrugStrengthsService
 } from '../services/vaccineWhodrug.service';
 
 // Unwraps the five query filters, identical in both listings. The two booleans arrive as the
@@ -213,6 +218,121 @@ const importVaccineWhodrugs = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// SPEC F54 — the five navigation controllers, ESAVI-WHODRUG-006A..006E.
+// Unwraps the seven query parameters of the tree. Every ancestor is read raw, without trimming or
+// normalizing: it carries a value this same API returned and it has to match it character by
+// character — including the '__NULL__' sentinel, which is how the option with no value keeps its
+// rows reachable. Which of them is required is the validator's business, not this function's
+const readTreeFilters = (query: Request['query']): VaccineWhodrugTreeFilters => ({
+    country: query.country ? (query.country as string).trim() : undefined,
+    language: query.language ? (query.language as string).trim() : undefined,
+    search: query.search ? (query.search as string).trim() : undefined,
+    abbreviation: query.abbreviation !== undefined ? query.abbreviation as string : undefined,
+    drugName: query.drugName !== undefined ? query.drugName as string : undefined,
+    maHolders: query.maHolders !== undefined ? query.maHolders as string : undefined,
+    formTranslations: query.formTranslations !== undefined ? query.formTranslations as string : undefined
+});
+
+// Get WHODrug Abbreviations Controller
+// Code: ESAVI-WHODRUG-006A
+const getWhodrugAbbreviations = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await getWhodrugAbbreviationsService(readTreeFilters(req.query), req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-006A: Error getting Vaccine WHODrug abbreviations: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.optionsFailed', req.lang), 500, 'WHODRUG_006A_FETCH_FAILED', error));
+    }
+}
+
+// Get WHODrug Drug Names Controller
+// Code: ESAVI-WHODRUG-006B
+const getWhodrugDrugNames = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await getWhodrugDrugNamesService(readTreeFilters(req.query), req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-006B: Error getting Vaccine WHODrug drug names: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.optionsFailed', req.lang), 500, 'WHODRUG_006B_FETCH_FAILED', error));
+    }
+}
+
+// Get WHODrug MA Holders Controller
+// Code: ESAVI-WHODRUG-006C
+const getWhodrugMaHolders = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await getWhodrugMaHoldersService(readTreeFilters(req.query), req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-006C: Error getting Vaccine WHODrug MA holders: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.optionsFailed', req.lang), 500, 'WHODRUG_006C_FETCH_FAILED', error));
+    }
+}
+
+// Get WHODrug Forms Controller
+// Code: ESAVI-WHODRUG-006D
+const getWhodrugForms = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await getWhodrugFormsService(readTreeFilters(req.query), req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-006D: Error getting Vaccine WHODrug forms: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.optionsFailed', req.lang), 500, 'WHODRUG_006D_FETCH_FAILED', error));
+    }
+}
+
+// Get WHODrug Strengths Controller
+// Code: ESAVI-WHODRUG-006E
+const getWhodrugStrengths = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await getWhodrugStrengthsService(readTreeFilters(req.query), req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-WHODRUG-006E: Error getting Vaccine WHODrug strengths: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('vaccineWhodrug.optionsFailed', req.lang), 500, 'WHODRUG_006E_FETCH_FAILED', error));
+    }
+}
+
 export {
     createVaccineWhodrug,
     getVaccineWhodrugs,
@@ -221,5 +341,10 @@ export {
     updateVaccineWhodrug,
     deleteVaccineWhodrug,
     activateVaccineWhodrug,
-    importVaccineWhodrugs
+    importVaccineWhodrugs,
+    getWhodrugAbbreviations,
+    getWhodrugDrugNames,
+    getWhodrugMaHolders,
+    getWhodrugForms,
+    getWhodrugStrengths
 };

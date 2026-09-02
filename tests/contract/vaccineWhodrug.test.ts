@@ -928,4 +928,246 @@ describe('vaccineWhodrug contract', () => {
             expect(response.body.data.unchanged).toBe(3);
         });
     });
+
+    /**
+     * SPEC F54 — the five levels of the tree, ESAVI-WHODRUG-006A..006E.
+     *
+     * What this block is really guarding is `matchCount`: the count that says whether the vaccine
+     * is already determined. It is per option, not per level, and it is what lets the frontend stop
+     * unfolding lists. The rest — the null option and its sentinel, the country subset, the
+     * inactive rows — are the ways that count can silently go wrong.
+     */
+    describe('tree navigation', () => {
+
+        // One private branch of the tree, isolated from every other row of the database by an
+        // abbreviation nobody else uses. Four generic preferred rows plus one of a country:
+        //
+        //   SOLO   → ALPHA → INYECTABLE → 1 MG      unique from the drugName down
+        //   MULTI  → BETA  → INYECTABLE → 2 MG
+        //   MULTI  → BETA  → INYECTABLE → 3 MG
+        //   MULTI  → null  → ORAL       → 4 MG      the option with no value
+        //   PAIS   → GAMMA → INYECTABLE → 5 MG      only inside ?country=ECU
+        const abbreviation = `TREE${ suffix }`;
+        const soloName = `SOLO ${ suffix }`;
+        const multiName = `MULTI ${ suffix }`;
+        const countryName = `PAIS ${ suffix }`;
+        let soloId: string;
+        let nullBranchId: string;
+
+        const navigate = ( level: string, query: Record<string, string> ) =>
+            request(app).get(`${ base }/${ level }`).set(authHeader('USER')).query({ language: 'es', ...query });
+
+        const createBranchRow = ( payload: Record<string, unknown> ) => createVaccine({
+            drugCode: `TREE-${ suffix }`,
+            externalId: anExternalId(),
+            abbreviation,
+            // No iso3Code: the row lands in the generic branch of the subset, which is the one that
+            // answers when the request carries no ?country=
+            language: 'es',
+            isPreferred: true,
+            ...payload
+        });
+
+        beforeAll(async () => {
+            const solo = await createBranchRow({ drugName: soloName, maHolders: 'ALPHA', formTranslations: 'INYECTABLE', strength: '1 MG' });
+            soloId = solo.body.data.vaccineWhodrugId;
+            await createBranchRow({ drugName: multiName, maHolders: 'BETA', formTranslations: 'INYECTABLE', strength: '2 MG' });
+            await createBranchRow({ drugName: multiName, maHolders: 'BETA', formTranslations: 'INYECTABLE', strength: '3 MG' });
+            const nullBranch = await createBranchRow({ drugName: multiName, maHolders: null, formTranslations: 'ORAL', strength: '4 MG' });
+            nullBranchId = nullBranch.body.data.vaccineWhodrugId;
+            await createBranchRow({ drugName: countryName, maHolders: 'GAMMA', formTranslations: 'INYECTABLE', strength: '5 MG', iso3Code: 'ECU' });
+        });
+
+        // ESAVI-WHODRUG-006A
+        it('the abbreviations level answers with the envelope and finds the branch', async () => {
+            const response = await navigate('abbreviations', { search: abbreviation });
+
+            expect(response.status).toBe(200);
+            expect(response.body.ok).toBe(true);
+            expect(Object.keys(response.body).sort()).toEqual(['data', 'message', 'ok']);
+            expect(response.body.data.options).toEqual([
+                { value: abbreviation, matchCount: 4, vaccineWhodrugId: null }
+            ]);
+            expect(response.body.data.count).toBe(1);
+            expect(response.body.data.total).toBe(4);
+        });
+
+        // ESAVI-WHODRUG-006B — the case the whole spec exists for: one of the two names is already
+        // a single vaccine and comes with its id resolved, the other still has to be unfolded
+        it('the drug names level resolves the id of the option that is already unique', async () => {
+            const response = await navigate('drug-names', { abbreviation });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(2);
+            expect(response.body.data.total).toBe(4);
+            expect(response.body.data.options).toEqual([
+                { value: multiName, matchCount: 3, vaccineWhodrugId: null },
+                { value: soloName, matchCount: 1, vaccineWhodrugId: soloId }
+            ]);
+        });
+
+        // Postgres hands COUNT over as a bigint, which the driver turns into a string. Shipped as
+        // "matchCount": "1" the client's === 1 fails and no list ever closes
+        it('matchCount travels as a number, not as a string', async () => {
+            const response = await navigate('drug-names', { abbreviation });
+
+            for( const option of response.body.data.options ) {
+                expect(typeof option.matchCount).toBe('number');
+            }
+        });
+
+        it('the id of a unique option answers the getById', async () => {
+            const response = await navigate('drug-names', { abbreviation });
+            const unique = response.body.data.options.find(( option: { matchCount: number } ) => option.matchCount === 1);
+
+            const detail = await request(app).get(`${ base }/${ unique.vaccineWhodrugId }`).set(authHeader('USER'));
+
+            expect(detail.status).toBe(200);
+            expect(detail.body.data.drugName).toBe(soloName);
+        });
+
+        // ESAVI-WHODRUG-006C — four of the five columns of the tree are nullable, and without an
+        // option of its own the row behind the null would be unreachable by navigation
+        it('the ma holders level lists the rows with no value as one option, last', async () => {
+            const response = await navigate('ma-holders', { abbreviation, drugName: multiName });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(2);
+            expect(response.body.data.total).toBe(3);
+            expect(response.body.data.options).toEqual([
+                { value: 'BETA', matchCount: 2, vaccineWhodrugId: null },
+                { value: null, matchCount: 1, vaccineWhodrugId: nullBranchId }
+            ]);
+        });
+
+        // ESAVI-WHODRUG-006D
+        it('the __NULL__ sentinel takes the navigation down the branch with no value', async () => {
+            const response = await navigate('forms', { drugName: multiName, maHolders: '__NULL__' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.options).toEqual([
+                { value: 'ORAL', matchCount: 1, vaccineWhodrugId: nullBranchId }
+            ]);
+        });
+
+        // ESAVI-WHODRUG-006E — the leaf: every option here is a single vaccine
+        it('the strengths level closes the walk with one row per option', async () => {
+            const response = await navigate('strengths', { abbreviation, drugName: multiName, maHolders: 'BETA', formTranslations: 'INYECTABLE' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(2);
+            expect(response.body.data.total).toBe(2);
+            expect(response.body.data.options.map(( option: { value: string } ) => option.value)).toEqual(['2 MG', '3 MG']);
+            for( const option of response.body.data.options ) {
+                expect(option.matchCount).toBe(1);
+                expect(option.vaccineWhodrugId).not.toBeNull();
+            }
+        });
+
+        it('count is the number of options and total the sum of their matchCount', async () => {
+            const response = await navigate('ma-holders', { abbreviation, drugName: multiName });
+
+            const { count, total, options } = response.body.data;
+            expect(count).toBe(options.length);
+            expect(total).toBe(options.reduce(( sum: number, option: { matchCount: number } ) => sum + option.matchCount, 0));
+        });
+
+        it('every level requires its immediate parent and answers 400 without it', async () => {
+            const levels = [
+                ['drug-names', 'Abbreviation is required'],
+                ['ma-holders', 'Drug Name is required'],
+                ['forms', 'MA Holders is required'],
+                ['strengths', 'Form Translations is required']
+            ];
+
+            for( const [level, parentMessage] of levels ) {
+                const response = await navigate(level, {});
+
+                expect(response.status).toBe(400);
+                expect(response.body.ok).toBe(false);
+                expect(JSON.stringify(response.body.errors)).toContain(parentMessage);
+            }
+        });
+
+        it('the immediate parent alone is enough, with no higher ancestor', async () => {
+            const response = await navigate('strengths', { formTranslations: 'ORAL', drugName: multiName });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.options).toEqual([
+                { value: '4 MG', matchCount: 1, vaccineWhodrugId: nullBranchId }
+            ]);
+        });
+
+        // The row of a country stays out of the generic subset and comes back in with ?country=,
+        // without the generic rows ever leaving
+        it('country adds its rows to the generic subset instead of replacing it', async () => {
+            const generic = await navigate('drug-names', { abbreviation });
+            const withCountry = await navigate('drug-names', { abbreviation, country: 'ECU' });
+
+            expect(generic.body.data.options.map(( option: { value: string } ) => option.value)).not.toContain(countryName);
+            expect(withCountry.body.data.count).toBe(3);
+            expect(withCountry.body.data.total).toBe(5);
+            expect(withCountry.body.data.options.map(( option: { value: string } ) => option.value)).toEqual([multiName, countryName, soloName]);
+        });
+
+        it('a country with no rows of its own still answers the generic subset', async () => {
+            const response = await navigate('drug-names', { abbreviation, country: 'ZZZ' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(2);
+            expect(response.body.data.total).toBe(4);
+        });
+
+        // The search filters the same column that is grouped, so it discards whole groups and never
+        // rows inside one: matchCount keeps meaning "rows hanging from this option"
+        it('search narrows the level without altering the matchCount of what survives', async () => {
+            const response = await navigate('drug-names', { abbreviation, search: 'MULTI' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.options).toEqual([
+                { value: multiName, matchCount: 3, vaccineWhodrugId: null }
+            ]);
+        });
+
+        it('search treats the two LIKE wildcards as literal text', async () => {
+            const response = await navigate('drug-names', { abbreviation, search: 'MULT_' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.options).toEqual([]);
+        });
+
+        it('search under two characters answers 400', async () => {
+            const response = await navigate('drug-names', { abbreviation, search: 'M' });
+
+            expect(response.status).toBe(400);
+        });
+
+        it('a filter with no match answers 200 with an empty list, not 404', async () => {
+            const response = await navigate('drug-names', { abbreviation: `NOTHING${ suffix }` });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data).toEqual({ count: 0, total: 0, options: [] });
+        });
+
+        it('the literal path is not captured by the getById of the UUID', async () => {
+            const response = await request(app).get(`${ base }/abbreviations`).set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+        });
+
+        // Last on purpose: it takes a row out of the branch and every count above it would move
+        it('an inactive row disappears from the tree, even for a SUPERADMIN', async () => {
+            await request(app).delete(`${ base }/${ soloId }`).set(authHeader('ADMIN'));
+
+            const response = await request(app).get(`${ base }/drug-names`)
+                .set(authHeader('SUPERADMIN')).query({ language: 'es', abbreviation });
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.options).toEqual([
+                { value: multiName, matchCount: 3, vaccineWhodrugId: null }
+            ]);
+            expect(response.body.data.total).toBe(3);
+        });
+
+    });
 });

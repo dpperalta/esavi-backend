@@ -55,6 +55,50 @@ export interface VaccineWhodrugListFilters {
     isGeneric?: boolean;
 }
 
+// The five levels of the WHODrug tree navigated by ESAVI-WHODRUG-006A..006E (SPEC F54), in order:
+// the position in the array is the hierarchy. Every name is the column it groups by, which is also
+// the query parameter that carries it to the level below — the fourth one groups formTranslations,
+// the translated form, and never form
+export type VaccineWhodrugTreeLevel =
+    'abbreviation' | 'drugName' | 'maHolders' | 'formTranslations' | 'strength';
+
+// The four levels that can be an ancestor of another one, which are also the four that travel as a
+// query parameter. strength is excluded because it is the leaf: nothing hangs below it
+export type VaccineWhodrugTreeAncestor = Exclude<VaccineWhodrugTreeLevel, 'strength'>;
+
+// Filters shared by the five navigation endpoints. Every ancestor is optional here because the
+// first level has no parent: it is each validator that requires the immediate parent of its own
+// level. country filters iso3Code — the only parameter of the five endpoints that is not named
+// after its column, kept from the external backend the frontend already talks to
+export interface VaccineWhodrugTreeFilters {
+    country?: string;
+    language?: string;
+    search?: string;
+    abbreviation?: string;
+    drugName?: string;
+    maHolders?: string;
+    formTranslations?: string;
+}
+
+// One option of a level. value is null for the group of rows with no value at that level — null and
+// the empty string collapse into it. vaccineWhodrugId travels resolved only when matchCount is 1,
+// which is the whole point of the navigation: the frontend stops unfolding lists as soon as the
+// vaccine is determined and goes straight to ESAVI-WHODRUG-003 with that id
+export interface VaccineWhodrugTreeOption {
+    value: string | null;
+    matchCount: number;
+    vaccineWhodrugId: string | null;
+}
+
+// count is the number of distinct options of the level and total the number of rows of the subset —
+// the sum of the matchCount. Both are derived from the options already in memory: the level costs
+// one query, not the three the external backend spends
+export interface VaccineWhodrugTreeResult {
+    count: number;
+    total: number;
+    options: VaccineWhodrugTreeOption[];
+}
+
 // Body of ESAVI-WHODRUG-007. It carries no data column: they all come from the file. There is no
 // encoding either — a .xlsx is a ZIP with XML inside and the encoding is the format's business,
 // not the client's

@@ -561,7 +561,9 @@
         "importedFailed": "Importeren van de WHODrug-vaccins mislukt. Probeer het later opnieuw.",
         "fileRequired": "Het te importeren bestand moet in het veld file worden meegestuurd",
         "fileInvalid": "Het bestand kon niet worden verwerkt. Controleer of het een .xlsx-werkmap met de verwachte koptekst is en probeer het opnieuw.",
-        "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB"
+        "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB",
+        "optionsSuccess": "WHODrug-vaccinopties succesvol opgehaald",
+        "optionsFailed": "Ophalen van de WHODrug-vaccinopties mislukt. Probeer het later opnieuw."
     },
     "diluentCatalog": {
         "createdSuccess": "Verdunningsmiddel succesvol aangemaakt",

@@ -157,3 +157,57 @@ export const importVaccineWhodrugsValidator = [
         .isLength({ max: 100 }).withMessage('Dictionary Version must be at most 100 characters long'),
     body('dryRun').optional().isBoolean().withMessage('Dry Run must be a boolean')
 ];
+
+// SPEC F54 — the five navigation validators of ESAVI-WHODRUG-006A..006E.
+// Each level requires its immediate parent and leaves the higher ancestors optional: with only the
+// parent the level already answers, and every extra ancestor narrows the subset further. The
+// missing parent is a 400 from validateFields, not a business rule, so it carries no i18n key.
+// The parameters are named after the columns they filter — formTranslations, never forms — with
+// country as the only exception, kept because it is the name the frontend already sends.
+// No ancestor declares a maximum length: they carry back a value this same API returned, which for
+// the three text columns has no ceiling in the DDL. What they must not do is arrive empty.
+// search does declare one, aligned to its column, because it is text the user types
+const whodrugTreeBaseValidator = [
+    query('country').optional().trim().notEmpty().withMessage('Country cannot be empty')
+        .isLength({ max: 250 }).withMessage('Country must be at most 250 characters long'),
+    query('language').optional().trim()
+        .isIn(['es', 'en', 'nl']).withMessage('Language must be one of es, en or nl'),
+    query('search').optional().trim()
+        .isLength({ min: 2 }).withMessage('Search must be at least 2 characters long')
+        .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long')
+];
+
+// ESAVI-WHODRUG-006A — the root of the tree. No parent to require
+export const whodrugAbbreviationsValidator = [
+    ...whodrugTreeBaseValidator
+];
+
+// ESAVI-WHODRUG-006B
+export const whodrugDrugNamesValidator = [
+    ...whodrugTreeBaseValidator,
+    query('abbreviation').trim().notEmpty().withMessage('Abbreviation is required')
+];
+
+// ESAVI-WHODRUG-006C
+export const whodrugMaHoldersValidator = [
+    ...whodrugTreeBaseValidator,
+    query('drugName').trim().notEmpty().withMessage('Drug Name is required'),
+    query('abbreviation').optional().trim().notEmpty().withMessage('Abbreviation cannot be empty')
+];
+
+// ESAVI-WHODRUG-006D — groups formTranslations, the translated form the user reads, never form
+export const whodrugFormsValidator = [
+    ...whodrugTreeBaseValidator,
+    query('maHolders').trim().notEmpty().withMessage('MA Holders is required'),
+    query('drugName').optional().trim().notEmpty().withMessage('Drug Name cannot be empty'),
+    query('abbreviation').optional().trim().notEmpty().withMessage('Abbreviation cannot be empty')
+];
+
+// ESAVI-WHODRUG-006E
+export const whodrugStrengthsValidator = [
+    ...whodrugTreeBaseValidator,
+    query('formTranslations').trim().notEmpty().withMessage('Form Translations is required'),
+    query('maHolders').optional().trim().notEmpty().withMessage('MA Holders cannot be empty'),
+    query('drugName').optional().trim().notEmpty().withMessage('Drug Name cannot be empty'),
+    query('abbreviation').optional().trim().notEmpty().withMessage('Abbreviation cannot be empty')
+];
