@@ -50,6 +50,8 @@ const ROUTE_RULES: RouteRule[] = [
     // the 001: it is the widest write over the catalog and it also founds rows in catalogType, which
     // is more than an ADMIN can do today without going through the CATTYPE-001
     { method: 'post',   path: '/api/catalog-items/import',              minRole: 'SUPERADMIN', code: 'ESAVI-CATITEM-006' },
+    // ESAVI-CATITEM-007 (SPEC F52) — global search by name or code, catalogTypeId optional
+    { method: 'get',    path: '/api/catalog-items/search',              minRole: 'USER',       code: 'ESAVI-CATITEM-007' },
 
     // catalogType
     { method: 'post',   path: '/api/catalog-types',                     minRole: 'ADMIN',      code: 'ESAVI-CATTYPE-001' },
@@ -746,7 +748,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(324);
+            expect(ROUTE_RULES).toHaveLength(325);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
