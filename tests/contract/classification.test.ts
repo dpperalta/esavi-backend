@@ -1,9 +1,9 @@
 import request from 'supertest';
-import { CatalogItem, CatalogType, Classification, EsaviCase, HealthFacility, Patient } from '../../src/models';
+import { CatalogItem, CatalogType, Classification, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
-import { seedTestUsers, authHeader } from '../setup/auth';
+import { seedTestUsers, authHeader, createScopedTestUser } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
@@ -35,6 +35,12 @@ describe('classification contract', () => {
 
     let caseCounter = 0;
 
+    // SPEC F49 — a facility with no geoLocationId belongs to no territory and no non-admin
+    // ever reaches its cases. createCaseFixture's facility lives inside this geoLocation, and
+    // scopedUserToken is a USER assigned to it — see esaviCase.test.ts for the same pattern
+    let scopeRootGeoLocationId: string;
+    let scopedUserToken: string;
+
     // Every case is minted fresh: the relation is one to one, so two tests cannot share one
     const createCaseFixture = async (
         options: { birthDate?: string | null, eventDate?: string | null, isActive?: boolean } = {}
@@ -50,7 +56,8 @@ describe('classification contract', () => {
         });
         const facility = await HealthFacility.create({
             localCode: `CL${ caseCounter }${ suffix }`,
-            name: `Classification ${ caseCounter } ${ suffix }`
+            name: `Classification ${ caseCounter } ${ suffix }`,
+            geoLocationId: scopeRootGeoLocationId
         });
         const esaviCase = await EsaviCase.create({
             patientId: patient.getDataValue('patientId'),
@@ -126,6 +133,21 @@ describe('classification contract', () => {
         consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
         await seedTestUsers();
         await resolveAgeUnitCatalog();
+
+        // Resolved before any createCaseFixture call: its facility needs scopeRootGeoLocationId
+        const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+        const levelType = await GeoLevelType.create({
+            code: `LVLCLASSIF_${ suffix }`, name: `LevelClassif ${ suffix }`, sortOrder: 1
+        });
+        const scopeRoot = await GeoLocation.create({
+            geoLevelTypeId: levelType.getDataValue('geoLevelTypeId'),
+            parentGeoLocationId: null,
+            code: `ROOTCLASSIF_${ suffix }`,
+            name: `RootClassif ${ suffix }`,
+            level: baseLevel + 1
+        });
+        scopeRootGeoLocationId = scopeRoot.getDataValue('geoLocationId');
+        scopedUserToken = ( await createScopedTestUser('classification-default', scopeRootGeoLocationId) ).token;
 
         inactiveCaseId = await createCaseFixture({ isActive: false });
 
@@ -1005,7 +1027,7 @@ describe('classification contract', () => {
             // One case is corrected through its endpoint, which propagates
             const movedByCase = await request(app)
                 .put(`/api/esavi-cases/${ propagatedCaseId }`)
-                .set(authHeader('USER'))
+                .set({ Authorization: `Bearer ${ scopedUserToken }` })
                 .send({ eventDate: corrected });
             expect(movedByCase.status).toBe(200);
 
@@ -1035,7 +1057,7 @@ describe('classification contract', () => {
             // Four months become eleven days: the unit changes with the number
             const moved = await request(app)
                 .put(`/api/esavi-cases/${ caseId }`)
-                .set(authHeader('USER'))
+                .set({ Authorization: `Bearer ${ scopedUserToken }` })
                 .send({ eventDate: '2024-01-12' });
             expect(moved.status).toBe(200);
 

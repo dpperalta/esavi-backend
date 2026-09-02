@@ -1,4 +1,4 @@
-import { Op, QueryTypes, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
+import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { Classification, EsaviCase, FinalClassification, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
@@ -8,6 +8,7 @@ import { setEntityActiveStatusService } from './common/entityActivation.service'
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
 import { cascadeSealSatellite } from './common/satelliteCascade.service';
 import { createCaseWorkflowService } from './caseWorkflow.service';
+import { resolveGeoSubtreeIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -16,19 +17,6 @@ const CASE_CODE_MAX_ATTEMPTS = 3;
 
 // The encrypted columns of the included patient. healthSystemCode is stored in clear text
 const PATIENT_PII_FIELDS = ['names', 'lastNames', 'documentNumber'];
-
-// Upper bound for the descendant walk of the geographic filter. Same value as MAX_COVERAGE_DEPTH
-// in appUserGeoLocation.service.ts, and the same reason: together with UNION it keeps the
-// recursive CTE terminating even if the stored geoLocation tree already contains a cycle, which
-// no SQL constraint can detect — CK_geoLocation_notSelfParent only rules out A being its own
-// parent, not A -> B -> A. If one of the two guards changes there, it changes here too
-const MAX_GEO_SUBTREE_DEPTH = 50;
-
-// Shape of one row of the recursive CTE. Raw SQL is outside Sequelize's typing,
-// so the contract is declared here rather than inferred
-interface GeoSubtreeRow {
-    geoLocationId: string;
-}
 
 // A report date is a calendar date: only the YYYY-MM-DD part is kept, so a full ISO timestamp
 // coming from the client cannot shift the day — and that day travels inside the case code
@@ -55,10 +43,13 @@ const PATIENT_INCLUDE = {
     attributes: ['patientId', 'names', 'lastNames', 'documentNumber', 'healthSystemCode']
 };
 
+// geoLocationId travels here only for the ownership guard of SPEC F49 — it is never part of the
+// response. toEsaviCaseResponse strips it from the nested healthFacility before the data leaves
+// the service, the same way it strips the top-level sysDetails, patientId and healthFacilityId
 const HEALTH_FACILITY_INCLUDE = {
     model: HealthFacility,
     as: 'healthFacility',
-    attributes: ['healthFacilityId', 'localCode', 'name']
+    attributes: ['healthFacilityId', 'localCode', 'name', 'geoLocationId']
 };
 
 // The facility include of the two listings carries its geoLocation, and it carries it always,
@@ -68,7 +59,11 @@ const HEALTH_FACILITY_INCLUDE = {
 // Only the two fields the row needs: the full path up to the root would multiply the size of
 // the response for a hierarchy the client already knows from the 002 of geoLocation
 const LIST_HEALTH_FACILITY_INCLUDE = {
-    ...HEALTH_FACILITY_INCLUDE,
+    model: HealthFacility,
+    as: 'healthFacility',
+    // Its own attributes, not spread from HEALTH_FACILITY_INCLUDE: that one now carries
+    // geoLocationId for the 003/004 ownership guard, and the list rows must not gain it
+    attributes: ['healthFacilityId', 'localCode', 'name'],
     include: [{
         model: GeoLocation,
         as: 'geoLocation',
@@ -115,6 +110,8 @@ const toEsaviCaseResponse = (esaviCase: EsaviCase) => {
     delete plain.sysDetails;
     delete plain.patientId;
     delete plain.healthFacilityId;
+    const healthFacility = plain.healthFacility as Record<string, unknown> | null | undefined;
+    if( healthFacility ) delete healthFacility.geoLocationId;
     return decryptPatient(plain);
 }
 
@@ -146,15 +143,22 @@ const assertPatientIsValid = async (patientId: string, op: string, lang: string)
     }
 }
 
-// The transaction is optional because 001 writes without one and 004 opens its own
-const assertHealthFacilityIsValid = async (healthFacilityId: string, op: string, lang: string, transaction?: Transaction) => {
+// The transaction is optional because 001 writes without one and 004 opens its own. authUser
+// optional the same way: a facility out of the user's scope behaves like an inactive one — 404,
+// never 403 — closing the vias of creating a case outside the own territory (001) or moving one
+// into it (004). geoLocationId travels only for that check, never in the return value
+const assertHealthFacilityIsValid = async (healthFacilityId: string, op: string, lang: string, transaction?: Transaction, authUser?: AuthUser) => {
     const healthFacility = await HealthFacility.findOne({
         where: { healthFacilityId, isActive: true },
-        attributes: ['healthFacilityId', 'localCode'],
+        attributes: ['healthFacilityId', 'localCode', 'geoLocationId'],
         transaction
     });
     if( !healthFacility ) {
         throw new AppError(getMessage('esaviCase.healthFacilityNotFound', lang), 404, `CASE_${ op }_FACILITY_NOT_FOUND`);
+    }
+    const userScope = await resolveUserGeoScopeIds(authUser);
+    if( userScope !== null && ( !healthFacility.geoLocationId || !userScope.includes(healthFacility.geoLocationId) ) ) {
+        throw new AppError(getMessage('esaviCase.healthFacilityNotFound', lang), 404, `CASE_${ op }_FACILITY_OUT_OF_SCOPE`);
     }
     return healthFacility;
 }
@@ -206,7 +210,7 @@ const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: Auth
     const registrationDate = todayIsoDate();
 
     await assertPatientIsValid(data.patientId, '001', lang);
-    const healthFacility = await assertHealthFacilityIsValid(data.healthFacilityId, '001', lang);
+    const healthFacility = await assertHealthFacilityIsValid(data.healthFacilityId, '001', lang, undefined, authUser);
 
     // 409 and not 400: the client's body is correct, what blocks the insert is the state of a
     // referenced resource. No fallback prefix is invented — a made up prefix would stop
@@ -321,36 +325,6 @@ const buildListWhere = (filters: EsaviCaseListFilters = {}): WhereOptions => {
     return where as WhereOptions;
 }
 
-// Expands a geoLocation into itself plus every active descendant, at any depth. healthFacility
-// points at the finest unit of the hierarchy, so strict equality against a province would return
-// zero rows on a perfectly populated database: the filter is only useful hierarchical.
-// Read-only, and deliberately without a transaction: it is a SELECT
-const resolveGeoSubtreeIds = async (geoLocationId: string): Promise<string[]> => {
-    // Two guards against a cycle in the stored data: UNION instead of UNION ALL, and an
-    // explicit depth cap. With a corrupt tree the query still terminates
-    const subtree = await sequelize.query<GeoSubtreeRow>(
-        `WITH RECURSIVE subtree AS (
-            SELECT g."geoLocationId", 1 AS depth
-            FROM "geoLocation" g
-            WHERE g."geoLocationId" = :geoLocationId
-              AND g."isActive" = true
-            UNION
-            SELECT c."geoLocationId", s.depth + 1
-            FROM subtree s
-            JOIN "geoLocation" c ON c."parentGeoLocationId" = s."geoLocationId"
-            WHERE c."isActive" = true
-              AND s.depth < :maxDepth
-        )
-        SELECT "geoLocationId" FROM subtree`,
-        {
-            // Parameterized, never string interpolation
-            replacements: { geoLocationId, maxDepth: MAX_GEO_SUBTREE_DEPTH },
-            type: QueryTypes.SELECT
-        }
-    );
-    return subtree.map(( row ) => row.geoLocationId );
-}
-
 // The facility include of the two listings. Without the geographic filter it stays the LEFT JOIN
 // it has always been; with it, the join becomes required so the count is computed over it. An
 // unknown or inactive root yields an empty list, and Op.in over an empty list matches no row —
@@ -366,17 +340,36 @@ const buildFacilityInclude = (subtreeIds: string[] | null) => (
 
 // Resolved once per request, and only when the filter travels
 const resolveListFacilityInclude = async (filters: EsaviCaseListFilters) => (
-    buildFacilityInclude(filters.geoLocationId ? await resolveGeoSubtreeIds(filters.geoLocationId) : null)
+    buildFacilityInclude(filters.geoLocationId ? await resolveGeoSubtreeIds([filters.geoLocationId]) : null)
 );
+
+// The intersection of the user's geographic scope and the SPEC F48 explicit filter, over already
+// expanded id lists — SPEC F49 §3.4. null means no restriction on that side; the intersection of
+// null with anything is the other side unchanged
+const intersectSubtreeIds = (a: string[] | null, b: string[] | null): string[] | null => {
+    if( a === null ) return b;
+    if( b === null ) return a;
+    const bSet = new Set(b);
+    return a.filter(( id ) => bSet.has(id));
+}
+
+// Resolved once per request: the user's scope composed with the explicit filter, per SPEC F49
+// §3.4. authUser undefined resolves to an empty scope — never "no restriction"
+const resolveScopedFacilityInclude = async (filters: EsaviCaseListFilters, authUser?: AuthUser) => {
+    const userScope = await resolveUserGeoScopeIds(authUser);
+    const explicitSubtree = filters.geoLocationId ? await resolveGeoSubtreeIds([filters.geoLocationId]) : null;
+    return buildFacilityInclude(intersectSubtreeIds(userScope, explicitSubtree));
+}
 
 // Get Active ESAVI Cases Service
 // Code: ESAVI-CASE-002A
 const getEsaviCasesService = async (
     filters: EsaviCaseListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    authUser?: AuthUser
 ) => {
-    const facilityInclude = await resolveListFacilityInclude(filters);
+    const facilityInclude = await resolveScopedFacilityInclude(filters, authUser);
     const { count, rows } = await EsaviCase.findAndCountAll({
         where: { ...buildListWhere(filters), isActive: true },
         attributes: LIST_ATTRIBUTES,
@@ -407,13 +400,27 @@ const getAllEsaviCasesService = async (
     return { count, rows: rows.map(toEsaviCaseListRow) };
 }
 
+// The ownership guard of SPEC F49, shared by 003 and 004: a case whose facility geoLocation is
+// outside the user's scope responds exactly like a case that does not exist — same status, same
+// message, same wrapper. The AppError code is the only trace, and it only reaches the log, never
+// the response. A facility without geoLocationId belongs to no territory, so no non-admin user
+// reaches it either — §3.1
+const assertFacilityGeoLocationInScope = async (facilityGeoLocationId: string | null | undefined, authUser: AuthUser | undefined, op: string, lang: string): Promise<void> => {
+    const userScope = await resolveUserGeoScopeIds(authUser);
+    if( userScope === null ) return;
+    if( !facilityGeoLocationId || !userScope.includes(facilityGeoLocationId) ) {
+        throw new AppError(getMessage('esaviCase.notFound', lang), 404, `CASE_${ op }_OUT_OF_SCOPE`);
+    }
+}
+
 // Get ESAVI Case By ID Service
 // Code: ESAVI-CASE-003
-const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive: boolean = false, authUser?: AuthUser) => {
     const esaviCase = await findEsaviCaseWithRelations(id, canViewInactive);
     if( !esaviCase ) {
         throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_003_NOT_FOUND');
     }
+    await assertFacilityGeoLocationInScope(esaviCase.healthFacility?.geoLocationId, authUser, '003', lang);
     return toEsaviCaseResponse(esaviCase);
 }
 
@@ -438,8 +445,18 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
             throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_004_NOT_FOUND');
         }
 
+        // Ownership of the stored case, checked immediately after it is found and before any other
+        // validation: a caller with no view of a row does not get told anything about its state,
+        // incoherent dates included — SPEC F49 §3.5
+        const savedFacility = await HealthFacility.findOne({
+            where: { healthFacilityId: esaviCase.healthFacilityId },
+            attributes: ['geoLocationId'],
+            transaction
+        });
+        await assertFacilityGeoLocationInScope(savedFacility?.geoLocationId, authUser, '004', lang);
+
         if( data.healthFacilityId ) {
-            await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang, transaction);
+            await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang, transaction, authUser);
         }
 
         // Coherence is checked against the RESULTING state, not against the body: validating only what

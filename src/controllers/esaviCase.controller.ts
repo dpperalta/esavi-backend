@@ -54,7 +54,7 @@ const getEsaviCases = async (req: Request, res: Response, next: NextFunction): P
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getEsaviCasesService(listFilters(req), limit, offset);
+        const data = await getEsaviCasesService(listFilters(req), limit, offset, req.user as AuthUser);
         return res.status(200).json({
             ok: true,
             message: getMessage('esaviCase.getSuccessPlural', req.lang),
@@ -97,7 +97,7 @@ const getAllEsaviCases = async (req: Request, res: Response, next: NextFunction)
 const getEsaviCaseById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getEsaviCaseByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getEsaviCaseByIdService(id, req.lang, canViewInactive(req.user as AuthUser), req.user as AuthUser);
         return res.status(200).json({
             ok: true,
             message: getMessage('esaviCase.getSuccess', req.lang),

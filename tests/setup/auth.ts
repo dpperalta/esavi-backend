@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { AppUser, AppRole, AppUserRole } from '../../src/models';
+import { AppUser, AppRole, AppUserRole, AppUserGeoLocation } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { jwtGenerate } from '../../src/helpers/jwt.helper';
 import { ROLES } from '../../src/constants/roles.constants';
@@ -103,6 +103,65 @@ const getTestUser = ( role: TestRole ): TestUser => {
     return user;
 }
 
+const scopedTestUsers = new Map<string, TestUser>();
+
+/**
+ * Creates a USER-role user separate from the one `seedTestUsers` shares across every
+ * test file, and assigns it a geoLocationId in `appUserGeoLocation` — SPEC F49's
+ * territorial scope. Kept apart from the shared default USER so a test file can give
+ * it real territory without touching the account other files' suites (notably
+ * appUserGeoLocation.test.ts, which counts assignments of the shared USER) rely on.
+ *
+ * Memoized by `key` per module registry, same idempotency rationale as createTestUser:
+ * findOrCreate on email avoids UQ_appUser_email across files that reuse the same key.
+ *
+ * `geoLocationId` null creates the user without any appUserGeoLocation row — SPEC F49's
+ * empty scope, on a user nobody else's suite can have already touched.
+ */
+const createScopedTestUser = async ( key: string, geoLocationId: string | null ): Promise<TestUser> => {
+    if( scopedTestUsers.has(key) ) return scopedTestUsers.get(key) as TestUser;
+
+    const email = `scoped-${ key }@test.local`;
+    const displayName = `Scoped ${ key }`;
+
+    const appRole = await AppRole.findOne({ where: { code: ROLES.USER } });
+    if( !appRole ) {
+        throw new Error('The role "USER" is not seeded. tests/setup/database.ts must run before issuing tokens.');
+    }
+
+    const [user] = await AppUser.findOrCreate({
+        where: { email: esaviCrypt(email) },
+        defaults: {
+            username: esaviCrypt(email),
+            email: esaviCrypt(email),
+            passwordHash: await bcrypt.hash(TEST_PASSWORD, 10),
+            displayName: esaviCrypt(displayName),
+            requiresPasswordChange: false,
+            isActive: true
+        }
+    });
+
+    const userId = user.getDataValue('userId');
+
+    await AppUserRole.findOrCreate({
+        where: { userId, roleId: appRole.getDataValue('roleId') },
+        defaults: { userId, roleId: appRole.getDataValue('roleId'), isActive: true }
+    });
+
+    if( geoLocationId ) {
+        await AppUserGeoLocation.findOrCreate({
+            where: { userId, geoLocationId },
+            defaults: { userId, geoLocationId, validFrom: new Date(), isActive: true }
+        });
+    }
+
+    const token = await jwtGenerate({ userId }) as string;
+
+    const scopedUser: TestUser = { userId, email, password: TEST_PASSWORD, token, role: 'USER' };
+    scopedTestUsers.set(key, scopedUser);
+    return scopedUser;
+}
+
 const getToken = ( role: TestRole ): string => getTestUser(role).token;
 
 /**
@@ -119,7 +178,8 @@ export {
     seedTestUsers,
     getTestUser,
     getToken,
-    authHeader
+    authHeader,
+    createScopedTestUser
 }
 
 export type {
