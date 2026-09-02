@@ -14,6 +14,7 @@ import {
 // so an absent filter never turns into an `undefined` in the where clause. Nothing is
 // validated here: the shape of the query was already checked by esaviCaseListValidator
 const listFilters = (req: Request): EsaviCaseListFilters => ({
+    code: req.query.code as string | undefined,
     patientId: req.query.patientId as string | undefined,
     healthFacilityId: req.query.healthFacilityId as string | undefined,
     geoLocationId: req.query.geoLocationId as string | undefined,

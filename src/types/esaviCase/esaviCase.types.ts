@@ -16,8 +16,11 @@ export interface CreateEsaviCaseInput {
 // `geoLocationId` matches the whole active subtree of that unit, not only the unit itself.
 // Each date column takes either its exact form or its From/To range: the two are mutually
 // exclusive per column, rejected with 400 in the validator. All values arrive as strings
-// from req.query and are normalized in the service
+// from req.query and are normalized in the service.
+// `code` is the canonical parameter of SPEC F52, an Op.iLike over caseCode — the only text
+// filter of this entity, since the DDL gives it no name column of its own
 export interface EsaviCaseListFilters {
+    code?: string;
     patientId?: string;
     healthFacilityId?: string;
     geoLocationId?: string;
