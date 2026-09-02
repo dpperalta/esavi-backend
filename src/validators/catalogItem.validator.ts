@@ -13,6 +13,21 @@ export const catalogItemListValidator = [
         .withMessage('Offset must be a non-negative integer')
 ];
 
+// Query validator of ESAVI-CATITEM-007. catalogItemListValidator is NOT modified — the two compose
+// together in the route. The empty-criteria guard ("at least one of name or code") cannot be
+// expressed here and lives in the service, the same shape as the 007 of patient and the 006 of
+// healthFacility
+export const searchCatalogItemValidator = [
+    query('name').optional().trim()
+        .isLength({ min: 2 }).withMessage('Name must be at least 2 characters long')
+        .isLength({ max: 250 }).withMessage('Name must be at most 250 characters long'),
+    query('code').optional().trim()
+        .isLength({ min: 2 }).withMessage('Code must be at least 2 characters long')
+        .isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
+    query('catalogTypeId').optional()
+        .isUUID().withMessage('Catalog Type ID must be a valid UUID').trim()
+];
+
 // code is optional in both bodies: in the 001 it is minted from the name when it is absent, and in
 // the 004 the stored one is kept. A code — or a name — that produces no usable identifier, because
 // it is only separators or long enough to overflow varchar(100), is a 400 of the service and not of

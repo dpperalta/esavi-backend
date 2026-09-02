@@ -12,6 +12,17 @@ export interface CreateCatalogItemInput {
     metadata?: object | null;
 }
 
+// Query filters of ESAVI-CATITEM-007, the global search across catalog types. name and code are
+// each an Op.iLike over their own column, joined with Op.or; at least one of the two is required —
+// the guard lives in the service, because `optional()` cannot express "at least one of the two".
+// catalogTypeId narrows without being a criterion on its own: it is joined with Op.and, and alone
+// it is a 400, the same guard that rejects an empty search
+export interface CatalogItemSearchInput {
+    name?: string;
+    code?: string;
+    catalogTypeId?: string;
+}
+
 // Body of ESAVI-CATITEM-006. It carries no data column: they all come from the file. And no
 // dictionaryVersion either, unlike the two importers before it — this one never writes metadata, so
 // there would be nowhere to keep it, and a parameter that is accepted and discarded is worse than
