@@ -59,7 +59,11 @@ const HEALTH_FACILITY_INCLUDE = {
 // Only the two fields the row needs: the full path up to the root would multiply the size of
 // the response for a hierarchy the client already knows from the 002 of geoLocation
 const LIST_HEALTH_FACILITY_INCLUDE = {
-    ...HEALTH_FACILITY_INCLUDE,
+    model: HealthFacility,
+    as: 'healthFacility',
+    // Its own attributes, not spread from HEALTH_FACILITY_INCLUDE: that one now carries
+    // geoLocationId for the 003/004 ownership guard, and the list rows must not gain it
+    attributes: ['healthFacilityId', 'localCode', 'name'],
     include: [{
         model: GeoLocation,
         as: 'geoLocation',

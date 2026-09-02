@@ -1,9 +1,9 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { AppUserGeoLocation, CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
-import { seedTestUsers, authHeader } from '../setup/auth';
+import { seedTestUsers, authHeader, createScopedTestUser } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
 
@@ -28,6 +28,16 @@ describe('esaviCase contract', () => {
     let otherFacilityId: string;
     let noLocalCodeFacilityId: string;
 
+    // SPEC F49 — every shared facility above lives inside this geoLocation, and
+    // scopedUserToken belongs to a USER assigned to it. It stands apart from the
+    // shared 'USER' test user that other files' suites (notably
+    // appUserGeoLocation.test.ts) count assignments on, so this territory does not
+    // leak into them. Every default-role 'USER' call in this file resolves to it —
+    // §below, actorHeader — so the bulk of the file exercises a real, in-territory
+    // USER instead of an unrestricted one
+    let scopeRootGeoLocationId: string;
+    let scopedUserToken: string;
+
     // errorHandler logs every error it handles, and a third of these tests trigger
     // errors on purpose, so the log is expected output rather than a signal
     let consoleError: jest.SpyInstance;
@@ -46,23 +56,28 @@ describe('esaviCase contract', () => {
         return `${ today.slice(8, 10) }${ today.slice(5, 7) }${ today.slice(0, 4) }`;
     };
 
+    // SPEC F49: the file's default 'USER' resolves to the territory-scoped user, not
+    // the shared, unassigned one — every other role keeps using the shared account
+    const actorHeader = ( role: TestRole ): Record<string, string> =>
+        role === 'USER' ? { Authorization: `Bearer ${ scopedUserToken }` } : authHeader(role);
+
     const createCase = ( payload: Record<string, unknown> = {}, role: TestRole = 'USER' ) =>
         request(app)
             .post('/api/esavi-cases')
-            .set(authHeader(role))
+            .set(actorHeader(role))
             .send({ patientId, healthFacilityId: facilityId, ...payload });
 
     const getCase = ( id: string, role: TestRole = 'USER' ) =>
-        request(app).get(`/api/esavi-cases/${ id }`).set(authHeader(role));
+        request(app).get(`/api/esavi-cases/${ id }`).set(actorHeader(role));
 
     const listCases = ( query: string = '', role: TestRole = 'USER' ) =>
-        request(app).get(`/api/esavi-cases${ query }`).set(authHeader(role));
+        request(app).get(`/api/esavi-cases${ query }`).set(actorHeader(role));
 
     const listAdminCases = ( query: string = '', role: TestRole = 'ADMIN' ) =>
         request(app).get(`/api/esavi-cases/admin${ query }`).set(authHeader(role));
 
     const updateCase = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
-        request(app).put(`/api/esavi-cases/${ id }`).set(authHeader(role)).send(payload);
+        request(app).put(`/api/esavi-cases/${ id }`).set(actorHeader(role)).send(payload);
 
     const deleteCase = ( id: string, role: TestRole = 'ADMIN' ) =>
         request(app).delete(`/api/esavi-cases/${ id }`).set(authHeader(role));
@@ -81,10 +96,14 @@ describe('esaviCase contract', () => {
         return patient.getDataValue('patientId');
     };
 
+    // SPEC F49 — a facility with no geoLocationId belongs to no territory and no
+    // non-admin ever reaches it (§3.1). Every facility fixture of the file is born
+    // inside scopeRootGeoLocationId so it stays reachable by the default 'USER' actor
     const createFacilityFixture = async ( label: string, withLocalCode: boolean = true ): Promise<string> => {
         const facility = await HealthFacility.create({
             localCode: withLocalCode ? `CS${ label }${ suffix }` : null,
-            name: `Case ${ label } ${ suffix }`
+            name: `Case ${ label } ${ suffix }`,
+            geoLocationId: scopeRootGeoLocationId
         });
         return facility.getDataValue('healthFacilityId');
     };
@@ -92,6 +111,22 @@ describe('esaviCase contract', () => {
     beforeAll(async () => {
         consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
         await seedTestUsers();
+
+        // Resolved first: createFacilityFixture below needs scopeRootGeoLocationId,
+        // and every describe block's own beforeAll needs scopedUserToken
+        const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+        const levelType = await GeoLevelType.create({
+            code: `LVLCASE_${ suffix }`, name: `LevelCase ${ suffix }`, sortOrder: 1
+        });
+        const scopeRoot = await GeoLocation.create({
+            geoLevelTypeId: levelType.getDataValue('geoLevelTypeId'),
+            parentGeoLocationId: null,
+            code: `ROOTCASE_${ suffix }`,
+            name: `RootCase ${ suffix }`,
+            level: baseLevel + 1
+        });
+        scopeRootGeoLocationId = scopeRoot.getDataValue('geoLocationId');
+        scopedUserToken = ( await createScopedTestUser('esaviCase-default', scopeRootGeoLocationId) ).token;
 
         patientId = await createPatientFixture('A');
         otherPatientId = await createPatientFixture('B');
@@ -401,6 +436,14 @@ describe('esaviCase contract', () => {
         let geoPatientId: string;
 
         const tag = `F48${ suffix }`;
+
+        // SPEC F49 §6: the eight geographic criteria of SPEC F48 keep passing for an
+        // ADMIN, who carries no territorial restriction — this block's province/canton/
+        // parish hierarchy is its own, unrelated to scopeRootGeoLocationId, so its actor
+        // has to be exempt from scope rather than assigned to it. Shadows the file-level
+        // listCases for every call in this block, direct or through filtered()
+        const listCases = ( query: string = '' ) =>
+            request(app).get(`/api/esavi-cases${ query }`).set(authHeader('ADMIN'));
 
         // Only the rows this block seeded: the table carries the cases of every other block
         const ownCodes = ( rows: { caseCode: string }[] ): string[] =>
@@ -803,6 +846,343 @@ describe('esaviCase contract', () => {
             const third = await updateCase(created.body.data.caseId, { countryIsoCode: 'EC' });
             expect(third.status).toBe(200);
             expect(third.body.data.appDetails).toHaveLength(2);
+        });
+
+    });
+
+    /**
+     * SPEC F49. Two independent branches of the hierarchy — A and B — each with its own
+     * facility and case, and a USER assigned to only one of them. Seeded through the
+     * model, like the F48 block: what is under test is the scope, not the writing path,
+     * except where a test's own point is exercising 001/003/004 through the API.
+     */
+    describe('geographic scope — SPEC F49', () => {
+
+        let levelTypeId: string;
+        let provinceAId: string;
+        let cantonAId: string;
+        let provinceBId: string;
+        let cantonBId: string;
+        let facilityAId: string;
+        let facilityBId: string;
+        let noTerritoryFacilityId: string;
+        let caseAId: string;
+        let caseBId: string;
+        let noTerritoryCaseId: string;
+        let userAToken: string;
+        let userBToken: string;
+        let noScopeUserToken: string;
+
+        const tag = `F49SCOPE${ suffix }`;
+
+        const scopedHeader = ( token: string ): Record<string, string> => ({ Authorization: `Bearer ${ token }` });
+
+        const createGeoLocation = async ( label: string, parent: string | null, level: number ): Promise<string> => {
+            const geo = await GeoLocation.create({
+                geoLevelTypeId: levelTypeId,
+                parentGeoLocationId: parent,
+                code: `${ label }_${ suffix }`,
+                name: `${ label } ${ suffix }`,
+                level
+            });
+            return geo.getDataValue('geoLocationId');
+        };
+
+        const seedFacilityCase = async ( label: string, geoLocationId: string | null ): Promise<{ facilityId: string, caseId: string }> => {
+            const facility = await HealthFacility.create({
+                localCode: `${ tag }${ label }`, name: `${ tag } ${ label }`, geoLocationId
+            });
+            const patientFixtureId = await createPatientFixture(`49${ label }`);
+            const esaviCase = await EsaviCase.create({
+                caseCode: `${ tag }-${ label }`,
+                patientId: patientFixtureId,
+                healthFacilityId: facility.getDataValue('healthFacilityId'),
+                reportDate: '2026-05-01',
+                isActive: true
+            });
+            await seedCaseWorkflow(esaviCase.getDataValue('caseId'));
+            return { facilityId: facility.getDataValue('healthFacilityId'), caseId: esaviCase.getDataValue('caseId') };
+        };
+
+        beforeAll(async () => {
+            const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+            const levelType = await GeoLevelType.create({
+                code: `LVLSCOPE_${ suffix }`, name: `LevelScope ${ suffix }`, sortOrder: 1
+            });
+            levelTypeId = levelType.getDataValue('geoLevelTypeId');
+
+            provinceAId = await createGeoLocation('PROVA49', null, baseLevel + 1);
+            cantonAId = await createGeoLocation('CANTA49', provinceAId, baseLevel + 2);
+            provinceBId = await createGeoLocation('PROVB49', null, baseLevel + 1);
+            cantonBId = await createGeoLocation('CANTB49', provinceBId, baseLevel + 2);
+
+            const a = await seedFacilityCase('A', cantonAId);
+            facilityAId = a.facilityId;
+            caseAId = a.caseId;
+
+            // Directly on the province, not the canton — proves the intersection with the
+            // F48 filter is not a union of the two levels
+            await seedFacilityCase('AP', provinceAId);
+
+            const b = await seedFacilityCase('B', cantonBId);
+            facilityBId = b.facilityId;
+            caseBId = b.caseId;
+
+            const n = await seedFacilityCase('N', null);
+            noTerritoryFacilityId = n.facilityId;
+            noTerritoryCaseId = n.caseId;
+
+            userAToken = ( await createScopedTestUser('esaviCase-branchA', provinceAId) ).token;
+            userBToken = ( await createScopedTestUser('esaviCase-branchB', provinceBId) ).token;
+            noScopeUserToken = ( await createScopedTestUser('esaviCase-empty', null) ).token;
+        });
+
+        describe('002A — the listing', () => {
+
+            it('a USER assigned to a province lists the cases hanging from its cantons, and none of another province', async () => {
+                const responseA = await request(app).get('/api/esavi-cases').set(scopedHeader(userAToken));
+                expect(responseA.status).toBe(200);
+                const codesA = responseA.body.data.rows.map(( row: { caseCode: string } ) => row.caseCode);
+                expect(codesA).toContain(`${ tag }-A`);
+                expect(codesA).toContain(`${ tag }-AP`);
+                expect(codesA).not.toContain(`${ tag }-B`);
+
+                // Symmetric: B's user sees B's case and none of A's
+                const responseB = await request(app).get('/api/esavi-cases').set(scopedHeader(userBToken));
+                const codesB = responseB.body.data.rows.map(( row: { caseCode: string } ) => row.caseCode);
+                expect(codesB).toContain(`${ tag }-B`);
+                expect(codesB).not.toContain(`${ tag }-A`);
+                expect(codesB).not.toContain(`${ tag }-AP`);
+            });
+
+            it('a USER with no row in appUserGeoLocation answers 200 with count 0, never 403 nor 500', async () => {
+                const response = await request(app).get('/api/esavi-cases').set(scopedHeader(noScopeUserToken));
+                expect(response.status).toBe(200);
+                expect(response.body.data.count).toBe(0);
+                expect(response.body.data.rows).toEqual([]);
+            });
+
+            it('an assignment whose validTo is already in the past grants no scope', async () => {
+                const expired = await createScopedTestUser('esaviCase-expired', provinceAId);
+                // CK_appUserGeoLocation_dates requires validTo > validFrom, so both move into
+                // the past together — validFrom alone in the future-relative-to-validTo shape
+                // would violate the constraint instead of exercising the expiry
+                await AppUserGeoLocation.update(
+                    {
+                        validFrom: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+                        validTo: new Date(Date.now() - 24 * 60 * 60 * 1000)
+                    },
+                    { where: { userId: expired.userId, geoLocationId: provinceAId } }
+                );
+                const response = await request(app).get('/api/esavi-cases').set(scopedHeader(expired.token));
+                expect(response.status).toBe(200);
+                expect(response.body.data.count).toBe(0);
+            });
+
+            it('an inactive assignment grants no scope', async () => {
+                const closed = await createScopedTestUser('esaviCase-closed', provinceAId);
+                await AppUserGeoLocation.update(
+                    { isActive: false },
+                    { where: { userId: closed.userId, geoLocationId: provinceAId } }
+                );
+                const response = await request(app).get('/api/esavi-cases').set(scopedHeader(closed.token));
+                expect(response.status).toBe(200);
+                expect(response.body.data.count).toBe(0);
+            });
+
+            it('deactivating the assigned geoLocation leaves the user at count 0, even with active descendants', async () => {
+                const provinceOnly = await createGeoLocation('PROVC49', null, 90);
+                const cantonOnly = await createGeoLocation('CANTC49', provinceOnly, 91);
+                await seedFacilityCase('C', cantonOnly);
+                const userC = await createScopedTestUser('esaviCase-branchC', provinceOnly);
+
+                const before = await request(app).get('/api/esavi-cases').set(scopedHeader(userC.token));
+                expect(before.body.data.count).toBeGreaterThan(0);
+
+                await GeoLocation.update({ isActive: false }, { where: { geoLocationId: provinceOnly } });
+                const after = await request(app).get('/api/esavi-cases').set(scopedHeader(userC.token));
+                expect(after.status).toBe(200);
+                expect(after.body.data.count).toBe(0);
+
+                await GeoLocation.update({ isActive: true }, { where: { geoLocationId: provinceOnly } });
+            });
+
+            it('an ADMIN and a SUPERADMIN see the same count in 002A as before the spec', async () => {
+                const totalActive = await EsaviCase.count({ where: { isActive: true } });
+                expect(( await listCases('', 'ADMIN') ).body.data.count).toBe(totalActive);
+                expect(( await listCases('', 'SUPERADMIN') ).body.data.count).toBe(totalActive);
+            });
+
+            it('count with limit=1 is the total of the scope, not the page size', async () => {
+                const response = await request(app).get('/api/esavi-cases?limit=1').set(scopedHeader(userAToken));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows).toHaveLength(1);
+                expect(response.body.data.count).toBeGreaterThan(1);
+            });
+
+        });
+
+        describe('composition with the SPEC F48 explicit filter', () => {
+
+            it('a USER of province A filtering by a canton of A sees that canton', async () => {
+                const response = await request(app)
+                    .get(`/api/esavi-cases?geoLocationId=${ cantonAId }`)
+                    .set(scopedHeader(userAToken));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map(( row: { caseCode: string } ) => row.caseCode))
+                    .toContain(`${ tag }-A`);
+            });
+
+            it('a USER of province A filtering by a canton of B answers 200 with count 0, not 403', async () => {
+                const response = await request(app)
+                    .get(`/api/esavi-cases?geoLocationId=${ cantonBId }`)
+                    .set(scopedHeader(userAToken));
+                expect(response.status).toBe(200);
+                expect(response.body.data.count).toBe(0);
+            });
+
+            it('a USER assigned to a canton filtering by the whole province sees only that canton — the intersection, not the union', async () => {
+                const cantonUser = await createScopedTestUser('esaviCase-cantonA', cantonAId);
+                const response = await request(app)
+                    .get(`/api/esavi-cases?geoLocationId=${ provinceAId }`)
+                    .set(scopedHeader(cantonUser.token));
+                expect(response.status).toBe(200);
+                const codes = response.body.data.rows.map(( row: { caseCode: string } ) => row.caseCode);
+                expect(codes).toContain(`${ tag }-A`);
+                expect(codes).not.toContain(`${ tag }-AP`);
+            });
+
+        });
+
+        describe('003 — the detail gate', () => {
+
+            it('answers 200 for the own territory and 404 for another, identical to an unknown id', async () => {
+                const own = await request(app).get(`/api/esavi-cases/${ caseAId }`).set(scopedHeader(userAToken));
+                expect(own.status).toBe(200);
+
+                const foreign = await request(app).get(`/api/esavi-cases/${ caseBId }`).set(scopedHeader(userAToken));
+                const unknown = await request(app).get(`/api/esavi-cases/${ unknownUuid }`).set(scopedHeader(userAToken));
+
+                expect(foreign.status).toBe(404);
+                expect(unknown.status).toBe(404);
+                expect(foreign.body.ok).toBe(unknown.body.ok);
+                expect(foreign.body.message).toBe(unknown.body.message);
+                // §3.5 and §7 of the spec: "mismo status, mismo mensaje, mismo envoltorio... el
+                // código del AppError sí los distingue, y esa es la única traza que queda — en el
+                // log, no en la respuesta". The repo's error envelope (CLAUDE.md) always echoes
+                // AppError.code into the JSON body, so the two codes below necessarily differ —
+                // that is the intended distinguishing trace the two paragraphs describe
+                expect(foreign.body.code).toBe('CASE_003_OUT_OF_SCOPE');
+                expect(unknown.body.code).toBe('CASE_003_NOT_FOUND');
+            });
+
+            it('an ADMIN reaches any case regardless of territory', async () => {
+                const response = await request(app).get(`/api/esavi-cases/${ caseBId }`).set(authHeader('ADMIN'));
+                expect(response.status).toBe(200);
+            });
+
+        });
+
+        describe('001 and 004 — the write gates', () => {
+
+            it('creating with a healthFacilityId out of scope answers 404 and inserts no row', async () => {
+                const before = await EsaviCase.count();
+                const response = await request(app)
+                    .post('/api/esavi-cases')
+                    .set(scopedHeader(userAToken))
+                    .send({ patientId: await createPatientFixture('49W1'), healthFacilityId: facilityBId });
+                expect(response.status).toBe(404);
+                expect(response.body.code).toBe('CASE_001_FACILITY_OUT_OF_SCOPE');
+                expect(await EsaviCase.count()).toBe(before);
+            });
+
+            it('creating in the own territory answers 201, and the case is immediately readable by that same USER through 003', async () => {
+                const created = await request(app)
+                    .post('/api/esavi-cases')
+                    .set(scopedHeader(userAToken))
+                    .send({ patientId: await createPatientFixture('49W2'), healthFacilityId: facilityAId });
+                expect(created.status).toBe(201);
+
+                const read = await request(app)
+                    .get(`/api/esavi-cases/${ created.body.data.caseId }`)
+                    .set(scopedHeader(userAToken));
+                expect(read.status).toBe(200);
+            });
+
+            it('editing a foreign case answers 404 and writes nothing', async () => {
+                const before = await EsaviCase.findByPk(caseBId);
+                const response = await request(app)
+                    .put(`/api/esavi-cases/${ caseBId }`)
+                    .set(scopedHeader(userAToken))
+                    .send({ details: 'intruder' });
+                expect(response.status).toBe(404);
+                expect(response.body.code).toBe('CASE_004_OUT_OF_SCOPE');
+
+                const after = await EsaviCase.findByPk(caseBId);
+                expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
+                expect(after!.getDataValue('appDetails')).toEqual(before!.getDataValue('appDetails'));
+                expect(( after!.getDataValue('sysDetails') as { version: number } ).version)
+                    .toBe(( before!.getDataValue('sysDetails') as { version: number } ).version);
+            });
+
+            it('moving the own case to a facility out of scope answers 404 and writes nothing', async () => {
+                const before = await EsaviCase.findByPk(caseAId);
+                const response = await request(app)
+                    .put(`/api/esavi-cases/${ caseAId }`)
+                    .set(scopedHeader(userAToken))
+                    .send({ healthFacilityId: facilityBId });
+                expect(response.status).toBe(404);
+                expect(response.body.code).toBe('CASE_004_FACILITY_OUT_OF_SCOPE');
+
+                const after = await EsaviCase.findByPk(caseAId);
+                expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
+            });
+
+            it('the ownership guard runs before date coherence: a foreign case with incoherent dates answers 404, not 400', async () => {
+                // Coherence is checked against the RESULTING state (§004), so only eventDate
+                // travels — it lands after caseB's own stored reportDate of 2026-05-01, which
+                // is incoherent, but only once merged. A per-field 400 would prove nothing
+                // about ordering: this has to be a state the validator itself lets through
+                const response = await request(app)
+                    .put(`/api/esavi-cases/${ caseBId }`)
+                    .set(scopedHeader(userAToken))
+                    .send({ eventDate: '2026-06-01' });
+                expect(response.status).toBe(404);
+                expect(response.body.code).toBe('CASE_004_OUT_OF_SCOPE');
+            });
+
+        });
+
+        describe('cases with no territory', () => {
+
+            it('a facility with geoLocationId null is unreachable by any USER on every operation, and reachable by an ADMIN through 002B and 003', async () => {
+                const list = await request(app).get('/api/esavi-cases').set(scopedHeader(userAToken));
+                expect(list.body.data.rows.map(( row: { caseCode: string } ) => row.caseCode))
+                    .not.toContain(`${ tag }-N`);
+
+                const detail = await request(app).get(`/api/esavi-cases/${ noTerritoryCaseId }`).set(scopedHeader(userAToken));
+                expect(detail.status).toBe(404);
+
+                const create = await request(app)
+                    .post('/api/esavi-cases')
+                    .set(scopedHeader(userAToken))
+                    .send({ patientId: await createPatientFixture('49W3'), healthFacilityId: noTerritoryFacilityId });
+                expect(create.status).toBe(404);
+
+                const update = await request(app)
+                    .put(`/api/esavi-cases/${ noTerritoryCaseId }`)
+                    .set(scopedHeader(userAToken))
+                    .send({ details: 'x' });
+                expect(update.status).toBe(404);
+
+                const adminDetail = await request(app).get(`/api/esavi-cases/${ noTerritoryCaseId }`).set(authHeader('ADMIN'));
+                expect(adminDetail.status).toBe(200);
+
+                const adminList = await listAdminCases(`?healthFacilityId=${ noTerritoryFacilityId }`);
+                expect(adminList.body.data.rows.map(( row: { caseCode: string } ) => row.caseCode))
+                    .toContain(`${ tag }-N`);
+            });
+
         });
 
     });
@@ -2567,7 +2947,8 @@ describe('esaviCase contract', () => {
             recalcCounter += 1;
             const facility = await HealthFacility.create({
                 localCode: `CSAG${ recalcCounter }${ suffix }`,
-                name: `Case Age ${ recalcCounter } ${ suffix }`
+                name: `Case Age ${ recalcCounter } ${ suffix }`,
+                geoLocationId: scopeRootGeoLocationId
             });
             const esaviCase = await EsaviCase.create({
                 patientId: datedPatientId,
