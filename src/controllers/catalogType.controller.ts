@@ -1,6 +1,13 @@
 ﻿import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage, canViewInactive } from '../helpers';
+import { CatalogTypeListFilters } from '../types';
 import { createCatalogTypeService, getActiveCatalogTypesService, getAllCatalogTypesService, getCatalogTypeByIdService, setCatalogTypeActivationService, updateCatalogTypeService } from '../services/catalogType.service';
+
+// Unwraps the two query filters, identical in both listings
+const readListFilters = (query: Request['query']): CatalogTypeListFilters => ({
+    name: query.name ? (query.name as string).trim() : undefined,
+    code: query.code ? (query.code as string).trim() : undefined
+});
 
 // Create Catalog Type Controller
 // Code: ESAVI-CATTYPE-001
@@ -28,7 +35,8 @@ const getCatalogTypes = async (req: Request, res: Response, next: NextFunction):
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = canViewInactive(req.user) ? await getAllCatalogTypesService(limit, offset) : await getActiveCatalogTypesService(limit, offset);
+        const filters = readListFilters(req.query);
+        const data = canViewInactive(req.user) ? await getAllCatalogTypesService(filters, limit, offset) : await getActiveCatalogTypesService(filters, limit, offset);
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogType.getSuccessPlural', req.lang),
