@@ -1,11 +1,12 @@
 import { CreationAttributes, Op, Transaction } from "sequelize";
-import { AppError, buildDifferentialUpdate, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toConstantCase, toTitleCase } from "../helpers";
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toConstantCase, toTitleCase } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
 import {
     AppDetails,
     AuthUser,
     CatalogItemImportReport,
+    CatalogItemSearchInput,
     CreateCatalogItemInput,
     ImportCatalogItemsInput,
     ParsedCatalogItemRow,
@@ -163,6 +164,55 @@ const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit
         where: whereClause,
         // sysDetails is internal and never exposed by the API
         attributes: { exclude: ['sysDetails'] },
+        order: [
+            ['sortOrder', 'ASC'],
+            ['name', 'ASC']
+        ],
+        limit,
+        offset
+    });
+    return catalogItems;
+}
+
+// ESAVI-CATITEM-007 - Search Catalog Items by Name or Code Service
+// The global search of catalogItem, SPEC F52: no catalogTypeId required in the path, unlike the
+// 002A/002B. catalogTypeId is optional here and only narrows — it never substitutes the text
+// criterion, which is why the guard lives in the service and not only in the validator:
+// `optional()` cannot express "at least one of the two".
+// catalogItem.code is not unique globally — UQ_catalogItem_type_code is composite — so this
+// returns { count, rows } like any listing, never a single object
+const searchCatalogItemsService = async (
+    filters: CatalogItemSearchInput,
+    lang: string,
+    includeInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const textConditions = [
+        ...buildTextSearchConditions(filters.name, ['name']),
+        ...buildTextSearchConditions(filters.code, ['code'])
+    ];
+    if( textConditions.length === 0 ) {
+        throw new AppError(getMessage('catalogItem.searchCriteriaRequired', lang), 400, 'CATITEM_007_SEARCH_CRITERIA_REQUIRED');
+    }
+    const whereClause: Record<string, unknown> = { [Op.or]: textConditions };
+    if( filters.catalogTypeId ) {
+        whereClause.catalogTypeId = filters.catalogTypeId;
+    }
+    if( !includeInactive ) {
+        whereClause.isActive = true;
+    }
+    const catalogItems = await CatalogItem.findAndCountAll({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
+        include: [
+            {
+                model: CatalogType,
+                as: 'catalogType',
+                attributes: ['catalogTypeId', 'name']
+            }
+        ],
         order: [
             ['sortOrder', 'ASC'],
             ['name', 'ASC']
@@ -612,6 +662,7 @@ export {
     createCatalogItemService,
     getActiveCatalogItemsByTypeService,
     getAllCatalogItemsByTypeService,
+    searchCatalogItemsService,
     getCatalogItemByIdService,
     updateCatalogItemService,
     setCatalogItemActivationService,
