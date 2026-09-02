@@ -1,7 +1,7 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { Classification, EsaviCase, FinalClassification, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
-import { AppError, buildDifferentialUpdate, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -307,6 +307,11 @@ const dateCondition = (exact?: string, fromValue?: string, toValue?: string): un
 // resolved here: it is an include, not a where, and it lives in the two listing services
 const buildListWhere = (filters: EsaviCaseListFilters = {}): WhereOptions => {
     const where: Record<string, unknown> = {};
+
+    // The canonical text parameter of SPEC F52, joined with Op.and to everything else in this
+    // where: it is an identity axis, not a facet like the date ranges or the foreign keys
+    const [codeCondition] = buildTextSearchConditions(filters.code, ['caseCode']);
+    if( codeCondition ) Object.assign(where, codeCondition);
 
     if( filters.patientId ) where.patientId = filters.patientId;
     if( filters.healthFacilityId ) where.healthFacilityId = filters.healthFacilityId;

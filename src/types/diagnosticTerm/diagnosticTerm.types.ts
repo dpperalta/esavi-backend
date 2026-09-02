@@ -17,11 +17,14 @@ export interface CreateDiagnosticTermInput {
     isActive?: boolean;
 }
 
-// Query filters of the two listings. search runs as Op.iLike over name only; source and termGroup
+// Query filters of the two listings. search is the legacy alias: name OR code. name and code are
+// the canonical parameters (SPEC F52), each an Op.iLike over its own column. source and termGroup
 // are exact equality. reviewStatus resolves over the metadata.reviewStatus JSONB key and is
 // admitted by the admin listing alone — the public one has no business filtering a review queue
 export interface DiagnosticTermListFilters {
     search?: string;
+    name?: string;
+    code?: string;
     source?: TermSource;
     termGroup?: string;
     reviewStatus?: string;

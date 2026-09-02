@@ -1,7 +1,7 @@
 # SPEC F51 — Búsqueda de establecimientos de salud por nombre o código
 
-> **Estado:** Aprobado
-> **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC 09 (`healthFacility`, CRUD base), **SPEC F50 (patrón `Op.iLike` + `escapeLike`, implementado)**
+> **Estado:** Implementado
+> **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC 09 (`healthFacility`, CRUD base), SPEC F50 (patrón `Op.iLike`, implementado), **SPEC F52 (extracción de `escapeLike` al helper compartido)**
 > **Fecha:** 2026-09-01
 > **Objetivo:** Añadir `ESAVI-HFAC-006` — `GET /api/health-facilities/search` —, un buscador nacional de establecimientos por nombre o por `localCode`, sin exigir conocer de antemano su geolocalización.
 
@@ -350,8 +350,7 @@ El éxito reutiliza `healthFacility.getSuccessPlural` y el fallo `healthFacility
 
 Nueve pasos. Los tres primeros no tienen superficie observable y preparan el terreno; el `006` empieza a responder en el paso 7.
 
-1. **Extraer `escapeLike` al helper compartido.** Añadir el export a `src/helpers/stringHandling.helper.ts` con la firma de §3.1, borrar la `const` local de `src/services/geoLocation.service.ts:91` y sustituirla por el import del barril. `src/helpers/index.ts` **no se toca** — ya reexporta el módulo con `export *`.
-   *Verificación:* `npm run build` en 0; `grep -rn "escapeLike" src/` devuelve la definición en `stringHandling.helper.ts` y **ninguna otra definición**, solo usos; los casos de contrato del F50 sobre `geo-locations` con `_` literal siguen pasando sin cambios.
+1. ~~**Extraer `escapeLike` al helper compartido.**~~ **Este paso pasa al SPEC F52**, que toca cinco servicios que no escapaban nada y para el que el helper compartido es más suyo (F52 §6). Se ejecutó como parte de la implementación de este spec — `escapeLike` ya vivía en `src/helpers/stringHandling.helper.ts` cuando F52 empezó — y F52 §3.2 lo declara formalmente extraído. Sin efecto en el resto de este plan.
 
 2. **Añadir el tipo `HealthFacilitySearchInput`.** En `src/types/healthFacility/healthFacility.types.ts`, junto a `CreateHealthFacilityInput`, con los tres campos opcionales de §3.2.
    *Verificación:* `npm run build` en 0; el tipo se importa desde el barril `../types` sin registrar nada nuevo en `src/types/index.ts` si ese barril ya reexporta el directorio.

@@ -4,6 +4,7 @@ import { AppUser, SystemConfig, SystemConfigHistory } from '../models';
 import {
     AppError,
     buildDifferentialUpdate,
+    buildTextSearchConditions,
     decryptSystemConfigValue,
     encryptSystemConfigValue,
     esaviDecrypt,
@@ -69,12 +70,13 @@ const maskEncryptedValue = (row: Record<string, unknown>): Record<string, unknow
     return row;
 }
 
-// Shared by both listings, which take exactly the same three filters. scope compares for equality
+// Shared by both listings, which take exactly the same five filters. scope compares for equality
 // against the value normalized with toConstantCase — the column stores the normalized form, so asking
 // about the raw one would never match; valueType compares for equality and the validator has already
-// restricted it to the five literals of the CHECK; search is an Op.iLike over name AND code joined by
-// Op.or, because a parameter is looked up either by the text a human reads or by the key a program
-// resolves, and the caller does not always know which one they remember
+// restricted it to the five literals of the CHECK. name and code are the canonical parameters
+// (SPEC F52), joined with Op.or; search is the legacy alias and already covered both columns before
+// this spec, so it keeps doing so when name/code do not arrive — the caller does not always know
+// whether they remember the text a human reads or the key a program resolves
 const buildSystemConfigWhere = (filters: SystemConfigListFilters): WhereOptions => {
     const where: Record<string, unknown> = {};
     if( filters.scope ) {
@@ -83,12 +85,12 @@ const buildSystemConfigWhere = (filters: SystemConfigListFilters): WhereOptions 
     if( filters.valueType ) {
         where.valueType = filters.valueType;
     }
-    if( filters.search ) {
-        const term = `%${ filters.search.trim() }%`;
-        where[Op.or as unknown as string] = [
-            { name: { [Op.iLike]: term } },
-            { code: { [Op.iLike]: term } }
-        ];
+    const textConditions = [
+        ...buildTextSearchConditions(filters.name ?? filters.search, ['name']),
+        ...buildTextSearchConditions(filters.code ?? filters.search, ['code'])
+    ];
+    if( textConditions.length > 0 ) {
+        where[Op.or as unknown as string] = textConditions;
     }
     return where;
 }

@@ -22,6 +22,12 @@ export const diagnosticTermListValidator = [
     query('search').optional().trim()
         .isLength({ min: 2 }).withMessage('Search must be at least 2 characters long')
         .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long'),
+    query('name').optional().trim()
+        .isLength({ min: 2 }).withMessage('Name must be at least 2 characters long')
+        .isLength({ max: 500 }).withMessage('Name must be at most 500 characters long'),
+    query('code').optional().trim()
+        .isLength({ min: 2 }).withMessage('Code must be at least 2 characters long')
+        .isLength({ max: 100 }).withMessage('Code must be at most 100 characters long'),
     query('source').optional().isIn(TERM_SOURCES)
         .withMessage(`Source must be one of: ${TERM_SOURCES.join(', ')}`),
     query('termGroup').optional().trim().notEmpty().withMessage('Term Group cannot be empty')

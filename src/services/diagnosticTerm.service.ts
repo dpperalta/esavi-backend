@@ -1,7 +1,7 @@
 import { CreationAttributes, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage, parseMeddraAscFile, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseMeddraAscFile, toConstantCase } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -25,14 +25,18 @@ const DEFAULT_IMPORT_TERM_GROUP = 'LLT';
 // The counters stay exact; only the sample of rejected lines is trimmed
 const MAX_REPORTED_IMPORT_ERRORS = 20;
 
-// Shared by both listings. search is the first Op.iLike of the repository and stays deliberately
-// confined to name and to these two services: the real use case of the catalog is the autocomplete
-// of the notification form, and a term is looked up by how it reads, not by its code. source and
-// termGroup are exact equality — partial search over them is out of this spec's scope
+// Shared by both listings. name and code are the canonical parameters (SPEC F52), joined with
+// Op.or; search is the legacy alias and feeds both columns at once. name/code explicit win over
+// the alias when both arrive. source and termGroup are exact equality — partial search over them
+// is out of this spec's scope
 const buildDiagnosticTermWhere = (filters: DiagnosticTermListFilters): WhereOptions => {
     const where: Record<string, unknown> = {};
-    if (filters.search) {
-        where.name = { [Op.iLike]: `%${filters.search.trim()}%` };
+    const textConditions = [
+        ...buildTextSearchConditions(filters.name ?? filters.search, ['name']),
+        ...buildTextSearchConditions(filters.code ?? filters.search, ['code'])
+    ];
+    if (textConditions.length > 0) {
+        where[Op.or as unknown as string] = textConditions;
     }
     if (filters.source) {
         where.source = filters.source;

@@ -44,8 +44,8 @@ y hoy ninguna de las dos es buscable por texto parcial.
 
 **Fuera de alcance (otros specs):**
 
-- `geoLevelType` no se toca. No tiene filtro de texto en este spec, aunque sí tiene una columna `code` real;
-  si hace falta, es un spec propio y minúsculo — repetir este mismo patrón sobre una sola columna.
+- `geoLevelType` no se toca. No tenía filtro de texto en este spec, aunque sí tiene una columna `code` real;
+  lo resuelve el [SPEC F52](52-name-code-resolution.md), que le añade `name` y `code` como parámetros canónicos.
 - `healthFacility` no se toca. `references/specs/09-healthfacility-crud.md` ya lo dejó fuera de su alcance
   con la misma razón (`Op.iLike` inexistente); sigue sin resolverse aquí — la resuelve el [SPEC F51](51-healthfacility-name-code-search.md).
 - Búsqueda en `officialName` o `shortName` de `geoLocation`. Se decidió que `name` es la columna que importa
@@ -250,7 +250,7 @@ el rol mínimo y el código de operación (`ESAVI-GEOLOC-002`) ya están registr
 - **Sí:** escapar `%` y `_` en la entrada del usuario antes de interpolarla en el patrón. Sin esto, cualquier
   código que contenga un guion bajo literal —frecuente en códigos administrativos— se comportaría como comodín.
 - **No:** `geoLevelType`. Tiene una columna `code` real y sería un cambio de una sola columna, pero el usuario
-  acotó este spec a `geoLocation` explícitamente. Si hace falta, es un spec propio y pequeño.
+  acotó este spec a `geoLocation` explícitamente. Lo resuelve el [SPEC F52](52-name-code-resolution.md).
 - **No:** `healthFacility`. Ya estaba fuera del alcance de `references/specs/09-healthfacility-crud.md` por la
   misma razón (`Op.iLike` inexistente) y sigue sin resolverse aquí — la resuelve el [SPEC F51](51-healthfacility-name-code-search.md).
 - **No:** normalizar acentos (`unaccent` o columna generada). Es un cambio de esquema y de índice que no está
@@ -275,7 +275,7 @@ el rol mínimo y el código de operación (`ESAVI-GEOLOC-002`) ya están registr
 
 ## Lo que **no** está en este spec
 
-- Búsqueda por texto en `geoLevelType` (tiene columna `code` real y sería un spec propio y pequeño).
+- Búsqueda por texto en `geoLevelType` (tiene columna `code` real) — la resuelve el [SPEC F52](52-name-code-resolution.md).
 - Búsqueda por texto en `healthFacility` (ya fuera de alcance en SPEC 09, sigue sin resolverse aquí) — la resuelve el [SPEC F51](51-healthfacility-name-code-search.md).
 - Búsqueda en `officialName` o `shortName` de `geoLocation`.
 - Normalización de acentos o tolerancia a erratas (`unaccent`, `pg_trgm`, columna generada).

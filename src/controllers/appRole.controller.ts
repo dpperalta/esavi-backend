@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
-import { AuthUser } from '../types';
+import { AppRoleListFilters, AuthUser } from '../types';
 import {
     createAppRoleService,
     getActiveAppRolesService,
@@ -9,6 +9,12 @@ import {
     updateAppRoleService,
     setAppRoleActivationService
 } from '../services/appRole.service';
+
+// Unwraps the two query filters, identical in both listings
+const readListFilters = (query: Request['query']): AppRoleListFilters => ({
+    name: query.name ? (query.name as string).trim() : undefined,
+    code: query.code ? (query.code as string).trim() : undefined
+});
 
 // Create App Role Controller
 // Code: ESAVI-APPROLE-001
@@ -36,7 +42,7 @@ const getAppRoles = async (req: Request, res: Response, next: NextFunction): Pro
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getActiveAppRolesService(limit, offset);
+        const data = await getActiveAppRolesService(readListFilters(req.query), limit, offset);
         return res.status(200).json({
             ok: true,
             message: getMessage('appRole.getSuccessPlural', req.lang),
@@ -58,7 +64,7 @@ const getAllAppRoles = async (req: Request, res: Response, next: NextFunction): 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllAppRolesService(limit, offset);
+        const data = await getAllAppRolesService(readListFilters(req.query), limit, offset);
         return res.status(200).json({
             ok: true,
             message: getMessage('appRole.getSuccessPlural', req.lang),

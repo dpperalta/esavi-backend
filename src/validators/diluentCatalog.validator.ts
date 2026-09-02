@@ -17,7 +17,13 @@ export const diluentCatalogListValidator = [
         .withMessage('Offset must be a non-negative integer'),
     query('search').optional().trim()
         .isLength({ min: 2 }).withMessage('Search must be at least 2 characters long')
-        .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long')
+        .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long'),
+    query('name').optional().trim()
+        .isLength({ min: 2 }).withMessage('Name must be at least 2 characters long')
+        .isLength({ max: 250 }).withMessage('Name must be at most 250 characters long'),
+    query('code').optional().trim()
+        .isLength({ min: 2 }).withMessage('Code must be at least 2 characters long')
+        .isLength({ max: 100 }).withMessage('Code must be at most 100 characters long')
 ];
 
 // code is required here even though esaviapp.sql:605 admits null: a diluent without a code cannot be

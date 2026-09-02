@@ -532,6 +532,182 @@ describe('catalogItem contract', () => {
     });
 
     /**
+     * ESAVI-CATITEM-007 — SPEC F52. Global search across catalog types by name or code, with
+     * catalogTypeId optional. No route of its own before this spec: the two listings by type
+     * (002A/002B) require the type in the path.
+     */
+    describe('search — ESAVI-CATITEM-007 (SPEC F52)', () => {
+
+        const searchPath = '/api/catalog-items/search';
+        const tag = `${ Date.now().toString(36) }s7`;
+
+        let secondCatalogTypeId: string;
+        let inactiveItemId: string;
+
+        beforeAll(async () => {
+            const secondType = await request(app)
+                .post('/api/catalog-types')
+                .set(authHeader('SUPERADMIN'))
+                .send({ code: `search${ tag }`, name: `Search Type ${ tag }` });
+            expect(secondType.status).toBe(201);
+            secondCatalogTypeId = secondType.body.data.catalogTypeId;
+
+            // Same name in two different types mints the same code in both — the UQ is
+            // composite (catalogTypeId, code), so this is legal and is the fixture §3.1 asks for
+            const firstItem = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: `Buscar Activo ${ tag }`, value: 'S1' });
+            expect(firstItem.status).toBe(201);
+
+            const secondItem = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId: secondCatalogTypeId, name: `Buscar Activo ${ tag }`, value: 'S2' });
+            expect(secondItem.status).toBe(201);
+
+            const inactiveItem = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: `Buscar Inactivo ${ tag }`, value: 'S3' });
+            expect(inactiveItem.status).toBe(201);
+            inactiveItemId = inactiveItem.body.data.catalogItemId;
+
+            const deleted = await request(app)
+                .delete(`/api/catalog-items/${ inactiveItemId }`)
+                .set(authHeader('ADMIN'));
+            expect(deleted.status).toBe(200);
+        });
+
+        it('finds items by name without requiring catalogTypeId', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar Activo ${ tag }`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(2);
+            const typeIds = response.body.data.rows.map((row: { catalogTypeId: string }) => row.catalogTypeId);
+            expect(typeIds).toEqual(expect.arrayContaining([ catalogTypeId, secondCatalogTypeId ]));
+        });
+
+        it('with catalogTypeId narrows to items matching the text AND that type', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar Activo ${ tag }&catalogTypeId=${ catalogTypeId }`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(1);
+            expect(response.body.data.rows[0].catalogTypeId).toBe(catalogTypeId);
+        });
+
+        it('catalogTypeId alone is not a criterion and answers 400', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?catalogTypeId=${ catalogTypeId }`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('CATITEM_007_SEARCH_CRITERIA_REQUIRED');
+        });
+
+        it('no parameters at all answers 400 with the same key', async () => {
+            const response = await request(app).get(searchPath).set(authHeader('USER'));
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('CATITEM_007_SEARCH_CRITERIA_REQUIRED');
+        });
+
+        it('a nonexistent catalogTypeId narrows to an empty page, never a 404', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar Activo ${ tag }&catalogTypeId=00000000-0000-4000-8000-000000000000`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+        });
+
+        it('an invalid catalogTypeId answers 400', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar Activo ${ tag }&catalogTypeId=noEsUnUuid`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(400);
+        });
+
+        it('a USER never sees an inactive row', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar Inactivo ${ tag }`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+        });
+
+        it('a SUPERADMIN sees the inactive row too', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar Inactivo ${ tag }`)
+                .set(authHeader('SUPERADMIN'));
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(1);
+            expect(response.body.data.rows[0].catalogItemId).toBe(inactiveItemId);
+        });
+
+        it('a literal underscore in the query does not act as a wildcard', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar_${ tag }`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+        });
+
+        it('a query with no match answers 200 with count 0, never 404', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=noExisteNiUnParecido${ tag }`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+        });
+
+        it('embeds catalogType with exactly catalogTypeId and name', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar Activo ${ tag }&catalogTypeId=${ catalogTypeId }`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows[0].catalogType).toEqual({
+                catalogTypeId,
+                name: expect.any(String)
+            });
+        });
+
+        it('no row of the response carries sysDetails', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=Buscar Activo ${ tag }`)
+                .set(authHeader('USER'));
+
+            expect(response.status).toBe(200);
+            for( const row of response.body.data.rows ) {
+                expect(row).not.toHaveProperty('sysDetails');
+            }
+        });
+
+        it('rejects a request with no token with 401', async () => {
+            const response = await request(app).get(`${ searchPath }?name=${ tag }`);
+            expect(response.status).toBe(401);
+        });
+
+        it('rejects an ANALYTICS token with 403', async () => {
+            const response = await request(app)
+                .get(`${ searchPath }?name=${ tag }`)
+                .set(authHeader('ANALYTICS'));
+            expect(response.status).toBe(403);
+        });
+
+    });
+
+    /**
      * SPEC F46 — the value lock. `code` belongs to the country and may be recoded at any time;
      * `value` belongs to this source code, which resolves items by it, and is frozen by
      * `isValueLocked` so a recoding cannot silently break the lookup. The lock itself is never
@@ -801,6 +977,53 @@ describe('catalogItem contract', () => {
                 expect(row).toHaveProperty('isValueLocked', true);
             });
 
+        });
+
+    });
+
+    /**
+     * SPEC F52 §1.E / §3.8 — attributes: { exclude: ['sysDetails'] } on the 002A, 002B and 003 of
+     * this entity. sysDetails is internal by convention and the rest of the repository already
+     * excludes it; appDetails keeps travelling
+     */
+    describe('sysDetails alignment — SPEC F52', () => {
+
+        let id: string;
+
+        beforeAll(async () => {
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: `SysDetails ${ suffix }`, value: 'SD' });
+            expect(created.status).toBe(201);
+            id = created.body.data.catalogItemId;
+        });
+
+        it('is absent from 002A — active list by type', async () => {
+            const response = await request(app)
+                .get(`/api/catalog-items/type/${ catalogTypeId }?limit=100`)
+                .set(authHeader('USER'));
+            expect(response.status).toBe(200);
+            const row = response.body.data.rows.find((r: { catalogItemId: string }) => r.catalogItemId === id);
+            expect(row).not.toHaveProperty('sysDetails');
+            expect(row).toHaveProperty('appDetails');
+        });
+
+        it('is absent from 002B — admin list by type', async () => {
+            const response = await request(app)
+                .get(`/api/catalog-items/admin/type/${ catalogTypeId }?limit=100`)
+                .set(authHeader('ADMIN'));
+            expect(response.status).toBe(200);
+            const row = response.body.data.rows.find((r: { catalogItemId: string }) => r.catalogItemId === id);
+            expect(row).not.toHaveProperty('sysDetails');
+            expect(row).toHaveProperty('appDetails');
+        });
+
+        it('is absent from 003 — get by id', async () => {
+            const response = await request(app).get(`/api/catalog-items/${ id }`).set(authHeader('USER'));
+            expect(response.status).toBe(200);
+            expect(response.body.data).not.toHaveProperty('sysDetails');
+            expect(response.body.data).toHaveProperty('appDetails');
         });
 
     });

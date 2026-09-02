@@ -1,7 +1,7 @@
 import { CreationAttributes, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { VaccineWhodrug } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage, parseWhodrugXlsxFile, WhodrugFileError } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseWhodrugXlsxFile, WhodrugFileError } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -37,15 +37,20 @@ const stripSysDetails = (vaccineWhodrug: VaccineWhodrug): Record<string, unknown
     return plain;
 }
 
-// Shared by both listings, which take exactly the same five filters. search is an Op.iLike over
-// drugName and stays confined to these two services: the real use case is the autocomplete of the
-// notification form, and an autocomplete needs prefixes and fragments — which is why the GIN index
-// IX_vaccineWhodrug_name is deliberately left unconsumed. The two booleans are compared against
-// undefined and never by truthiness, or ?isPreferred=false would silently return everything
+// Shared by both listings, which take exactly the same seven filters. name and code are the
+// canonical parameters (SPEC F52): name is an Op.iLike over drugName, code over drugCode, joined
+// with Op.or — the autocomplete of the notification form needs prefixes and fragments, which is
+// why the GIN index IX_vaccineWhodrug_name is deliberately left unconsumed. search is the legacy
+// alias and feeds both columns at once. The two booleans are compared against undefined and never
+// by truthiness, or ?isPreferred=false would silently return everything
 const buildVaccineWhodrugWhere = (filters: VaccineWhodrugListFilters): WhereOptions => {
     const where: Record<string, unknown> = {};
-    if (filters.search) {
-        where.drugName = { [Op.iLike]: `%${filters.search.trim()}%` };
+    const textConditions = [
+        ...buildTextSearchConditions(filters.name ?? filters.search, ['drugName']),
+        ...buildTextSearchConditions(filters.code ?? filters.search, ['drugCode'])
+    ];
+    if (textConditions.length > 0) {
+        where[Op.or as unknown as string] = textConditions;
     }
     if (filters.language) {
         where.language = filters.language.trim();

@@ -43,10 +43,13 @@ export interface SystemConfigDefault {
 }
 
 // Query filters of the two listings, identical in both. scope compares for equality against the value
-// normalized with toConstantCase, valueType against the five literals of the CHECK, and search runs
-// as Op.iLike over name AND code joined by Op.or, with a minimum of 2 characters
+// normalized with toConstantCase, valueType against the five literals of the CHECK. name and code are
+// the canonical parameters (SPEC F52), each an Op.iLike over its own column, joined with Op.or; search
+// is the legacy alias and already covered both columns before this spec, so it keeps doing so
 export interface SystemConfigListFilters {
     scope?: string;
     valueType?: SystemConfigValueType;
     search?: string;
+    name?: string;
+    code?: string;
 }

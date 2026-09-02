@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { tokenValidation, uploadSingleFile, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { activateCatalogItem, createCatalogItem, deleteCatalogItem, getAllCatalogItemsByType, getCatalogItemById, getCatalogItemsByType, importCatalogItems, updateCatalogItem } from '../controllers/catalogItem.controller';
-import { catalogItemIdValidator, catalogItemListValidator, createCatalogItemValidator, importCatalogItemsValidator, updateCatalogItemValidator } from '../validators';
+import { activateCatalogItem, createCatalogItem, deleteCatalogItem, getAllCatalogItemsByType, getCatalogItemById, getCatalogItemsByType, importCatalogItems, searchCatalogItems, updateCatalogItem } from '../controllers/catalogItem.controller';
+import { catalogItemIdValidator, catalogItemListValidator, createCatalogItemValidator, importCatalogItemsValidator, searchCatalogItemValidator, updateCatalogItemValidator } from '../validators';
 
 const { SUPERADMIN, ADMIN, USER } = ROLES;
 
@@ -26,6 +26,11 @@ router.get('/admin/type/:id', tokenValidation, validateUserRole(ADMIN), ...catal
 // generalized without touching it: the i18nPrefix resolves the five keys of the catalogItem block
 // Code: ESAVI-CATITEM-006
 router.post('/import', tokenValidation, validateUserRole(SUPERADMIN), uploadSingleFile('file', { i18nPrefix: 'catalogItem', codePrefix: 'CATITEM_006' }), ...importCatalogItemsValidator, validateFields, importCatalogItems);
+
+// Search Catalog Items by Name or Code
+// Literal path, declared before '/:id' so that '/search' is never read as an identifier
+// Code: ESAVI-CATITEM-007
+router.get('/search', tokenValidation, validateUserRole(USER), ...searchCatalogItemValidator, ...catalogItemListValidator, validateFields, searchCatalogItems);
 
 // Get Catalog Item by ID
 // Code: ESAVI-CATITEM-003

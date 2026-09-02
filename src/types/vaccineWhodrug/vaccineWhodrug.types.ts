@@ -40,12 +40,15 @@ export interface CreateVaccineWhodrugInput {
     isActive?: boolean;
 }
 
-// Query filters of the two listings, identical in both. search runs as Op.iLike over drugName only,
-// with a minimum of 2 characters; language and iso3Code are exact equality over the trimmed value;
-// isPreferred and isGeneric are booleans. There is no way to filter isGeneric IS NULL — it would
-// need a sentinel value in the query and nobody has asked for it
+// Query filters of the two listings, identical in both. name and code are the canonical parameters
+// (SPEC F52): name is an Op.iLike over drugName, code over drugCode, joined with Op.or. search is
+// the legacy alias and feeds both columns at once. language and iso3Code are exact equality over
+// the trimmed value; isPreferred and isGeneric are booleans. There is no way to filter isGeneric
+// IS NULL — it would need a sentinel value in the query and nobody has asked for it
 export interface VaccineWhodrugListFilters {
     search?: string;
+    name?: string;
+    code?: string;
     language?: string;
     iso3Code?: string;
     isPreferred?: boolean;

@@ -1,9 +1,10 @@
 import { Op } from 'sequelize';
 import { AppError } from '../helpers/appError.helper';
 import { buildDifferentialUpdate } from '../helpers/differentialUpdate.helper';
+import { buildTextSearchConditions } from '../helpers/searchConditions.helper';
 import { getMessage } from '../helpers/i18n.helper';
 import { GeoLevelType } from '../models/geoLevelType.model';
-import { AppDetails, AuthUser, CreateGeoLevelTypeInput } from '../types';
+import { AppDetails, AuthUser, CreateGeoLevelTypeInput, GeoLevelTypeListFilters } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -35,10 +36,29 @@ const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser
     return newGeoLevelType;
 }
 
+// Shared by both listings. name and code are the canonical parameters (SPEC F52), joined with
+// Op.or — the entity had no text filter of its own before this spec
+const buildGeoLevelTypeWhere = (filters: GeoLevelTypeListFilters): Record<string, unknown> => {
+    const where: Record<string, unknown> = {};
+    const textConditions = [
+        ...buildTextSearchConditions(filters.name, ['name']),
+        ...buildTextSearchConditions(filters.code, ['code'])
+    ];
+    if (textConditions.length > 0) {
+        where[Op.or as unknown as string] = textConditions;
+    }
+    return where;
+}
+
 // ESAVI-GEOTYPE-002A - Get Active Geographic Level Types Service
-const getActiveGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveGeoLevelTypesService = async (filters: GeoLevelTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const geoLevelTypes = await GeoLevelType.findAndCountAll({
-        where: { isActive: true },
+        where: {
+            ...buildGeoLevelTypeWhere(filters),
+            isActive: true
+        },
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [['sortOrder', 'ASC']],
         limit,
         offset
@@ -47,8 +67,11 @@ const getActiveGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offs
 }
 
 // ESAVI-GEOTYPE-002B - Get All Geographic Level Types Service (including inactive) - For SuperAdmin
-const getAllGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllGeoLevelTypesService = async (filters: GeoLevelTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const geoLevelTypes = await GeoLevelType.findAndCountAll({
+        where: buildGeoLevelTypeWhere(filters),
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [
             ['sortOrder', 'ASC'],
             ['name', 'ASC']
@@ -63,8 +86,10 @@ const getAllGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offset:
 const getGeoLevelTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { geoLevelTypeId: id } : { geoLevelTypeId: id, isActive: true };
     const geoLevelType = await GeoLevelType.findOne({
-        where: whereClause
-    }); 
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] }
+    });
     if( !geoLevelType ) {
         throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_003_NOT_FOUND');
     }

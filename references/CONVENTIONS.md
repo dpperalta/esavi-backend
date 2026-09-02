@@ -196,6 +196,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | caseWorkflow | `012` | avanzar de etapa — sella el inicio de la etapa nueva y el fin de la anterior. **Sin ruta HTTP:** lo invocan los cuatro servicios de creación de etapa dentro de su transacción |
 | vaccineWhodrug | `007` | importación masiva desde fichero WHODrug `.xlsx` — SUPERADMIN, `POST /import` |
 | catalogItem | `006` | importación masiva desde fichero `.xlsx`, con creación de `catalogType` al vuelo — SUPERADMIN, `POST /import` |
+| catalogItem | `007` | búsqueda global por nombre o código — `Op.iLike` sobre `name` y `code`, con `catalogTypeId` opcional. `GET /search`, USER |
 | systemConfig | `006` | leer por el par `(code, scope)` — la aplicación conoce el nombre del parámetro, no su UUID. `GET /code/:code`, USER |
 | systemConfig | `007` | listar el historial de cambios de una configuración — `systemConfigHistory` cuelga del padre y no tiene superficie propia. `GET /:id/history`, SUPERADMIN |
 | systemConfig | `008` | siembra idempotente de las configuraciones iniciales desde el catálogo declarativo — solo-alta, transacción todo o nada. `POST /sync`, SUPERADMIN |

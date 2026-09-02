@@ -1,7 +1,7 @@
 ﻿import { Request, Response, NextFunction } from "express"
 import { AppError, canViewInactive, esaviLog, getMessage } from "../helpers";
-import { createCatalogItemService, getActiveCatalogItemsByTypeService, getAllCatalogItemsByTypeService, getCatalogItemByIdService, importCatalogItemsService, setCatalogItemActivationService, updateCatalogItemService } from "../services/catalogItem.service";
-import { ImportCatalogItemsInput } from "../types";
+import { createCatalogItemService, getActiveCatalogItemsByTypeService, getAllCatalogItemsByTypeService, getCatalogItemByIdService, importCatalogItemsService, searchCatalogItemsService, setCatalogItemActivationService, updateCatalogItemService } from "../services/catalogItem.service";
+import { CatalogItemSearchInput, ImportCatalogItemsInput } from "../types";
 
 // Create Catalog Item Controller
 // Code: ESAVI-CATITEM-001
@@ -66,6 +66,33 @@ const getAllCatalogItemsByType = async (req: Request, res: Response, next: NextF
             return;
         }
         next(new AppError(getMessage('catalogItem.getFailedPlural', req.lang), 500, 'CATITEM_002B_FETCH_FAILED', error));
+    }
+}
+
+// Search Catalog Items by Name or Code Controller
+// Code: ESAVI-CATITEM-007
+const searchCatalogItems = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    const filters: CatalogItemSearchInput = {
+        name: req.query.name ? (req.query.name as string).trim() : undefined,
+        code: req.query.code ? (req.query.code as string).trim() : undefined,
+        catalogTypeId: req.query.catalogTypeId ? (req.query.catalogTypeId as string).trim() : undefined
+    };
+    try {
+        const data = await searchCatalogItemsService(filters, req.lang, canViewInactive(req.user), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('catalogItem.getSuccessPlural', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-CATITEM-007: Error searching Catalog Items: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('catalogItem.getFailedPlural', req.lang), 500, 'CATITEM_007_SEARCH_FAILED', error));
     }
 }
 
@@ -191,6 +218,7 @@ export {
     createCatalogItem,
     getCatalogItemsByType,
     getAllCatalogItemsByType,
+    searchCatalogItems,
     getCatalogItemById,
     updateCatalogItem,
     deleteCatalogItem,

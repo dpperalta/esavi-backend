@@ -46,7 +46,13 @@ export const systemConfigListValidator = [
         .withMessage(`Value type must be one of: ${ SYSTEM_CONFIG_VALUE_TYPES.join(', ') }`),
     query('search').optional().trim()
         .isLength({ min: 2 }).withMessage('Search must be at least 2 characters long')
-        .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long')
+        .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long'),
+    query('name').optional().trim()
+        .isLength({ min: 2 }).withMessage('Name must be at least 2 characters long')
+        .isLength({ max: 200 }).withMessage('Name must be at most 200 characters long'),
+    query('code').optional().trim()
+        .isLength({ min: 2 }).withMessage('Code must be at least 2 characters long')
+        .isLength({ max: 150 }).withMessage('Code must be at most 150 characters long')
 ];
 
 // The eight data columns of §3.1, all writable on create. The isLength ceilings match the varchar

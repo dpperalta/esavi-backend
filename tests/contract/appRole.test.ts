@@ -579,6 +579,85 @@ describe('appRole contract', () => {
 
     });
 
+    /**
+     * ESAVI-APPROLE-002A/002B — SPEC F52. The entity had no text filter at all before this spec:
+     * name and code are the canonical parameters, joined with Op.or, with no legacy search alias.
+     * Both code AND name are normalized with toConstantCase here — unlike every other entity of
+     * this spec, name is not left as literal text — so both columns store CONSTANT_CASE and a
+     * literal underscore in the query is a meaningful escape case for either one
+     */
+    describe('name/code search — SPEC F52', () => {
+
+        const tag = `SEARCH${ suffix }`;
+        let findableId: string;
+        let inactiveId: string;
+
+        const publicList = ( qs: string ) => request(app).get(`/api/roles?${ qs }&limit=100`).set(authHeader('USER'));
+        const adminList = ( qs: string ) => request(app).get(`/api/roles/admin?${ qs }&limit=100`).set(authHeader('ADMIN'));
+
+        const createNamedRole = async ( code: string, name: string ): Promise<string> => {
+            const response = await createRole('SUPERADMIN', { code, name, description: `Fixture ${ code }`, level: 5 });
+            expect(response.status).toBe(201);
+            return response.body.data.roleId;
+        };
+
+        beforeAll(async () => {
+            findableId = await createNamedRole(`FINDABLE_${ tag }`, `Findable ${ tag }`);
+            inactiveId = await createNamedRole(`RETIRED_${ tag }`, `Retired ${ tag }`);
+            const deleted = await request(app).delete(`/api/roles/${ inactiveId }`).set(authHeader('ADMIN'));
+            expect(deleted.status).toBe(200);
+
+            await createNamedRole(`WILD_A_${ tag }`, `Wild A ${ tag }`);
+            await createNamedRole(`WILDXA_${ tag }`, `WildXA ${ tag }`);
+        });
+
+        it('name matches partially and case insensitively', async () => {
+            const response = await publicList(`name=findable_${ tag }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.map((r: { roleId: string }) => r.roleId)).toContain(findableId);
+        });
+
+        it('code matches partially and case insensitively', async () => {
+            const response = await publicList(`code=findable_${ tag }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.map((r: { roleId: string }) => r.roleId)).toEqual([findableId]);
+        });
+
+        it('name and code combine with Op.or — a match on either is enough', async () => {
+            const response = await publicList(`name=noExisteEsteNombre${ tag }&code=findable_${ tag }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.map((r: { roleId: string }) => r.roleId)).toContain(findableId);
+        });
+
+        it('the public listing hides the inactive row and the admin one shows it', async () => {
+            const asPublic = await publicList(`name=retired_${ tag }`);
+            const asAdmin = await adminList(`name=retired_${ tag }`);
+
+            expect(asPublic.body.data.rows).toHaveLength(0);
+            expect(asAdmin.body.data.rows.map((r: { roleId: string }) => r.roleId)).toContain(inactiveId);
+        });
+
+        it('?name=a (one character) responds 400; ?name=ab responds 200', async () => {
+            expect((await publicList('name=a')).status).toBe(400);
+            expect((await publicList('name=ab')).status).toBe(200);
+        });
+
+        it('a literal underscore in code does not act as a single-character wildcard', async () => {
+            const response = await publicList(`code=WILD_A_${ tag }`);
+            expect(response.status).toBe(200);
+            const codes = response.body.data.rows.map((r: { code: string }) => r.code);
+            expect(codes).toContain(`WILD_A_${ tag }`);
+            expect(codes).not.toContain(`WILDXA_${ tag }`);
+        });
+
+        it('no parameter still returns the unfiltered catalog, exactly as before this spec', async () => {
+            const response = await publicList('');
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.length).toBeGreaterThan(0);
+        });
+
+    });
+
     describe('differential update — SPEC F12', () => {
 
         it('a PUT resending the whole GET response writes nothing', async () => {

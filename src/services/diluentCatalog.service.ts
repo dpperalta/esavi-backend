@@ -1,7 +1,7 @@
 import { Op, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiluentCatalog } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, toConstantCase } from '../helpers';
 import { AppDetails, AuthUser, CreateDiluentCatalogInput, DiluentCatalogListFilters } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -21,14 +21,18 @@ const stripSysDetails = (diluent: DiluentCatalog): Record<string, unknown> => {
     return plain;
 }
 
-// Shared by both listings, which take exactly the same single filter. search is an Op.iLike over
-// name and stays confined to these two services: the real use case is the autocomplete of the
-// notification form, and an autocomplete needs prefixes and fragments. There is no other filter —
+// Shared by both listings, which take exactly the same two filters. name and code are the
+// canonical parameters (SPEC F52), joined with Op.or; search is the legacy alias and feeds both
+// columns at once, and name/code explicit win over it when both arrive. There is no other filter —
 // the table has no column that could serve as a facet
 const buildDiluentCatalogWhere = (filters: DiluentCatalogListFilters): WhereOptions => {
     const where: Record<string, unknown> = {};
-    if (filters.search) {
-        where.name = { [Op.iLike]: `%${filters.search.trim()}%` };
+    const textConditions = [
+        ...buildTextSearchConditions(filters.name ?? filters.search, ['name']),
+        ...buildTextSearchConditions(filters.code ?? filters.search, ['code'])
+    ];
+    if (textConditions.length > 0) {
+        where[Op.or as unknown as string] = textConditions;
     }
     return where;
 }

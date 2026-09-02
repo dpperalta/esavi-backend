@@ -14,10 +14,12 @@ export interface CreateDiluentCatalogInput {
     isActive?: boolean;
 }
 
-// Query filters of the two listings, identical in both. search runs as Op.iLike over name only, with
-// a minimum of 2 characters. There is no other filter: the table has no column that could serve as a
-// facet — description and composition are long text, and there is no manufacturer, presentation or
-// type
+// Query filters of the two listings, identical in both. name and code are the canonical parameters
+// (SPEC F52), each an Op.iLike over its own column; search is the legacy alias and feeds both at
+// once. There is no other filter: the table has no column that could serve as a facet —
+// description and composition are long text, and there is no manufacturer, presentation or type
 export interface DiluentCatalogListFilters {
     search?: string;
+    name?: string;
+    code?: string;
 }

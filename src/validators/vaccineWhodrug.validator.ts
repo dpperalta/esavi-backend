@@ -18,6 +18,12 @@ export const vaccineWhodrugListValidator = [
     query('search').optional().trim()
         .isLength({ min: 2 }).withMessage('Search must be at least 2 characters long')
         .isLength({ max: 500 }).withMessage('Search must be at most 500 characters long'),
+    query('name').optional().trim()
+        .isLength({ min: 2 }).withMessage('Name must be at least 2 characters long')
+        .isLength({ max: 500 }).withMessage('Name must be at most 500 characters long'),
+    query('code').optional().trim()
+        .isLength({ min: 2 }).withMessage('Code must be at least 2 characters long')
+        .isLength({ max: 250 }).withMessage('Code must be at most 250 characters long'),
     query('language').optional().trim().notEmpty().withMessage('Language cannot be empty')
         .isLength({ max: 10 }).withMessage('Language must be at most 10 characters long'),
     query('iso3Code').optional().trim().notEmpty().withMessage('ISO3 Code cannot be empty')
