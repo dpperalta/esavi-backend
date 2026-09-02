@@ -196,6 +196,7 @@
         "getFailedPlural": "Ophalen van de zorginstellingen mislukt. Probeer het later opnieuw.",
         "getSuccess": "Zorginstelling succesvol opgehaald",
         "getSuccessPlural": "Zorginstellingen succesvol opgehaald",
+        "searchCriteriaRequired": "Een naam of een code is vereist om te zoeken",
         "updatedSuccess": "Zorginstelling succesvol bijgewerkt",
         "updatedFailed": "Bijwerken van de zorginstelling mislukt. Probeer het later opnieuw.",
         "alreadyInactive": "De zorginstelling met ID {{id}} is al inactief",

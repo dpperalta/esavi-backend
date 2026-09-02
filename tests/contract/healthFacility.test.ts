@@ -3,6 +3,7 @@ import { app } from '../../src/app';
 import { CatalogItem, CatalogType, HealthFacility } from '../../src/models';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
+import type { TestRole } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 
 /**
@@ -577,6 +578,252 @@ describe('healthFacility contract', () => {
             expect(( after!.getDataValue('appDetails') as unknown[] ).length)
                 .toBe(( before!.getDataValue('appDetails') as unknown[] ).length);
             expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
+        });
+
+    });
+
+    // SPEC F51 — ESAVI-HFAC-006. Every fixture below carries `tag` in the column under test, so a
+    // search for it returns this block's rows and nothing the rest of the suite created
+    describe('search by name or code — ESAVI-HFAC-006', () => {
+
+        const tag = `vz${ suffix }`;
+        // toTitleCase runs on create, so the stored name capitalizes every word of the
+        // fixture. The search still hits it: Op.iLike ignores case
+        const storedTag = `Vz${ suffix }`;
+        const storedSuffix = suffix.charAt(0).toUpperCase() + suffix.slice(1);
+        let otherGeoLocationId: string;
+
+        const search = ( query: string, role: TestRole = 'USER' ) =>
+            request(app)
+                .get(`/api/health-facilities/search${ query }`)
+                .set(authHeader(role));
+
+        beforeAll(async () => {
+            const otherLevelTypeId = await createGeoLevelTypeFixture('hfacSearchLevel', 2);
+            otherGeoLocationId = await createGeoLocationFixture(otherLevelTypeId, 'hfacSearchLoc');
+
+            // Matches through `name`, and the only one carrying a facilityType
+            expect(( await createFacility({
+                name: `Aaa hospital ${ tag }`,
+                localCode: `search a ${ suffix }`,
+                facilityTypeItemId
+            }) ).status).toBe(201);
+
+            // Matches through `officialName` only — `name` does not carry the tag
+            expect(( await createFacility({
+                name: `Bbb clinic ${ suffix }`,
+                officialName: `Official ${ tag }`,
+                localCode: `search b ${ suffix }`
+            }) ).status).toBe(201);
+
+            // Matches through `shortName` only
+            expect(( await createFacility({
+                name: `Ccc post ${ suffix }`,
+                shortName: `SHORT${ tag }`,
+                localCode: `search c ${ suffix }`
+            }) ).status).toBe(201);
+
+            // Matches through `localCode` only. toConstantCase turns the space into the literal
+            // underscore this block needs to prove the escape
+            expect(( await createFacility({
+                name: `Ddd unrelated ${ suffix }`,
+                localCode: `hvq 1${ tag }`
+            }) ).status).toBe(201);
+
+            // The decoy of the escape test: an X where the row above has the underscore
+            expect(( await createFacility({
+                name: `Eee unrelated ${ suffix }`,
+                localCode: `hvqx1${ tag }`
+            }) ).status).toBe(201);
+
+            // Lives in the other geolocation — the vehicle of the conjunctive geoLocationId case
+            const elsewhere = await request(app)
+                .post('/api/health-facilities')
+                .set(authHeader('ADMIN'))
+                .send({
+                    geoLocationId: otherGeoLocationId,
+                    name: `Fff elsewhere ${ tag }`,
+                    localCode: `search f ${ suffix }`
+                });
+            expect(elsewhere.status).toBe(201);
+
+            // Deactivated right after creation: only roles that can view inactive rows see it
+            const inactive = await createFacility({
+                name: `Ggg inactive ${ tag }`,
+                localCode: `search g ${ suffix }`
+            });
+            expect(inactive.status).toBe(201);
+            expect(( await request(app)
+                .delete(`/api/health-facilities/${ inactive.body.data.healthFacilityId }`)
+                .set(authHeader('ADMIN')) ).status).toBe(200);
+        });
+
+        it('matches `name` regardless of case, including a hit in the middle of the string', async () => {
+            const response = await search(`?name=${ tag.toUpperCase() }`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.ok).toBe(true);
+            expect(response.body.data.rows.map(( row: { name: string } ) => row.name))
+                .toEqual(expect.arrayContaining([`Aaa Hospital ${ storedTag }`]));
+        });
+
+        it('matches a row through `officialName` alone', async () => {
+            const response = await search(`?name=${ tag }`);
+            const names = response.body.data.rows.map(( row: { name: string } ) => row.name);
+
+            expect(response.status).toBe(200);
+            expect(names).toContain(`Bbb Clinic ${ storedSuffix }`);
+        });
+
+        it('matches a row through `shortName` alone', async () => {
+            const response = await search(`?name=${ tag }`);
+            const names = response.body.data.rows.map(( row: { name: string } ) => row.name);
+
+            expect(response.status).toBe(200);
+            expect(names).toContain(`Ccc Post ${ storedSuffix }`);
+        });
+
+        it('matches `localCode` through `code`, regardless of case', async () => {
+            const response = await search(`?code=hvqx1${ tag }`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(1);
+            expect(response.body.data.rows[0].name).toBe(`Eee Unrelated ${ storedSuffix }`);
+        });
+
+        it('combines `name` and `code` disjunctively', async () => {
+            const response = await search(`?name=${ tag }&code=hvqx1${ tag }`);
+            const names = response.body.data.rows.map(( row: { name: string } ) => row.name);
+
+            expect(response.status).toBe(200);
+            // The Eee row matches the code but not the name, and is in the result anyway
+            expect(names).toContain(`Eee Unrelated ${ storedSuffix }`);
+            expect(names).toContain(`Aaa Hospital ${ storedTag }`);
+        });
+
+        it('combines `geoLocationId` conjunctively with the text block', async () => {
+            const response = await search(`?name=${ tag }&geoLocationId=${ otherGeoLocationId }`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(1);
+            expect(response.body.data.rows[0].name).toBe(`Fff Elsewhere ${ storedTag }`);
+        });
+
+        it('without `geoLocationId` the search crosses every geolocation', async () => {
+            const response = await search(`?name=${ tag }`);
+            const names = response.body.data.rows.map(( row: { name: string } ) => row.name);
+
+            expect(response.status).toBe(200);
+            expect(names).toContain(`Aaa Hospital ${ storedTag }`);
+            expect(names).toContain(`Fff Elsewhere ${ storedTag }`);
+        });
+
+        it('a `geoLocationId` that exists nowhere responds 200 with count 0, never 404', async () => {
+            const response = await search(`?name=${ tag }&geoLocationId=00000000-0000-4000-8000-000000000000`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+        });
+
+        it('no matching row is still a 200 with count 0', async () => {
+            const response = await search(`?name=zzznothingmatches${ suffix }`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+            expect(response.body.data.rows).toEqual([]);
+        });
+
+        it('without `name` and without `code` responds 400', async () => {
+            const response = await search('');
+
+            expect(response.status).toBe(400);
+            expect(response.body.ok).toBe(false);
+            expect(response.body.code).toBe('HFAC_006_SEARCH_CRITERIA_REQUIRED');
+        });
+
+        it('`geoLocationId` alone is not a criterion: narrowing is not searching', async () => {
+            const response = await search(`?geoLocationId=${ otherGeoLocationId }`);
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('HFAC_006_SEARCH_CRITERIA_REQUIRED');
+        });
+
+        it('a single-character `name` responds 400, two characters respond 200', async () => {
+            expect(( await search('?name=a') ).status).toBe(400);
+            expect(( await search('?name=ab') ).status).toBe(200);
+        });
+
+        it('a `name` over 250 characters and a `code` over 200 respond 400', async () => {
+            expect(( await search(`?name=${ 'a'.repeat(251) }`) ).status).toBe(400);
+            expect(( await search(`?code=${ 'a'.repeat(201) }`) ).status).toBe(400);
+        });
+
+        it('a `geoLocationId` that is not a UUID responds 400', async () => {
+            expect(( await search('?name=hospital&geoLocationId=notAUuid') ).status).toBe(400);
+        });
+
+        it('a literal underscore in `code` is not a wildcard', async () => {
+            const response = await search(`?code=hvq_1${ tag }`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(1);
+            expect(response.body.data.rows[0].name).toBe(`Ddd Unrelated ${ storedSuffix }`);
+        });
+
+        it('a literal percent in `name` does not return the whole table', async () => {
+            // Two percent signs, not one: the validator's minimum of 2 characters rejects a single one
+            const response = await search('?name=%25%25');
+
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+        });
+
+        it('a USER sees no inactive row while an ADMIN and a SUPERADMIN do', async () => {
+            const asUser = await search(`?name=${ tag }`);
+            const asAdmin = await search(`?name=${ tag }`, 'ADMIN');
+
+            expect(asUser.body.data.rows.every(( row: { isActive: boolean } ) => row.isActive)).toBe(true);
+            expect(asUser.body.data.rows.map(( row: { name: string } ) => row.name))
+                .not.toContain(`Ggg Inactive ${ storedTag }`);
+            expect(asAdmin.body.data.rows.map(( row: { name: string } ) => row.name))
+                .toContain(`Ggg Inactive ${ storedTag }`);
+
+            const asSuperAdmin = await search(`?name=${ tag }`, 'SUPERADMIN');
+            expect(asSuperAdmin.body.data.rows.map(( row: { name: string } ) => row.name))
+                .toContain(`Ggg Inactive ${ storedTag }`);
+        });
+
+        it('without a token the route responds 401', async () => {
+            expect(( await request(app).get(`/api/health-facilities/search?name=${ tag }`) ).status).toBe(401);
+        });
+
+        it('no returned row carries sysDetails, and both associations come trimmed', async () => {
+            const response = await search(`?name=${ tag }`);
+            const rows = response.body.data.rows;
+
+            expect(rows.every(( row: Record<string, unknown> ) => row.sysDetails === undefined)).toBe(true);
+
+            const withType = rows.find(( row: { name: string } ) => row.name === `Aaa Hospital ${ storedTag }`);
+            expect(Object.keys(withType.geoLocation).sort()).toEqual(['geoLocationId', 'name']);
+            expect(Object.keys(withType.facilityType).sort()).toEqual(['catalogItemId', 'name']);
+
+            // facilityTypeItemId is nullable, and the include carries no `required: true`, so a
+            // facility with no type must still show up — with facilityType null
+            const withoutType = rows.find(( row: { name: string } ) => row.name === `Fff Elsewhere ${ storedTag }`);
+            expect(withoutType).not.toBeUndefined();
+            expect(withoutType.facilityType).toBeNull();
+        });
+
+        it('rows come ordered by name ascending, and limit paginates without changing count', async () => {
+            const response = await search(`?name=${ tag }`);
+            const names = response.body.data.rows.map(( row: { name: string } ) => row.name);
+
+            expect(names).toEqual([...names].sort());
+
+            const firstPage = await search(`?name=${ tag }&limit=1`);
+            expect(firstPage.body.data.rows).toHaveLength(1);
+            expect(firstPage.body.data.count).toBe(response.body.data.count);
+            expect(firstPage.body.data.rows[0].name).toBe(names[0]);
         });
 
     });

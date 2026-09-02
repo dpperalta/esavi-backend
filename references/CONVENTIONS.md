@@ -163,6 +163,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | appUser | `006` | cambiar la propia contraseña — actúa siempre sobre el usuario del token |
 | appUser | `007` | consultar el propio perfil — la ficha del usuario del token |
 | patient | `006` | búsqueda por identificador — documento, pasaporte o código de sistema |
+| healthFacility | `006` | búsqueda por nombre o código — `Op.iLike` sobre `name`, `officialName`, `shortName` y `localCode`; nacional, con `geoLocationId` opcional. `GET /search`, USER |
 | classification | `006` | obtener la clasificación de un caso — la relación es uno a uno y se entra por el `caseId` |
 | notification | `006` | obtener la notificación de un caso — la relación es uno a uno y se entra por el `caseId` |
 | severeNotification | `006` | obtener el detalle grave de un caso — la cadena `caso → notificación → detalle` es uno a uno en los dos saltos |

@@ -13,6 +13,20 @@ export const healthFacilityListValidator = [
         .withMessage('Offset must be a non-negative integer')
 ];
 
+// ESAVI-HFAC-006 - Both text criteria are declared optional() one by one; 'at least one of name
+// or code' cannot be expressed here and lives in the service. The max lengths follow the DDL:
+// 250 for the three name columns and 200 for localCode. The min of 2 keeps a single character
+// from scanning the whole national table to return a page of noise
+export const searchHealthFacilityValidator = [
+    query('name').optional().trim()
+        .isLength({ min: 2 }).withMessage('Name must be at least 2 characters long')
+        .isLength({ max: 250 }).withMessage('Name must be at most 250 characters long'),
+    query('code').optional().trim()
+        .isLength({ min: 2 }).withMessage('Code must be at least 2 characters long')
+        .isLength({ max: 200 }).withMessage('Code must be at most 200 characters long'),
+    query('geoLocationId').optional().isUUID().withMessage('Geo Location ID must be a valid UUID').trim()
+];
+
 export const createHealthFacilityValidator = [
     body('geoLocationId').notEmpty().withMessage('Geo Location ID is required')
         .isUUID().withMessage('Geo Location ID must be a valid UUID').trim(),

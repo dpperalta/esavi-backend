@@ -8,9 +8,10 @@ import {
     getAllHealthFacilitiesByLocation,
     getHealthFacilitiesByLocation,
     getHealthFacilityById,
+    searchHealthFacilities,
     updateHealthFacility
 } from '../controllers/healthFacility.controller';
-import { createHealthFacilityValidator, geoLocationIdValidator, healthFacilityIdValidator, healthFacilityListValidator, updateHealthFacilityValidator } from '../validators';
+import { createHealthFacilityValidator, geoLocationIdValidator, healthFacilityIdValidator, healthFacilityListValidator, searchHealthFacilityValidator, updateHealthFacilityValidator } from '../validators';
 
 const { SUPERADMIN, ADMIN, USER } = ROLES;
 
@@ -28,13 +29,17 @@ router.get('/location/:id', tokenValidation, validateUserRole(USER), ...geoLocat
 // Code: ESAVI-HFAC-002B
 router.get('/admin/location/:id', tokenValidation, validateUserRole(ADMIN), ...geoLocationIdValidator, ...healthFacilityListValidator, validateFields, getAllHealthFacilitiesByLocation);
 
+// Search Health Facilities By Name Or Code
+// Code: ESAVI-HFAC-006
+router.get('/search', tokenValidation, validateUserRole(USER), ...searchHealthFacilityValidator, ...healthFacilityListValidator, validateFields, searchHealthFacilities);
+
 // Activate Health Facility - For SuperAdmin
 // Code: ESAVI-HFAC-005B
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...healthFacilityIdValidator, validateFields, activateHealthFacility);
 
 // Get Health Facility by ID
 // Code: ESAVI-HFAC-003
-// Declared after the literal paths so Express does not capture 'location', 'admin' or 'activate' as an :id
+// Declared after the literal paths so Express does not capture 'location', 'admin', 'activate' or 'search' as an :id
 router.get('/:id', tokenValidation, validateUserRole(USER), ...healthFacilityIdValidator, validateFields, getHealthFacilityById);
 
 // Update Health Facility
