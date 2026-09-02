@@ -1,7 +1,7 @@
 import { CreationAttributes, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { VaccineWhodrug } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage, parseWhodrugXlsxFile, WhodrugFileError } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseWhodrugXlsxFile, WhodrugFileError } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -44,8 +44,9 @@ const stripSysDetails = (vaccineWhodrug: VaccineWhodrug): Record<string, unknown
 // undefined and never by truthiness, or ?isPreferred=false would silently return everything
 const buildVaccineWhodrugWhere = (filters: VaccineWhodrugListFilters): WhereOptions => {
     const where: Record<string, unknown> = {};
-    if (filters.search) {
-        where.drugName = { [Op.iLike]: `%${filters.search.trim()}%` };
+    const [drugNameCondition] = buildTextSearchConditions(filters.search, ['drugName']);
+    if (drugNameCondition) {
+        Object.assign(where, drugNameCondition);
     }
     if (filters.language) {
         where.language = filters.language.trim();
