@@ -177,7 +177,8 @@
         "importedFailed": "Importeren van de catalogusitems mislukt. Probeer het later opnieuw.",
         "fileRequired": "Het te importeren bestand moet in het veld file worden meegestuurd",
         "fileInvalid": "Het bestand kon niet worden verwerkt. Controleer of het een .xlsx-werkmap met de verwachte koptekst is en probeer het opnieuw.",
-        "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB"
+        "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB",
+        "searchCriteriaRequired": "Een naam of een code is vereist om te zoeken"
     },
     "healthFacility": {
         "codeExists": "Er bestaat al een zorginstelling met code {{code}}",

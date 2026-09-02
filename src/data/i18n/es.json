@@ -177,7 +177,8 @@
         "importedFailed": "Error al importar los elementos de catálogo. Por favor, inténtelo de nuevo más tarde.",
         "fileRequired": "Debe adjuntar el fichero a importar en el campo file",
         "fileInvalid": "El fichero no se pudo procesar. Por favor, verifique que sea un libro .xlsx con la cabecera esperada e inténtelo de nuevo.",
-        "fileTooLarge": "El fichero supera el tamaño máximo permitido de 20 MB"
+        "fileTooLarge": "El fichero supera el tamaño máximo permitido de 20 MB",
+        "searchCriteriaRequired": "Debe indicar un nombre o un código para buscar"
     },
     "healthFacility": {
         "codeExists": "Un establecimiento de salud con el código {{code}} ya existe",
