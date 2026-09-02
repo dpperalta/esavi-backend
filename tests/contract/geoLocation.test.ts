@@ -293,4 +293,47 @@ describe('geoLocation contract', () => {
 
     });
 
+    /**
+     * SPEC F52 §1.E / §3.8 — attributes: { exclude: ['sysDetails'] } on the 002A, 002B and 003 of
+     * this entity. sysDetails is internal by convention and the rest of the repository already
+     * excludes it; appDetails keeps travelling
+     */
+    describe('sysDetails alignment — SPEC F52', () => {
+
+        let id: string;
+
+        beforeAll(async () => {
+            const created = await request(app)
+                .post('/api/geo-locations')
+                .set(authHeader('ADMIN'))
+                .send({ geoLevelTypeId, name: `SysDetails ${ suffix }`, externalCode: `SYSDET${ suffix }` });
+            expect(created.status).toBe(201);
+            id = created.body.data.geoLocationId;
+        });
+
+        it('is absent from 002A (USER, active only)', async () => {
+            const response = await request(app).get('/api/geo-locations?limit=100').set(authHeader('USER'));
+            expect(response.status).toBe(200);
+            const row = response.body.data.rows.find((r: { geoLocationId: string }) => r.geoLocationId === id);
+            expect(row).not.toHaveProperty('sysDetails');
+            expect(row).toHaveProperty('appDetails');
+        });
+
+        it('is absent from 002B (SUPERADMIN, including inactive)', async () => {
+            const response = await request(app).get('/api/geo-locations?limit=100').set(authHeader('SUPERADMIN'));
+            expect(response.status).toBe(200);
+            const row = response.body.data.rows.find((r: { geoLocationId: string }) => r.geoLocationId === id);
+            expect(row).not.toHaveProperty('sysDetails');
+            expect(row).toHaveProperty('appDetails');
+        });
+
+        it('is absent from 003 (get by id)', async () => {
+            const response = await request(app).get(`/api/geo-locations/${ id }`).set(authHeader('USER'));
+            expect(response.status).toBe(200);
+            expect(response.body.data).not.toHaveProperty('sysDetails');
+            expect(response.body.data).toHaveProperty('appDetails');
+        });
+
+    });
+
 });

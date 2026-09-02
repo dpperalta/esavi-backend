@@ -981,4 +981,51 @@ describe('catalogItem contract', () => {
 
     });
 
+    /**
+     * SPEC F52 §1.E / §3.8 — attributes: { exclude: ['sysDetails'] } on the 002A, 002B and 003 of
+     * this entity. sysDetails is internal by convention and the rest of the repository already
+     * excludes it; appDetails keeps travelling
+     */
+    describe('sysDetails alignment — SPEC F52', () => {
+
+        let id: string;
+
+        beforeAll(async () => {
+            const created = await request(app)
+                .post('/api/catalog-items')
+                .set(authHeader('SUPERADMIN'))
+                .send({ catalogTypeId, name: `SysDetails ${ suffix }`, value: 'SD' });
+            expect(created.status).toBe(201);
+            id = created.body.data.catalogItemId;
+        });
+
+        it('is absent from 002A — active list by type', async () => {
+            const response = await request(app)
+                .get(`/api/catalog-items/type/${ catalogTypeId }?limit=100`)
+                .set(authHeader('USER'));
+            expect(response.status).toBe(200);
+            const row = response.body.data.rows.find((r: { catalogItemId: string }) => r.catalogItemId === id);
+            expect(row).not.toHaveProperty('sysDetails');
+            expect(row).toHaveProperty('appDetails');
+        });
+
+        it('is absent from 002B — admin list by type', async () => {
+            const response = await request(app)
+                .get(`/api/catalog-items/admin/type/${ catalogTypeId }?limit=100`)
+                .set(authHeader('ADMIN'));
+            expect(response.status).toBe(200);
+            const row = response.body.data.rows.find((r: { catalogItemId: string }) => r.catalogItemId === id);
+            expect(row).not.toHaveProperty('sysDetails');
+            expect(row).toHaveProperty('appDetails');
+        });
+
+        it('is absent from 003 — get by id', async () => {
+            const response = await request(app).get(`/api/catalog-items/${ id }`).set(authHeader('USER'));
+            expect(response.status).toBe(200);
+            expect(response.body.data).not.toHaveProperty('sysDetails');
+            expect(response.body.data).toHaveProperty('appDetails');
+        });
+
+    });
+
 });
