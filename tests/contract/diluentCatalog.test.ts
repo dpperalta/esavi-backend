@@ -362,6 +362,62 @@ describe('diluentCatalog contract', () => {
         it('the active row is still reachable by id', async () => {
             expect(( await request(app).get(`${ base }/${ activeId }`).set(authHeader('USER')) ).status).toBe(200);
         });
+
+        // SPEC F52 — name and code become the canonical parameters, search survives as their alias
+        describe('canonical name/code parameters — SPEC F52', () => {
+
+            const codeSuffix = `CODE${ suffix }`;
+            let byCodeId: string;
+
+            beforeAll(async () => {
+                const created = await createDiluent({ code: `LOOKUP_${ codeSuffix }`, name: `Lookup by code ${ suffix }` });
+                byCodeId = created.body.data.diluentCatalogId;
+                await createDiluent({ code: `WILD_A_${ suffix }`, name: `Wildcard probe ${ suffix }` });
+                await createDiluent({ code: `WILDXA_${ suffix }`, name: `Wildcard probe twin ${ suffix }` });
+            });
+
+            it('name matches partially over the name column', async () => {
+                const names = await publicNames(`name=sodio`);
+                expect(names).toEqual(expect.arrayContaining([`Cloruro de sodio 0.9% ${ listSuffix }`]));
+            });
+
+            it('code matches partially over the code column', async () => {
+                const response = await request(app).get(`${ base }?code=lookup_${ codeSuffix }&limit=100`).set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((r: { diluentCatalogId: string }) => r.diluentCatalogId)).toEqual([byCodeId]);
+            });
+
+            it('name and code combine with Op.or — a match on either is enough', async () => {
+                const response = await request(app)
+                    .get(`${ base }?name=noExisteEsteNombre${ suffix }&code=lookup_${ codeSuffix }&limit=100`)
+                    .set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((r: { diluentCatalogId: string }) => r.diluentCatalogId)).toContain(byCodeId);
+            });
+
+            it('explicit name wins over search when both arrive', async () => {
+                const response = await request(app)
+                    .get(`${ base }?name=Agua para inyección ${ listSuffix }&search=sodio&limit=100`)
+                    .set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((r: { name: string }) => r.name)).toEqual([`Agua para inyección ${ listSuffix }`]);
+            });
+
+            it('search keeps covering both name and code, now also matching by code', async () => {
+                const response = await request(app).get(`${ base }?search=lookup_${ codeSuffix }&limit=100`).set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((r: { diluentCatalogId: string }) => r.diluentCatalogId)).toContain(byCodeId);
+            });
+
+            it('a literal underscore in code does not act as a single-character wildcard', async () => {
+                const response = await request(app).get(`${ base }?code=WILD_A_${ suffix }&limit=100`).set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                const codes = response.body.data.rows.map((r: { code: string }) => r.code);
+                expect(codes).toContain(`WILD_A_${ suffix }`);
+                expect(codes).not.toContain(`WILDXA_${ suffix }`);
+            });
+
+        });
     });
 
     describe('differential update', () => {

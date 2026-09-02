@@ -254,6 +254,8 @@ describe('diagnosticTerm contract', () => {
             await createTerm({ code: `SRCH2_${ suffix }`, name: `Dolor cefálico ${ suffix }`, termGroup: `Neuro${ suffix }` });
             await createTerm({ code: `SRCH3_${ suffix }`, name: `Fiebre ${ suffix }`, source: 'MEDDRA', termGroup: 'General' });
             await createTerm({ code: `SRCH4_${ suffix }`, name: `Cefalea retirada ${ suffix }`, isActive: false });
+            await createTerm({ code: `US_${ suffix }A`, name: `Wildcard probe ${ suffix }` });
+            await createTerm({ code: `USX${ suffix }A`, name: `Wildcard probe twin ${ suffix }` });
         });
 
         const publicList = ( qs: string ) =>
@@ -321,6 +323,57 @@ describe('diagnosticTerm contract', () => {
             const response = await adminList('');
             expect(response.status).toBe(200);
             expect(response.body.data).toHaveProperty('rows');
+        });
+
+        // SPEC F52 — name and code become the canonical parameters, search survives as their alias
+        describe('canonical name/code parameters — SPEC F52', () => {
+
+            it('name matches partially and case insensitively over the name column', async () => {
+                const response = await publicList(`?name=cefalea ${ suffix }&limit=100`);
+                const names = response.body.data.rows.map((r: { name: string }) => r.name);
+
+                expect(names).toContain(`Cefalea ${ suffix }`);
+                expect(names).not.toContain(`Fiebre ${ suffix }`);
+            });
+
+            it('code matches partially and case insensitively over the code column', async () => {
+                const response = await publicList(`?code=srch2_${ suffix }&limit=100`);
+                const names = response.body.data.rows.map((r: { name: string }) => r.name);
+
+                expect(names).toEqual([`Dolor cefálico ${ suffix }`]);
+            });
+
+            it('name and code combine with Op.or — a match on either is enough', async () => {
+                const response = await publicList(`?name=noExisteEsteTermino${ suffix }&code=SRCH3_${ suffix }&limit=100`);
+                const codes = response.body.data.rows.map((r: { code: string }) => r.code);
+
+                expect(codes).toContain(`SRCH3_${ suffix }`);
+            });
+
+            it('explicit name wins over search when both arrive', async () => {
+                // search stays fully suffixed so its fallback over the code column cannot pick up
+                // an unrelated row from another suite's fixtures sharing this database
+                const response = await publicList(`?name=Fiebre ${ suffix }&search=Cefalea ${ suffix }&limit=100`);
+                const names = response.body.data.rows.map((r: { name: string }) => r.name);
+
+                expect(names).toEqual([`Fiebre ${ suffix }`]);
+            });
+
+            it('search keeps covering both name and code, now also matching by code', async () => {
+                const response = await publicList(`?search=SRCH3_${ suffix }&limit=100`);
+                const codes = response.body.data.rows.map((r: { code: string }) => r.code);
+
+                expect(codes).toContain(`SRCH3_${ suffix }`);
+            });
+
+            it('a literal underscore in code does not act as a single-character wildcard', async () => {
+                const response = await publicList(`?code=US_${ suffix }A&limit=100`);
+                const codes = response.body.data.rows.map((r: { code: string }) => r.code);
+
+                expect(codes).toContain(`US_${ suffix }A`);
+                expect(codes).not.toContain(`USX${ suffix }A`);
+            });
+
         });
     });
 

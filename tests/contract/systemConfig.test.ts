@@ -350,6 +350,63 @@ describe('systemConfig contract', () => {
             expect(ids(publicList.body.data.rows)).not.toContain(id);
             expect(ids(adminList.body.data.rows)).toContain(id);
         });
+
+        // SPEC F52 — name and code become the canonical parameters; search keeps covering both,
+        // unchanged, since it already did before this spec
+        describe('canonical name/code parameters — SPEC F52', () => {
+
+            it('name and code filter separately', async () => {
+                const code = aCode('CANON');
+                const name = `Canonico buscable ${ suffix }`;
+                await createConfig({ code, name, value: {} });
+
+                const byName = await request(app).get(`${ base }?name=${ encodeURIComponent(name) }`).set(authHeader('USER'));
+                const byCode = await request(app).get(`${ base }?code=${ stored(code) }`).set(authHeader('USER'));
+
+                expect(byName.body.data.rows).toHaveLength(1);
+                expect(byName.body.data.rows[0].code).toBe(stored(code));
+                expect(byCode.body.data.rows).toHaveLength(1);
+                expect(byCode.body.data.rows[0].code).toBe(stored(code));
+            });
+
+            it('?search= returns exactly what it did before this spec', async () => {
+                const code = aCode('LEGACY');
+                const name = `Legado buscable ${ suffix }`;
+                await createConfig({ code, name, value: {} });
+
+                const byCode = await request(app).get(`${ base }?search=${ stored(code) }`).set(authHeader('USER'));
+                const byName = await request(app).get(`${ base }?search=${ encodeURIComponent(name) }`).set(authHeader('USER'));
+
+                expect(byCode.body.data.rows).toHaveLength(1);
+                expect(byName.body.data.rows).toHaveLength(1);
+                expect(byName.body.data.rows[0].code).toBe(stored(code));
+            });
+
+            it('explicit name wins over search when both arrive', async () => {
+                const code = aCode('WINS');
+                const name = `Prioridad canonica ${ suffix }`;
+                await createConfig({ code, name, value: {} });
+
+                const response = await request(app)
+                    .get(`${ base }?name=${ encodeURIComponent(name) }&search=noExisteEsteTermino${ suffix }`)
+                    .set(authHeader('USER'));
+
+                expect(response.body.data.rows).toHaveLength(1);
+                expect(response.body.data.rows[0].code).toBe(stored(code));
+            });
+
+            it('a literal underscore in code does not act as a single-character wildcard', async () => {
+                const wild = await createConfig({ code: `WILD-A-${ suffix }`, name: `Wildcard probe ${ suffix }`, value: {} });
+                const twin = await createConfig({ code: `WILDXA-${ suffix }`, name: `Wildcard probe twin ${ suffix }`, value: {} });
+
+                const response = await request(app).get(`${ base }?code=WILD_A_${ suffix }`).set(authHeader('USER'));
+
+                const ids = response.body.data.rows.map((row: { systemConfigId: string }) => row.systemConfigId);
+                expect(ids).toContain(wild.body.data.systemConfigId);
+                expect(ids).not.toContain(twin.body.data.systemConfigId);
+            });
+
+        });
     });
 
     describe('the asymmetry of canViewInactive', () => {

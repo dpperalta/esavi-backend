@@ -431,6 +431,67 @@ describe('vaccineWhodrug contract', () => {
         it('the preferred row is still reachable by id', async () => {
             expect(( await request(app).get(`${ base }/${ preferredId }`).set(authHeader('USER')) ).status).toBe(200);
         });
+
+        // SPEC F52 — name and code become the canonical parameters over drugName/drugCode, search
+        // survives as their alias
+        describe('canonical name/code parameters — SPEC F52', () => {
+
+            const codeSuffix = `CODE${ suffix }`;
+            let byCodeId: string;
+
+            beforeAll(async () => {
+                const created = await createVaccine({
+                    drugCode: `LOOKUP_${ codeSuffix }`, drugName: `Lookup by code ${ suffix }`, externalId: anExternalId()
+                });
+                byCodeId = created.body.data.vaccineWhodrugId;
+                await createVaccine({ drugCode: `WILD_A_${ suffix }`, drugName: `Wildcard probe ${ suffix }`, externalId: anExternalId() });
+                await createVaccine({ drugCode: `WILDXA_${ suffix }`, drugName: `Wildcard probe twin ${ suffix }`, externalId: anExternalId() });
+            });
+
+            it('name matches partially over drugName', async () => {
+                const names = await publicNames(`name=bcg ${ listSuffix }`);
+                expect(names).toEqual(expect.arrayContaining([`BCG ${ listSuffix }`, `Vacuna bcg ${ listSuffix }`]));
+            });
+
+            it('code matches partially over drugCode', async () => {
+                const response = await request(app).get(`${ base }?code=lookup_${ codeSuffix }&limit=100`).set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((r: { vaccineWhodrugId: string }) => r.vaccineWhodrugId)).toEqual([byCodeId]);
+            });
+
+            it('name and code combine with Op.or — a match on either is enough', async () => {
+                const response = await request(app)
+                    .get(`${ base }?name=noExisteEsteNombre${ suffix }&code=lookup_${ codeSuffix }&limit=100`)
+                    .set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((r: { vaccineWhodrugId: string }) => r.vaccineWhodrugId)).toContain(byCodeId);
+            });
+
+            it('explicit name wins over search when both arrive', async () => {
+                // search stays fully suffixed so its fallback over drugCode cannot pick up an
+                // unrelated row from another suite's fixtures sharing this database
+                const response = await request(app)
+                    .get(`${ base }?name=Anti-rabies ${ listSuffix }&search=bcg ${ listSuffix }&limit=100`)
+                    .set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((r: { drugName: string }) => r.drugName)).toEqual([`Anti-rabies ${ listSuffix }`]);
+            });
+
+            it('search keeps covering both drugName and drugCode, now also matching by code', async () => {
+                const response = await request(app).get(`${ base }?search=lookup_${ codeSuffix }&limit=100`).set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((r: { vaccineWhodrugId: string }) => r.vaccineWhodrugId)).toContain(byCodeId);
+            });
+
+            it('a literal underscore in code does not act as a single-character wildcard', async () => {
+                const response = await request(app).get(`${ base }?code=WILD_A_${ suffix }&limit=100`).set(authHeader('USER'));
+                expect(response.status).toBe(200);
+                const codes = response.body.data.rows.map((r: { drugCode: string }) => r.drugCode);
+                expect(codes).toContain(`WILD_A_${ suffix }`);
+                expect(codes).not.toContain(`WILDXA_${ suffix }`);
+            });
+
+        });
     });
 
     describe('differential update', () => {
