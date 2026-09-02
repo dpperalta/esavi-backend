@@ -1,8 +1,8 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { AppError, buildDifferentialUpdate, getMessage, isSuperAdmin, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, isSuperAdmin, toConstantCase } from '../helpers';
 import { AppRole, AppUserRole } from '../models';
-import { AppDetails, AuthUser, CreateAppRoleInput } from '../types';
+import { AppDetails, AppRoleListFilters, AuthUser, CreateAppRoleInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -73,11 +73,28 @@ const createAppRoleService = async (data: CreateAppRoleInput, authUser: AuthUser
     return toAppRoleResponse(appRole);
 }
 
+// Shared by both listings. name and code are the canonical parameters (SPEC F52), joined with
+// Op.or — the entity had no text filter of its own before this spec
+const buildAppRoleWhere = (filters: AppRoleListFilters): Record<string, unknown> => {
+    const where: Record<string, unknown> = {};
+    const textConditions = [
+        ...buildTextSearchConditions(filters.name, ['name']),
+        ...buildTextSearchConditions(filters.code, ['code'])
+    ];
+    if (textConditions.length > 0) {
+        where[Op.or as unknown as string] = textConditions;
+    }
+    return where;
+}
+
 // Get Active App Roles Service
 // Code: ESAVI-APPROLE-002A
-const getActiveAppRolesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveAppRolesService = async (filters: AppRoleListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     return await AppRole.findAndCountAll({
-        where: { isActive: true },
+        where: {
+            ...buildAppRoleWhere(filters),
+            isActive: true
+        },
         attributes: LIST_EXCLUDE,
         order: LIST_ORDER,
         limit,
@@ -87,8 +104,9 @@ const getActiveAppRolesService = async (limit: number = DEFAULT_LIMIT, offset: n
 
 // Get All App Roles Service - For Admin
 // Code: ESAVI-APPROLE-002B
-const getAllAppRolesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllAppRolesService = async (filters: AppRoleListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     return await AppRole.findAndCountAll({
+        where: buildAppRoleWhere(filters),
         attributes: LIST_EXCLUDE,
         order: LIST_ORDER,
         limit,
