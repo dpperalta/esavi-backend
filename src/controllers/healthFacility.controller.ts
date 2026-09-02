@@ -1,5 +1,5 @@
 ﻿import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from "../helpers";
+import { AppError, canViewInactive, esaviLog, getMessage, isAdmin } from "../helpers";
 import { AuthUser } from '../types';
 import {
     createHealthFacilityService,
@@ -171,7 +171,9 @@ const searchHealthFacilities = async (req: Request, res: Response, next: NextFun
         const data = await searchHealthFacilitiesService(
             { name, code, geoLocationId },
             req.lang,
-            canViewInactive(req.user as AuthUser),
+            // isAdmin and not canViewInactive: the SPEC F51 acceptance criteria put ADMIN on the
+            // side that sees inactive rows, and canViewInactive is SUPERADMIN only
+            isAdmin(req.user as AuthUser),
             limit,
             offset
         );

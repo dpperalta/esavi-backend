@@ -79,6 +79,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'post',   path: '/api/health-facilities',                              minRole: 'ADMIN',      code: 'ESAVI-HFAC-001' },
     { method: 'get',    path: `/api/health-facilities/location/${ UUID }`,           minRole: 'USER',       code: 'ESAVI-HFAC-002A' },
     { method: 'get',    path: `/api/health-facilities/admin/location/${ UUID }`,     minRole: 'ADMIN',      code: 'ESAVI-HFAC-002B' },
+    { method: 'get',    path: '/api/health-facilities/search',                       minRole: 'USER',       code: 'ESAVI-HFAC-006' },
     { method: 'get',    path: `/api/health-facilities/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-HFAC-003' },
     { method: 'put',    path: `/api/health-facilities/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-HFAC-004' },
     { method: 'delete', path: `/api/health-facilities/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-HFAC-005A' },
@@ -745,7 +746,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(323);
+            expect(ROUTE_RULES).toHaveLength(324);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
