@@ -1,6 +1,6 @@
 # SPEC F51 — Búsqueda de establecimientos de salud por nombre o código
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC 09 (`healthFacility`, CRUD base), **SPEC F50 (patrón `Op.iLike` + `escapeLike`, implementado)**
 > **Fecha:** 2026-09-01
 > **Objetivo:** Añadir `ESAVI-HFAC-006` — `GET /api/health-facilities/search` —, un buscador nacional de establecimientos por nombre o por `localCode`, sin exigir conocer de antemano su geolocalización.
