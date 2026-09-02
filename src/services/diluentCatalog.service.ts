@@ -1,7 +1,7 @@
 import { Op, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiluentCatalog } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, toConstantCase } from '../helpers';
 import { AppDetails, AuthUser, CreateDiluentCatalogInput, DiluentCatalogListFilters } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -27,8 +27,9 @@ const stripSysDetails = (diluent: DiluentCatalog): Record<string, unknown> => {
 // the table has no column that could serve as a facet
 const buildDiluentCatalogWhere = (filters: DiluentCatalogListFilters): WhereOptions => {
     const where: Record<string, unknown> = {};
-    if (filters.search) {
-        where.name = { [Op.iLike]: `%${filters.search.trim()}%` };
+    const [nameCondition] = buildTextSearchConditions(filters.search, ['name']);
+    if (nameCondition) {
+        Object.assign(where, nameCondition);
     }
     return where;
 }
