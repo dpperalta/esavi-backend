@@ -561,6 +561,17 @@ describe('esaviCase contract', () => {
             expect(await filtered('?reportDate=2026-03-01&eventDateFrom=2026-03-31')).toEqual([]);
         });
 
+        // SPEC F52 — the only text filter this entity gains: code, an Op.iLike over caseCode.
+        // No name column exists on this table, so name is not declared
+        it('code matches partially over caseCode', async () => {
+            expect(await filtered(`?code=${ tag }A`)).toEqual([`${ tag }A`]);
+        });
+
+        it('code combined with a date filter narrows with AND, not with the code alone', async () => {
+            // code=tag matches A through E; reportDate=2026-04-10 belongs only to C
+            expect(await filtered(`?code=${ tag }&reportDate=2026-04-10`)).toEqual([`${ tag }C`]);
+        });
+
         it('answers 400 when the exact form travels with the range of its own column', async () => {
             for( const query of [
                 '?reportDate=2026-03-01&reportDateFrom=2026-03-01',

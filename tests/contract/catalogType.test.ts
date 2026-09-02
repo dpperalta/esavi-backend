@@ -130,4 +130,84 @@ describe('catalogType contract', () => {
 
     });
 
+    /**
+     * ESAVI-CATTYPE-002A/002B — SPEC F52. The entity had no text filter at all before this spec:
+     * name and code are the canonical parameters, joined with Op.or, with no legacy search alias.
+     * code is minted through toCodeFromInput, which strips '_' and every other separator as a word
+     * boundary — so a catalogType code can never carry a literal '_' the way geoLevelType's or
+     * appRole's CONSTANT_CASE codes do, and the escape case of §5 does not apply to this entity: the
+     * queries below build their code assertions off the code the server actually minted
+     */
+    describe('name/code search — SPEC F52', () => {
+
+        const tag = `search${ Date.now().toString(36) }`;
+        let findableId: string;
+        let findableCode: string;
+        let inactiveId: string;
+
+        beforeAll(async () => {
+            const findable = await request(app)
+                .post('/api/catalog-types')
+                .set(authHeader('SUPERADMIN'))
+                .send({ name: `Findable Type ${ tag }` });
+            expect(findable.status).toBe(201);
+            findableId = findable.body.data.catalogTypeId;
+            findableCode = findable.body.data.code;
+
+            const inactive = await request(app)
+                .post('/api/catalog-types')
+                .set(authHeader('SUPERADMIN'))
+                .send({ name: `Retired Type ${ tag }` });
+            expect(inactive.status).toBe(201);
+            inactiveId = inactive.body.data.catalogTypeId;
+            const deleted = await request(app).delete(`/api/catalog-types/${ inactiveId }`).set(authHeader('ADMIN'));
+            expect(deleted.status).toBe(200);
+        });
+
+        const list = ( qs: string, role: 'USER' | 'SUPERADMIN' = 'USER' ) =>
+            request(app).get(`/api/catalog-types?${ qs }&limit=100`).set(authHeader(role));
+
+        it('name matches partially and case insensitively', async () => {
+            const response = await list(`name=findable type ${ tag }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.map((r: { catalogTypeId: string }) => r.catalogTypeId)).toContain(findableId);
+        });
+
+        it('code matches partially and case insensitively', async () => {
+            const response = await list(`code=${ findableCode.toUpperCase() }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.map((r: { catalogTypeId: string }) => r.catalogTypeId)).toEqual([findableId]);
+        });
+
+        it('name and code combine with Op.or — a match on either is enough', async () => {
+            const response = await list(`name=noExisteEsteNombre${ tag }&code=${ findableCode }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.map((r: { catalogTypeId: string }) => r.catalogTypeId)).toContain(findableId);
+        });
+
+        it('a USER never sees the inactive row', async () => {
+            const response = await list(`name=Retired Type ${ tag }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows).toHaveLength(0);
+        });
+
+        it('a SUPERADMIN filtered read includes the inactive row', async () => {
+            const response = await list(`name=Retired Type ${ tag }`, 'SUPERADMIN');
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.map((r: { catalogTypeId: string }) => r.catalogTypeId)).toContain(inactiveId);
+        });
+
+        it('?name=a (one character) responds 400; ?name=ab responds 200', async () => {
+            expect((await list('name=a')).status).toBe(400);
+            expect((await list('name=ab')).status).toBe(200);
+        });
+
+        it('no parameter still returns the unfiltered catalog, exactly as before this spec', async () => {
+            const response = await list('');
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.length).toBeGreaterThan(0);
+        });
+
+    });
+
 });
