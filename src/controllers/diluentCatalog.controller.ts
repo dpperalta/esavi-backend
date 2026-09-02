@@ -12,7 +12,9 @@ import {
 
 // Unwraps the single query filter, identical in both listings
 const readListFilters = (query: Request['query']): DiluentCatalogListFilters => ({
-    search: query.search ? (query.search as string).trim() : undefined
+    search: query.search ? (query.search as string).trim() : undefined,
+    name: query.name ? (query.name as string).trim() : undefined,
+    code: query.code ? (query.code as string).trim() : undefined
 });
 
 // Create Diluent Catalog Controller
