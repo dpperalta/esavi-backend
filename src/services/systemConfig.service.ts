@@ -4,6 +4,7 @@ import { AppUser, SystemConfig, SystemConfigHistory } from '../models';
 import {
     AppError,
     buildDifferentialUpdate,
+    buildTextSearchConditions,
     decryptSystemConfigValue,
     encryptSystemConfigValue,
     esaviDecrypt,
@@ -83,12 +84,9 @@ const buildSystemConfigWhere = (filters: SystemConfigListFilters): WhereOptions 
     if( filters.valueType ) {
         where.valueType = filters.valueType;
     }
-    if( filters.search ) {
-        const term = `%${ filters.search.trim() }%`;
-        where[Op.or as unknown as string] = [
-            { name: { [Op.iLike]: term } },
-            { code: { [Op.iLike]: term } }
-        ];
+    const searchConditions = buildTextSearchConditions(filters.search, ['name', 'code']);
+    if( searchConditions.length > 0 ) {
+        where[Op.or as unknown as string] = searchConditions;
     }
     return where;
 }
