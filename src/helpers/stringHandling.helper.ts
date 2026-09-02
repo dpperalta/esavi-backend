@@ -81,6 +81,11 @@ export const toTitleCase = (text: string): string => {
 // SPEC F47 lands, where search depends on nameTokens (toSearchForm) instead
 export const normalizeName = (value: string): string => toTitleCase(value.trim());
 
+// Neutralize the two LIKE wildcards ('%' and '_') in user input before it is interpolated into an
+// Op.iLike pattern. Without it a code with a literal underscore — frequent in administrative codes —
+// matches any character in that position, and a lone '%' returns the whole table
+export const escapeLike = (value: string): string => value.replace(/[%_]/g, '\\$&');
+
 // Convert text to sentence case
 export const toSentenceCase = (text: string): string => {
     const lower = text.toLowerCase();

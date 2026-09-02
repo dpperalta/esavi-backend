@@ -1,6 +1,6 @@
 # SPEC F49 — Alcance geográfico del usuario sobre los casos ESAVI
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 04 (consistencia del contrato), SPEC 05 (códigos de operación), SPEC 08 (`lang` en servicios), **SPEC F01 (`appUserGeoLocation`, `ESAVI-USERGEO-008`, implementado)**, **SPEC F06 (`esaviCase`, implementado)**, **SPEC F48 (filtros de fecha y unidad geográfica, implementado)**
 > **Fecha:** 2026-08-31
 > **Objetivo:** Que un usuario no administrador alcance únicamente los casos ESAVI reportados en las unidades geográficas que tiene asignadas en `appUserGeoLocation`, o en cualquiera de sus descendientes.

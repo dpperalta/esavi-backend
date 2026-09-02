@@ -1,5 +1,5 @@
 import { Op } from 'sequelize';
-import { getMessage, AppError, buildDifferentialUpdate, esaviLog } from '../helpers';
+import { getMessage, AppError, buildDifferentialUpdate, esaviLog, escapeLike } from '../helpers';
 import { AppDetails, AuthUser, CreateGeoLocationInput } from '../types';
 import { GeoLevelType, GeoLocation } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -87,8 +87,6 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser: 
     });
     return createdLocation;
 }
-
-const escapeLike = (value: string) => value.replace(/[%_]/g, '\\$&');
 
 const buildTextWhereConditions = (name?: string, code?: string) => {
     const textConditions: any[] = [];
