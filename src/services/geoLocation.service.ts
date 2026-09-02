@@ -127,6 +127,8 @@ const getActiveGeoLocationsService = async (
     }
     const geoLocations = await GeoLocation.findAndCountAll({
         where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [['sortOrder', 'ASC']],
         limit,
         offset
@@ -156,6 +158,8 @@ const getAllGeoLocationsService = async (
     }
     const geoLocations = await GeoLocation.findAndCountAll({
         where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [['sortOrder', 'ASC']],
         limit,
         offset
@@ -168,6 +172,8 @@ const getGeoLocationByIdService = async (id: string, lang: string, isAdmin: bool
     const whereClause = isAdmin ? { geoLocationId: id } : { geoLocationId: id, isActive: true };
     const geoLocation = await GeoLocation.findOne({
         where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         include: [
             {
                 model: GeoLevelType,
