@@ -138,10 +138,12 @@ const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: 
         throw new AppError(getMessage('catalogType.idRequired', 'en'), 400, 'CATITEM_002A_CATTYPEID_REQUIRED');
     }
     const catalogItems = await CatalogItem.findAndCountAll({
-        where: { 
-            catalogTypeId, 
-            isActive: true 
+        where: {
+            catalogTypeId,
+            isActive: true
         },
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [['sortOrder', 'ASC']],
         limit,
         offset
@@ -159,6 +161,8 @@ const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit
     }
     const catalogItems = await CatalogItem.findAndCountAll({
         where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [
             ['sortOrder', 'ASC'],
             ['name', 'ASC']
@@ -172,8 +176,10 @@ const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit
 // ESAVI-CATITEM-003 - Get Catalog Item by ID Service
 const getCatalogItemByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { catalogItemId: id } : { catalogItemId: id, isActive: true };
-    const catalogItem = await CatalogItem.findOne({ 
-        where: whereClause 
+    const catalogItem = await CatalogItem.findOne({
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] }
     });
     if (!catalogItem) {
         throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_003_NOT_FOUND');
