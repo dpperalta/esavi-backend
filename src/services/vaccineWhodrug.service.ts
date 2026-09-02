@@ -1,4 +1,4 @@
-import { CreationAttributes, Op, Transaction, WhereOptions } from 'sequelize';
+import { cast, col, CreationAttributes, fn, literal, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { VaccineWhodrug } from '../models';
 import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseWhodrugXlsxFile, WhodrugFileError } from '../helpers';
@@ -9,7 +9,12 @@ import {
     ImportVaccineWhodrugsInput,
     ParsedVaccineWhodrugRow,
     VaccineWhodrugImportReport,
-    VaccineWhodrugListFilters
+    VaccineWhodrugListFilters,
+    VaccineWhodrugTreeAncestor,
+    VaccineWhodrugTreeFilters,
+    VaccineWhodrugTreeLevel,
+    VaccineWhodrugTreeOption,
+    VaccineWhodrugTreeResult
 } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -527,6 +532,133 @@ const importVaccineWhodrugsService = async (
     };
 }
 
+// ---------------------------------------------------------------------------------------------
+// SPEC F54 — hierarchical navigation of the WHODrug tree, ESAVI-WHODRUG-006A..006E
+// ---------------------------------------------------------------------------------------------
+
+// The ancestors of every level, in hierarchy order. The level name is also the column it groups by
+// and the query parameter that carries it downwards; the fourth level groups formTranslations, the
+// translated form the user reads, and never form
+const TREE_ANCESTORS: Record<VaccineWhodrugTreeLevel, VaccineWhodrugTreeAncestor[]> = {
+    abbreviation: [],
+    drugName: ['abbreviation'],
+    maHolders: ['abbreviation', 'drugName'],
+    formTranslations: ['abbreviation', 'drugName', 'maHolders'],
+    strength: ['abbreviation', 'drugName', 'maHolders', 'formTranslations']
+};
+
+// What an ancestor carries when the option it came from had value null. Four of the five columns of
+// the tree are nullable, and without this the rows behind a null option would be unreachable by
+// navigation. '__NULL__' does not occur in the WHODrug dictionary, which is why it can be reserved
+const TREE_NULL_SENTINEL = '__NULL__';
+
+// The subset every level shares, replicated from the external backend with the language made
+// configurable: rows of the requested country, plus the generic preferred ones of the language.
+// Three things it does not do, all of them deliberate:
+//   - it never interpolates the query string into SQL — the external backend does, on all five
+//     parameters, and that is five injection points open to any authenticated user
+//   - country absent removes its branch instead of comparing against an empty string
+//   - isActive is always true, with no admin variant: navigation exists to pick a vaccine in a
+//     form, and a row that was taken down must not be selectable
+const buildTreeSubsetConditions = (filters: VaccineWhodrugTreeFilters, lang: string): WhereOptions[] => {
+    const language = filters.language ?? lang;
+    const subsetBranches: WhereOptions[] = [];
+    if (filters.country) {
+        subsetBranches.push({ iso3Code: filters.country.trim() });
+    }
+    subsetBranches.push({ iso3Code: null, language, isPreferred: true });
+    // The whole OR stays inside its own condition. Flattened, the generic branch would swallow the
+    // ancestor filters and every level would answer with the entire dictionary
+    return [{ isActive: true }, { [Op.or]: subsetBranches }];
+}
+
+// One query per level. The external backend spends three — a COUNT of distinct values, a COUNT of
+// rows and the SELECT — over the same subset; count and total are derived here from the options
+// already in memory
+const getTreeLevelOptions = async (
+    level: VaccineWhodrugTreeLevel,
+    filters: VaccineWhodrugTreeFilters,
+    lang: string
+): Promise<VaccineWhodrugTreeResult> => {
+    const conditions = buildTreeSubsetConditions(filters, lang);
+    for (const ancestor of TREE_ANCESTORS[level]) {
+        const value = filters[ancestor];
+        if (value === undefined) {
+            continue;
+        }
+        // Exact equality, never iLike and never normalized: the value comes from the previous
+        // level's own response, so it matches character by character
+        conditions.push(value === TREE_NULL_SENTINEL
+            ? { [Op.or]: [{ [ancestor]: null }, { [ancestor]: '' }] }
+            : { [ancestor]: value });
+    }
+    // The search filters the same column that is grouped, so it discards whole groups and never
+    // single rows inside one: that is what keeps matchCount meaning "rows hanging from this
+    // option". A search over any other column would silently break the uniqueness signal
+    const textConditions = buildTextSearchConditions(filters.search, [level]);
+    if (textConditions.length > 0) {
+        conditions.push({ [Op.or]: textConditions });
+    }
+
+    // The import can leave an empty string where the file had a blank cell. Without the NULLIF that
+    // string would be an option of its own, indistinguishable on screen from the null one and with
+    // the counters split between the two
+    const valueExpression = fn('NULLIF', col(level), '');
+    const rows = await VaccineWhodrug.findAll({
+        attributes: [
+            [valueExpression, 'value'],
+            // Cast to integer on purpose: Postgres returns COUNT as bigint and the driver hands it
+            // over as a string, which would ship "matchCount": "3" and break the === 1 of the client
+            [cast(fn('COUNT', col('vaccineWhodrugId')), 'integer'), 'matchCount'],
+            // The id is resolved in this same query. With one row in the group the MIN is that row;
+            // with more than one the expression is NULL and there is no id to give. No user input
+            // reaches this literal
+            [literal('CASE WHEN COUNT("vaccineWhodrugId") = 1 THEN MIN("vaccineWhodrugId"::text) END'), 'vaccineWhodrugId']
+        ],
+        where: { [Op.and]: conditions },
+        group: [valueExpression],
+        // Ascending. In Postgres an ASC order already puts the nulls last, so the option with no
+        // value closes the list instead of opening it
+        order: [[valueExpression, 'ASC']],
+        raw: true
+    }) as unknown as VaccineWhodrugTreeOption[];
+
+    const options = rows.map((row) => ({
+        value: row.value,
+        matchCount: row.matchCount,
+        vaccineWhodrugId: row.vaccineWhodrugId ?? null
+    }));
+    return {
+        count: options.length,
+        total: options.reduce((sum, option) => sum + option.matchCount, 0),
+        options
+    };
+}
+
+// The five services stay separate even though they all delegate here: each one carries its own
+// operation code into its esaviLog and its AppError, which is what the five-point rule of the
+// operation code requires. A single service parameterized by level would collapse them into one
+
+// ESAVI-WHODRUG-006A - Get WHODrug Abbreviations Service
+const getWhodrugAbbreviationsService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
+    getTreeLevelOptions('abbreviation', filters, lang);
+
+// ESAVI-WHODRUG-006B - Get WHODrug Drug Names Service
+const getWhodrugDrugNamesService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
+    getTreeLevelOptions('drugName', filters, lang);
+
+// ESAVI-WHODRUG-006C - Get WHODrug MA Holders Service
+const getWhodrugMaHoldersService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
+    getTreeLevelOptions('maHolders', filters, lang);
+
+// ESAVI-WHODRUG-006D - Get WHODrug Forms Service
+const getWhodrugFormsService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
+    getTreeLevelOptions('formTranslations', filters, lang);
+
+// ESAVI-WHODRUG-006E - Get WHODrug Strengths Service
+const getWhodrugStrengthsService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
+    getTreeLevelOptions('strength', filters, lang);
+
 export {
     createVaccineWhodrugService,
     getActiveVaccineWhodrugsService,
@@ -534,5 +666,10 @@ export {
     getVaccineWhodrugByIdService,
     updateVaccineWhodrugService,
     setVaccineWhodrugActivationService,
-    importVaccineWhodrugsService
+    importVaccineWhodrugsService,
+    getWhodrugAbbreviationsService,
+    getWhodrugDrugNamesService,
+    getWhodrugMaHoldersService,
+    getWhodrugFormsService,
+    getWhodrugStrengthsService
 };

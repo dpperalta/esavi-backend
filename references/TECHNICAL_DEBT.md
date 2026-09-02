@@ -64,14 +64,16 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-042](#deuda-042) | 🟠 | Tres endpoints rechazan con 400 la respuesta de su propio `GET` |
 | [DEUDA-043](#deuda-043) | 🟡 | `sortOrder: 0` no se puede guardar en tres servicios |
 | [DEUDA-044](#deuda-044) | 🟠 | ✅ `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla |
+| [DEUDA-045](#deuda-045) | 🟠 | `appDetails.user` expone el UUID interno del usuario en toda respuesta |
+| [DEUDA-046](#deuda-046) | 🔴 | El rate limit se cuenta por IP y sin `trust proxy` |
 
 ## Mapa de resolución
 
 La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030, el
 SPEC 08 cubre 037 y 038, el SPEC 09 cubre 039 y el SPEC F12 cubre 041 — de esta
 última, el SPEC F09 había corregido por adelantado la única entidad que él mismo
-estrenaba. Las entradas 031–036, 040, 042 y 043 todavía no tienen spec; las dos
-últimas las detectó el propio SPEC F12 al implementarse.
+estrenaba. Las entradas 031–036, 040, 042, 043, 045 y 046 todavía no tienen
+spec; 042 y 043 las detectó el propio SPEC F12 al implementarse.
 
 **Saldadas a 2026-08-03**: las 30 entradas 001–030, por los siete specs de la
 serie, más 037 y 038 por el SPEC 08. Los ocho specs están en estado
@@ -95,7 +97,7 @@ producción, en vez de exigir SUPERADMIN), **013** (unicidad **sin** filtrar por
 | [08 — Idioma efectivo](./specs/08-language-propagation.md) | 037, 038 |
 | [09 — CRUD de healthFacility](./specs/09-healthfacility-crud.md) | 039 |
 | [F12 — Update diferencial uniforme](./functional/specs/12-differential.md) | 041 |
-| sin spec | 031, 032, 033, 034, 035, 036, 040, 042, 043 |
+| sin spec | 031, 032, 033, 034, 035, 036, 040, 042, 043, 045, 046 |
 
 Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08. El 05 renumera
 líneas que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los
@@ -901,3 +903,59 @@ Hay que decidir cuál de los dos manda. La sección de Normalización de [CONVEN
 **Aceptación**: `normalizeOrganization` pasa a `toTitleCase`, o el caso de contrato se corrige a mayúsculas si el dominio prefiere ese criterio. `npm run check` sale en 0 sin tocar ningún otro archivo.
 
 **Saldada el 2026-08-28** por el [SPEC F46](./functional/specs/46-catalogitem-value-lock.md), paso 9, por la vía que proponía la «Aceptación»: `normalizeOrganization` pasa a `toTitleCase(value.trim())` en `src/services/esaviCase.service.ts`. Manda el SPEC F06, que lo declara en tres sitios, y es lo que el test ya afirmaba. `normalizeCountryIsoCode` se queda en mayúsculas.
+
+---
+
+<a id="deuda-045"></a>
+## DEUDA-045 🟠 `appDetails.user` expone el UUID interno del usuario en toda respuesta
+
+**Archivos**: `src/types/common/audit.types.ts:18`, y los 38 servicios con operaciones de lectura.
+
+Detectada el 2026-09-02 al revisar qué identificadores recibe el frontend.
+
+Toda tabla lleva `appDetails` (JSONB array) y cada entrada guarda en `user` el **UUID** de quien ejecutó la operación. Ese array viaja íntegro en la respuesta de casi todos los `GET`: solo `user.service.ts:63-67` y `systemConfig.service.ts` lo excluyen, y únicamente en sus listados. El consumidor recibe entonces una lista de UUID que no puede mostrar sin una llamada extra por cada uno, y a cambio se le entrega un identificador interno que no necesita para nada.
+
+Lo que se quiere es que la respuesta diga el **email** del autor. Con dos límites que definen la forma de la solución:
+
+**La escritura no cambia.** La tentación es guardar el email en vez del `userId` al construir la entrada de auditoría, y es el camino equivocado por tres razones. `email` está cifrado con `esaviCrypt` precisamente para que la PII no repose en claro; escribirlo en `appDetails` la dejaría **sin cifrar** en el JSONB de las 45 tablas, y la auditoría es acumulativa, así que sería para siempre. Son además unos 146 puntos de escritura repartidos en 47 servicios. Y no arreglaría ninguna de las filas ya escritas.
+
+**La resolución va en la lectura, explícita, no en un middleware.** El punto correcto es el mismo donde `user.service.ts:44-59` ya descifra su propia PII antes de responder (`decryptPii` / `toUserResponse`): un helper compartido —`resolveAppDetailsAuthors`— que junte los `userId` únicos de la respuesta, haga **un solo** `findAll` sobre `AppUser` y sustituya `user` por el email descifrado. Un query por respuesta, no uno por entrada de auditoría.
+
+Se evaluó y se descartó un middleware genérico sobre `res.json`. Reconocería la entrada de auditoría por la forma de sus claves (`createdAt`, `user`, `method`, `detail`), de modo que reescribiría cualquier otro JSONB que coincidiera por casualidad, y necesitaría recorrer a ciegas las tres formas de respuesta que conviven (objeto, `{ count, rows }`, entidad con sub-entidades anidadas). Sería, además, la única pieza del repositorio que transforma la respuesta sin que el servicio lo declare. Lo que sí conserva del middleware es la ventaja que lo hacía atractivo: si el helper lee un flag, la resolución se puede desactivar desde un solo sitio.
+
+**Alcance**: 130 funciones `get*Service` en 38 archivos son el techo; el suelo son las que devuelven la fila completa con su `appDetails`. La razón de que sea tan disperso es que no existe capa de serialización compartida: los controladores pasan el `data` del servicio a `res.json` sin tocarlo, así que no hay un punto único que ya esté dando forma a las respuestas.
+
+**Decisión pendiente**: qué se responde cuando el `userId` no resuelve a ningún `AppUser`. Son dos casos reales, no hipotéticos — un usuario purgado por su `005C`, y el literal `'undefined'` que los servicios escriben cuando la operación no trae `authUser` (`user.service.ts:123`, `healthFacility.service.ts:74`, y así en todos). Dejar el UUID reintroduce la exposición justo en el caso raro; un literal i18n la evita pero pierde el rastro. Sea cual sea la decisión, el helper tiene que contemplar el `'undefined'` ya escrito en filas existentes.
+
+**Aceptación**: ninguna respuesta de la API contiene un UUID en `appDetails[].user`; el valor es el email del autor. La escritura sigue guardando el `userId`, verificable directamente en la base. Un `GET` de un listado de N filas ejecuta **un** query adicional, no N. Un caso de contrato lo fija sobre al menos una entidad.
+
+---
+
+<a id="deuda-046"></a>
+## DEUDA-046 🔴 El rate limit se cuenta por IP y sin `trust proxy`
+
+**Archivos**: `src/app.ts:71-79`, `src/middlewares/rateLimit.middleware.ts`
+
+Detectada el 2026-09-02 al integrar el frontend: con navegación normal se alcanza el límite y hay que esperar.
+
+El limiter global concede **100 peticiones por IP cada 15 minutos** —unas 6,7 por minuto— y se monta antes de las rutas. Son cuatro problemas distintos que comparten el mismo punto de montaje y hay que resolver juntos.
+
+**1. El techo es bajo para un cliente SPA.** Una pantalla que carga sus catálogos en paralelo gasta diez o veinte peticiones en un segundo. El límite se diseñó contra el abuso y hoy lo que frena es el uso normal.
+
+**2. La cuenta es por IP, y eso se rompe detrás de NAT.** Es el problema de fondo, y es propio de este dominio: una unidad de salud entera sale por una sola IP pública, de modo que sus usuarios se reparten los mismos 100 requests y se bloquean entre sí. El sujeto que se quiere limitar es la **cuenta**, no la ubicación de red. Lo mismo alcanza al `passwordResetLimiter` de `rateLimit.middleware.ts:30-36`: sus 5 peticiones por ventana son 5 para todo el centro de salud, no 5 por persona.
+
+**3. `trust proxy` no está configurado en ningún punto de `src/`.** Mientras la API corra expuesta directamente no se nota, pero en cuanto quede detrás de un proxy o balanceador —nginx, Cloud Run, Heroku— `req.ip` pasa a ser la IP del proxy y **todos los usuarios comparten un único bucket de 100**. El rate limit deja de ser molesto y pasa a ser inservible. La corrección tampoco es `trust proxy: true` a secas: confiar en todo `X-Forwarded-For` permite falsificar la cabecera y evadir el límite por completo. Hay que declarar el número de saltos reales de la infraestructura.
+
+De aquí sale la severidad 🔴: no del techo bajo, que es una molestia, sino de la combinación de 2 y 3 — en producción el límite mide algo distinto de lo que cree medir, y en un despliegue con proxy se degrada a un contador global.
+
+**4. El 429 rompe el contrato de respuesta.** El limiter responde con la cadena de `message` tal cual, sin pasar por `errorHandler`: sin `{ ok, message, code, errors }` y sin i18n. El cliente no puede tratar ese error como trata los demás. Es el mismo patrón que [DEUDA-032](#deuda-032), en otro middleware.
+
+**Dirección de la solución**: el limiter corre **antes** de `tokenValidation`, así que `req.user` todavía no existe cuando se calcula la clave. La salida sin tocar las rutas es un único limiter con `keyGenerator` propio que verifique el JWT por su cuenta —`jwt.verify`, sin consultar la base, mucho más barato que `tokenValidation`, que sí relee el usuario y sus roles en cada petición— y devuelva `user:<userId>` cuando el token es válido, cayendo a la IP cuando no lo es. Con `limit` dinámico: cuota amplia para la cuenta autenticada y cuota corta para el tráfico anónimo, que es el que hay que seguir frenando en login y en recuperación de contraseña. El límite por IP **no se elimina**: se reserva para quien todavía no se identificó.
+
+Debe **verificarse la firma**, nunca solo decodificar: un `jwt.decode` dejaría que cualquiera eligiera su propio bucket inventando un `userId` distinto en cada petición, que es evadir el límite por definición.
+
+Dos precisiones de `express-rate-limit@8`, la versión instalada: `max` está deprecado a favor de `limit`, y un `keyGenerator` propio con reserva a IP tiene que usar el helper `ipKeyGenerator` — sin él, un cliente IPv6 obtiene un bucket por dirección y rota libremente dentro de su propio /64.
+
+Queda fuera de alcance, pero conviene anotarlo: el store por defecto es en memoria, así que los contadores se reinician con el proceso y no se comparten entre instancias. Mientras el despliegue sea de una sola instancia no cambia nada.
+
+**Aceptación**: dos usuarios autenticados distintos detrás de la misma IP pública no consumen la cuota del otro. `trust proxy` declara los saltos reales y una cabecera `X-Forwarded-For` falsificada no altera la clave del limiter. El tráfico anónimo conserva un límite por IP, y `POST /api/auth/login` sigue frenado. Un 429 responde con el sobre `{ ok, message, code, errors }` e i18n, como cualquier otro error. Los tests siguen sin montar el limiter, por la razón que `app.ts:71-72` ya documenta.

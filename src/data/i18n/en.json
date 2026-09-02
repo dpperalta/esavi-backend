@@ -561,7 +561,9 @@
         "importedFailed": "Failed to import the WHODrug vaccines. Please try again later.",
         "fileRequired": "The file to import must be attached in the file field",
         "fileInvalid": "The file could not be processed. Please check that it is an .xlsx workbook with the expected header and try again.",
-        "fileTooLarge": "The file exceeds the maximum allowed size of 20 MB"
+        "fileTooLarge": "The file exceeds the maximum allowed size of 20 MB",
+        "optionsSuccess": "WHODrug vaccine options retrieved successfully",
+        "optionsFailed": "Failed to retrieve the WHODrug vaccine options. Please try again later."
     },
     "diluentCatalog": {
         "createdSuccess": "Diluent created successfully",

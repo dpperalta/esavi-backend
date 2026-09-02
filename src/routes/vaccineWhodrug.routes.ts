@@ -8,6 +8,11 @@ import {
     getAllVaccineWhodrugs,
     getVaccineWhodrugById,
     getVaccineWhodrugs,
+    getWhodrugAbbreviations,
+    getWhodrugDrugNames,
+    getWhodrugForms,
+    getWhodrugMaHolders,
+    getWhodrugStrengths,
     importVaccineWhodrugs,
     updateVaccineWhodrug
 } from '../controllers/vaccineWhodrug.controller';
@@ -16,7 +21,12 @@ import {
     importVaccineWhodrugsValidator,
     updateVaccineWhodrugValidator,
     vaccineWhodrugIdValidator,
-    vaccineWhodrugListValidator
+    vaccineWhodrugListValidator,
+    whodrugAbbreviationsValidator,
+    whodrugDrugNamesValidator,
+    whodrugFormsValidator,
+    whodrugMaHoldersValidator,
+    whodrugStrengthsValidator
 } from '../validators';
 
 // The only entity of the repository whose base route does not match its table name: the table is
@@ -51,6 +61,32 @@ router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...
 // Literal path, declared before '/:id' for coherence with the rest of the file. uploadSingleFile
 // runs before the validators because the multipart body does not exist until multer parses it
 router.post('/import', tokenValidation, validateUserRole(SUPERADMIN), uploadSingleFile('file', { i18nPrefix: 'vaccineWhodrug', codePrefix: 'WHODRUG_007' }), ...importVaccineWhodrugsValidator, validateFields, importVaccineWhodrugs);
+
+// SPEC F54 — the five levels of the WHODrug tree: abbreviation → drugName → maHolders →
+// formTranslations → strength. All literal paths, all declared before '/:id' so Express does not
+// capture 'abbreviations' as an :id and answer 400 from the UUID validator instead of listing.
+// Every option carries its own matchCount, and the vaccineWhodrugId resolved when that count is 1:
+// the sixth endpoint the tree needs — the full row by its id — is ESAVI-WHODRUG-003, already below
+
+// Get WHODrug Abbreviations
+// Code: ESAVI-WHODRUG-006A
+router.get('/abbreviations', tokenValidation, validateUserRole(USER), ...whodrugAbbreviationsValidator, validateFields, getWhodrugAbbreviations);
+
+// Get WHODrug Drug Names
+// Code: ESAVI-WHODRUG-006B
+router.get('/drug-names', tokenValidation, validateUserRole(USER), ...whodrugDrugNamesValidator, validateFields, getWhodrugDrugNames);
+
+// Get WHODrug MA Holders
+// Code: ESAVI-WHODRUG-006C
+router.get('/ma-holders', tokenValidation, validateUserRole(USER), ...whodrugMaHoldersValidator, validateFields, getWhodrugMaHolders);
+
+// Get WHODrug Forms
+// Code: ESAVI-WHODRUG-006D
+router.get('/forms', tokenValidation, validateUserRole(USER), ...whodrugFormsValidator, validateFields, getWhodrugForms);
+
+// Get WHODrug Strengths
+// Code: ESAVI-WHODRUG-006E
+router.get('/strengths', tokenValidation, validateUserRole(USER), ...whodrugStrengthsValidator, validateFields, getWhodrugStrengths);
 
 // Get Vaccine Whodrug by ID
 // Code: ESAVI-WHODRUG-003

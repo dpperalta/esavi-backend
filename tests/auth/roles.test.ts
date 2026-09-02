@@ -286,6 +286,16 @@ const ROUTE_RULES: RouteRule[] = [
     // for moving a single row
     { method: 'post',   path: '/api/whodrug-vaccines/import',                 minRole: 'SUPERADMIN', code: 'ESAVI-WHODRUG-007' },
 
+    // ESAVI-WHODRUG-006A..006E (SPEC F54) — the five levels of the WHODrug tree. All USER, the same
+    // role as the 002A and the 003: navigating the dictionary is reading it, and the three of them
+    // are the surface the notification form consumes. There is no admin variant on purpose — the
+    // navigation only ever sees active rows, because a row taken down must not be selectable
+    { method: 'get',    path: '/api/whodrug-vaccines/abbreviations',          minRole: 'USER',       code: 'ESAVI-WHODRUG-006A' },
+    { method: 'get',    path: '/api/whodrug-vaccines/drug-names',             minRole: 'USER',       code: 'ESAVI-WHODRUG-006B' },
+    { method: 'get',    path: '/api/whodrug-vaccines/ma-holders',             minRole: 'USER',       code: 'ESAVI-WHODRUG-006C' },
+    { method: 'get',    path: '/api/whodrug-vaccines/forms',                  minRole: 'USER',       code: 'ESAVI-WHODRUG-006D' },
+    { method: 'get',    path: '/api/whodrug-vaccines/strengths',              minRole: 'USER',       code: 'ESAVI-WHODRUG-006E' },
+
     // notificationVaccine (SPEC F22) — the fifth satellite of notification and the third of the one
     // to many family, so it repeats the nine rows of NOTIFEVT and NOTIFMED with the canonical role
     // matrix. The 005C exists because the table sits outside the preventPhysicalDelete loop of
@@ -748,7 +758,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(325);
+            expect(ROUTE_RULES).toHaveLength(330);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

@@ -25,3 +25,5 @@ src/logs/
 graphify-out/
 
 *.log.*
+
+references/external/
