@@ -1,6 +1,6 @@
 # SPEC F53 — Importación masiva de geografía y establecimientos desde un `.xlsx`
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC 09 (normalización de `healthFacility`), SPEC F12 (`buildDifferentialUpdate`), SPEC F17 (aporta `multer` y `fileUpload.middleware.ts`), SPEC F19 (aporta `uploadSingleFile(fieldName, { i18nPrefix, codePrefix })` y la dependencia `exceljs`), **SPEC F20 (dependencia dura de forma: el patrón de parser `.xlsx`, informe, lotes y `dryRun`)**
 > **Fecha:** 2026-09-02
 > **Objetivo:** Cargar el árbol geográfico completo y el padrón de establecimientos desde un único `.xlsx` de tres hojas, y generar esa misma plantilla desde el servidor con los catálogos vigentes ya incrustados.
