@@ -72,6 +72,8 @@ const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser: 
 const getActiveCatalogTypesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const catalogTypes = await CatalogType.findAndCountAll({
         where: { isActive: true },
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [['sortOrder', 'ASC']],
         limit,
         offset
@@ -82,6 +84,8 @@ const getActiveCatalogTypesService = async (limit: number = DEFAULT_LIMIT, offse
 // ESAVI-CATTYPE-002B - Get All Catalog Types Service (including inactive) - For SuperAdmin
 const getAllCatalogTypesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const catalogTypes = await CatalogType.findAndCountAll({
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [
             ['sortOrder', 'ASC'],
             ['name', 'ASC']
@@ -96,8 +100,10 @@ const getAllCatalogTypesService = async (limit: number = DEFAULT_LIMIT, offset: 
 const getCatalogTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { catalogTypeId: id } : { catalogTypeId: id, isActive: true };
         const catalogType = await CatalogType.findOne({
-            where: whereClause
-        }); 
+            where: whereClause,
+            // sysDetails is internal and never exposed by the API
+            attributes: { exclude: ['sysDetails'] }
+        });
         if( !catalogType ) {
             throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATTYPE_003_NOT_FOUND');
         }
