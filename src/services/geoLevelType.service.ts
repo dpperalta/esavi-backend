@@ -39,6 +39,8 @@ const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser
 const getActiveGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const geoLevelTypes = await GeoLevelType.findAndCountAll({
         where: { isActive: true },
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [['sortOrder', 'ASC']],
         limit,
         offset
@@ -49,6 +51,8 @@ const getActiveGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offs
 // ESAVI-GEOTYPE-002B - Get All Geographic Level Types Service (including inactive) - For SuperAdmin
 const getAllGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
     const geoLevelTypes = await GeoLevelType.findAndCountAll({
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] },
         order: [
             ['sortOrder', 'ASC'],
             ['name', 'ASC']
@@ -63,8 +67,10 @@ const getAllGeoLevelTypesService = async (limit: number = DEFAULT_LIMIT, offset:
 const getGeoLevelTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
     const whereClause = isAdmin ? { geoLevelTypeId: id } : { geoLevelTypeId: id, isActive: true };
     const geoLevelType = await GeoLevelType.findOne({
-        where: whereClause
-    }); 
+        where: whereClause,
+        // sysDetails is internal and never exposed by the API
+        attributes: { exclude: ['sysDetails'] }
+    });
     if( !geoLevelType ) {
         throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_003_NOT_FOUND');
     }
