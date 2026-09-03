@@ -41,3 +41,4 @@ export * from './finalClassification.validator';
 export * from './caseWorkflow.validator';
 export * from './evaluationInstitution.validator';
 export * from './systemConfig.validator';
+export * from './meddra.validator';
