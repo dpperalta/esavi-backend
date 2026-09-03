@@ -72,6 +72,8 @@ const ROUTE_RULES: RouteRule[] = [
     // geoLocation
     { method: 'post',   path: '/api/geo-locations',                      minRole: 'ADMIN',      code: 'ESAVI-GEOLOC-001' },
     { method: 'get',    path: '/api/geo-locations',                      minRole: 'USER',       code: 'ESAVI-GEOLOC-002' },
+    { method: 'post',   path: '/api/geo-locations/import',               minRole: 'SUPERADMIN', code: 'ESAVI-GEOLOC-006' },
+    { method: 'get',    path: '/api/geo-locations/import/template',      minRole: 'ADMIN',      code: 'ESAVI-GEOLOC-007' },
     { method: 'get',    path: `/api/geo-locations/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-GEOLOC-003' },
     { method: 'put',    path: `/api/geo-locations/${ UUID }`,            minRole: 'ADMIN',      code: 'ESAVI-GEOLOC-004' },
     { method: 'delete', path: `/api/geo-locations/${ UUID }`,            minRole: 'ADMIN',      code: 'ESAVI-GEOLOC-005A' },
@@ -152,15 +154,16 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'delete', path: `/api/esavi-cases/${ UUID }`,             minRole: 'ADMIN',      code: 'ESAVI-CASE-005A' },
     { method: 'patch',  path: `/api/esavi-cases/activate/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-CASE-005B' },
 
-    // notifier — 001 and 004 sit at USER for the same reason as esaviCase (SPEC F07 §3.4):
-    // the notifier is captured in the same operational flow as the case. 005C exists because
-    // notifier is outside the preventPhysicalDelete loop of esaviapp.sql:1354-1360
+    // notifier — 001, 004 and 005A sit at USER for the same reason as esaviCase (SPEC F07 §3.4):
+    // the notifier is captured in the same operational flow as the case, and retiring one badly
+    // captured belongs to that flow too. 005C exists because notifier is outside the
+    // preventPhysicalDelete loop of esaviapp.sql:1354-1360
     { method: 'post',   path: '/api/notifiers',                          minRole: 'USER',       code: 'ESAVI-NOTIFIER-001' },
     { method: 'get',    path: '/api/notifiers',                          minRole: 'USER',       code: 'ESAVI-NOTIFIER-002A' },
     { method: 'get',    path: '/api/notifiers/admin',                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFIER-002B' },
     { method: 'get',    path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-003' },
     { method: 'put',    path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-004' },
-    { method: 'delete', path: `/api/notifiers/${ UUID }`,                minRole: 'ADMIN',      code: 'ESAVI-NOTIFIER-005A' },
+    { method: 'delete', path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-005A' },
     { method: 'patch',  path: `/api/notifiers/activate/${ UUID }`,       minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005B' },
     { method: 'delete', path: `/api/notifiers/purge/${ UUID }`,          minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005C' },
 
@@ -241,7 +244,10 @@ const ROUTE_RULES: RouteRule[] = [
     // preventPhysicalDelete loop of esaviapp.sql:1355-1361.
     // ESAVI-NOTIFEVT-006 does have a row here, unlike the 006 of DIAGTERM: it is a read with an
     // HTTP route of its own. The two listings are entered by the foreign key and never by /
-    { method: 'post',   path: '/api/notification-events',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-001' },
+    // The 001 is USER and not ADMIN: it belongs to the notification tree, whose creates the USER
+    // performs because the USER is the one who notifies (CONVENTIONS.md, declared exception to the
+    // canonical matrix). The 004, the 005A and the 002B stay ADMIN
+    { method: 'post',   path: '/api/notification-events',                              minRole: 'USER',       code: 'ESAVI-NOTIFEVT-001' },
     { method: 'get',    path: `/api/notification-events/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFEVT-006' },
     { method: 'get',    path: `/api/notification-events/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-002B' },
     { method: 'get',    path: `/api/notification-events/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFEVT-002A' },
@@ -258,7 +264,7 @@ const ROUTE_RULES: RouteRule[] = [
     // ESAVI-NOTIFMED-006 does have a row here, for the same reason the 006 of NOTIFEVT does: it is a
     // read with an HTTP route of its own. The two listings are entered by the foreign key and never
     // by /
-    { method: 'post',   path: '/api/notification-medications',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-001' },
+    { method: 'post',   path: '/api/notification-medications',                              minRole: 'USER',       code: 'ESAVI-NOTIFMED-001' },
     { method: 'get',    path: `/api/notification-medications/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFMED-006' },
     { method: 'get',    path: `/api/notification-medications/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-002B' },
     { method: 'get',    path: `/api/notification-medications/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFMED-002A' },
@@ -297,13 +303,13 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: '/api/whodrug-vaccines/strengths',              minRole: 'USER',       code: 'ESAVI-WHODRUG-006E' },
 
     // notificationVaccine (SPEC F22) — the fifth satellite of notification and the third of the one
-    // to many family, so it repeats the nine rows of NOTIFEVT and NOTIFMED with the canonical role
-    // matrix. The 005C exists because the table sits outside the preventPhysicalDelete loop of
+    // to many family, so it repeats the nine rows of NOTIFEVT and NOTIFMED with the same role
+    // matrix, the USER create of the notification tree included. The 005C exists because the table sits outside the preventPhysicalDelete loop of
     // esaviapp.sql:1361-1373.
     // ESAVI-NOTIFVAC-006 does have a row here, for the same reason the 006 of NOTIFEVT and NOTIFMED
     // do: it is a read with an HTTP route of its own. The two listings are entered by the foreign
     // key and never by /
-    { method: 'post',   path: '/api/notification-vaccines',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-001' },
+    { method: 'post',   path: '/api/notification-vaccines',                              minRole: 'USER',       code: 'ESAVI-NOTIFVAC-001' },
     { method: 'get',    path: `/api/notification-vaccines/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFVAC-006' },
     { method: 'get',    path: `/api/notification-vaccines/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-002B' },
     { method: 'get',    path: `/api/notification-vaccines/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFVAC-002A' },
@@ -329,12 +335,13 @@ const ROUTE_RULES: RouteRule[] = [
 
     // notificationDiluent (SPEC F24) — the sixth satellite of notification and the first grandchild
     // of the graph: it hangs from vaccineId, so its inherited visibility is two hops instead of one.
-    // Eight canonical operations with the role matrix of NOTIFVAC, and no 006 of any kind: flattening
+    // Eight canonical operations with the role matrix of NOTIFVAC — USER create included —, and no
+    // 006 of any kind: flattening
     // a two level fan out would mix rows of different vaccines under a sortOrder relative to each of
     // them, so this is the first of the family that adds no row to the non-canonical table.
     // The 005C exists because the table is outside the preventPhysicalDelete loop of
     // esaviapp.sql:1361-1375. The two listings are entered by the foreign key and never by /
-    { method: 'post',   path: '/api/notification-diluents',                              minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-001' },
+    { method: 'post',   path: '/api/notification-diluents',                              minRole: 'USER',       code: 'ESAVI-NOTIFDIL-001' },
     { method: 'get',    path: `/api/notification-diluents/admin/vaccine/${ UUID }`,      minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-002B' },
     { method: 'get',    path: `/api/notification-diluents/vaccine/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFDIL-002A' },
     { method: 'delete', path: `/api/notification-diluents/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005C' },
@@ -762,7 +769,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(331);
+            expect(ROUTE_RULES).toHaveLength(333);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

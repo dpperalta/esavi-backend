@@ -337,10 +337,10 @@ describe('notificationEvent contract', () => {
             expect(response.body.data.startTime).toBe('14:30:00');
         });
 
-        it('answers 403 for a USER', async () => {
+        it('admits a USER, who is the one who notifies', async () => {
             const { notificationId } = await notifyNewCase();
 
-            expect(( await createEvent({ notificationId, esaviName: 'Fiebre' }, 'USER') ).status).toBe(403);
+            expect(( await createEvent({ notificationId, esaviName: 'Fiebre' }, 'USER') ).status).toBe(201);
         });
 
     });

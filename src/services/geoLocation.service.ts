@@ -1,10 +1,71 @@
 import { Op } from 'sequelize';
-import { getMessage, AppError, buildDifferentialUpdate, esaviLog, escapeLike } from '../helpers';
-import { AppDetails, AuthUser, CreateGeoLocationInput } from '../types';
-import { GeoLevelType, GeoLocation } from '../models';
+import { getMessage, AppError, buildDifferentialUpdate, buildGeoTemplateWorkbook, esaviLog, escapeLike } from '../helpers';
+import { AppDetails, AuthUser, CreateGeoLocationInput, GenerateGeoTemplateInput } from '../types';
+import { CatalogItem, CatalogType, GeoLevelType, GeoLocation, HealthFacility } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+
+// Code of the catalogType that groups the valid facility types, the same one healthFacility.service
+// reads: the template mirrors that catalog and the 006 resolves facilityTypeCode against it
+const HEALTH_FACILITY_TYPE_CATALOG_CODE = 'healthFacilityType';
+
+/**
+ * Shared precheck of ESAVI-GEOLOC-006 and ESAVI-GEOLOC-007. Runs before reading the file in the 006
+ * and before querying anything in the 007, because both operations rest on the same invariant: the
+ * `level` of the file resolves its geoLevelType through sortOrder, one level per number, starting at
+ * 1 and with no gaps.
+ *
+ * geoLevelType is not seeded by esaviapp.sql — administrative levels belong to each country and the
+ * deployment is multi-country — so on a freshly created base, which is exactly the scenario of a
+ * first load, there are no levels at all. Without this check the template would come out with an
+ * empty dropdown and every row would be rejected after somebody filled in the whole file.
+ *
+ * The actionable detail travels in `message` and not in `errors`: errorHandler only puts real text
+ * in errors when NODE_ENV=development, so in production the operator would read 'Internal server
+ * error' and not know what to fix. That is why these are three interpolated keys and not one.
+ *
+ * Returns the level -> geoLevelTypeId map, which is the only thing the rest of the operation uses.
+ */
+const assertGeoLevelTypesReady = async ( codePrefix: string, lang: string ): Promise<Map<number, string>> => {
+    const geoLevelTypes = await GeoLevelType.findAll({
+        where: { isActive: true },
+        order: [ [ 'sortOrder', 'ASC' ] ]
+    });
+    if( geoLevelTypes.length === 0 ) {
+        throw new AppError(getMessage('geoLocation.levelTypesMissing', lang), 409, `${ codePrefix }_LEVEL_TYPES_MISSING`);
+    }
+    // Two active levels sharing a sortOrder make the resolution non-deterministic: a row of level 2
+    // would resolve to whichever of the two the order happened to return first
+    const seen = new Set<number>();
+    const duplicated: number[] = [];
+    for( const geoLevelType of geoLevelTypes ) {
+        const sortOrder = Number(geoLevelType.sortOrder);
+        if( seen.has(sortOrder) && !duplicated.includes(sortOrder) ) {
+            duplicated.push(sortOrder);
+        }
+        seen.add(sortOrder);
+    }
+    if( duplicated.length > 0 ) {
+        throw new AppError(
+            getMessage('geoLocation.levelTypesDuplicatedOrder', lang, { orders: duplicated.join(', ') }),
+            409,
+            `${ codePrefix }_LEVEL_TYPES_DUPLICATED_ORDER`
+        );
+    }
+    // The series has to run 1, 2, 3... with no gap: a hole at 3 would leave every row of level 3
+    // rejected and every level below it orphaned, which is a whole branch lost for one missing row
+    const orders = [ ...seen ].sort(( a, b ) => a - b);
+    const expected = orders.findIndex(( order, index ) => order !== index + 1);
+    if( expected !== -1 ) {
+        throw new AppError(
+            getMessage('geoLocation.levelTypesNotContiguous', lang, { expected: String(expected + 1) }),
+            409,
+            `${ codePrefix }_LEVEL_TYPES_NOT_CONTIGUOUS`
+        );
+    }
+    return new Map(geoLevelTypes.map(( geoLevelType ) => [ Number(geoLevelType.sortOrder), geoLevelType.geoLevelTypeId ]));
+};
 
 // ESAVI-GEOLOC-001 - Create Geographic Location Service
 const createGeoLocationService = async( data: CreateGeoLocationInput, authUser: AuthUser | undefined, lang: string ) => {
@@ -326,7 +387,109 @@ const setGeoLocationActivationService = async (id: string, authUser: AuthUser | 
     }
 }
 
+// ESAVI-GEOLOC-007 - Generate Geographic Import Template Service
+//
+// Four phases: the shared precheck, the catalogs that feed the dropdowns, the dump of what is
+// already loaded — only when includeExisting travels — and the construction of the book.
+//
+// It returns the Buffer and not an envelope: the 200 of this operation is the binary, which is the
+// declared exception to CONVENTIONS.md §10 and the reason it has no success i18n key. Its errors do
+// travel in the usual envelope, which is what keeps the deviation to a single path.
+const generateGeoTemplateService = async ( data: GenerateGeoTemplateInput, authUser: AuthUser | undefined, lang: string ): Promise<Buffer> => {
+    // Phase 0. A 409 here stops anybody from filling in a book that could not then be loaded
+    await assertGeoLevelTypesReady('GEOLOC_007', lang);
+    // Phase 1. The levels are read again for their name: the precheck hands back the id map, which
+    // is what the 006 needs, and the template needs the label the operator reads in the dropdown
+    const geoLevelTypes = await GeoLevelType.findAll({
+        where: { isActive: true },
+        attributes: [ 'sortOrder', 'name' ],
+        order: [ [ 'sortOrder', 'ASC' ] ]
+    });
+    // An empty facility type catalog is NOT an error: sheet 2 comes out with an empty dropdown and
+    // the fact is visible. Blocking a load of geography over the facility catalog would be a false
+    // positive
+    const facilityTypeItems = await CatalogItem.findAll({
+        where: { isActive: true },
+        attributes: [ 'code', 'name' ],
+        include: [ {
+            model: CatalogType,
+            as: 'catalogType',
+            where: { code: HEALTH_FACILITY_TYPE_CATALOG_CODE },
+            attributes: []
+        } ],
+        order: [ [ 'name', 'ASC' ] ]
+    });
+    // Phase 2. Only when asked, and only active rows — with independence of the role. What is being
+    // decided is not visibility but what is reimportable, and an inactive row coming back in the
+    // file would be updated without being reactivated, an effect nobody asked for. canViewInactive
+    // therefore does not take part here
+    let geoLocations: GeoLocation[] = [];
+    let healthFacilities: HealthFacility[] = [];
+    if( data.includeExisting ) {
+        geoLocations = await GeoLocation.findAll({
+            where: { isActive: true },
+            include: [ { model: GeoLocation, as: 'parent', attributes: [ 'externalCode' ] } ],
+            order: [ [ 'level', 'ASC' ], [ 'sortOrder', 'ASC' ], [ 'name', 'ASC' ] ]
+        });
+        healthFacilities = await HealthFacility.findAll({
+            where: { isActive: true },
+            include: [
+                { model: GeoLocation, as: 'geoLocation', attributes: [ 'externalCode' ] },
+                { model: HealthFacility, as: 'parent', attributes: [ 'localCode' ] },
+                { model: CatalogItem, as: 'facilityType', attributes: [ 'code' ] }
+            ],
+            order: [ [ 'name', 'ASC' ] ]
+        });
+    }
+    // Phase 3. The builder is pure: it receives what was queried here and returns the buffer
+    return await buildGeoTemplateWorkbook({
+        levels: geoLevelTypes.map(( geoLevelType ) => ({
+            level: Number(geoLevelType.sortOrder),
+            name: geoLevelType.name
+        })),
+        facilityTypes: facilityTypeItems.map(( item ) => ({ code: item.code, name: item.name })),
+        // parentCode travels as the parent's externalCode and never as its UUID: it has to be the
+        // same value the 006 reads back, or a file downloaded and re-uploaded untouched would
+        // produce PARENT_CHANGED on every row
+        geoLocations: geoLocations.map(( row ) => ({
+            externalCode: row.externalCode ?? null,
+            name: row.name,
+            level: row.level === null || row.level === undefined ? null : Number(row.level),
+            parentCode: ( row as GeoLocation & { parent?: { externalCode: string | null } } ).parent?.externalCode ?? null,
+            officialName: row.officialName ?? null,
+            shortName: row.shortName ?? null,
+            isoCode: row.isoCode ?? null,
+            latitude: row.latitude ?? null,
+            longitude: row.longitude ?? null,
+            sortOrder: row.sortOrder === null || row.sortOrder === undefined ? null : Number(row.sortOrder)
+        })),
+        healthFacilities: healthFacilities.map(( row ) => {
+            const joined = row as HealthFacility & {
+                geoLocation?: { externalCode: string | null };
+                parent?: { localCode: string | null };
+                facilityType?: { code: string | null };
+            };
+            return {
+                localCode: row.localCode ?? null,
+                name: row.name,
+                geoExternalCode: joined.geoLocation?.externalCode ?? null,
+                facilityTypeCode: joined.facilityType?.code ?? null,
+                officialName: row.officialName ?? null,
+                shortName: row.shortName ?? null,
+                address: row.address ?? null,
+                latitude: row.latitude ?? null,
+                longitude: row.longitude ?? null,
+                phone: row.phone ?? null,
+                email: row.email ?? null,
+                parentLocalCode: joined.parent?.localCode ?? null
+            };
+        })
+    });
+}
+
 export {
+    assertGeoLevelTypesReady,
+    generateGeoTemplateService,
     createGeoLocationService,
     getActiveGeoLocationsService,
     getAllGeoLocationsService,

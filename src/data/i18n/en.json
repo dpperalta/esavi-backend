@@ -124,7 +124,16 @@
         "deletedFailed": "Failed to delete the geographic location. Please try again later.",
         "activatedSuccess": "Geographic location activated successfully",
         "activatedFailed": "Failed to activate the geographic location. Please try again later.",
-        "idRequired": "Geographic location ID is required for this operation"
+        "idRequired": "Geographic location ID is required for this operation",
+        "importedSuccess": "Geography and health facilities imported successfully",
+        "importedFailed": "Failed to import the geography and health facilities. Please try again later.",
+        "fileRequired": "The file to import must be attached in the file field",
+        "fileInvalid": "The file could not be processed. Please check that it is an .xlsx workbook with a geoLocation sheet, its complete header and at least one valid row, and try again.",
+        "fileTooLarge": "The file exceeds the maximum allowed size of 20 MB",
+        "levelTypesMissing": "There is no active geographic level type. Create the administrative levels before importing or generating the template.",
+        "levelTypesDuplicatedOrder": "Some active geographic level types share the same order: {{orders}}. Fix the order of those levels before continuing.",
+        "levelTypesNotContiguous": "The active geographic level types do not form a contiguous series from 1: order {{expected}} is missing. Fix the levels before continuing.",
+        "templateFailed": "Failed to generate the import template. Please try again later."
     },
     "catalogType": {
         "codeExists": "A catalog type with code {{code}} already exists",

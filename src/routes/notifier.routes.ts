@@ -51,6 +51,9 @@ router.put('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidat
 
 // Soft delete Notifier
 // Code: ESAVI-NOTIFIER-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notifierIdValidator, validateFields, deleteNotifier);
+// USER for the same reason as 001 and 004: retirar un notificador mal capturado es parte del
+// mismo flujo de notificación del ESAVI. La reactivación (005B) y la purga (005C) siguen
+// reservadas, así que el error se corrige hacia abajo pero no se revierte sin SUPERADMIN
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidator, validateFields, deleteNotifier);
 
 export default router;

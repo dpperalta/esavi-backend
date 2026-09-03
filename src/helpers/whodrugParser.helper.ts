@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 
+import { RawSheetRow, XlsxFileError, readSheet } from './xlsxSheetReader.helper';
 import {
     ParsedVaccineWhodrugRow,
     RejectedVaccineWhodrugRow,
@@ -97,63 +98,13 @@ export interface ParsedWhodrugFile {
     missingRequiredHeaders: string[];
 }
 
-// Lowercase and drop the separators the exports mix in the same row — the file already writes
-// 'iso3Code', 'country_medicinalProductID' and 'ICD11term' side by side. Applied to both sides of
-// the comparison, so 'FORMS MEDICINAL PRODUCT ID' resolves like 'forms_medicinalProductID'
-const normalizeHeader = ( header: string ): string =>
-    header.trim().toLowerCase().replace(/[\s\-_+]/g, '');
-
-// The alias table, keyed by its normalized header, built once at load time
-const NORMALIZED_ALIASES: Record<string, string> = Object.entries(HEADER_ALIASES)
-    .reduce(( map, [ header, column ] ) => ({ ...map, [normalizeHeader(header)]: column }), {});
-
 /**
- * A cell as text. exceljs hands back strings, numbers, booleans, dates, rich text and formula
- * results depending on how the cell was written, and the dictionary is text in all of them.
- * An empty cell becomes null, never '': a blank cell in Excel means "no data", and storing it as an
- * empty string would make a re-import see a change where there is none.
+ * A cell as boolean, over the text the reader already trimmed — a real boolean cell reaches here as
+ * 'true' or 'false', which the two tables below cover. An unrecognized value is read as absent,
+ * which is what the caller then turns into null or false depending on the column: guessing at 'X'
+ * would be worse than not having read it
  */
-const cellToText = ( value: ExcelJS.CellValue ): string | null => {
-    if( value === null || value === undefined ) {
-        return null;
-    }
-
-    let text: string;
-
-    if( value instanceof Date ) {
-        text = value.toISOString();
-    } else if( typeof value === 'object' ) {
-        if( 'richText' in value ) {
-            text = value.richText.map(( part ) => part.text).join('');
-        } else if( 'text' in value ) {
-            text = String(value.text);
-        } else if( 'result' in value ) {
-            text = value.result === null || value.result === undefined ? '' : String(value.result);
-        } else if( 'error' in value ) {
-            text = String(value.error);
-        } else {
-            text = String(value);
-        }
-    } else {
-        text = String(value);
-    }
-
-    const trimmed = text.trim();
-
-    return trimmed.length === 0 ? null : trimmed;
-};
-
-/**
- * A cell as boolean. An unrecognized value is read as absent, which is what the caller then turns
- * into null or false depending on the column: guessing at 'X' would be worse than not having read it
- */
-const cellToBoolean = ( value: ExcelJS.CellValue ): boolean | null => {
-    if( typeof value === 'boolean' ) {
-        return value;
-    }
-
-    const text = cellToText(value);
-
+const cellToBoolean = ( text: string | null ): boolean | null => {
     if( text === null ) {
         return null;
     }
@@ -202,80 +153,38 @@ export const parseWhodrugXlsxFile = async ( buffer: Buffer ): Promise<ParsedWhod
     }
 
     // Always the first sheet: the endpoint takes no `sheet` parameter, and its name travels in the
-    // report so a book whose first tab was not the expected one says so.
-    const worksheet = workbook.worksheets[0];
+    // report so a book whose first tab was not the expected one says so. A book with no sheet at all
+    // comes back from the reader as an XlsxFileError, rewrapped below.
+    //
+    // The reader resolves the header, discards the empty rows and hands every cell back as trimmed
+    // text; an export that adds a column, one that repeats a header and one that omits an optional
+    // column are all sorted there. What stays here is what is WHODrug: the id, the two de-facto NOT
+    // NULL columns, the two booleans and the varchar limits of the dictionary.
+    let read;
 
-    if( !worksheet ) {
-        throw new WhodrugFileError('The uploaded workbook carries no sheet');
+    try {
+        read = readSheet(workbook, { headerAliases: HEADER_ALIASES, requiredHeaders: REQUIRED_HEADERS });
+    } catch ( error ) {
+        // The reader raises its own class; the service checks this one with instanceof to answer 400
+        throw new WhodrugFileError(
+            error instanceof XlsxFileError ? error.message : 'The uploaded workbook could not be read',
+            error
+        );
     }
 
-    const sheet = worksheet.name ?? '';
-    const {
-        columns,
-        unknownHeaders,
-        missingOptionalHeaders,
-        missingRequiredHeaders
-    } = readHeader(worksheet.getRow(1));
+    const { sheet, rows: rawRows, unknownHeaders, missingOptionalHeaders, missingRequiredHeaders } = read;
 
     // Not a single data row is read if a required header is missing, so the abort happens before
     // anything could be written.
-    if( missingRequiredHeaders.length > 0 || columns.size === 0 ) {
+    if( missingRequiredHeaders.length > 0 ) {
         return { sheet, rows, rejected, missingOptionalHeaders, unknownHeaders, missingRequiredHeaders };
     }
 
-    worksheet.eachRow({ includeEmpty: false }, ( row ) => {
-        if( row.number === 1 ) {
-            return;
-        }
-
-        readDataRow(row, columns, rows, rejected, seenExternalIds);
-    });
+    for( const rawRow of rawRows ) {
+        readDataRow(rawRow, rows, rejected, seenExternalIds);
+    }
 
     return { sheet, rows, rejected, missingOptionalHeaders, unknownHeaders, missingRequiredHeaders };
-};
-
-/**
- * Reads row 1 into a map of sheet column index -> vaccineWhodrug column, and sorts the headers the
- * file brought against the ones it should have brought.
- */
-const readHeader = ( row: ExcelJS.Row ) => {
-    const columns = new Map<number, string>();
-    const unknownHeaders: string[] = [];
-    const seenHeaders = new Set<string>();
-
-    row.eachCell({ includeEmpty: false }, ( cell, columnNumber ) => {
-        const text = cellToText(cell.value);
-
-        if( text === null ) {
-            return;
-        }
-
-        const column = NORMALIZED_ALIASES[normalizeHeader(text)];
-
-        // An export that adds a column must not block the load of the whole dictionary. It is
-        // ignored — and reported, because a column ignored in silence is a decision nobody reviews.
-        if( !column ) {
-            unknownHeaders.push(text);
-            return;
-        }
-
-        // A header repeated in the sheet: the first column wins, same criterion as a repeated id.
-        if( columns.has(columnNumber) || seenHeaders.has(column) ) {
-            unknownHeaders.push(text);
-            return;
-        }
-
-        seenHeaders.add(column);
-        columns.set(columnNumber, column);
-    });
-
-    const missingRequiredHeaders = REQUIRED_HEADERS
-        .filter(( header ) => !seenHeaders.has(HEADER_ALIASES[header]));
-
-    const missingOptionalHeaders = Object.keys(HEADER_ALIASES)
-        .filter(( header ) => !REQUIRED_HEADERS.includes(header) && !seenHeaders.has(HEADER_ALIASES[header]));
-
-    return { columns, unknownHeaders, missingOptionalHeaders, missingRequiredHeaders };
 };
 
 /**
@@ -283,31 +192,16 @@ const readHeader = ( row: ExcelJS.Row ) => {
  * the file keeps going: one bad cell must not cost the other 2999 rows.
  */
 const readDataRow = (
-    row: ExcelJS.Row,
-    columns: Map<number, string>,
+    { row: rowNumber, cells }: RawSheetRow,
     rows: ParsedVaccineWhodrugRow[],
     rejected: RejectedVaccineWhodrugRow[],
     seenExternalIds: Set<number>
 ): void => {
-    const rowNumber = row.number;
-    const raw = new Map<string, ExcelJS.CellValue>();
-
-    columns.forEach(( column, columnNumber ) => {
-        raw.set(column, row.getCell(columnNumber).value);
-    });
-
-    // A row with nothing in any mapped column is not read and not invalid: it is nothing.
-    const isEmpty = Array.from(raw.values()).every(( value ) => cellToText(value) === null);
-
-    if( isEmpty ) {
-        return;
-    }
-
     const reject = ( reason: RejectedVaccineWhodrugRow['reason'], column?: string ): void => {
         rejected.push(column ? { row: rowNumber, reason, column } : { row: rowNumber, reason });
     };
 
-    const rawExternalId = cellToText(raw.get('externalId') ?? null);
+    const rawExternalId = cells.externalId ?? null;
     const externalId = rawExternalId === null ? NaN : Number(rawExternalId);
 
     if( !Number.isInteger(externalId) ) {
@@ -315,8 +209,8 @@ const readDataRow = (
     }
 
     // A dictionary entry is quoted data: trim only, never toConstantCase or toTitleCase.
-    const drugCode = cellToText(raw.get('drugCode') ?? null);
-    const drugName = cellToText(raw.get('drugName') ?? null);
+    const drugCode = cells.drugCode ?? null;
+    const drugName = cells.drugName ?? null;
 
     if( drugCode === null ) {
         return reject('EMPTY_DRUG_CODE');
@@ -346,19 +240,20 @@ const readDataRow = (
         return reject('VALUE_TOO_LONG', 'drugCode');
     }
 
-    for( const column of columns.values() ) {
+    // Only the columns the sheet actually brought, in the order it wrote them: the ones it omitted
+    // keep the null the loop above left them with.
+    for( const [ column, text ] of Object.entries(cells) ) {
         if( column === 'externalId' || column === 'drugCode' || column === 'drugName' ) {
             continue;
         }
 
         if( BOOLEAN_COLUMNS.includes(column) ) {
-            const parsed = cellToBoolean(raw.get(column) ?? null);
+            const parsed = cellToBoolean(text);
 
             values[column] = column === 'isPreferred' ? parsed ?? false : parsed;
             continue;
         }
 
-        const text = cellToText(raw.get(column) ?? null);
         const maxLength = MAX_LENGTHS[column];
 
         // Without this filter the row would blow up the whole batch it travels in.

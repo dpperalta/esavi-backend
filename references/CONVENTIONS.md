@@ -208,6 +208,8 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | appPasswordReset | `006` | resolver y consumir un token — verifica formato, existencia, hash, consumo, invalidación, caducidad y usuario. **Sin ruta HTTP:** lo invoca `ESAVI-AUTH-007` |
 | appPasswordReset | `007` | invalidar las solicitudes vigentes de un usuario — se apoya en `IX_appPasswordReset_pending`. **Sin ruta HTTP:** lo invocan `ESAVI-AUTH-006`, `ESAVI-AUTH-007` y `ESAVI-USER-006` |
 | meddra | `006` | búsqueda de términos contra el API oficial de MedDRA — USER, `GET /api/meddra/search` |
+| geoLocation | `006` | importación masiva de geografía y establecimientos desde `.xlsx` — SUPERADMIN, `POST /import` |
+| geoLocation | `007` | generación de la plantilla `.xlsx` con catálogos incrustados — ADMIN, `GET /import/template` |
 
 `appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4).
 
@@ -467,6 +469,8 @@ Dos consecuencias que son regla:
 | activate (`005B`) | `SUPERADMIN` |
 | borrado físico (`005C`) | `SUPERADMIN` |
 
+**Excepción declarada — el alta del árbol de notificación es `USER`.** Quien notifica es el USER, así que el `001` de las entidades que componen una notificación admite `USER` y no `ADMIN`: `patient`, `esaviCase`, `notification`, `severeNotification`, `nonSevereNotification`, `notificationEvent`, `notificationVaccine`, `notificationDiluent`, `notificationMedication`, `notificationPregnancy` y `notificationPregnancyComplication`. **Solo el `001`**: en esas mismas entidades el `004`, el `005A` y el `002B` siguen la matriz canónica, porque corregir o dar de baja lo notificado no es notificar. Ninguna entidad fuera de ese árbol hereda la excepción por analogía.
+
 Los predicados de `src/helpers/permissions.helper.ts` (`canViewInactive`, `isAdmin`, …) **no autorizan**: modulan comportamiento dentro de un endpoint ya autorizado — típicamente si se ven o no los registros inactivos:
 
 ```ts
@@ -489,6 +493,14 @@ return res.status(200).json({
 
 - `message` **siempre** desde `getMessage(key, req.lang)`. Nunca un literal.
 - `201` en create, `200` en el resto.
+
+### La única excepción al sobre — `ESAVI-GEOLOC-007`
+
+`ESAVI-GEOLOC-007` (`GET /api/geo-locations/import/template`) es **la única operación del repositorio cuyo `200` no lleva el sobre `{ ok, message, data }`**. Su cuerpo es el `.xlsx` binario de la plantilla de importación, con `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` y `Content-Disposition: attachment; filename="esavi-geo-template-YYYY-MM-DD.xlsx"`. Un libro de Excel no cabe en `data`, y devolverlo en base64 obligaría al cliente a reconstruirlo.
+
+La excepción está acotada al **camino de éxito**: todos los errores del `007` —incluido el `409` de la verificación previa de `geoLevelType`— salen por `errorHandler` con la forma habitual `{ ok, message, code, errors }`. Por la misma razón el `007` **no tiene clave i18n de éxito**: su `200` no lleva `message`.
+
+Ninguna operación nueva hereda esta excepción por analogía. Una respuesta binaria se registra aquí, con su código de operación, o no existe.
 
 ### Las operaciones de estado no devuelven `data`
 
@@ -533,6 +545,21 @@ Los produce `errorHandler` (`src/middlewares/errorHandler.middleware.ts`), últi
 | `500` | Error inesperado |
 
 Un duplicado es `409` siempre. Usar `400` en create y `409` en update para el mismo caso, como ocurre hoy, hace imposible que el frontend distinga.
+
+#### Códigos transversales de autenticación y autorización
+
+`tokenValidation` y `validateUserRole` rechazan con `next(new AppError(...))` como cualquier otra capa: la respuesta la arma `errorHandler` y lleva `code`. Sin él, las cuatro maneras de fallar la autenticación son un `401` con una frase traducida y el cliente no puede decidir entre renovar la sesión, redirigir al login o rehabilitar el formulario.
+
+| `code` | Status | Cuándo |
+|---|---|---|
+| `AUTH_TOKEN_MISSING` | `401` | No hay cabecera `Authorization`, o no empieza por `Bearer ` |
+| `AUTH_TOKEN_INVALID` | `401` | La firma no verifica o el token está malformado |
+| `AUTH_TOKEN_EXPIRED` | `401` | El token es legítimo pero caducó — el único caso que amerita renovar en vez de reautenticar |
+| `AUTH_USER_NOT_FOUND` | `401` | El token verifica pero el `userId` no corresponde a un usuario activo |
+| `AUTH_TOKEN_VALIDATION_FAILED` | `500` | Fallo inesperado dentro del middleware |
+| `AUTH_ROLE_FORBIDDEN` | `403` | Nivel de rol insuficiente |
+
+No llevan número de operación —a diferencia de `CATITEM_002A_FETCH_FAILED`— porque el middleware corre antes de que se sepa a qué operación pertenece la petición. Es la misma forma que ya tenía `INTERNAL_SERVER_ERROR`.
 
 ### Idiom obligatorio del `catch` del controlador
 

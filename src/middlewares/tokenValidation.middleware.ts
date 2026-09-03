@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 
 import { getMessage } from '../helpers/i18n.helper';
 
+import { AppError } from '../helpers/appError.helper';
 import { esaviLog } from '../helpers/esaviLogs.helper';
 import { AppUser } from '../models';
 import { AppRole } from '../models/appRole.model';
@@ -22,14 +23,19 @@ interface TokenPayload {
     exp: number;
 }
 
-const tokenValidation = async( req: Request, res: Response, next: NextFunction ): Promise<void | Response> => {
+/**
+ * Every rejection travels as an `AppError` through `next()`, never as a hand-built
+ * `res.status(...).json({ ok: false })`. That is what puts `code` in the body: the four ways
+ * authentication fails look identical to the client without it, and the frontend cannot tell
+ * "log in again" from "your session expired" from a plain 401 with only a translated message.
+ * CONVENTIONS.md §10 — Error.
+ */
+const tokenValidation = async( req: Request, _res: Response, next: NextFunction ): Promise<void> => {
     try {
         const authHeader = req.headers.authorization;
         if( !authHeader || !authHeader.startsWith('Bearer ') ) {
-            return res.status(401).json({
-                ok: false,
-                message: getMessage('auth.tokenMissing', req.lang)
-            });
+            next(new AppError(getMessage('auth.tokenMissing', req.lang), 401, 'AUTH_TOKEN_MISSING'));
+            return;
         }
         const token = authHeader.split(' ')[1];
         const jwtSecret = process.env.JWT_SECRET as string;
@@ -58,10 +64,8 @@ const tokenValidation = async( req: Request, res: Response, next: NextFunction )
         ]
     });
         if ( !user ) {
-            return res.status(401).json({
-                ok: false,
-                message: getMessage('auth.userNotFound', req.lang)
-            });
+            next(new AppError(getMessage('auth.userNotFound', req.lang), 401, 'AUTH_USER_NOT_FOUND'));
+            return;
         }
         // Mapping roles to the format defined in the token payload
         const roles = user.roles?.map((role: AppRole) => ({
@@ -78,26 +82,16 @@ const tokenValidation = async( req: Request, res: Response, next: NextFunction )
         req.user = userHeader;
         next();
     } catch (error) {
-        esaviLog('ESAVI-ERROR - Error during token validation', 'error');
+        esaviLog('ESAVI-ERROR - Error during token validation: ' + error, 'error');
         if ( error instanceof jwt.TokenExpiredError ) {
-            return res.status(401).json({
-                ok: false,
-                message: getMessage('auth.tokenExpired', req.lang),
-                error: error instanceof Error ? error.message : 'Expired token error'
-            });
-        } else if ( error instanceof jwt.JsonWebTokenError ) {
-            return res.status(401).json({
-                ok: false,
-                message: getMessage('auth.invalidToken', req.lang),
-                error: error instanceof Error ? error.message : 'Invalid token error'
-            });
-        } else {
-            return res.status(500).json({
-                ok: false,
-                message: 'Internal server error',
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
+            next(new AppError(getMessage('auth.tokenExpired', req.lang), 401, 'AUTH_TOKEN_EXPIRED', error));
+            return;
         }
+        if ( error instanceof jwt.JsonWebTokenError ) {
+            next(new AppError(getMessage('auth.invalidToken', req.lang), 401, 'AUTH_TOKEN_INVALID', error));
+            return;
+        }
+        next(new AppError(getMessage('common.internalError', req.lang), 500, 'AUTH_TOKEN_VALIDATION_FAILED', error));
     }
 }
 

@@ -245,36 +245,45 @@ describe('response contract', () => {
             expect(response.body.ok).toBe(false);
         });
 
-    });
+        /**
+         * DEUDA-032, settled: `tokenValidation` and `roleValidation` reject through
+         * `next(new AppError(...))`, so 401 and 403 come out of `errorHandler` with
+         * the same `{ ok, message, code, errors }` envelope as every other error.
+         * The `code` is what lets the frontend tell an expired session from a
+         * missing token from an insufficient role — all three are otherwise a 401
+         * or 403 with a translated sentence.
+         */
+        describe('401 and 403 carry the same envelope, code included', () => {
 
-    /**
-     * DEUDA-032: `tokenValidation` and `roleValidation` build their error
-     * responses by hand instead of throwing `AppError`, so 401 and 403 carry
-     * `error` rather than `code` + `errors`. These tests pin the current
-     * behaviour on purpose — when the debt is settled they will fail, which is
-     * the signal to fold 401 and 403 into `expectErrorEnvelope` above.
-     */
-    describe('known deviation — 401 and 403 bypass errorHandler (DEUDA-032)', () => {
+            it('401 without a token', async () => {
+                const response = await request(app).get('/api/catalog-types');
 
-        it('401 without a token: ok and message, but no code', async () => {
-            const response = await request(app).get('/api/catalog-types');
+                expect(response.status).toBe(401);
+                expectErrorEnvelope(response.body);
+                expect(response.body.code).toBe('AUTH_TOKEN_MISSING');
+            });
 
-            expect(response.status).toBe(401);
-            expect(response.body.ok).toBe(false);
-            expect(response.body.message.length).toBeGreaterThan(0);
-            expect(response.body.code).toBeUndefined();
-        });
+            it('401 with a malformed token', async () => {
+                const response = await request(app)
+                    .get('/api/catalog-types')
+                    .set('Authorization', 'Bearer not-a-jwt');
 
-        it('403 with an insufficient role: ok and message, but no code', async () => {
-            const response = await request(app)
-                .post('/api/catalog-types')
-                .set(authHeader('USER'))
-                .send({ code: `forbidden${ suffix }`, name: `Forbidden ${ suffix }` });
+                expect(response.status).toBe(401);
+                expectErrorEnvelope(response.body);
+                expect(response.body.code).toBe('AUTH_TOKEN_INVALID');
+            });
 
-            expect(response.status).toBe(403);
-            expect(response.body.ok).toBe(false);
-            expect(response.body.message.length).toBeGreaterThan(0);
-            expect(response.body.code).toBeUndefined();
+            it('403 with an insufficient role', async () => {
+                const response = await request(app)
+                    .post('/api/catalog-types')
+                    .set(authHeader('USER'))
+                    .send({ code: `forbidden${ suffix }`, name: `Forbidden ${ suffix }` });
+
+                expect(response.status).toBe(403);
+                expectErrorEnvelope(response.body);
+                expect(response.body.code).toBe('AUTH_ROLE_FORBIDDEN');
+            });
+
         });
 
     });

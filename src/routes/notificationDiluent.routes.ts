@@ -29,7 +29,7 @@ const router = Router();
 
 // Create Notification Diluent
 // Code: ESAVI-NOTIFDIL-001
-router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationDiluentValidator, validateFields, createNotificationDiluent);
+router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationDiluentValidator, validateFields, createNotificationDiluent);
 
 // Get All Notification Diluents By Vaccine - For Admin
 // Code: ESAVI-NOTIFDIL-002B

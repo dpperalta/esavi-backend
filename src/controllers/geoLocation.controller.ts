@@ -1,6 +1,8 @@
 ﻿import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage, canViewInactive } from '../helpers';
-import { createGeoLocationService, getAllGeoLocationsService, getActiveGeoLocationsService, getGeoLocationByIdService, updateGeoLocationService, setGeoLocationActivationService } from '../services/geoLocation.service';
+import { createGeoLocationService, generateGeoTemplateService, getAllGeoLocationsService, getActiveGeoLocationsService, getGeoLocationByIdService, updateGeoLocationService, setGeoLocationActivationService } from '../services/geoLocation.service';
+import { GenerateGeoTemplateInput, ImportGeoDataInput } from '../types';
+import { importGeoDataService } from '../services/geoImport.service';
 
 
 // Create Geographic Location Controller
@@ -134,8 +136,76 @@ const activateGeoLocation = async(req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Import Geography And Health Facilities Controller
+// Code: ESAVI-GEOLOC-006
+const importGeoData = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    // A request with no multipart body at all leaves req.body undefined — multer only fills it when
+    // it has something to parse — and that is precisely the request that must end in a 400 for the
+    // missing file, not in a 500 for reading a key off undefined
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    // dryRun arrives as a text field of the multipart body, so the boolean comes as a string and is
+    // turned into a value here. The file itself was left in req.file by uploadSingleFile. There is
+    // no `sheet` and no `encoding`: a .xlsx resolves both inside the format
+    const data: ImportGeoDataInput = {
+        dryRun: body.dryRun !== undefined ? String(body.dryRun) === 'true' : undefined
+    };
+    try {
+        // Checked here and again in the service: the controller is what turns a request with no file
+        // into a 400 instead of letting it reach the parser as a crash
+        if (!req.file) {
+            throw new AppError(getMessage('geoLocation.fileRequired', req.lang), 400, 'GEOLOC_006_FILE_REQUIRED');
+        }
+        // 200 and not 201: there is no identifiable resource to return and no URL to point at, and
+        // data does not carry a single geoLocationId or healthFacilityId. What comes back is the
+        // report of a process
+        const report = await importGeoDataService(req.file.buffer, data, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('geoLocation.importedSuccess', req.lang),
+            data: report
+        });
+    } catch (error) {
+        esaviLog('ESAVI-GEOLOC-006: Error importing geography and health facilities: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('geoLocation.importedFailed', req.lang), 500, 'GEOLOC_006_IMPORT_FAILED', error));
+    }
+}
+
+// Generate Geographic Import Template Controller
+// Code: ESAVI-GEOLOC-007
+const generateGeoTemplate = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    // The one query parameter, arriving as the string a query string carries: compared against
+    // undefined first and read as 'true' afterwards, so ?includeExisting=false is not truthy
+    const data: GenerateGeoTemplateInput = {
+        includeExisting: req.query.includeExisting !== undefined ? String(req.query.includeExisting) === 'true' : undefined
+    };
+    try {
+        const workbook = await generateGeoTemplateService(data, req.user, req.lang);
+        const filename = `esavi-geo-template-${ new Date().toISOString().slice(0, 10) }.xlsx`;
+        // The declared exception to CONVENTIONS.md §10: this 200 carries no { ok, message, data }
+        // envelope because an .xlsx does not fit in data. Its errors do go through errorHandler with
+        // the usual envelope, which is what keeps the deviation to this single path — and it is also
+        // why the 007 has no success i18n key
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${ filename }"`);
+        return res.status(200).send(workbook);
+    } catch (error) {
+        esaviLog('ESAVI-GEOLOC-007: Error generating Geolocation import template: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('geoLocation.templateFailed', req.lang), 500, 'GEOLOC_007_TEMPLATE_FAILED', error));
+    }
+}
+
 export {
     createGeoLocation,
+    generateGeoTemplate,
+    importGeoData,
     getGeoLocations,
     getGeoLocationById,
     updateGeoLocation,

@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { createGeoLocationValidator, geoLocationIdValidator, geoLocationListValidator, updateGeoLocationValidator } from '../validators';
+import { createGeoLocationValidator, generateGeoTemplateValidator, geoLocationIdValidator, geoLocationListValidator, importGeoDataValidator, updateGeoLocationValidator } from '../validators';
 import { ROLES } from '../constants/roles.constants';
-import { tokenValidation, validateUserRole, validateFields } from '../middlewares';
-import { activateGeoLocation, createGeoLocation, deleteGeoLocation, getGeoLocationById, getGeoLocations, updateGeoLocation } from '../controllers/geoLocation.controller';
+import { tokenValidation, uploadSingleFile, validateUserRole, validateFields } from '../middlewares';
+import { activateGeoLocation, createGeoLocation, deleteGeoLocation, generateGeoTemplate, getGeoLocationById, getGeoLocations, importGeoData, updateGeoLocation } from '../controllers/geoLocation.controller';
 
 const { SUPERADMIN, ADMIN, USER } = ROLES;
 
@@ -15,6 +15,17 @@ router.post('/', tokenValidation, validateUserRole(ADMIN), ...createGeoLocationV
 // Get Geographic Locations
 // Code: ESAVI-GEOLOC-002
 router.get('/', tokenValidation, validateUserRole(USER), ...geoLocationListValidator, validateFields, getGeoLocations);
+
+// Bulk import of geography and health facilities
+// Code: ESAVI-GEOLOC-006
+// Declared BEFORE the routes carrying :id, for the same reason as the template below
+router.post('/import', tokenValidation, validateUserRole(SUPERADMIN), uploadSingleFile('file', { i18nPrefix: 'geoLocation', codePrefix: 'GEOLOC_006' }), ...importGeoDataValidator, validateFields, importGeoData);
+
+// Generate the import template
+// Code: ESAVI-GEOLOC-007
+// Declared BEFORE GET /:id: Express would otherwise capture 'import' as an :id and the UUID
+// validator would answer 400
+router.get('/import/template', tokenValidation, validateUserRole(ADMIN), ...generateGeoTemplateValidator, validateFields, generateGeoTemplate);
 
 // Get Geographic Location by ID
 // Code: ESAVI-GEOLOC-003

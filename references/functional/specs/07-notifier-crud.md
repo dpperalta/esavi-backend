@@ -143,14 +143,14 @@ GET    /api/notifiers                  ESAVI-NOTIFIER-002A  USER        (nuevo)
 GET    /api/notifiers/admin            ESAVI-NOTIFIER-002B  ADMIN       (nuevo)
 GET    /api/notifiers/:id              ESAVI-NOTIFIER-003   USER        (nuevo)
 PUT    /api/notifiers/:id              ESAVI-NOTIFIER-004   USER        (nuevo)
-DELETE /api/notifiers/:id              ESAVI-NOTIFIER-005A  ADMIN       (nuevo)
+DELETE /api/notifiers/:id              ESAVI-NOTIFIER-005A  USER        (nuevo)
 PATCH  /api/notifiers/activate/:id     ESAVI-NOTIFIER-005B  SUPERADMIN  (nuevo)
 DELETE /api/notifiers/purge/:id        ESAVI-NOTIFIER-005C  SUPERADMIN  (nuevo)
 ```
 
 Orden de declaración en `src/routes/notifier.routes.ts`: las rutas literales (`/admin`, `/activate/:id`, `/purge/:id`) van **antes** de `/:id`, o Express capturará `admin` como un `:id` y el validador de UUID responderá 400.
 
-`001` y `004` en **USER** se apartan de la matriz canónica de §9, que pediría ADMIN. Es la misma desviación de los SPEC F05 y F06, y por la misma razón: el notificador se captura en el mismo flujo operativo que el caso, y con create en ADMIN el flujo se corta a la mitad. `005A` se queda en ADMIN y `005B` en SUPERADMIN.
+`001`, `004` y `005A` en **USER** se apartan de la matriz canónica de §9, que pediría ADMIN. Es la misma desviación de los SPEC F05 y F06, y por la misma razón: el notificador se captura en el mismo flujo operativo que el caso, y con create en ADMIN el flujo se corta a la mitad. `005A` acompaña a `001` y `004` porque retirar un notificador mal capturado es la corrección natural de haberlo capturado: dejarla en ADMIN obligaría a escalar cada error de digitación. `005B` sigue en SUPERADMIN y `005C` también, así que el error se corrige hacia abajo pero no se revierte ni se destruye sin escalar.
 
 No hay operaciones no canónicas: el filtro por caso va por query sobre `002A`/`002B`, no como ruta propia.
 
@@ -303,7 +303,7 @@ Cada paso deja el sistema compilando y arrancable, y puede committearse solo.
 7. **`ESAVI-NOTIFIER-004` — actualizar.** `updateNotifierService` con los siete pasos de §3.5 y el patrón `objectToUpdate` del repositorio, escribiendo `updatedAt` explícitamente. Ruta `PUT /:id` en USER.
    *Verificación:* enviar `caseId` no lo modifica y la respuesta sigue trayendo el caso original; cambiar solo `lastName` deja `firstName` intacto y correctamente cifrado; un `professionItemId` inactivo devuelve 404; un PUT sin cambios devuelve 200 con una entrada más en `appDetails`, las anteriores intactas y `updatedAt` actualizado.
 
-8. **`ESAVI-NOTIFIER-005A` y `005B` — desactivar y reactivar.** `setNotifierActivationService` sobre `setEntityActiveStatusService`, con transacción y `const op = isActive ? '005B' : '005A'`. El `where` filtra solo por la PK. Dos controladores y dos rutas: `DELETE /:id` en ADMIN, `PATCH /activate/:id` en SUPERADMIN, ambas respondiendo sin `data`.
+8. **`ESAVI-NOTIFIER-005A` y `005B` — desactivar y reactivar.** `setNotifierActivationService` sobre `setEntityActiveStatusService`, con transacción y `const op = isActive ? '005B' : '005A'`. El `where` filtra solo por la PK. Dos controladores y dos rutas: `DELETE /:id` en USER, `PATCH /activate/:id` en SUPERADMIN, ambas respondiendo sin `data`.
    *Verificación:* desactivar deja `isActive: false` y `deletedAt` con fecha; desactivar dos veces devuelve 409 `NOTIFIER_005A_ALREADY_INACTIVE`; reactivar deja `deletedAt` en `null`; un ADMIN recibe 403 en `PATCH /activate/:id`; reactivar un notificador cuyo caso está inactivo devuelve **200**, no un error.
 
 9. **`ESAVI-NOTIFIER-005C` — purgar.** `purgeNotifierService` sobre `purgeEntityService` (`src/services/common/entityPurge.service.ts`), con transacción propia. Controlador y ruta `DELETE /purge/:id` en SUPERADMIN, reutilizando `notifierIdValidator` y declarada junto a las otras literales. Las tres claves i18n del bloque.

@@ -1,6 +1,9 @@
+import ExcelJS from 'exceljs';
+import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 import { app } from '../../src/app';
-import { GeoLocation } from '../../src/models';
+import { GeoLevelType, GeoLocation, HealthFacility } from '../../src/models';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
@@ -332,6 +335,196 @@ describe('geoLocation contract', () => {
             expect(response.status).toBe(200);
             expect(response.body.data).not.toHaveProperty('sysDetails');
             expect(response.body.data).toHaveProperty('appDetails');
+        });
+
+    });
+
+    /**
+     * SPEC F53 — bulk import of geography and health facilities, ESAVI-GEOLOC-006.
+     *
+     * The fixture is built by `node scripts/build-geo-bulk-fixture.js`, which is where the twelve
+     * rows of sheet 1 and the four of sheet 2 read as source. What this block checks is that the
+     * counters CLOSE — 12 = 7 + 1 + 4 and 4 = 2 + 2 — and the three behaviours that separate this
+     * importer from the three before it: the cascade, the differential update and the refusal to
+     * reparent.
+     *
+     * The level table is taken over for the whole block and given back in the afterAll: the precheck
+     * demands a contiguous series from 1, and the leftovers of other suites are not one.
+     */
+    describe('bulk import — SPEC F53', () => {
+
+        const fixturePath = path.join(__dirname, '..', 'fixtures', 'geo-bulk-sample.xlsx');
+        const importFile = ( role: 'SUPERADMIN' | 'ADMIN' | 'USER' = 'SUPERADMIN', dryRun?: boolean ) => {
+            const call = request(app).post('/api/geo-locations/import').set(authHeader(role));
+            if( dryRun !== undefined ) { call.field('dryRun', String(dryRun)); }
+            return call.attach('file', fixturePath);
+        };
+
+        let levelSnapshot: { id: string; isActive: boolean }[] = [];
+
+        beforeAll(async () => {
+            const before = await GeoLevelType.findAll({ attributes: [ 'geoLevelTypeId', 'isActive' ] });
+            levelSnapshot = before.map(( row ) => ({ id: row.geoLevelTypeId, isActive: row.isActive as boolean }));
+
+            await GeoLevelType.update({ isActive: false }, { where: {} });
+            for( const [ index, name ] of [ 'Pais', 'Provincia', 'Canton', 'Parroquia' ].entries() ) {
+                const created = await request(app)
+                    .post('/api/geo-level-types')
+                    .set(authHeader('ADMIN'))
+                    .send({ code: `F53L${ index + 1 }${ suffix }`, name: `${ name } ${ suffix }`, sortOrder: index + 1 });
+                expect(created.status).toBe(201);
+            }
+        });
+
+        afterAll(async () => {
+            await GeoLevelType.update({ isActive: false }, { where: {} });
+            for( const row of levelSnapshot ) {
+                await GeoLevelType.update({ isActive: row.isActive }, { where: { geoLevelTypeId: row.id } });
+            }
+        });
+
+        it('the fixture is versioned and not swallowed by the *.xlsx of .gitignore', () => {
+            expect(fs.existsSync(fixturePath)).toBe(true);
+        });
+
+        it('an ADMIN gets 403 and a request with no file gets 400', async () => {
+            expect(( await importFile('ADMIN') ).status).toBe(403);
+            expect(( await importFile('USER') ).status).toBe(403);
+
+            const noFile = await request(app).post('/api/geo-locations/import').set(authHeader('SUPERADMIN'));
+            expect(noFile.status).toBe(400);
+            expect(noFile.body.code).toBe('GEOLOC_006_FILE_REQUIRED');
+        });
+
+        it('dryRun leaves both tables untouched and reports what the real run would do', async () => {
+            const beforeGeo = await GeoLocation.count();
+            const beforeFacility = await HealthFacility.count();
+
+            const response = await importFile('SUPERADMIN', true);
+            expect(response.status).toBe(200);
+            expect(response.body.data.dryRun).toBe(true);
+            expect(response.body.data.geoLocation.inserted).toBe(7);
+            expect(response.body.data.healthFacility.inserted).toBe(2);
+
+            expect(await GeoLocation.count()).toBe(beforeGeo);
+            expect(await HealthFacility.count()).toBe(beforeFacility);
+        });
+
+        it('the report counters close: 12 = 7 + 1 + 4 and 4 = 2 + 2', async () => {
+            const response = await importFile();
+
+            expect(response.status).toBe(200);
+            const { geoLocation, healthFacility } = response.body.data;
+
+            expect(geoLocation).toMatchObject({
+                read: 12, inserted: 7, updated: 0, unchanged: 0,
+                duplicated: 1, invalid: 4, inactiveMatched: 0, sortOrderCoerced: 1
+            });
+            expect(geoLocation.inserted + geoLocation.updated + geoLocation.unchanged
+                + geoLocation.duplicated + geoLocation.invalid).toBe(geoLocation.read);
+
+            expect(healthFacility).toMatchObject({
+                read: 4, inserted: 2, updated: 0, unchanged: 0,
+                duplicated: 0, invalid: 2, inactiveMatched: 0
+            });
+            expect(healthFacility.inserted + healthFacility.updated + healthFacility.unchanged
+                + healthFacility.duplicated + healthFacility.invalid).toBe(healthFacility.read);
+
+            expect(response.body.data.sheets).toEqual({ geoLocation: 'geoLocation', healthFacility: 'healthFacility' });
+        });
+
+        it('two of the four invalid rows of sheet 1 are ORPHAN, and the cause comes before its cascade', async () => {
+            // Reimported over what the previous case already wrote: the rejections are the same, and
+            // the seven valid rows now come back as unchanged
+            const response = await importFile();
+            const sheetOne = ( response.body.data.errors as { sheet: string; row: number; reason: string }[] )
+                .filter(( error ) => error.sheet === 'geoLocation');
+
+            expect(sheetOne.map(( error ) => `${ error.row }:${ error.reason }`)).toEqual([
+                '5:VALUE_TOO_LONG', '6:ORPHAN', '8:PARENT_NOT_FOUND', '10:ORPHAN', '12:DUPLICATE_IN_FILE'
+            ]);
+            expect(sheetOne.filter(( error ) => error.reason === 'ORPHAN' )).toHaveLength(2);
+
+            const sheetTwo = ( response.body.data.errors as { sheet: string; reason: string }[] )
+                .filter(( error ) => error.sheet === 'healthFacility');
+            expect(sheetTwo.map(( error ) => error.reason).sort())
+                .toEqual([ 'FACILITY_TYPE_NOT_FOUND', 'GEO_NOT_FOUND' ]);
+        });
+
+        it('the order of the rows inside the sheet is irrelevant: the tree is complete and correct', async () => {
+            const country = await GeoLocation.findOne({ where: { externalCode: 'F53-EC' } });
+            const province = await GeoLocation.findOne({ where: { externalCode: 'F53-PIC' } });
+            // Written in the sheet BEFORE its parent, and still hanging from it
+            const canton = await GeoLocation.findOne({ where: { externalCode: 'F53-QUI' } });
+            const parish = await GeoLocation.findOne({ where: { externalCode: 'F53-CEN' } });
+
+            expect(country!.parentGeoLocationId).toBeNull();
+            expect(province!.parentGeoLocationId).toBe(country!.geoLocationId);
+            expect(canton!.parentGeoLocationId).toBe(province!.geoLocationId);
+            expect(parish!.parentGeoLocationId).toBe(canton!.geoLocationId);
+            expect(Number(parish!.level)).toBe(4);
+            // sortOrder 'abc' entered as 0 and did not reject its row
+            expect(Number(parish!.sortOrder)).toBe(0);
+
+            // Neither the rejected rows nor their cascade reached the table
+            for( const missing of [ 'F53-LONG', 'F53-LONGC', 'F53-HUER', 'F53-HUERC' ] ) {
+                expect(await GeoLocation.findOne({ where: { externalCode: missing } })).toBeNull();
+            }
+            // The duplicate kept the first appearance
+            const duplicated = await GeoLocation.findOne({ where: { externalCode: 'F53-GYE' } });
+            expect(duplicated!.name).toBe('Guayaquil F53');
+
+            // Sheet 2: normalized as ESAVI-HFAC-001 does, and the child hanging from the parent
+            const parent = await HealthFacility.findOne({ where: { localCode: 'F53_HOSP_CENTRAL' } });
+            const child = await HealthFacility.findOne({ where: { localCode: 'F53_HOSP_ANEXO' } });
+            expect(parent!.name).toBe('Hospital Central F53');
+            expect(child!.parentHealthFacilityId).toBe(parent!.healthFacilityId);
+            expect(( parent!.getDataValue('appDetails') as { method: string }[] )[0].method).toBe('ESAVI-GEOLOC-006');
+        });
+
+        it('reimporting writes nothing: unchanged 7 and 2, and no appDetails grows', async () => {
+            const before = await GeoLocation.findOne({ where: { externalCode: 'F53-EC' } });
+            const appDetailsBefore = ( before!.getDataValue('appDetails') as unknown[] ).length;
+            const updatedAtBefore = before!.getDataValue('updatedAt');
+
+            const response = await importFile();
+
+            expect(response.body.data.geoLocation).toMatchObject({ inserted: 0, updated: 0, unchanged: 7 });
+            expect(response.body.data.healthFacility).toMatchObject({ inserted: 0, updated: 0, unchanged: 2 });
+
+            const after = await GeoLocation.findOne({ where: { externalCode: 'F53-EC' } });
+            expect(( after!.getDataValue('appDetails') as unknown[] ).length).toBe(appDetailsBefore);
+            expect(after!.getDataValue('updatedAt')).toEqual(updatedAtBefore);
+        });
+
+        it('editing the parentCode of an existing row produces PARENT_CHANGED and leaves the parent intact', async () => {
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(fixturePath);
+            const sheet = workbook.getWorksheet('geoLocation')!;
+            // F53-QUI is a level 3 hanging from F53-PIC; move it under F53-GUA, which is another
+            // level 2, so the parent LEVEL still fits and what is left over is the move itself. A
+            // move to a parent of the wrong level would read PARENT_LEVEL_MISMATCH instead, because
+            // the graph is resolved before the row is compared against what is stored
+            sheet.eachRow(( row, number ) => {
+                if( number > 1 && row.getCell(1).value === 'F53-QUI' ) {
+                    row.getCell(4).value = 'F53-GUA';
+                }
+            });
+            const edited = await workbook.xlsx.writeBuffer() as unknown as Buffer;
+
+            const storedParent = ( await GeoLocation.findOne({ where: { externalCode: 'F53-QUI' } }) )!.parentGeoLocationId;
+
+            const response = await request(app)
+                .post('/api/geo-locations/import')
+                .set(authHeader('SUPERADMIN'))
+                .attach('file', edited, 'geo-bulk-edited.xlsx');
+
+            expect(response.status).toBe(200);
+            const reasons = ( response.body.data.errors as { reason: string }[] ).map(( error ) => error.reason);
+            expect(reasons).toContain('PARENT_CHANGED');
+
+            const after = await GeoLocation.findOne({ where: { externalCode: 'F53-QUI' } });
+            expect(after!.parentGeoLocationId).toBe(storedParent);
         });
 
     });

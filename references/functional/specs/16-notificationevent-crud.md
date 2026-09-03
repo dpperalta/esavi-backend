@@ -181,7 +181,7 @@ Tres ausencias deliberadas en la interfaz:
 Ruta base `/api/notification-events`, registrada en `src/routes/index.ts`.
 
 ```
-POST   /api/notification-events                          ESAVI-NOTIFEVT-001   ADMIN       (nuevo)
+POST   /api/notification-events                          ESAVI-NOTIFEVT-001   USER        (nuevo)
 GET    /api/notification-events/case/:caseId             ESAVI-NOTIFEVT-006   USER        (nuevo)
 GET    /api/notification-events/admin/notification/:id   ESAVI-NOTIFEVT-002B  ADMIN       (nuevo)
 GET    /api/notification-events/notification/:id         ESAVI-NOTIFEVT-002A  USER        (nuevo)
