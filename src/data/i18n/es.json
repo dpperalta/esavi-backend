@@ -124,7 +124,16 @@
         "deletedFailed": "Error al eliminar la ubicación geográfica. Por favor, inténtelo de nuevo más tarde.",
         "activatedSuccess": "Ubicación geográfica activada exitosamente",
         "activatedFailed": "Error al activar la ubicación geográfica. Por favor, inténtelo de nuevo más tarde.",
-        "idRequired": "El ID de la ubicación geográfica es requerido para esta operación."
+        "idRequired": "El ID de la ubicación geográfica es requerido para esta operación.",
+        "importedSuccess": "Importación de geografía y establecimientos completada exitosamente",
+        "importedFailed": "Error al importar la geografía y los establecimientos. Por favor, inténtelo de nuevo más tarde.",
+        "fileRequired": "Debe adjuntar el fichero a importar en el campo file",
+        "fileInvalid": "El fichero no se pudo procesar. Por favor, verifique que sea un libro .xlsx con la hoja geoLocation, su cabecera completa y al menos una fila válida, e inténtelo de nuevo.",
+        "fileTooLarge": "El fichero supera el tamaño máximo permitido de 20 MB",
+        "levelTypesMissing": "No hay ningún tipo de nivel geográfico activo. Cree los niveles administrativos antes de importar o generar la plantilla.",
+        "levelTypesDuplicatedOrder": "Hay tipos de nivel geográfico activos que comparten el mismo orden: {{orders}}. Corrija el orden de esos niveles antes de continuar.",
+        "levelTypesNotContiguous": "Los tipos de nivel geográfico activos no forman una serie contigua desde 1: falta el orden {{expected}}. Corrija los niveles antes de continuar.",
+        "templateFailed": "Error al generar la plantilla de importación. Por favor, inténtelo de nuevo más tarde."
     },
     "catalogType": {
         "codeExists": "Un tipo de catálogo con el código {{code}} ya existe",

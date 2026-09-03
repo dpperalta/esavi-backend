@@ -124,7 +124,16 @@
         "deletedFailed": "Verwijderen van de geografische locatie mislukt. Probeer het later opnieuw.",
         "activatedSuccess": "Geografische locatie succesvol geactiveerd",
         "activatedFailed": "Activeren van de geografische locatie mislukt. Probeer het later opnieuw.",
-        "idRequired": "De ID van de geografische locatie is vereist voor deze bewerking"
+        "idRequired": "De ID van de geografische locatie is vereist voor deze bewerking",
+        "importedSuccess": "Geografie en zorginstellingen succesvol geïmporteerd",
+        "importedFailed": "Importeren van de geografie en zorginstellingen mislukt. Probeer het later opnieuw.",
+        "fileRequired": "Het te importeren bestand moet in het veld file worden meegestuurd",
+        "fileInvalid": "Het bestand kon niet worden verwerkt. Controleer of het een .xlsx-werkmap met een geoLocation-blad, de volledige koptekst en ten minste één geldige rij is en probeer het opnieuw.",
+        "fileTooLarge": "Het bestand overschrijdt de maximaal toegestane grootte van 20 MB",
+        "levelTypesMissing": "Er is geen actief geografisch niveautype. Maak de administratieve niveaus aan voordat u importeert of de sjabloon genereert.",
+        "levelTypesDuplicatedOrder": "Sommige actieve geografische niveautypes delen dezelfde volgorde: {{orders}}. Corrigeer de volgorde van die niveaus voordat u verdergaat.",
+        "levelTypesNotContiguous": "De actieve geografische niveautypes vormen geen aaneengesloten reeks vanaf 1: volgorde {{expected}} ontbreekt. Corrigeer de niveaus voordat u verdergaat.",
+        "templateFailed": "Genereren van de importsjabloon mislukt. Probeer het later opnieuw."
     },
     "catalogType": {
         "codeExists": "Er bestaat al een catalogustype met code {{code}}",
