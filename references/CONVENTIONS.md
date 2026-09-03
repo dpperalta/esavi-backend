@@ -207,6 +207,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | appPasswordReset | `001` | abrir una solicitud de restablecimiento. **Sin ruta HTTP:** servicio interno que `ESAVI-AUTH-006` invoca dentro de su transacción |
 | appPasswordReset | `006` | resolver y consumir un token — verifica formato, existencia, hash, consumo, invalidación, caducidad y usuario. **Sin ruta HTTP:** lo invoca `ESAVI-AUTH-007` |
 | appPasswordReset | `007` | invalidar las solicitudes vigentes de un usuario — se apoya en `IX_appPasswordReset_pending`. **Sin ruta HTTP:** lo invocan `ESAVI-AUTH-006`, `ESAVI-AUTH-007` y `ESAVI-USER-006` |
+| meddra | `006` | búsqueda de términos contra el API oficial de MedDRA — USER, `GET /api/meddra/search` |
 
 `appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4).
 
@@ -340,6 +341,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | investigationTeamMember | `INVTEAM` |
 | investigationVaccinationContext | `INVVACTX` |
 | investigationVaccineAdministered | `INVVACAD` |
+| meddra | `MEDDRA` |
 | nonSevereNotification | `NSEVNOT` |
 | notification | `NOTIFCN` |
 | notificationDiluent | `NOTIFDIL` |

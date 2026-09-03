@@ -1045,5 +1045,14 @@
         "notEditable": "The configuration with ID {{id}} is protected and does not accept changes",
         "changeReasonRequired": "A change reason is required when the value changes",
         "valueTypeMismatch": "The value does not match the declared type {{valueType}}"
+    },
+    "meddra": {
+        "searchSuccess": "MedDRA term search completed successfully",
+        "disabled": "MedDRA term search is disabled in this deployment",
+        "notConfigured": "MedDRA term search is not configured in this deployment",
+        "invalidSearchConfig": "The MedDRA search configuration does not declare any term level",
+        "authFailed": "Error authenticating against the MedDRA service. Please try again later.",
+        "searchFailed": "Error searching terms in the MedDRA service. Please try again later.",
+        "timeout": "The MedDRA service did not respond in time. Please try again later."
     }
 }

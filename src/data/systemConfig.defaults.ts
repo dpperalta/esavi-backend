@@ -184,6 +184,116 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfigDefault[] = [
         isEditable: true
     },
     {
+        code: 'ESAVI_MEDDRA_ENABLED',
+        name: 'Búsqueda de términos MedDRA habilitada',
+        description: 'Interruptor general de ESAVI-MEDDRA-006. Con el valor en false el endpoint responde 503 sin salir a la red. Se siembra apagado a propósito: un despliegue recién sincronizado no debe empezar a llamar a un API licenciado por haber corrido el sync.',
+        value: false,
+        valueType: 'boolean',
+        scope: 'MEDDRA',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MEDDRA_USERNAME',
+        name: 'Usuario del API de MedDRA',
+        description: 'Usuario del grant OAuth2 password contra MedDRA. Se siembra vacío y se carga con ESAVI-SYSCONF-004.',
+        value: '',
+        valueType: 'string',
+        scope: 'MEDDRA',
+        // Encrypted, unlike ESAVI_MAIL_SMTP_USER which travels in clear. In MedDRA the user IS the
+        // licence identifier and leaking it has contractual consequences; an SMTP user has none
+        isEncrypted: true,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MEDDRA_PASSWORD',
+        name: 'Contraseña del API de MedDRA',
+        description: 'Contraseña del grant OAuth2 password contra MedDRA. Se guarda como { enc: "..." } y solo un SUPERADMIN puede leerla en claro.',
+        value: '',
+        valueType: 'string',
+        scope: 'MEDDRA',
+        isEncrypted: true,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MEDDRA_TOKEN_URL',
+        name: 'Endpoint del token de MedDRA',
+        description: 'URL del grant OAuth2 contra la que el servicio pide el token de acceso.',
+        value: 'https://mid.meddra.org/connect/token',
+        valueType: 'string',
+        scope: 'MEDDRA',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MEDDRA_SEARCH_URL',
+        name: 'Endpoint de búsqueda de MedDRA',
+        description: 'URL a la que el servicio manda el cuerpo de búsqueda con el token en la cabecera Authorization.',
+        value: 'https://mapisbx.meddra.org/api/search',
+        valueType: 'string',
+        scope: 'MEDDRA',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MEDDRA_CLIENT_ID',
+        name: 'client_id del grant OAuth2 de MedDRA',
+        description: 'Identificador de cliente del grant OAuth2. Configurable pese a llevar años sin cambiar: cuando cambie, editar una fila es más barato que desplegar.',
+        value: 'mspclient',
+        valueType: 'string',
+        scope: 'MEDDRA',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MEDDRA_OAUTH_SCOPE',
+        name: 'scope del grant OAuth2 de MedDRA',
+        description: 'Alcance que el servicio pide al endpoint del token.',
+        value: 'meddraapi',
+        valueType: 'string',
+        scope: 'MEDDRA',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_MEDDRA_SEARCH_CONFIG',
+        name: 'Cuerpo de la búsqueda de MedDRA',
+        description: 'Los veinte parámetros de la consulta al API. El servicio solo reescribe searchterms[0].searchterm y language; el resto viaja intacto. version y take se cambian editando esta fila, no tocando código.',
+        value: {
+            addlangs: [],
+            bview: 'SOC',
+            contains: true,
+            filters: [],
+            hlgt: false,
+            hlt: false,
+            idiacritical: true,
+            kana: false,
+            language: 'Spanish',
+            llt: true,
+            pt: false,
+            rsview: 'release',
+            searchterms: [
+                {
+                    searchlogic: 0,
+                    searchterm: '',
+                    searchtype: 0
+                }
+            ],
+            separator: 2,
+            skip: 0,
+            smq: false,
+            soc: false,
+            stype: 1,
+            synonym: true,
+            take: 20,
+            version: 28
+        },
+        valueType: 'json',
+        scope: 'MEDDRA',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
         code: 'ESAVI_SEVERE_CASE_ALERT_HOURS',
         name: 'Horas para alertar un caso grave',
         description: 'Horas desde el registro de un caso grave tras las cuales queda marcado como pendiente de revisión.',

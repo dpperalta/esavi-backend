@@ -25,3 +25,4 @@ export * from './investigation/index';
 export * from './finalClassification/index';
 export * from './caseWorkflow/index';
 export * from './systemConfig/index';
+export * from './meddra/index';

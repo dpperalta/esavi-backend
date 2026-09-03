@@ -57,7 +57,7 @@ const readSystemConfigValue = async ( code: string, scope: string, lang: string 
 }
 
 /**
- * The raw resolution, shared by the three typed readers. The environment variable is looked up by
+ * The raw resolution, shared by the four typed readers. The environment variable is looked up by
  * the code itself: the catalogue writes codes in the shape `toConstantCase` produces, which is
  * exactly the shape of an environment variable name, so there is no mapping table to keep in sync.
  */
@@ -120,4 +120,38 @@ export const getAppConfigBoolean = async ( code: string, scope: string, lang: st
     }
     const normalized = String( value ).trim().toLowerCase();
     return normalized === 'true' || normalized === '1';
+}
+
+/**
+ * Resolves a `json` parameter. The two paths differ in shape and not only in type: `systemConfig`
+ * stores the value in a `jsonb` column and hands back an object already, while the environment can
+ * only ever hand back text, so only that path is parsed. A broken document, or one that parses
+ * into something that is not an object, throws for the same reason a NaN does in the reader above
+ * — a half-read search body would travel to a paid API and fail there instead of here.
+ */
+export const getAppConfigJson = async <T>( code: string, scope: string, lang: string ): Promise<T> => {
+    const value = await resolveAppConfigValue( code, scope, lang );
+
+    let parsed: unknown = value;
+    if( typeof value === 'string' ) {
+        try {
+            parsed = JSON.parse( value );
+        } catch {
+            throw new AppError(
+                `Invalid configuration ${ code } (scope ${ scope }): value is not valid JSON`,
+                500,
+                MISSING_CONFIG_CODE
+            );
+        }
+    }
+
+    if( typeof parsed !== 'object' || parsed === null ) {
+        throw new AppError(
+            `Invalid configuration ${ code } (scope ${ scope }): value is not a JSON object`,
+            500,
+            MISSING_CONFIG_CODE
+        );
+    }
+
+    return parsed as T;
 }

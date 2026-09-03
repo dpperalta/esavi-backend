@@ -34,3 +34,19 @@ export const passwordResetLimiter: RequestHandler = process.env.NODE_ENV === 'te
         max: 5, // Five reset requests per IP per window
         message: 'Too many password reset requests from this IP, please try again later.'
     });
+
+/**
+ * ESAVI-MEDDRA-006 — `GET /api/meddra/search`.
+ *
+ * Sixty requests per IP every 15 minutes. Sixty is the ceiling of an autocomplete used normally,
+ * and the result cache of the service absorbs most of them before they ever reach the API. The
+ * limit exists because MedDRA is a licensed, paid dictionary: what is being protected here is not
+ * the server, it is the licence.
+ */
+export const meddraSearchLimiter: RequestHandler = process.env.NODE_ENV === 'test'
+    ? passThrough
+    : rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 60, // Sixty MedDRA searches per IP per window
+        message: 'Too many MedDRA search requests from this IP, please try again later.'
+    });
