@@ -187,7 +187,7 @@ Una sola ausencia deliberada: **`sortOrder` no está**. Es inmutable y lo asigna
 Ruta base `/api/notification-vaccines`, registrada en `src/routes/index.ts`.
 
 ```
-POST   /api/notification-vaccines                          ESAVI-NOTIFVAC-001   ADMIN       (nuevo)
+POST   /api/notification-vaccines                          ESAVI-NOTIFVAC-001   USER        (nuevo)
 GET    /api/notification-vaccines/case/:caseId             ESAVI-NOTIFVAC-006   USER        (nuevo)
 GET    /api/notification-vaccines/admin/notification/:id   ESAVI-NOTIFVAC-002B  ADMIN       (nuevo)
 GET    /api/notification-vaccines/notification/:id         ESAVI-NOTIFVAC-002A  USER        (nuevo)

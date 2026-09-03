@@ -184,7 +184,7 @@ Una sola ausencia deliberada: **`sortOrder` no está**. Es inmutable y lo asigna
 Ruta base `/api/notification-diluents`, registrada en `src/routes/index.ts`.
 
 ```
-POST   /api/notification-diluents                     ESAVI-NOTIFDIL-001   ADMIN       (nuevo)
+POST   /api/notification-diluents                     ESAVI-NOTIFDIL-001   USER        (nuevo)
 GET    /api/notification-diluents/admin/vaccine/:id   ESAVI-NOTIFDIL-002B  ADMIN       (nuevo)
 GET    /api/notification-diluents/vaccine/:id         ESAVI-NOTIFDIL-002A  USER        (nuevo)
 DELETE /api/notification-diluents/purge/:id           ESAVI-NOTIFDIL-005C  SUPERADMIN  (nuevo)

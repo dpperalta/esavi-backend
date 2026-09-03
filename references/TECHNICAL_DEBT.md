@@ -51,7 +51,7 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-029](#deuda-029) | 🟡 | ✅ Barrels de `types/` con dos estilos |
 | [DEUDA-030](#deuda-030) | 🟡 | ✅ Sin tests ni linter |
 | [DEUDA-031](#deuda-031) | 🔴 | `roles.constants.ts` lee variables de entorno que no existen |
-| [DEUDA-032](#deuda-032) | 🟠 | Los middlewares construyen respuestas de error a mano |
+| [DEUDA-032](#deuda-032) | 🟠 | ✅ Los middlewares construyen respuestas de error a mano |
 | [DEUDA-033](#deuda-033) | 🟠 | `tokenValidation` deja `email` y `displayName` cifrados en `req.user` |
 | [DEUDA-034](#deuda-034) | 🟠 | Reasignar `parentGeoLocationId` puede crear un ciclo |
 | [DEUDA-035](#deuda-035) | 🟠 | `canViewInactive` exige SUPERADMIN; la matriz dice ADMIN |
@@ -588,13 +588,19 @@ Hoy funciona porque los cuatro caen a su valor por defecto. Pero si alguien defi
 ---
 
 <a id="deuda-032"></a>
-## DEUDA-032 🟠 Los middlewares construyen respuestas de error a mano
+## DEUDA-032 🟠 ✅ Los middlewares construyen respuestas de error a mano
 
-`tokenValidation.middleware.ts` (cinco veces) y `roleValidation.middleware.ts` (una) responden con `res.status(...).json({ ok: false, message, error })` en vez de pasar por `AppError` y `errorHandler`.
+`tokenValidation.middleware.ts` (cinco veces) y `roleValidation.middleware.ts` (una) respondían con `res.status(...).json({ ok: false, message, error })` en vez de pasar por `AppError` y `errorHandler`.
 
-Consecuencia: esas respuestas llevan la clave `error`, no `errors` ni `code`, y exponen el mensaje real del error también en producción — justo lo que `errorHandler` evita.
+Consecuencia: esas respuestas llevaban la clave `error`, no `errors` ni `code`, y exponían el mensaje real del error también en producción — justo lo que `errorHandler` evita.
 
 **Aceptación**: los dos middlewares lanzan `AppError` con su código de operación y dejan que `errorHandler` construya la respuesta.
+
+**Saldada el 2026-09-03**, reportada desde el frontend: sin `code`, un 401 y un 403 solo se distinguen leyendo un mensaje traducido, y el cliente no puede decidir si renovar la sesión, redirigir al login u ocultar una acción. Ambos middlewares rechazan ahora con `next(new AppError(...))` y la respuesta la arma `errorHandler`, con el envelope `{ ok, message, code, errors }` de siempre.
+
+Los seis códigos son transversales, no de endpoint: no llevan número de operación porque el middleware corre antes de saber a qué operación pertenece la petición — la misma forma que ya tenía `INTERNAL_SERVER_ERROR`. Están tabulados en [CONVENTIONS.md](./CONVENTIONS.md) §10 — Status codes.
+
+Los dos casos que fijaban el comportamiento anterior en `tests/contract/response.test.ts` se invirtieron: ahora exigen el envelope completo y el código exacto.
 
 ---
 

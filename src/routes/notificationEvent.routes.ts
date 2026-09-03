@@ -31,7 +31,7 @@ const router = Router();
 
 // Create Notification Event
 // Code: ESAVI-NOTIFEVT-001
-router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationEventValidator, validateFields, createNotificationEvent);
+router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationEventValidator, validateFields, createNotificationEvent);
 
 // Get Notification Events by Case
 // Code: ESAVI-NOTIFEVT-006

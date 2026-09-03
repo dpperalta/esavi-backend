@@ -31,7 +31,7 @@ const router = Router();
 
 // Create Notification Vaccine
 // Code: ESAVI-NOTIFVAC-001
-router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationVaccineValidator, validateFields, createNotificationVaccine);
+router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationVaccineValidator, validateFields, createNotificationVaccine);
 
 // Get Notification Vaccines by Case
 // Code: ESAVI-NOTIFVAC-006

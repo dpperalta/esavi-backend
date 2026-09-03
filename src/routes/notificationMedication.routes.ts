@@ -31,7 +31,7 @@ const router = Router();
 
 // Create Notification Medication
 // Code: ESAVI-NOTIFMED-001
-router.post('/', tokenValidation, validateUserRole(ADMIN), ...createNotificationMedicationValidator, validateFields, createNotificationMedication);
+router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationMedicationValidator, validateFields, createNotificationMedication);
 
 // Get Notification Medications by Case
 // Code: ESAVI-NOTIFMED-006

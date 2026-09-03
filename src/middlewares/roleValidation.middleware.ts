@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { getMessage } from '../helpers/i18n.helper';
+import { AppError } from '../helpers/appError.helper';
 import { ROLE_LEVELS } from '../constants/roles.constants';
 
 const validateUserRole = ( ...requiredRole: string[] ) => {
-    return ( req: Request, res: Response, next: NextFunction ): Response | void => {
+    return ( req: Request, _res: Response, next: NextFunction ): void => {
         const userRoles = req.user?.roles || [];
         const requiredMinLevel = Math.max(
             ...requiredRole.map(role => ROLE_LEVELS[role] || 0)
@@ -21,11 +22,11 @@ const validateUserRole = ( ...requiredRole: string[] ) => {
             }),
         );
         if ( userMaxRoleLevel < requiredMinLevel ) {
-            return res.status(403).json({
-                ok: false,
-                message: getMessage('auth.forbidden', req.lang),
-                error: `Forbidden: Requires elevation`
-            });
+            // Rejected through errorHandler so the 403 carries `code` like every other error of
+            // the API: a client that only reads the message cannot distinguish an insufficient
+            // role from an expired session. CONVENTIONS.md §10 — Error
+            next(new AppError(getMessage('auth.forbidden', req.lang), 403, 'AUTH_ROLE_FORBIDDEN'));
+            return;
         }
         next();
     }

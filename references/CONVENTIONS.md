@@ -469,6 +469,8 @@ Dos consecuencias que son regla:
 | activate (`005B`) | `SUPERADMIN` |
 | borrado físico (`005C`) | `SUPERADMIN` |
 
+**Excepción declarada — el alta del árbol de notificación es `USER`.** Quien notifica es el USER, así que el `001` de las entidades que componen una notificación admite `USER` y no `ADMIN`: `patient`, `esaviCase`, `notification`, `severeNotification`, `nonSevereNotification`, `notificationEvent`, `notificationVaccine`, `notificationDiluent`, `notificationMedication`, `notificationPregnancy` y `notificationPregnancyComplication`. **Solo el `001`**: en esas mismas entidades el `004`, el `005A` y el `002B` siguen la matriz canónica, porque corregir o dar de baja lo notificado no es notificar. Ninguna entidad fuera de ese árbol hereda la excepción por analogía.
+
 Los predicados de `src/helpers/permissions.helper.ts` (`canViewInactive`, `isAdmin`, …) **no autorizan**: modulan comportamiento dentro de un endpoint ya autorizado — típicamente si se ven o no los registros inactivos:
 
 ```ts
@@ -543,6 +545,21 @@ Los produce `errorHandler` (`src/middlewares/errorHandler.middleware.ts`), últi
 | `500` | Error inesperado |
 
 Un duplicado es `409` siempre. Usar `400` en create y `409` en update para el mismo caso, como ocurre hoy, hace imposible que el frontend distinga.
+
+#### Códigos transversales de autenticación y autorización
+
+`tokenValidation` y `validateUserRole` rechazan con `next(new AppError(...))` como cualquier otra capa: la respuesta la arma `errorHandler` y lleva `code`. Sin él, las cuatro maneras de fallar la autenticación son un `401` con una frase traducida y el cliente no puede decidir entre renovar la sesión, redirigir al login o rehabilitar el formulario.
+
+| `code` | Status | Cuándo |
+|---|---|---|
+| `AUTH_TOKEN_MISSING` | `401` | No hay cabecera `Authorization`, o no empieza por `Bearer ` |
+| `AUTH_TOKEN_INVALID` | `401` | La firma no verifica o el token está malformado |
+| `AUTH_TOKEN_EXPIRED` | `401` | El token es legítimo pero caducó — el único caso que amerita renovar en vez de reautenticar |
+| `AUTH_USER_NOT_FOUND` | `401` | El token verifica pero el `userId` no corresponde a un usuario activo |
+| `AUTH_TOKEN_VALIDATION_FAILED` | `500` | Fallo inesperado dentro del middleware |
+| `AUTH_ROLE_FORBIDDEN` | `403` | Nivel de rol insuficiente |
+
+No llevan número de operación —a diferencia de `CATITEM_002A_FETCH_FAILED`— porque el middleware corre antes de que se sepa a qué operación pertenece la petición. Es la misma forma que ya tenía `INTERNAL_SERVER_ERROR`.
 
 ### Idiom obligatorio del `catch` del controlador
 
