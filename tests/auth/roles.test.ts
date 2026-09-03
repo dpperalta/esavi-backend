@@ -702,7 +702,11 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/request-validation`,   minRole: 'USER',       code: 'ESAVI-CASEFLOW-010' },
     { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/resolve-validation`,   minRole: 'USER',       code: 'ESAVI-CASEFLOW-011' },
     { method: 'get',    path: `/api/case-workflows/${ UUID }`,                           minRole: 'USER',       code: 'ESAVI-CASEFLOW-003' },
-    { method: 'delete', path: `/api/case-workflows/${ UUID }`,                           minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-005A' }
+    { method: 'delete', path: `/api/case-workflows/${ UUID }`,                           minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-005A' },
+
+    // The only route of a domain without a table: a read-only proxy against the official MedDRA
+    // API. USER, like every other search endpoint
+    { method: 'get',    path: '/api/meddra/search',                                      minRole: 'USER',       code: 'ESAVI-MEDDRA-006' }
 ];
 
 /**
@@ -758,7 +762,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(330);
+            expect(ROUTE_RULES).toHaveLength(331);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
