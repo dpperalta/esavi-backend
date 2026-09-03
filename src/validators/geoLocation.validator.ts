@@ -44,3 +44,9 @@ export const updateGeoLocationValidator = [
 export const generateGeoTemplateValidator = [
     query('includeExisting').optional().isBoolean().withMessage('Include existing must be a boolean')
 ];
+
+// ESAVI-GEOLOC-006 — the single text field of the multipart body. The file itself is not validated
+// here: multer takes it and uploadSingleFile turns its size and type problems into a 413 or a 400
+export const importGeoDataValidator = [
+    body('dryRun').optional().isBoolean().withMessage('Dry Run must be a boolean')
+];
