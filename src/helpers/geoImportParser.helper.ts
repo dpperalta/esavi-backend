@@ -109,6 +109,11 @@ export interface ParsedGeoImportFile {
     // read counts every row the sheet brought, valid or not: it is what makes the report's counters
     // close, and it is not derivable from the arrays above
     read: { geoLocation: number; healthFacility: number };
+    // The identifiers of the rows this parser turned down, when the cell that carries them was
+    // readable. The service needs them to make the ORPHAN cascade reach the children of a row
+    // rejected by cell: without this list a child of a VALUE_TOO_LONG row would look like a child of
+    // a parent that simply is not in the file, and would read PARENT_NOT_FOUND instead of ORPHAN
+    rejectedCodes: { geoLocation: string[]; healthFacility: string[] };
     // Optional headers the sheet does not bring. Their column enters the diff as undefined, so an
     // existing row keeps its stored value — which is not the same as an empty cell proposing null
     missingOptionalHeaders: { geoLocation: string[]; healthFacility: string[] };
@@ -184,20 +189,27 @@ const readCoordinate = ( text: string | null ): number | null => {
 const readGeoLocationRows = (
     rawRows: RawSheetRow[],
     rows: ParsedGeoLocationRow[],
-    rejected: RejectedGeoRow[]
+    rejected: RejectedGeoRow[],
+    rejectedCodes: Set<string>
 ): void => {
     // First appearance wins: the file is read top to bottom and a repeated code is a defect of the
     // file, not a correction of it
     const seenCodes = new Set<string>();
 
     for( const { row, cells } of rawRows ) {
+        const externalCode = cells.externalCode ?? null;
+
         const reject = ( reason: GeoRejectionReason, column?: string ): void => {
             rejected.push(column
                 ? { sheet: 'geoLocation', row, reason, column }
                 : { sheet: 'geoLocation', row, reason });
+            // A duplicate does not disown its code: the first appearance won it and is being written,
+            // so the children of that code are not orphans
+            if( externalCode !== null && reason !== 'DUPLICATE_IN_FILE' ) {
+                rejectedCodes.add(externalCode);
+            }
         };
 
-        const externalCode = cells.externalCode ?? null;
         const name = cells.name ?? null;
         const parentCode = cells.parentCode ?? null;
 
@@ -288,18 +300,23 @@ const readGeoLocationRows = (
 const readHealthFacilityRows = (
     rawRows: RawSheetRow[],
     rows: ParsedHealthFacilityRow[],
-    rejected: RejectedGeoRow[]
+    rejected: RejectedGeoRow[],
+    rejectedCodes: Set<string>
 ): void => {
     const seenCodes = new Set<string>();
 
     for( const { row, cells } of rawRows ) {
+        const rawLocalCode = cells.localCode ?? null;
+
         const reject = ( reason: GeoRejectionReason, column?: string ): void => {
             rejected.push(column
                 ? { sheet: 'healthFacility', row, reason, column }
                 : { sheet: 'healthFacility', row, reason });
+            if( rawLocalCode !== null && reason !== 'DUPLICATE_IN_FILE' ) {
+                rejectedCodes.add(toConstantCase(rawLocalCode));
+            }
         };
 
-        const rawLocalCode = cells.localCode ?? null;
         const rawName = cells.name ?? null;
         const geoExternalCode = cells.geoExternalCode ?? null;
         const facilityTypeCode = cells.facilityTypeCode ?? null;
@@ -392,7 +409,11 @@ const readHealthFacilityRows = (
  * SPEC 09 uses to walk the facility tree — a walk with no ceiling over a corrupted file does not
  * come back.
  */
-const rejectCycles = ( rows: ParsedGeoLocationRow[], rejected: RejectedGeoRow[] ): ParsedGeoLocationRow[] => {
+const rejectCycles = (
+    rows: ParsedGeoLocationRow[],
+    rejected: RejectedGeoRow[],
+    rejectedCodes: Set<string>
+): ParsedGeoLocationRow[] => {
     const byCode = new Map<string, ParsedGeoLocationRow>();
 
     for( const row of rows ) {
@@ -443,6 +464,7 @@ const rejectCycles = ( rows: ParsedGeoLocationRow[], rejected: RejectedGeoRow[] 
     for( const row of rows ) {
         if( onCycle.has(row.externalCode) ) {
             rejected.push({ sheet: 'geoLocation', row: row.row, reason: 'CYCLE' });
+            rejectedCodes.add(row.externalCode);
             continue;
         }
 
@@ -467,6 +489,8 @@ export const parseGeoImportFile = async ( buffer: Buffer ): Promise<ParsedGeoImp
     const geoLocations: ParsedGeoLocationRow[] = [];
     const healthFacilities: ParsedHealthFacilityRow[] = [];
     const rejected: RejectedGeoRow[] = [];
+    const rejectedGeoCodes = new Set<string>();
+    const rejectedFacilityCodes = new Set<string>();
 
     // Whole-book load instead of the streaming WorkbookReader, for the same reason as the two
     // importers before it: the reader of exceljs 4.4.0 resolves the sheet name out of the last entry
@@ -524,13 +548,13 @@ export const parseGeoImportFile = async ( buffer: Buffer ): Promise<ParsedGeoImp
         );
     }
 
-    readGeoLocationRows(geo.rows, geoLocations, rejected);
+    readGeoLocationRows(geo.rows, geoLocations, rejected, rejectedGeoCodes);
 
     if( facility ) {
-        readHealthFacilityRows(facility.rows, healthFacilities, rejected);
+        readHealthFacilityRows(facility.rows, healthFacilities, rejected, rejectedFacilityCodes);
     }
 
-    const kept = rejectCycles(geoLocations, rejected);
+    const kept = rejectCycles(geoLocations, rejected, rejectedGeoCodes);
 
     // A book that resolves to nothing writable is a content problem and not an empty import: it
     // stops here, before the service opens a single transaction
@@ -547,6 +571,10 @@ export const parseGeoImportFile = async ( buffer: Buffer ): Promise<ParsedGeoImp
         healthFacilities,
         rejected,
         read: { geoLocation: geo.rows.length, healthFacility: facility ? facility.rows.length : 0 },
+        rejectedCodes: {
+            geoLocation: [ ...rejectedGeoCodes ],
+            healthFacility: [ ...rejectedFacilityCodes ]
+        },
         missingOptionalHeaders: {
             geoLocation: geo.missingOptionalHeaders,
             healthFacility: facility ? facility.missingOptionalHeaders : []
