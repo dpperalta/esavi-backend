@@ -1045,5 +1045,14 @@
         "notEditable": "De configuratie met ID {{id}} is beveiligd en accepteert geen wijzigingen",
         "changeReasonRequired": "Een reden voor de wijziging is verplicht wanneer de waarde verandert",
         "valueTypeMismatch": "De waarde komt niet overeen met het opgegeven type {{valueType}}"
+    },
+    "meddra": {
+        "searchSuccess": "Zoeken naar MedDRA-termen voltooid",
+        "disabled": "Zoeken naar MedDRA-termen is uitgeschakeld in deze omgeving",
+        "notConfigured": "Zoeken naar MedDRA-termen is niet geconfigureerd in deze omgeving",
+        "invalidSearchConfig": "De MedDRA-zoekconfiguratie declareert geen enkel termniveau",
+        "authFailed": "Fout bij het authenticeren bij de MedDRA-service. Probeer het later opnieuw.",
+        "searchFailed": "Fout bij het zoeken naar termen in de MedDRA-service. Probeer het later opnieuw.",
+        "timeout": "De MedDRA-service heeft niet op tijd gereageerd. Probeer het later opnieuw."
     }
 }

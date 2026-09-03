@@ -1045,5 +1045,14 @@
         "notEditable": "La configuración con ID {{id}} está protegida y no admite modificaciones",
         "changeReasonRequired": "Debe indicar el motivo del cambio cuando se modifica el valor",
         "valueTypeMismatch": "El valor no corresponde con el tipo declarado {{valueType}}"
+    },
+    "meddra": {
+        "searchSuccess": "Búsqueda de términos MedDRA completada",
+        "disabled": "La búsqueda de términos MedDRA está deshabilitada en este despliegue",
+        "notConfigured": "La búsqueda de términos MedDRA no está configurada en este despliegue",
+        "invalidSearchConfig": "La configuración de búsqueda de MedDRA no declara ningún nivel de término",
+        "authFailed": "Error al autenticar contra el servicio de MedDRA. Por favor, inténtelo de nuevo más tarde.",
+        "searchFailed": "Error al buscar términos en el servicio de MedDRA. Por favor, inténtelo de nuevo más tarde.",
+        "timeout": "El servicio de MedDRA no respondió a tiempo. Por favor, inténtelo de nuevo más tarde."
     }
 }
