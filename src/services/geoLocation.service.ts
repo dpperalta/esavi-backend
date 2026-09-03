@@ -6,6 +6,63 @@ import { setEntityActiveStatusService } from './common/entityActivation.service'
 import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
+/**
+ * Shared precheck of ESAVI-GEOLOC-006 and ESAVI-GEOLOC-007. Runs before reading the file in the 006
+ * and before querying anything in the 007, because both operations rest on the same invariant: the
+ * `level` of the file resolves its geoLevelType through sortOrder, one level per number, starting at
+ * 1 and with no gaps.
+ *
+ * geoLevelType is not seeded by esaviapp.sql — administrative levels belong to each country and the
+ * deployment is multi-country — so on a freshly created base, which is exactly the scenario of a
+ * first load, there are no levels at all. Without this check the template would come out with an
+ * empty dropdown and every row would be rejected after somebody filled in the whole file.
+ *
+ * The actionable detail travels in `message` and not in `errors`: errorHandler only puts real text
+ * in errors when NODE_ENV=development, so in production the operator would read 'Internal server
+ * error' and not know what to fix. That is why these are three interpolated keys and not one.
+ *
+ * Returns the level -> geoLevelTypeId map, which is the only thing the rest of the operation uses.
+ */
+const assertGeoLevelTypesReady = async ( codePrefix: string, lang: string ): Promise<Map<number, string>> => {
+    const geoLevelTypes = await GeoLevelType.findAll({
+        where: { isActive: true },
+        order: [ [ 'sortOrder', 'ASC' ] ]
+    });
+    if( geoLevelTypes.length === 0 ) {
+        throw new AppError(getMessage('geoLocation.levelTypesMissing', lang), 409, `${ codePrefix }_LEVEL_TYPES_MISSING`);
+    }
+    // Two active levels sharing a sortOrder make the resolution non-deterministic: a row of level 2
+    // would resolve to whichever of the two the order happened to return first
+    const seen = new Set<number>();
+    const duplicated: number[] = [];
+    for( const geoLevelType of geoLevelTypes ) {
+        const sortOrder = Number(geoLevelType.sortOrder);
+        if( seen.has(sortOrder) && !duplicated.includes(sortOrder) ) {
+            duplicated.push(sortOrder);
+        }
+        seen.add(sortOrder);
+    }
+    if( duplicated.length > 0 ) {
+        throw new AppError(
+            getMessage('geoLocation.levelTypesDuplicatedOrder', lang, { orders: duplicated.join(', ') }),
+            409,
+            `${ codePrefix }_LEVEL_TYPES_DUPLICATED_ORDER`
+        );
+    }
+    // The series has to run 1, 2, 3... with no gap: a hole at 3 would leave every row of level 3
+    // rejected and every level below it orphaned, which is a whole branch lost for one missing row
+    const orders = [ ...seen ].sort(( a, b ) => a - b);
+    const expected = orders.findIndex(( order, index ) => order !== index + 1);
+    if( expected !== -1 ) {
+        throw new AppError(
+            getMessage('geoLocation.levelTypesNotContiguous', lang, { expected: String(expected + 1) }),
+            409,
+            `${ codePrefix }_LEVEL_TYPES_NOT_CONTIGUOUS`
+        );
+    }
+    return new Map(geoLevelTypes.map(( geoLevelType ) => [ Number(geoLevelType.sortOrder), geoLevelType.geoLevelTypeId ]));
+};
+
 // ESAVI-GEOLOC-001 - Create Geographic Location Service
 const createGeoLocationService = async( data: CreateGeoLocationInput, authUser: AuthUser | undefined, lang: string ) => {
     const geoLevelType = await GeoLevelType.findOne({
@@ -327,6 +384,7 @@ const setGeoLocationActivationService = async (id: string, authUser: AuthUser | 
 }
 
 export {
+    assertGeoLevelTypesReady,
     createGeoLocationService,
     getActiveGeoLocationsService,
     getAllGeoLocationsService,
