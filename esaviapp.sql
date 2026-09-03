@@ -468,6 +468,7 @@ CREATE TABLE IF NOT EXISTS "geoLocation" (
 );
 CREATE INDEX IF NOT EXISTS "IX_geoLocation_level" ON "geoLocation" ("geoLevelTypeId");
 CREATE INDEX IF NOT EXISTS "IX_geoLocation_parent" ON "geoLocation" ("parentGeoLocationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "UQ_geoLocation_externalCode" ON "geoLocation" ("externalCode") WHERE "externalCode" IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS "healthFacility" (
   "healthFacilityId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
