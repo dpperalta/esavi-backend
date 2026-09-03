@@ -3,7 +3,6 @@ import { AppError } from '../helpers/appError.helper';
 import { getMessage } from '../helpers/i18n.helper';
 
 export const errorHandler = (error: unknown, req: Request, res: Response, next: NextFunction): void => {
-    console.error('ERROR:', error);
     // A rejection can happen before anyone read the body — `tokenValidation` and `validateUserRole`
     // run ahead of multer, so an upload rejected with 401 or 403 still has megabytes in flight.
     // Answering and closing while the client is still writing resets the connection, and the
