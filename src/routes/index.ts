@@ -43,6 +43,7 @@ import investigationCommunityRoutes from './investigationCommunity.routes';
 import finalClassificationRoutes from './finalClassification.routes';
 import caseWorkflowRoutes from './caseWorkflow.routes';
 import systemConfigRoutes from './systemConfig.routes';
+import meddraRoutes from './meddra.routes';
 
 const router = Router();
 
@@ -145,5 +146,10 @@ router.use('/final-classifications', finalClassificationRoutes);
 router.use('/case-workflows', caseWorkflowRoutes);
 
 router.use('/system-configs', systemConfigRoutes);
+
+// A read-only proxy against the official MedDRA API, not an entity of this repository: it has no
+// table, no model and it writes nothing. What the user picks is persisted afterwards through
+// ESAVI-DIAGTERM-006 and ESAVI-NOTIFEVT-001
+router.use('/meddra', meddraRoutes);
 
 export default router;
