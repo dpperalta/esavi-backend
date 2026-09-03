@@ -38,3 +38,9 @@ export const updateGeoLocationValidator = [
     body('isoCode').optional({ nullable: true }).trim().isLength({ max: 10 }).withMessage('ISO code must be at most 10 characters long'),
     body('level').optional({ nullable: true }).isInt({ min: 1 }).withMessage('Level must be a positive integer'),
 ];
+
+// ESAVI-GEOLOC-007 — the single query parameter of the template. Optional and boolean: without it
+// sheets 1 and 2 come out with their header alone
+export const generateGeoTemplateValidator = [
+    query('includeExisting').optional().isBoolean().withMessage('Include existing must be a boolean')
+];

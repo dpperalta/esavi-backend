@@ -1,6 +1,7 @@
 ﻿import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage, canViewInactive } from '../helpers';
-import { createGeoLocationService, getAllGeoLocationsService, getActiveGeoLocationsService, getGeoLocationByIdService, updateGeoLocationService, setGeoLocationActivationService } from '../services/geoLocation.service';
+import { createGeoLocationService, generateGeoTemplateService, getAllGeoLocationsService, getActiveGeoLocationsService, getGeoLocationByIdService, updateGeoLocationService, setGeoLocationActivationService } from '../services/geoLocation.service';
+import { GenerateGeoTemplateInput } from '../types';
 
 
 // Create Geographic Location Controller
@@ -134,8 +135,37 @@ const activateGeoLocation = async(req: Request, res: Response, next: NextFunctio
     }
 }
 
+// Generate Geographic Import Template Controller
+// Code: ESAVI-GEOLOC-007
+const generateGeoTemplate = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    // The one query parameter, arriving as the string a query string carries: compared against
+    // undefined first and read as 'true' afterwards, so ?includeExisting=false is not truthy
+    const data: GenerateGeoTemplateInput = {
+        includeExisting: req.query.includeExisting !== undefined ? String(req.query.includeExisting) === 'true' : undefined
+    };
+    try {
+        const workbook = await generateGeoTemplateService(data, req.user, req.lang);
+        const filename = `esavi-geo-template-${ new Date().toISOString().slice(0, 10) }.xlsx`;
+        // The declared exception to CONVENTIONS.md §10: this 200 carries no { ok, message, data }
+        // envelope because an .xlsx does not fit in data. Its errors do go through errorHandler with
+        // the usual envelope, which is what keeps the deviation to this single path — and it is also
+        // why the 007 has no success i18n key
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${ filename }"`);
+        return res.status(200).send(workbook);
+    } catch (error) {
+        esaviLog('ESAVI-GEOLOC-007: Error generating Geolocation import template: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('geoLocation.templateFailed', req.lang), 500, 'GEOLOC_007_TEMPLATE_FAILED', error));
+    }
+}
+
 export {
     createGeoLocation,
+    generateGeoTemplate,
     getGeoLocations,
     getGeoLocationById,
     updateGeoLocation,
