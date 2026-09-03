@@ -17,5 +17,6 @@ export * from './severity.helper';
 export * from './stringHandling.helper';
 export * from './systemConfigValue.helper';
 export * from './whodrugParser.helper';
+export * from './xlsxSheetReader.helper';
 export * from './refreshToken.helper';
 export * from './passwordResetToken.helper';

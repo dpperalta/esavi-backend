@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 
 import { toCamelCase, toCodeFromName, toTitleCase } from './stringHandling.helper';
+import { RawSheetRow, XlsxFileError, readSheet } from './xlsxSheetReader.helper';
 import {
     CatalogItemFileValues,
     ParsedCatalogItemRow,
@@ -71,60 +72,12 @@ export interface ParsedCatalogItemFile {
     missingRequiredHeaders: string[];
 }
 
-// Lowercase and drop the separators a hand-authored sheet mixes in the same row, so that
-// 'catalog type code', 'catalog_type_code' and 'CatalogTypeCode' all resolve to the same column.
-// Applied to both sides of the comparison
-const normalizeHeader = ( header: string ): string =>
-    header.trim().toLowerCase().replace(/[\s\-_]/g, '');
-
-// The alias table, keyed by its normalized header, built once at load time
-const NORMALIZED_ALIASES: Record<string, string> = Object.entries(HEADER_ALIASES)
-    .reduce(( map, [ header, column ] ) => ({ ...map, [normalizeHeader(header)]: column }), {});
-
-/**
- * A cell as text. exceljs hands back strings, numbers, booleans, dates, rich text and formula
- * results depending on how the cell was written, and the catalog is text in all of them.
- * An empty cell becomes null, never '': a blank cell in Excel means "no data", and storing it as an
- * empty string would make a re-import see a change where there is none.
- */
-const cellToText = ( value: ExcelJS.CellValue ): string | null => {
-    if( value === null || value === undefined ) {
-        return null;
-    }
-
-    let text: string;
-
-    if( value instanceof Date ) {
-        text = value.toISOString();
-    } else if( typeof value === 'object' ) {
-        if( 'richText' in value ) {
-            text = value.richText.map(( part ) => part.text).join('');
-        } else if( 'text' in value ) {
-            text = String(value.text);
-        } else if( 'result' in value ) {
-            text = value.result === null || value.result === undefined ? '' : String(value.result);
-        } else if( 'error' in value ) {
-            text = String(value.error);
-        } else {
-            text = String(value);
-        }
-    } else {
-        text = String(value);
-    }
-
-    const trimmed = text.trim();
-
-    return trimmed.length === 0 ? null : trimmed;
-};
-
 /**
  * A cell as sortOrder. Empty, non-numeric, non-integer, negative or above the smallint ceiling all
  * enter as 0 and flag the coercion; it never rejects the row. The order of a dropdown is not worth
  * a lost item, and the counter is what keeps the coercion from being silent.
  */
-const cellToSortOrder = ( value: ExcelJS.CellValue ): { sortOrder: number; coerced: boolean } => {
-    const text = cellToText(value);
-
+const cellToSortOrder = ( text: string | null ): { sortOrder: number; coerced: boolean } => {
     if( text === null ) {
         return { sortOrder: 0, coerced: true };
     }
@@ -177,80 +130,37 @@ export const parseCatalogItemsXlsxFile = async ( buffer: Buffer ): Promise<Parse
     }
 
     // Always the first sheet: the endpoint takes no `sheet` parameter, and its name travels in the
-    // report so a book whose first tab was not the expected one says so.
-    const worksheet = workbook.worksheets[0];
+    // report so a book whose first tab was not the expected one says so. A book with no sheet at all
+    // comes back from the reader as an XlsxFileError, rewrapped below.
+    //
+    // The reader resolves the header, discards the empty rows and hands every cell back as trimmed
+    // text; an extra column, a repeated header and a missing optional one are all sorted there. What
+    // stays here is what is catalogItem: the normalization, the minted code and the file's own pairs.
+    let read;
 
-    if( !worksheet ) {
-        throw new CatalogItemFileError('The uploaded workbook carries no sheet');
+    try {
+        read = readSheet(workbook, { headerAliases: HEADER_ALIASES, requiredHeaders: REQUIRED_HEADERS });
+    } catch ( error ) {
+        // The reader raises its own class; the service checks this one with instanceof to answer 400
+        throw new CatalogItemFileError(
+            error instanceof XlsxFileError ? error.message : 'The uploaded workbook could not be read',
+            error
+        );
     }
 
-    const sheet = worksheet.name ?? '';
-    const {
-        columns,
-        unknownHeaders,
-        missingOptionalHeaders,
-        missingRequiredHeaders
-    } = readHeader(worksheet.getRow(1));
+    const { sheet, rows: rawRows, unknownHeaders, missingOptionalHeaders, missingRequiredHeaders } = read;
 
     // Not a single data row is read if a required header is missing, so the abort happens before
     // anything could be written — in either of the two tables.
-    if( missingRequiredHeaders.length > 0 || columns.size === 0 ) {
+    if( missingRequiredHeaders.length > 0 ) {
         return { sheet, rows, rejected, missingOptionalHeaders, unknownHeaders, missingRequiredHeaders };
     }
 
-    worksheet.eachRow({ includeEmpty: false }, ( row ) => {
-        if( row.number === 1 ) {
-            return;
-        }
-
-        readDataRow(row, columns, rows, rejected, seenPairs);
-    });
+    for( const rawRow of rawRows ) {
+        readDataRow(rawRow, rows, rejected, seenPairs);
+    }
 
     return { sheet, rows, rejected, missingOptionalHeaders, unknownHeaders, missingRequiredHeaders };
-};
-
-/**
- * Reads row 1 into a map of sheet column index -> destination column, and sorts the headers the file
- * brought against the ones it should have brought.
- */
-const readHeader = ( row: ExcelJS.Row ) => {
-    const columns = new Map<number, string>();
-    const unknownHeaders: string[] = [];
-    const seenHeaders = new Set<string>();
-
-    row.eachCell({ includeEmpty: false }, ( cell, columnNumber ) => {
-        const text = cellToText(cell.value);
-
-        if( text === null ) {
-            return;
-        }
-
-        const column = NORMALIZED_ALIASES[normalizeHeader(text)];
-
-        // A sheet that carries an extra column must not block the load. It is ignored — and
-        // reported, because a column ignored in silence is a decision nobody reviews.
-        if( !column ) {
-            unknownHeaders.push(text);
-            return;
-        }
-
-        // A header repeated in the sheet: the first column wins, same criterion as a repeated pair.
-        if( columns.has(columnNumber) || seenHeaders.has(column) ) {
-            unknownHeaders.push(text);
-            return;
-        }
-
-        seenHeaders.add(column);
-        columns.set(columnNumber, column);
-    });
-
-    const missingRequiredHeaders = REQUIRED_HEADERS
-        .filter(( header ) => !seenHeaders.has(HEADER_ALIASES[header]));
-
-    const missingOptionalHeaders = Object.keys(HEADER_ALIASES)
-        .filter(( header ) => !REQUIRED_HEADERS.includes(header) && !seenHeaders.has(HEADER_ALIASES[header]));
-
-    return { columns, unknownHeaders, missingOptionalHeaders, missingRequiredHeaders };
 };
 
 /**
@@ -258,26 +168,11 @@ const readHeader = ( row: ExcelJS.Row ) => {
  * the file keeps going: one bad cell must not cost the rest of the catalog.
  */
 const readDataRow = (
-    row: ExcelJS.Row,
-    columns: Map<number, string>,
+    { row: rowNumber, cells }: RawSheetRow,
     rows: ParsedCatalogItemRow[],
     rejected: RejectedCatalogItemRow[],
     seenPairs: Set<string>
 ): void => {
-    const rowNumber = row.number;
-    const raw = new Map<string, ExcelJS.CellValue>();
-
-    columns.forEach(( column, columnNumber ) => {
-        raw.set(column, row.getCell(columnNumber).value);
-    });
-
-    // A row with nothing in any mapped column is not read and not invalid: it is nothing.
-    const isEmpty = Array.from(raw.values()).every(( value ) => cellToText(value) === null);
-
-    if( isEmpty ) {
-        return;
-    }
-
     const reject = ( reason: RejectedCatalogItemRow['reason'], column?: string ): void => {
         rejected.push(column ? { row: rowNumber, reason, column } : { row: rowNumber, reason });
     };
@@ -286,9 +181,9 @@ const readDataRow = (
     // unlike the two importers before it this one normalizes on write, and with the same rule the
     // 001 and the 004 use: the code is minted from the name with toCodeFromName and the sheet has no
     // say in it.
-    const rawCatalogTypeCode = cellToText(raw.get('catalogTypeCode') ?? null);
-    const rawCatalogTypeName = cellToText(raw.get('catalogTypeName') ?? null);
-    const rawName = cellToText(raw.get('name') ?? null);
+    const rawCatalogTypeCode = cells.catalogTypeCode ?? null;
+    const rawCatalogTypeName = cells.catalogTypeName ?? null;
+    const rawName = cells.name ?? null;
 
     if( rawCatalogTypeCode === null ) {
         return reject('EMPTY_CATALOG_TYPE_CODE');
@@ -317,8 +212,8 @@ const readDataRow = (
     // admits null, and an empty cell would insert fine — bulkCreate does not validate — but would 500
     // on the update branch that empties it. An empty cell carries the already normalized name, so the
     // two columns of that row come out identical and the diff keeps its four candidates
-    const value = cellToText(raw.get('value') ?? null) ?? name;
-    const description = cellToText(raw.get('description') ?? null);
+    const value = cells.value ?? name;
+    const description = cells.description ?? null;
 
     // Length is checked against the normalized value because that is the one that reaches the
     // column. Without this filter the row would blow up the whole batch it travels in.
@@ -333,7 +228,7 @@ const readDataRow = (
         }
     }
 
-    const { sortOrder, coerced } = cellToSortOrder(raw.get('sortOrder') ?? null);
+    const { sortOrder, coerced } = cellToSortOrder(cells.sortOrder ?? null);
 
     const pair = `${ catalogTypeCode }|${ code }`;
 
