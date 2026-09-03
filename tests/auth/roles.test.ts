@@ -72,6 +72,8 @@ const ROUTE_RULES: RouteRule[] = [
     // geoLocation
     { method: 'post',   path: '/api/geo-locations',                      minRole: 'ADMIN',      code: 'ESAVI-GEOLOC-001' },
     { method: 'get',    path: '/api/geo-locations',                      minRole: 'USER',       code: 'ESAVI-GEOLOC-002' },
+    { method: 'post',   path: '/api/geo-locations/import',               minRole: 'SUPERADMIN', code: 'ESAVI-GEOLOC-006' },
+    { method: 'get',    path: '/api/geo-locations/import/template',      minRole: 'ADMIN',      code: 'ESAVI-GEOLOC-007' },
     { method: 'get',    path: `/api/geo-locations/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-GEOLOC-003' },
     { method: 'put',    path: `/api/geo-locations/${ UUID }`,            minRole: 'ADMIN',      code: 'ESAVI-GEOLOC-004' },
     { method: 'delete', path: `/api/geo-locations/${ UUID }`,            minRole: 'ADMIN',      code: 'ESAVI-GEOLOC-005A' },
@@ -762,7 +764,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(331);
+            expect(ROUTE_RULES).toHaveLength(333);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
