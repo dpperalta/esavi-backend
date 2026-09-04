@@ -322,7 +322,7 @@ Las cuatro claves de precondición de `008` son distintas y no una sola parametr
 
 ```
 { ok, message, data: {
-    caseWorkflowId, caseId,
+    caseWorkflowId, caseId, caseCode,
     status:         { catalogItemId, code, name },
     previousStatus: { catalogItemId, code, name } | null,
     openedAt, closedAt, lastReopenedAt, reopenCount,
@@ -340,6 +340,7 @@ Las cuatro claves de precondición de `008` son distintas y no una sola parametr
 - **`exists` e `id`** resuelven la fila real de cada etapa: `id` es el PK del satélite (`classificationId`, `notificationId`, `investigationId`, `finalClassificationId`) o `null` cuando la etapa no se ha iniciado, y `exists` es `id !== null`. Se explica en detalle abajo.
 - **`durationMinutes`** = `endedAt − startedAt` en minutos enteros. **`null`** si falta cualquiera de los dos sellos. No se guarda en ninguna columna: se calcula al construir la respuesta.
 - **`totalDurationMinutes`** = `closedAt − openedAt`. **`null`** mientras el caso siga abierto. El tiempo transcurrido de un caso vivo lo calcula el cliente contra su propio reloj; el servidor no devuelve un valor que cambia entre dos llamadas idénticas.
+- **`caseCode`** es el identificador humano del caso, tomado del `include` de `esaviCase` que este endpoint ya hace para resolver las etapas. Viaja junto al `caseId` porque toda pantalla que muestra un flujo muestra el caso por su código, nunca por su UUID; sin él el cliente necesita un `GET /api/esavi-cases/:id` extra solo para poner un título.
 - **`status` y `previousStatus`** viajan como objeto con `code` y `name`, no como UUID suelto. El `name` sale del `catalogItem` y ya está en el idioma del catálogo; **no** pasa por `getMessage`.
 - **`sysDetails` no se expone**, en ninguna operación.
 

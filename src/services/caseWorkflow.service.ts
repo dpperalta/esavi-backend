@@ -304,6 +304,10 @@ const toCaseWorkflowResponse = (workflow: CaseWorkflow) => {
     return {
         caseWorkflowId: workflow.caseWorkflowId,
         caseId: workflow.caseId,
+        // The human identifier of the file. It travels next to the caseId because every screen
+        // that shows a workflow shows the case by its code, never by its UUID; the column already
+        // comes in the `case` include that resolves the stages, so it costs no extra query
+        caseCode: ( workflow.case as EsaviCase | undefined )?.caseCode ?? null,
         status: toCatalogRef(workflow.status),
         previousStatus: toCatalogRef(workflow.previousStatus),
         openedAt: toIso(openedAt),
