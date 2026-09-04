@@ -5,7 +5,8 @@
         "internalError": "Error interno del servidor. Por favor, inténtelo de nuevo más tarde.",
         "badRequest": "Solicitud incorrecta. Por favor, verifique su entrada e inténtelo de nuevo.",
         "notFound": "Recurso no encontrado. Por favor, verifique la URL e inténtelo de nuevo.",
-        "validationError": "Error de validación. Por favor, verifique su entrada e inténtelo de nuevo."
+        "validationError": "Error de validación. Por favor, verifique su entrada e inténtelo de nuevo.",
+        "tooManyRequests": "Demasiadas peticiones. Por favor, espere unos minutos e inténtelo de nuevo."
     },
     "seed": {
         "validationError": "Acción de seed inválida. Los valores permitidos son: none, all, users, roles.",
@@ -36,6 +37,7 @@
         "logoutAllFailed": "No se pudieron cerrar las sesiones",
         "forgotPasswordSuccess": "Si existe una cuenta con ese correo, recibirá un enlace para restablecer su contraseña.",
         "forgotPasswordFailed": "No se pudo procesar la solicitud de restablecimiento",
+        "tooManyPasswordResetRequests": "Demasiadas solicitudes de restablecimiento para este correo electrónico. Por favor, espere unos minutos e inténtelo de nuevo.",
         "resetPasswordSuccess": "Su contraseña fue restablecida correctamente.",
         "resetPasswordFailed": "No se pudo restablecer la contraseña",
         "invalidResetToken": "El enlace de restablecimiento no es válido. Por favor, solicite uno nuevo.",
@@ -1062,6 +1064,7 @@
         "invalidSearchConfig": "La configuración de búsqueda de MedDRA no declara ningún nivel de término",
         "authFailed": "Error al autenticar contra el servicio de MedDRA. Por favor, inténtelo de nuevo más tarde.",
         "searchFailed": "Error al buscar términos en el servicio de MedDRA. Por favor, inténtelo de nuevo más tarde.",
-        "timeout": "El servicio de MedDRA no respondió a tiempo. Por favor, inténtelo de nuevo más tarde."
+        "timeout": "El servicio de MedDRA no respondió a tiempo. Por favor, inténtelo de nuevo más tarde.",
+        "tooManySearchRequests": "Demasiadas búsquedas en MedDRA. Por favor, espere unos minutos e inténtelo de nuevo."
     }
 }

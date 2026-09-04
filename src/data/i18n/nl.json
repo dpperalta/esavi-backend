@@ -5,7 +5,8 @@
         "internalError": "Interne serverfout. Probeer het later opnieuw.",
         "badRequest": "Ongeldig verzoek. Controleer uw invoer en probeer het opnieuw.",
         "notFound": "Bron niet gevonden. Controleer de URL en probeer het opnieuw.",
-        "validationError": "Validatiefout. Controleer uw invoer en probeer het opnieuw."
+        "validationError": "Validatiefout. Controleer uw invoer en probeer het opnieuw.",
+        "tooManyRequests": "Te veel verzoeken. Wacht een paar minuten en probeer het opnieuw."
     },
     "seed": {
         "validationError": "Ongeldige seed-actie. Toegestane waarden zijn: none, all, users, roles.",
@@ -36,6 +37,7 @@
         "logoutAllFailed": "De sessies konden niet worden gesloten",
         "forgotPasswordSuccess": "Als er een account met dat e-mailadres bestaat, ontvangt u een link om uw wachtwoord opnieuw in te stellen.",
         "forgotPasswordFailed": "Het verzoek om het wachtwoord opnieuw in te stellen kon niet worden verwerkt",
+        "tooManyPasswordResetRequests": "Te veel verzoeken om het wachtwoord opnieuw in te stellen voor dit e-mailadres. Wacht een paar minuten en probeer het opnieuw.",
         "resetPasswordSuccess": "Uw wachtwoord is succesvol opnieuw ingesteld.",
         "resetPasswordFailed": "Het wachtwoord kon niet opnieuw worden ingesteld",
         "invalidResetToken": "De herstellink is niet geldig. Vraag een nieuwe aan.",
@@ -1062,6 +1064,7 @@
         "invalidSearchConfig": "De MedDRA-zoekconfiguratie declareert geen enkel termniveau",
         "authFailed": "Fout bij het authenticeren bij de MedDRA-service. Probeer het later opnieuw.",
         "searchFailed": "Fout bij het zoeken naar termen in de MedDRA-service. Probeer het later opnieuw.",
-        "timeout": "De MedDRA-service heeft niet op tijd gereageerd. Probeer het later opnieuw."
+        "timeout": "De MedDRA-service heeft niet op tijd gereageerd. Probeer het later opnieuw.",
+        "tooManySearchRequests": "Te veel MedDRA-zoekopdrachten. Wacht een paar minuten en probeer het opnieuw."
     }
 }

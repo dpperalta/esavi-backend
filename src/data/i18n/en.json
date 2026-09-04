@@ -5,7 +5,8 @@
         "internalError": "Internal server error. Please try again later.",
         "badRequest": "Bad request. Please check your input and try again.",
         "notFound": "Resource not found. Please check the URL and try again.",
-        "validationError": "Validation error. Please check your input and try again."
+        "validationError": "Validation error. Please check your input and try again.",
+        "tooManyRequests": "Too many requests. Please wait a few minutes and try again."
     },
     "seed": {
         "validationError": "Invalid seed action. Allowed values are: none, all, users, roles.",
@@ -36,6 +37,7 @@
         "logoutAllFailed": "The sessions could not be closed",
         "forgotPasswordSuccess": "If an account exists for that email address, you will receive a link to reset your password.",
         "forgotPasswordFailed": "The password reset request could not be processed",
+        "tooManyPasswordResetRequests": "Too many password reset requests for this email address. Please wait a few minutes and try again.",
         "resetPasswordSuccess": "Your password was reset successfully.",
         "resetPasswordFailed": "The password could not be reset",
         "invalidResetToken": "The reset link is not valid. Please request a new one.",
@@ -1062,6 +1064,7 @@
         "invalidSearchConfig": "The MedDRA search configuration does not declare any term level",
         "authFailed": "Error authenticating against the MedDRA service. Please try again later.",
         "searchFailed": "Error searching terms in the MedDRA service. Please try again later.",
-        "timeout": "The MedDRA service did not respond in time. Please try again later."
+        "timeout": "The MedDRA service did not respond in time. Please try again later.",
+        "tooManySearchRequests": "Too many MedDRA searches. Please wait a few minutes and try again."
     }
 }

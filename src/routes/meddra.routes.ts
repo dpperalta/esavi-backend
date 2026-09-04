@@ -15,7 +15,8 @@ const router = Router();
 // Search MedDRA Terms Against The Official API
 // Code: ESAVI-MEDDRA-006
 // The limiter goes first, before the token and the validators: one that runs after validation has
-// already paid the cost it exists to avoid
+// already paid the cost it exists to avoid. It verifies the JWT on its own to count per account
+// instead of per IP — a MedDRA licence is consumed per account (DEUDA-046)
 router.get('/search', meddraSearchLimiter, tokenValidation, validateUserRole(USER), ...searchMeddraValidator, validateFields, searchMeddraTerms);
 
 export default router;
