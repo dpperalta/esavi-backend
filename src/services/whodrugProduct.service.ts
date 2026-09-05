@@ -1,7 +1,8 @@
-import { CreationAttributes, Op, Transaction, WhereOptions } from 'sequelize';
+import { CreationAttributes, Op, QueryTypes, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { WhodrugProduct } from '../models';
-import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, flattenWhodrugProducts, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, flattenWhodrugProducts, getMessage, toWhodrugSearchForm } from '../helpers';
+import { escapeLike } from '../helpers/stringHandling.helper';
 import { getAppConfigBoolean, getAppConfigJson, getAppConfigString } from '../helpers/appConfig.helper';
 import {
     AppDetails,
@@ -12,7 +13,9 @@ import {
     WhodrugDownloadConfig,
     WhodrugProductFlatRow,
     WhodrugProductListFilters,
-    WhodrugProductSyncReport
+    WhodrugProductSyncReport,
+    WhodrugSearchOption,
+    WhodrugSearchPolicy
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import {
@@ -25,7 +28,9 @@ import {
     WHODRUG_ENABLED_CODE,
     WHODRUG_LICENSE_KEY_CODE,
     WHODRUG_LICENSE_KEY_HEADER,
-    WHODRUG_SCOPE
+    WHODRUG_SCOPE,
+    WHODRUG_SEARCH_COUNTRY_CODE,
+    WHODRUG_SEARCH_EXCLUDED_ATC_CODE
 } from '../constants/whodrug.constants';
 
 // SPEC F56 — the raw mirror of the WHODrug standard. name and ingredient are independent filters,
@@ -454,7 +459,90 @@ const syncWhodrugProductsService = async (
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// SPEC F56 §3.5 — ESAVI-WHODPROD-006: search concomitant medication
+// ---------------------------------------------------------------------------------------------
+
+// §3.5 point 1 — the two reads of scope WHODRUG that turn into the query's policy. The client
+// cannot ask for vaccines or switch country: if it could, the exclusion would stop being a rule
+// of the system. Resolved on every search and never cached, same as the 007's own configuration
+const resolveWhodrugSearchPolicy = async (lang: string): Promise<WhodrugSearchPolicy> => {
+    try {
+        const [ countryIso3, excludedAtcPrefixes ] = await Promise.all([
+            getAppConfigString(WHODRUG_SEARCH_COUNTRY_CODE, WHODRUG_SCOPE, lang),
+            getAppConfigJson<string[]>(WHODRUG_SEARCH_EXCLUDED_ATC_CODE, WHODRUG_SCOPE, lang)
+        ]);
+        return { countryIso3, excludedAtcPrefixes };
+    } catch (error) {
+        if (error instanceof AppError && error.code === MISSING_CONFIG_CODE) {
+            esaviLog(`[ERROR]: ESAVI-WHODPROD-006 - WHODrug search is not configured: ${ error.message }`, 'error');
+            throw new AppError(getMessage('whodrugProduct.notConfigured', lang), 503, 'WHODPROD_006_NOT_CONFIGURED', error);
+        }
+        throw error;
+    }
+}
+
+interface WhodrugSearchRow {
+    drugCode: string;
+    optionName: string;
+}
+
+// ESAVI-WHODPROD-006 - Search Whodrug Products Service (concomitant medication)
+//
+// DISTINCT ON ("drugCode") collapses every presentation of a medicine down to one row, letting
+// the preferred one win via ORDER BY "isPreferred" DESC — Postgres requires the ORDER BY to start
+// with the DISTINCT ON column, so the result set comes back ordered by drugCode and not by
+// relevance. There is no deduplication by name: two different medicines that share a commercial
+// name must both appear
+const searchWhodrugProductsService = async (
+    term: string,
+    limit: number,
+    lang: string
+): Promise<{ term: string; count: number; rows: WhodrugSearchOption[] }> => {
+    const policy = await resolveWhodrugSearchPolicy(lang);
+    // The same normalization the 007 gave optionNameSearch at import time: lowercase, no
+    // diacritics — so 'cetamol' and 'cétamol' hit the same rows
+    const pattern = `%${ escapeLike(toWhodrugSearchForm(term)) }%`;
+
+    const replacements: Record<string, unknown> = { pattern, countryIso3: policy.countryIso3, limit };
+    // COALESCE against '': a bare NOT LIKE against a NULL drugAtcs evaluates to NULL under SQL's
+    // three-valued logic, which WHERE treats as false — silently hiding a medicine that carries no
+    // ATC at all, never a vaccine, from every search. Not in SPEC F56's literal query; fixed here
+    // because a product with no ATC disappearing from the search it exists for is a correctness
+    // bug, not a policy choice
+    const excludedAtcConditions = policy.excludedAtcPrefixes.map((prefix, index) => {
+        replacements[`excludedAtc${ index }`] = `%;${ prefix }%`;
+        return `COALESCE("drugAtcs", '') NOT LIKE :excludedAtc${ index }`;
+    });
+    const excludedAtcClause = excludedAtcConditions.length > 0 ? `AND ${ excludedAtcConditions.join(' AND ') }` : '';
+
+    let rows: WhodrugSearchRow[];
+    try {
+        rows = await sequelize.query<WhodrugSearchRow>(
+            `SELECT DISTINCT ON ("drugCode") "drugCode", "optionName"
+             FROM "whodrugProduct"
+             WHERE "isActive" = true AND "deletedAt" IS NULL
+               AND "optionNameSearch" LIKE :pattern
+               ${ excludedAtcClause }
+               AND ( "iso3Code" = :countryIso3 OR ( "iso3Code" IS NULL AND "isGeneric" = true ) )
+             ORDER BY "drugCode", "isPreferred" DESC, "optionName"
+             LIMIT :limit`,
+            { replacements, type: QueryTypes.SELECT }
+        );
+    } catch (error) {
+        esaviLog(`[ERROR]: ESAVI-WHODPROD-006 - Search query failed: ${ error }`, 'error');
+        throw new AppError(getMessage('whodrugProduct.searchFailed', lang), 500, 'WHODPROD_006_FETCH_FAILED', error);
+    }
+
+    return {
+        term,
+        count: rows.length,
+        rows: rows.map(row => ({ code: row.drugCode, name: row.optionName }))
+    };
+}
+
 export {
     getAllWhodrugProductsService,
+    searchWhodrugProductsService,
     syncWhodrugProductsService
 };
