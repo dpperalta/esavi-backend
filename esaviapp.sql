@@ -21,6 +21,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 DO $$ BEGIN
   CREATE TYPE "answerOption" AS ENUM ('YES', 'NO', 'UNKNOWN', 'NOT_APPLICABLE', 'NO_ANSWER');
@@ -639,6 +640,42 @@ CREATE TABLE IF NOT EXISTS "vaccineWhodrug" (
   CONSTRAINT "UQ_vaccineWhodrug_externalId" UNIQUE ("externalId")
 );
 CREATE INDEX IF NOT EXISTS "IX_vaccineWhodrug_name" ON "vaccineWhodrug" USING gin (to_tsvector('simple', coalesce("drugName", '')));
+
+CREATE TABLE IF NOT EXISTS "whodrugProduct" (
+  "whodrugProductId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "rowHash" char(64) NOT NULL,
+  "drugCode" varchar(50) NOT NULL,
+  "drugName" text NOT NULL,
+  "drugAtcs" text,
+  "medicinalProductId" varchar(250),
+  "atcs" varchar(250),
+  "ingredient" text,
+  "ingredientTranslations" text,
+  "languageCode" varchar(10),
+  "iso3Code" varchar(3),
+  "countryMedicinalProductId" varchar(250),
+  "maHolders" text,
+  "maHoldersMedicinalProductId" varchar(250),
+  "form" text,
+  "formMedicinalProductId" varchar(250),
+  "strength" text,
+  "strengthMedicinalProductId" varchar(250),
+  "isGeneric" boolean NOT NULL DEFAULT false,
+  "isPreferred" boolean NOT NULL DEFAULT false,
+  "optionName" varchar(500) NOT NULL,
+  "optionNameSearch" varchar(500) NOT NULL,
+  "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "isActive" boolean NOT NULL DEFAULT true,
+  "createdAt" timestamptz NOT NULL DEFAULT current_timestamp,
+  "updatedAt" timestamptz,
+  "deletedAt" timestamptz,
+  "sysDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT "UQ_whodrugProduct_rowHash" UNIQUE ("rowHash")
+);
+CREATE INDEX IF NOT EXISTS "IX_whodrugProduct_search" ON "whodrugProduct" USING gin ("optionNameSearch" gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS "IX_whodrugProduct_drugCode" ON "whodrugProduct" ("drugCode");
+CREATE INDEX IF NOT EXISTS "IX_whodrugProduct_iso3Code" ON "whodrugProduct" ("iso3Code");
 
 CREATE TABLE IF NOT EXISTS "diluentCatalog" (
   "diluentCatalogId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
