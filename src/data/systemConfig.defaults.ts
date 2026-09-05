@@ -294,6 +294,80 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfigDefault[] = [
         isEditable: true
     },
     {
+        code: 'ESAVI_WHODRUG_ENABLED',
+        name: 'Sincronización del estándar WHODrug habilitada',
+        description: 'Interruptor general de ESAVI-WHODPROD-007. Con el valor en false el endpoint responde 503 sin salir a la red. Se siembra apagado a propósito: un despliegue recién sincronizado no debe empezar a llamar a un API licenciado por haber corrido el sync.',
+        value: false,
+        valueType: 'boolean',
+        scope: 'WHODRUG',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_WHODRUG_CLIENT_KEY',
+        name: 'Client key del API de WHODrug',
+        description: 'Cabecera umc-client-key contra el API regional-drugs de la UMC. Se siembra vacía y se carga con ESAVI-SYSCONF-004.',
+        value: '',
+        valueType: 'string',
+        scope: 'WHODRUG',
+        isEncrypted: true,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_WHODRUG_LICENSE_KEY',
+        name: 'License key del API de WHODrug',
+        description: 'Cabecera umc-license-key contra el API regional-drugs de la UMC. Se guarda como { enc: "..." } y solo un SUPERADMIN puede leerla en claro.',
+        value: '',
+        valueType: 'string',
+        scope: 'WHODRUG',
+        isEncrypted: true,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_WHODRUG_DOWNLOAD_URL',
+        name: 'Endpoint de descarga del estándar WHODrug',
+        description: 'URL del API regional-drugs de la UMC contra la que ESAVI-WHODPROD-007 descarga el estándar completo.',
+        value: 'https://api.who-umc.org/whodrug/download/v2/regional-drugs',
+        valueType: 'string',
+        scope: 'WHODRUG',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_WHODRUG_DOWNLOAD_PARAMS',
+        name: 'Parámetros de la descarga de WHODrug',
+        description: 'Query params de la descarga del estándar. IngredientTranslations fija el idioma de las traducciones que trae ingredientTranslations.',
+        value: {
+            MedProdLevel: '3',
+            IncludeAtc: 'true',
+            IngredientTranslations: 'es-ES'
+        },
+        valueType: 'json',
+        scope: 'WHODRUG',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_WHODRUG_SEARCH_COUNTRY',
+        name: 'País del buscador de medicación concomitante',
+        description: 'Código ISO3 con el que ESAVI-WHODPROD-006 filtra el país comercial. Las filas sin país solo entran si el producto es genérico.',
+        value: 'ECU',
+        valueType: 'string',
+        scope: 'WHODRUG',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_WHODRUG_SEARCH_EXCLUDED_ATC',
+        name: 'Prefijos ATC excluidos del buscador de medicación concomitante',
+        description: 'Prefijos de ATC que ESAVI-WHODPROD-006 excluye por ser vacunas. J07 es el grupo de vacunas del estándar WHODrug/ATC.',
+        value: ['J07'],
+        valueType: 'json',
+        scope: 'WHODRUG',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
         code: 'ESAVI_SEVERE_CASE_ALERT_HOURS',
         name: 'Horas para alertar un caso grave',
         description: 'Horas desde el registro de un caso grave tras las cuales queda marcado como pendiente de revisión.',
