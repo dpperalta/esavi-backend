@@ -26,40 +26,46 @@ export interface WhodrugProductFlatRow {
 }
 
 // The contract of the regional-drugs API, typed rather than navigated blind: everything optional
-// because nothing a third party sends is guaranteed
+// because nothing a third party sends is guaranteed. Field names and nesting mirror
+// references/external/01_transforme_v3.0.1.py:34-139, the proof of concept already running in
+// production — medicinalProductID keeps its capital ID because that is the literal key the API sends
 export interface WhodrugApiAtc {
-    atc?: unknown;
+    code?: unknown;
     [key: string]: unknown;
 }
 
+// The API nests a translations list per ingredient, each one shaped like the ingredient itself
+// (only "ingredient" is read); it stays inline here so the contract keeps exactly seven named
+// interfaces, as declared in SPEC F56 §3.3
 export interface WhodrugApiIngredient {
     ingredient?: unknown;
-    ingredientTranslation?: unknown;
-    [key: string]: unknown;
-}
-
-export interface WhodrugApiMaHolder {
-    maHolder?: unknown;
-    medicinalProductId?: unknown;
-    [key: string]: unknown;
-}
-
-export interface WhodrugApiForm {
-    form?: unknown;
-    medicinalProductId?: unknown;
-    strengths?: WhodrugApiStrength[];
+    ingredientTranslations?: { ingredient?: unknown; [key: string]: unknown }[];
     [key: string]: unknown;
 }
 
 export interface WhodrugApiStrength {
     strength?: unknown;
-    medicinalProductId?: unknown;
+    medicinalProductID?: unknown;
+    [key: string]: unknown;
+}
+
+export interface WhodrugApiForm {
+    form?: unknown;
+    medicinalProductID?: unknown;
+    strengths?: WhodrugApiStrength[];
+    [key: string]: unknown;
+}
+
+export interface WhodrugApiMaHolder {
+    name?: unknown;
+    medicinalProductID?: unknown;
+    forms?: WhodrugApiForm[];
     [key: string]: unknown;
 }
 
 export interface WhodrugApiCountry {
     iso3Code?: unknown;
-    medicinalProductId?: unknown;
+    medicinalProductID?: unknown;
     maHolders?: WhodrugApiMaHolder[];
     [key: string]: unknown;
 }
@@ -67,11 +73,12 @@ export interface WhodrugApiCountry {
 export interface WhodrugApiDrug {
     drugCode?: unknown;
     drugName?: unknown;
+    medicinalProductID?: unknown;
     isGeneric?: unknown;
+    isPreferred?: unknown;
     atcs?: WhodrugApiAtc[];
-    ingredients?: WhodrugApiIngredient[];
+    activeIngredients?: WhodrugApiIngredient[];
     countryOfSales?: WhodrugApiCountry[];
-    forms?: WhodrugApiForm[];
     [key: string]: unknown;
 }
 
