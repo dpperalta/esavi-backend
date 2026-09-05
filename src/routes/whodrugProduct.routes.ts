@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
-import { getAllWhodrugProducts } from '../controllers/whodrugProduct.controller';
-import { whodrugProductListValidator } from '../validators';
+import { getAllWhodrugProducts, syncWhodrugProducts } from '../controllers/whodrugProduct.controller';
+import { syncWhodrugProductsValidator, whodrugProductListValidator } from '../validators';
 
-const { ADMIN } = ROLES;
+const { ADMIN, SUPERADMIN } = ROLES;
 
 const router = Router();
 
@@ -16,5 +16,9 @@ const router = Router();
 // List Whodrug Products For Inspection (raw mirror, admin only, no country/ATC policy applied)
 // Code: ESAVI-WHODPROD-002B
 router.get('/admin', tokenValidation, validateUserRole(ADMIN), ...whodrugProductListValidator, validateFields, getAllWhodrugProducts);
+
+// Sync The WHODrug Standard From The UMC regional-drugs API
+// Code: ESAVI-WHODPROD-007
+router.post('/sync', tokenValidation, validateUserRole(SUPERADMIN), ...syncWhodrugProductsValidator, validateFields, syncWhodrugProducts);
 
 export default router;
