@@ -1066,5 +1066,17 @@
         "searchFailed": "Error al buscar términos en el servicio de MedDRA. Por favor, inténtelo de nuevo más tarde.",
         "timeout": "El servicio de MedDRA no respondió a tiempo. Por favor, inténtelo de nuevo más tarde.",
         "tooManySearchRequests": "Demasiadas búsquedas en MedDRA. Por favor, espere unos minutos e inténtelo de nuevo."
+    },
+    "whodrugProduct": {
+        "searched": "Búsqueda de medicación concomitante completada",
+        "listed": "Listado del espejo WHODrug obtenido correctamente",
+        "synced": "Sincronización del estándar WHODrug completada",
+        "syncDisabled": "La sincronización del estándar WHODrug está deshabilitada en este despliegue",
+        "notConfigured": "El estándar WHODrug no está configurado en este despliegue",
+        "downloadFailed": "Error al descargar el estándar WHODrug desde el API de la UMC. Por favor, inténtelo de nuevo más tarde.",
+        "syncAlreadyRunning": "Ya hay una sincronización del estándar WHODrug en curso",
+        "syncFailed": "Error al sincronizar el estándar WHODrug. Por favor, inténtelo de nuevo más tarde.",
+        "searchFailed": "Error al buscar medicación concomitante. Por favor, inténtelo de nuevo más tarde.",
+        "fetchFailed": "Error al listar el espejo WHODrug. Por favor, inténtelo de nuevo más tarde."
     }
 }

@@ -1066,5 +1066,17 @@
         "searchFailed": "Error searching terms in the MedDRA service. Please try again later.",
         "timeout": "The MedDRA service did not respond in time. Please try again later.",
         "tooManySearchRequests": "Too many MedDRA searches. Please wait a few minutes and try again."
+    },
+    "whodrugProduct": {
+        "searched": "Concomitant medication search completed",
+        "listed": "WHODrug mirror listing retrieved successfully",
+        "synced": "WHODrug standard sync completed",
+        "syncDisabled": "WHODrug standard sync is disabled in this deployment",
+        "notConfigured": "The WHODrug standard is not configured in this deployment",
+        "downloadFailed": "Error downloading the WHODrug standard from the UMC API. Please try again later.",
+        "syncAlreadyRunning": "A WHODrug standard sync is already in progress",
+        "syncFailed": "Error syncing the WHODrug standard. Please try again later.",
+        "searchFailed": "Error searching concomitant medication. Please try again later.",
+        "fetchFailed": "Error listing the WHODrug mirror. Please try again later."
     }
 }
