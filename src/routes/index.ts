@@ -44,6 +44,7 @@ import finalClassificationRoutes from './finalClassification.routes';
 import caseWorkflowRoutes from './caseWorkflow.routes';
 import systemConfigRoutes from './systemConfig.routes';
 import meddraRoutes from './meddra.routes';
+import whodrugProductRoutes from './whodrugProduct.routes';
 
 const router = Router();
 
@@ -151,5 +152,9 @@ router.use('/system-configs', systemConfigRoutes);
 // table, no model and it writes nothing. What the user picks is persisted afterwards through
 // ESAVI-DIAGTERM-006 and ESAVI-NOTIFEVT-001
 router.use('/meddra', meddraRoutes);
+
+// The raw mirror of the WHODrug standard, downloaded from the UMC regional-drugs API (SPEC F56).
+// Distinct from /whodrug-vaccines: that one is the curated vaccine catalogue of SPEC F18
+router.use('/whodrug-products', whodrugProductRoutes);
 
 export default router;
