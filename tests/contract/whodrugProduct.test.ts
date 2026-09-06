@@ -213,6 +213,79 @@ describe('whodrugProduct contract', () => {
             expect(listing.body.data.rows[0].drugCode).toBe(`${ suffix }-VAX`);
         });
 
+        // The five fields the rowHash is built from are kept out of the differential candidates on
+        // purpose, and an insert that reused that same set stored every one of them empty. The
+        // presentation is the point of this table: a row without its country or its holder
+        // identifies nothing, and the 006's country filter would match no row at all
+        it('an inserted row carries the five rowHash fields, which the differential candidates leave out', async () => {
+            await configureWhodrug();
+            mockDownload([
+                apiDrug({
+                    drugCode: `${ suffix }-KEYS`,
+                    drugName: `KeyFieldsZzq${ suffix }`,
+                    countryOfSales: [
+                        {
+                            iso3Code: 'ECU',
+                            medicinalProductID: 1402614,
+                            maHolders: [
+                                {
+                                    name: 'Aspen',
+                                    medicinalProductID: 5454276,
+                                    forms: [
+                                        {
+                                            form: 'TABLETS',
+                                            medicinalProductID: 5454275,
+                                            strengths: [ { strength: '250 mg', medicinalProductID: 5454274 } ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                })
+            ]);
+
+            await sync();
+
+            const stored = await WhodrugProduct.findOne({ where: { drugCode: `${ suffix }-KEYS` } });
+            expect(stored).not.toBeNull();
+            expect(stored!.iso3Code).toBe('ECU');
+            expect(stored!.countryMedicinalProductId).toBe('1402614');
+            expect(stored!.maHoldersMedicinalProductId).toBe('5454276');
+            expect(stored!.formMedicinalProductId).toBe('5454275');
+            expect(stored!.strengthMedicinalProductId).toBe('5454274');
+
+            // And the differential contract still holds over them: re-syncing the same download
+            // writes nothing, because they never enter the diff
+            mockDownload([
+                apiDrug({
+                    drugCode: `${ suffix }-KEYS`,
+                    drugName: `KeyFieldsZzq${ suffix }`,
+                    countryOfSales: [
+                        {
+                            iso3Code: 'ECU',
+                            medicinalProductID: 1402614,
+                            maHolders: [
+                                {
+                                    name: 'Aspen',
+                                    medicinalProductID: 5454276,
+                                    forms: [
+                                        {
+                                            form: 'TABLETS',
+                                            medicinalProductID: 5454275,
+                                            strengths: [ { strength: '250 mg', medicinalProductID: 5454274 } ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                })
+            ]);
+            const second = await sync();
+            expect(second.body.data).toMatchObject({ inserted: 0, updated: 0, unchanged: 1 });
+        });
+
         it('rejects an empty drugName as invalid and counts it, without aborting the rest of the download', async () => {
             await configureWhodrug();
             mockDownload([

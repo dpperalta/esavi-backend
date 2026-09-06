@@ -156,11 +156,11 @@ WhodrugProduct.init({
         defaultValue: false
     },
     optionName: {
-        type: DataTypes.STRING(500),
+        type: DataTypes.TEXT,
         allowNull: false,
     },
     optionNameSearch: {
-        type: DataTypes.STRING(500),
+        type: DataTypes.TEXT,
         allowNull: false,
     },
     metadata: {

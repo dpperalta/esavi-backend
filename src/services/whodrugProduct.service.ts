@@ -91,8 +91,9 @@ let isSyncRunning = false;
 // The counters stay exact; only the sample of rejected rows is trimmed
 const MAX_REPORTED_SYNC_ERRORS = 20;
 
-// varchar widths of the whodrugProduct DDL (SPEC F56 §3.1). The text columns are absent on
-// purpose: they carry no ceiling because the column declares none
+// varchar widths of the whodrugProduct DDL (SPEC F56 §3.1). The text columns — including
+// optionName and optionNameSearch, both text — are absent on purpose: they carry no ceiling
+// because the column declares none
 const COLUMN_MAX_LENGTHS: Partial<Record<keyof WhodrugProductFlatRow, number>> = {
     drugCode: 50,
     medicinalProductId: 250,
@@ -102,9 +103,7 @@ const COLUMN_MAX_LENGTHS: Partial<Record<keyof WhodrugProductFlatRow, number>> =
     countryMedicinalProductId: 250,
     maHoldersMedicinalProductId: 250,
     formMedicinalProductId: 250,
-    strengthMedicinalProductId: 250,
-    optionName: 500,
-    optionNameSearch: 500
+    strengthMedicinalProductId: 250
 };
 
 // §3.5 point 2 — the four reads of scope WHODRUG, with the SPEC F43 precedence: the systemConfig
@@ -245,6 +244,16 @@ const processSyncBatch = async (
                 rowHash: row.rowHash,
                 drugCode: row.drugCode,
                 ...buildRowCandidates(row),
+                // The five fields the rowHash is built from. They are absent from
+                // buildRowCandidates on purpose — §3.5 keeps them out of the diff, because a change
+                // in any of them means another row, not an update of this one — but an INSERT is
+                // not a diff: leaving them out here is what would store the presentation with its
+                // country, holder, form and strength identifiers empty
+                iso3Code: row.iso3Code ?? null,
+                countryMedicinalProductId: row.countryMedicinalProductId ?? null,
+                maHoldersMedicinalProductId: row.maHoldersMedicinalProductId ?? null,
+                formMedicinalProductId: row.formMedicinalProductId ?? null,
+                strengthMedicinalProductId: row.strengthMedicinalProductId ?? null,
                 isActive: true,
                 deletedAt: null,
                 // Sealed here and never touched by the differential branch: see §3.5, downloadedAt

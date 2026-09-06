@@ -1,6 +1,6 @@
 # SPEC F56 — Espejo del estándar WHODrug y buscador de medicación concomitante
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), SPEC F12 (`buildDifferentialUpdate` — la rama de actualización del `007` lo usa), SPEC F26 (`systemConfig` — aporta la tabla y el catálogo declarativo), SPEC F43 (`appConfig.helper` — fija la precedencia `systemConfig` > `.env`), SPEC F19 (precedente de forma: lotes con transacción propia, `dryRun` e informe de proceso), SPEC F55 (precedente de consumo de un API externa con credenciales en `systemConfig`)
 > **Fecha:** 2026-09-04
 > **Objetivo:** Descargar el estándar WHODrug íntegro a una tabla propia y ofrecer sobre ella un buscador de medicación concomitante que excluye vacunas y filtra por país.
@@ -95,8 +95,8 @@ Las filas `J07` de `whodrugProduct` no las sirve ningún endpoint de este spec: 
 | Columna | Tipo | Nulo | Nota |
 |---|---|---|---|
 | `rowHash` | `char(64)` | no | `UQ_whodrugProduct_rowHash`. SHA-256 en hexadecimal de la tupla que identifica la presentación. El API **no devuelve ningún identificador de fila**: sin esta clave cada `sync` duplicaría la tabla entera |
-| `optionName` | `varchar(500)` | no | `ingredientTranslations (drugName)` ya compuesto y normalizado |
-| `optionNameSearch` | `varchar(500)` | no | El anterior en minúsculas y sin diacríticos. Es la única columna que toca el buscador |
+| `optionName` | `text` | no | `ingredientTranslations (drugName)` ya compuesto y normalizado. Sin límite de ancho: un `varchar(500)` seguía siendo una talla arbitraria y la carga real del estándar la excedía |
+| `optionNameSearch` | `text` | no | El anterior en minúsculas y sin diacríticos. Es la única columna que toca el buscador |
 
 Más `metadata jsonb NOT NULL DEFAULT '{}'::jsonb` para la procedencia de la carga, y las seis transversales que lleva toda tabla del esquema: `isActive`, `createdAt`, `updatedAt`, `deletedAt`, `sysDetails` y `appDetails`. Los `DEFAULT` se copian textualmente de `vaccineWhodrug` (`esaviapp.sql:631-637`), `appDetails` incluido con su `'{}'::jsonb` — es lo que hacen las 45 tablas del fichero y este spec no abre ese frente.
 
@@ -279,7 +279,7 @@ Ocho pasos, en este orden:
 2. **Configuración.** Las dos credenciales, la URL y los parámetros, por `appConfig.helper`. El `APPCONFIG_VALUE_MISSING` se traduce a **503** `WHODPROD_007_NOT_CONFIGURED`: que WHODrug no esté configurado no es un fallo del servidor, es un servicio que este despliegue no ofrece. Se resuelve en cada llamada y no se cachea.
 3. **Descarga.** `GET` con las cabeceras `umc-client-key` y `umc-license-key` y los parámetros configurados, bajo un `AbortController` con `WHODRUG_DOWNLOAD_TIMEOUT_MS`. Respuesta no 2xx, cuerpo que no es un array, o timeout → **502** `WHODPROD_007_DOWNLOAD_FAILED`.
 4. **Aplanado.** El anidamiento de `01_transforme_v3.0.1.py:76-139`, tal cual: `ATC → país → titular → forma → concentración`, con la rama de nulos que emite una fila aunque el nivel esté vacío. **Sin exclusión de ATC y sin filtro de país** — el espejo es íntegro.
-5. **Derivados por fila.** `optionName` con la regla de `build_option_name` —traducciones deduplicadas sin distinguir mayúsculas, unidas por `; `, entre paréntesis el `drugName`— pero **sin el truncado a 230 caracteres**: ese límite era una validación de DHIS2 y aquí la columna es `varchar(500)`. Después `optionNameSearch`, `drugAtcs` y `rowHash`.
+5. **Derivados por fila.** `optionName` con la regla de `build_option_name` —traducciones deduplicadas sin distinguir mayúsculas, unidas por `; `, entre paréntesis el `drugName`— pero **sin el truncado a 230 caracteres**: ese límite era una validación de DHIS2 y aquí la columna es `text`, sin ancho que respetar. Después `optionNameSearch`, `drugAtcs` y `rowHash`.
 6. **Rechazos.** Fila sin `drugCode`, sin `drugName` o con `optionName` vacío → `errors`, contada en `invalid`. Valor que excede el ancho de su columna → `VALUE_TOO_LONG` con `column`. Dos filas con el mismo `rowHash` en la misma descarga → gana la primera, contada en `duplicated`.
 7. **Escritura por lotes de 1000, cada uno en su propia transacción.** Por lote: lectura de las filas existentes con `rowHash` `Op.in`, alta de las que no están, y para las que sí, las ramas descritas abajo.
 8. **Bajas.** Los `rowHash` que la tabla tiene activos y esta descarga no trajo.
