@@ -41,9 +41,11 @@ router.post('/refresh', ...refreshTokenValidator, validateFields, refresh);
 // Code: ESAVI-AUTH-006
 // POST: /api/auth/forgot-password
 // Public, and here that means without a previous credential: whoever calls it cannot authenticate,
-// which is the problem it solves. The limiter goes FIRST on purpose — five requests per IP every
-// 15 minutes, against the 100 of the global one — because a limiter that runs after the validators
-// has already paid the cost it exists to avoid. SPEC F43 3.4
+// which is the problem it solves. The limiter goes FIRST on purpose — five requests per EMAIL
+// ADDRESS every 15 minutes, against the anonymous quota of the global one — because a limiter that
+// runs after the validators has already paid the cost it exists to avoid. The key is the address
+// and not the IP so that one health facility does not share five requests among everyone in it
+// (DEUDA-046). SPEC F43 3.4
 router.post('/forgot-password', passwordResetLimiter, ...forgotPasswordValidator, validateFields, forgotPassword);
 
 

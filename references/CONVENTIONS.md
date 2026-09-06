@@ -208,6 +208,8 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | appPasswordReset | `006` | resolver y consumir un token — verifica formato, existencia, hash, consumo, invalidación, caducidad y usuario. **Sin ruta HTTP:** lo invoca `ESAVI-AUTH-007` |
 | appPasswordReset | `007` | invalidar las solicitudes vigentes de un usuario — se apoya en `IX_appPasswordReset_pending`. **Sin ruta HTTP:** lo invocan `ESAVI-AUTH-006`, `ESAVI-AUTH-007` y `ESAVI-USER-006` |
 | meddra | `006` | búsqueda de términos contra el API oficial de MedDRA — USER, `GET /api/meddra/search` |
+| whodrugProduct | `006` | búsqueda de medicación concomitante — excluye vacunas por ATC y filtra por país. USER, `GET /api/whodrug-products/search` |
+| whodrugProduct | `007` | sincronización del estándar desde el API de la UMC `regional-drugs` — SUPERADMIN, `POST /api/whodrug-products/sync` |
 | geoLocation | `006` | importación masiva de geografía y establecimientos desde `.xlsx` — SUPERADMIN, `POST /import` |
 | geoLocation | `007` | generación de la plantilla `.xlsx` con catálogos incrustados — ADMIN, `GET /import/template` |
 
@@ -357,6 +359,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | severeNotification | `SEVNOT` |
 | systemConfig | `SYSCONF` |
 | vaccineWhodrug | `WHODRUG` |
+| whodrugProduct | `WHODPROD` |
 | user | `USER` |
 | auth | `AUTH` |
 | appSession | `SESSION` |

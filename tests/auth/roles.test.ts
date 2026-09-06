@@ -713,7 +713,14 @@ const ROUTE_RULES: RouteRule[] = [
 
     // The only route of a domain without a table: a read-only proxy against the official MedDRA
     // API. USER, like every other search endpoint
-    { method: 'get',    path: '/api/meddra/search',                                      minRole: 'USER',       code: 'ESAVI-MEDDRA-006' }
+    { method: 'get',    path: '/api/meddra/search',                                      minRole: 'USER',       code: 'ESAVI-MEDDRA-006' },
+
+    // whodrugProduct (SPEC F56) — the raw mirror of the WHODrug standard. No 001, 004, 005A or
+    // 005B: the sync (007) is the only write door. 006 is USER like every other search endpoint;
+    // 002B is the inspection listing, ADMIN; 007 is SUPERADMIN, same as every bulk import
+    { method: 'get',    path: '/api/whodrug-products/search',                            minRole: 'USER',       code: 'ESAVI-WHODPROD-006' },
+    { method: 'get',    path: '/api/whodrug-products/admin',                             minRole: 'ADMIN',      code: 'ESAVI-WHODPROD-002B' },
+    { method: 'post',   path: '/api/whodrug-products/sync',                              minRole: 'SUPERADMIN', code: 'ESAVI-WHODPROD-007' }
 ];
 
 /**
@@ -769,7 +776,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(333);
+            expect(ROUTE_RULES).toHaveLength(336);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

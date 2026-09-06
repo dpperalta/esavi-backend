@@ -23,6 +23,7 @@ import { NotificationEvent } from './notificationEvent.model';
 import { NotificationMedication } from './notificationMedication.model';
 import { NotificationVaccine } from './notificationVaccine.model';
 import { VaccineWhodrug } from './vaccineWhodrug.model';
+import { WhodrugProduct } from './whodrugProduct.model';
 import { DiluentCatalog } from './diluentCatalog.model';
 import { NotificationDiluent } from './notificationDiluent.model';
 import { NotificationPregnancy } from './notificationPregnancy.model';
@@ -74,6 +75,7 @@ export {
     NotificationMedication,
     NotificationVaccine,
     VaccineWhodrug,
+    WhodrugProduct,
     DiluentCatalog,
     NotificationDiluent,
     NotificationPregnancy,

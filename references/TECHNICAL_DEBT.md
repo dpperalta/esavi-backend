@@ -65,7 +65,7 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-043](#deuda-043) | 🟡 | `sortOrder: 0` no se puede guardar en tres servicios |
 | [DEUDA-044](#deuda-044) | 🟠 | ✅ `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla |
 | [DEUDA-045](#deuda-045) | 🟠 | `appDetails.user` expone el UUID interno del usuario en toda respuesta |
-| [DEUDA-046](#deuda-046) | 🔴 | El rate limit se cuenta por IP y sin `trust proxy` |
+| [DEUDA-046](#deuda-046) | 🔴 | ✅ El rate limit se cuenta por IP y sin `trust proxy` |
 
 ## Mapa de resolución
 
@@ -938,7 +938,7 @@ Se evaluó y se descartó un middleware genérico sobre `res.json`. Reconocería
 ---
 
 <a id="deuda-046"></a>
-## DEUDA-046 🔴 El rate limit se cuenta por IP y sin `trust proxy`
+## DEUDA-046 🔴 ✅ El rate limit se cuenta por IP y sin `trust proxy`
 
 **Archivos**: `src/app.ts:71-79`, `src/middlewares/rateLimit.middleware.ts`
 
@@ -965,3 +965,22 @@ Dos precisiones de `express-rate-limit@8`, la versión instalada: `max` está de
 Queda fuera de alcance, pero conviene anotarlo: el store por defecto es en memoria, así que los contadores se reinician con el proceso y no se comparten entre instancias. Mientras el despliegue sea de una sola instancia no cambia nada.
 
 **Aceptación**: dos usuarios autenticados distintos detrás de la misma IP pública no consumen la cuota del otro. `trust proxy` declara los saltos reales y una cabecera `X-Forwarded-For` falsificada no altera la clave del limiter. El tráfico anónimo conserva un límite por IP, y `POST /api/auth/login` sigue frenado. Un 429 responde con el sobre `{ ok, message, code, errors }` e i18n, como cualquier otro error. Los tests siguen sin montar el limiter, por la razón que `app.ts:71-72` ya documenta.
+
+**Saldada el 2026-09-04**, sin spec, por la vía que proponía la «Dirección de la solución». Los cuatro problemas se cerraron juntos:
+
+**Sujeto.** `src/middlewares/rateLimit.middleware.ts` resuelve una clave por petición: verifica el JWT por su cuenta —`jwt.verify`, firma comprobada, sin tocar la base— y devuelve `user:<userId>` cuando el token es válido, cayendo a `ip:<ipKeyGenerator(req.ip)>` cuando no lo es. El resultado se memoriza en la propia petición bajo un `Symbol`, porque el limiter global lo pide dos veces —clave y cuota— y las rutas con limiter propio lo piden otra vez.
+
+**Techo.** El limiter global tiene cuota doble: `RATE_LIMIT_AUTHENTICATED_MAX` (1000 por ventana) para la cuenta autenticada y `RATE_LIMIT_ANONYMOUS_MAX` (100) para el tráfico anónimo, que sigue contándose por IP. El límite por IP no se elimina: queda reservado para quien todavía no se identificó, que es exactamente `POST /api/auth/login` y la recuperación de contraseña.
+
+**`trust proxy`.** `src/app.ts` declara `app.set('trust proxy', TRUST_PROXY_HOPS)` — un **número de saltos**, nunca `true`, con default 0. Una cabecera `X-Forwarded-For` falsificada no altera la clave mientras el despliegue declare sus saltos reales.
+
+**El 429.** Los tres limiters responden por `handler`, que entrega un `AppError` a `next()`: el 429 sale por `errorHandler` con el sobre `{ ok, message, code, errors }` y con i18n. Por eso `languageMiddleware` se monta ahora **antes** del limiter — `req.lang` tiene que existir para traducir el mensaje. Códigos: `RATE_LIMIT_EXCEEDED`, `AUTH_006_RATE_LIMIT_EXCEEDED`, `MEDDRA_006_RATE_LIMIT_EXCEEDED`.
+
+Dos desvíos respecto de lo que el diagnóstico preveía:
+
+1. **El `passwordResetLimiter` se cuenta por dirección de correo, no por IP.** En esa ruta nadie está autenticado por definición, así que una clave por IP daba cinco peticiones para todo el centro de salud. Lo que el limiter protege es un buzón inundado de enlaces, y la dirección es justamente el sujeto de ese abuso. Rotar la dirección para estrenar bucket no compra nada: la cuota anónima del limiter global sigue contando esas peticiones contra la IP y es el tope de volumen.
+2. **`dotenv` se movió a `src/config/env.ts`, importado como primera línea de `src/app.ts`.** `app.ts` llamaba a `dotenv.config()` en su cuerpo de módulo, que corre **después** de sus propios `import`: todo lo que un archivo de constantes leyera de `process.env` al cargarse veía el entorno vacío y se quedaba con su default en silencio. Sin ese cambio, ninguna de las variables `RATE_LIMIT_*` habría tenido efecto. Corrige de paso el mismo defecto latente en `pagination.constants.ts`.
+
+Fuera de alcance, como el diagnóstico ya anotaba: el store sigue siendo en memoria, así que los contadores se reinician con el proceso y no se comparten entre instancias.
+
+Verificado: `npm run check` en 0 — build, lint (0 errores), `i18n:check` con 974 claves idénticas en `es`, `en` y `nl`, y 3347 tests en 54 suites. Los limiters siguen siendo un `passThrough` bajo `NODE_ENV=test`, por la razón que `app.ts` ya documentaba.
