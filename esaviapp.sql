@@ -1813,6 +1813,10 @@ CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution ty
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'PRIVATE_PRACTICE', 'Private practice', 'PRIVATE_PRACTICE', 4);
 CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'OTHER', 'Other', 'OTHER', 5);
 
+CALL "upsertCatalogItem"('diagnosticType', 'Diagnostic type', 'PRESUMPTIVE',  'Presuntivo',  'PRESUMPTIVE',  1);
+CALL "upsertCatalogItem"('diagnosticType', 'Diagnostic type', 'CONFIRMED',    'Confirmado',  'CONFIRMED',    2);
+CALL "upsertCatalogItem"('diagnosticType', 'Diagnostic type', 'DIFFERENTIAL', 'Diferencial', 'DIFFERENTIAL', 3);
+
 CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '1', 'En las primeras horas de la jornada', 'FIRST_HOURS', 1);
 CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '2', 'En las últimas horas de la jornada', 'LAST_HOURS', 2);
 CALL "upsertCatalogItem"('vaccinationMoment', 'Vaccination moment', '3', 'Desconocido', 'UNKNOWN', 3);
