@@ -176,11 +176,10 @@ const updateNotificationMedicalHistory = async (req: Request, res: Response, nex
 const deleteNotificationMedicalHistory = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setNotificationMedicalHistoryActivationService(id, req.user, req.lang, false);
+        await setNotificationMedicalHistoryActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationMedicalHistory.deletedSuccess', req.lang),
-            data
+            message: getMessage('notificationMedicalHistory.deletedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-MEDHIST-005A: Error deleting Notification Medical History: ' + error, 'error');
@@ -196,11 +195,10 @@ const deleteNotificationMedicalHistory = async (req: Request, res: Response, nex
 const activateNotificationMedicalHistory = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setNotificationMedicalHistoryActivationService(id, req.user, req.lang, true);
+        await setNotificationMedicalHistoryActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationMedicalHistory.activatedSuccess', req.lang),
-            data
+            message: getMessage('notificationMedicalHistory.activatedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-MEDHIST-005B: Error activating Notification Medical History: ' + error, 'error');
@@ -219,8 +217,7 @@ const purgeNotificationMedicalHistory = async (req: Request, res: Response, next
         await purgeNotificationMedicalHistoryService(id, req.user, req.lang);
         return res.status(200).json({
             ok: true,
-            message: getMessage('notificationMedicalHistory.purgeSuccess', req.lang),
-            data: null
+            message: getMessage('notificationMedicalHistory.purgeSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-MEDHIST-005C: Error purging Notification Medical History: ' + error, 'error');
