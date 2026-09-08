@@ -9,6 +9,7 @@ import {
     getInvestigationDiagnosticById,
     getInvestigationDiagnosticsByCaseId,
     getInvestigationDiagnosticsByInvestigation,
+    purgeInvestigationDiagnostic,
     updateInvestigationDiagnostic
 } from '../controllers/investigationDiagnostic.controller';
 import {
@@ -19,7 +20,7 @@ import {
     updateInvestigationDiagnosticValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -53,6 +54,14 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // diagnoses only make sense read together and in their order. It is entered by the investigationId,
 // never by /, and it admits no filter — not even by diagnosticTypeItemId
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticInvestigationIdValidator, validateFields, getInvestigationDiagnosticsByInvestigation);
+
+// Purge Investigation Diagnostic - For SuperAdmin
+// Code: ESAVI-INVDIAG-005C
+// Declared BEFORE /:id, or Express would capture 'purge' as the :id of that route. It exists because
+// the table is deliberately left out of the preventPhysicalDelete loop of esaviapp.sql, so the row
+// can really be destroyed. Its canonical guard is the row's own state: purging an active diagnosis
+// is a 409
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...investigationDiagnosticIdValidator, validateFields, purgeInvestigationDiagnostic);
 
 // Activate Investigation Diagnostic
 // Code: ESAVI-INVDIAG-005B

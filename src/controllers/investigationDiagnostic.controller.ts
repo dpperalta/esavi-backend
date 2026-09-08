@@ -7,6 +7,7 @@ import {
     getInvestigationDiagnosticByIdService,
     getInvestigationDiagnosticsByCaseIdService,
     getInvestigationDiagnosticsByInvestigationService,
+    purgeInvestigationDiagnosticService,
     setInvestigationDiagnosticActivationService,
     updateInvestigationDiagnosticService
 } from '../services/investigationDiagnostic.service';
@@ -208,6 +209,26 @@ const activateInvestigationDiagnostic = async (req: Request, res: Response, next
     }
 }
 
+// Purge Investigation Diagnostic Controller - For SuperAdmin
+// Code: ESAVI-INVDIAG-005C
+const purgeInvestigationDiagnostic = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeInvestigationDiagnosticService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationDiagnostic.purgeSuccess', req.lang)
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVDIAG-005C: Error purging Investigation Diagnostic: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationDiagnostic.purgeFailed', req.lang), 500, 'INVDIAG_005C_PURGE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationDiagnostic,
     getInvestigationDiagnosticsByInvestigation,
@@ -216,5 +237,6 @@ export {
     getInvestigationDiagnosticsByCaseId,
     updateInvestigationDiagnostic,
     deleteInvestigationDiagnostic,
-    activateInvestigationDiagnostic
+    activateInvestigationDiagnostic,
+    purgeInvestigationDiagnostic
 };
