@@ -2,13 +2,16 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
-    createInvestigationDiagnostic
+    createInvestigationDiagnostic,
+    getAllInvestigationDiagnosticsByInvestigation,
+    getInvestigationDiagnosticsByInvestigation
 } from '../controllers/investigationDiagnostic.controller';
 import {
-    createInvestigationDiagnosticValidator
+    createInvestigationDiagnosticValidator,
+    investigationDiagnosticInvestigationIdValidator
 } from '../validators';
 
-const { USER } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -19,5 +22,20 @@ const router = Router();
 // INVVACAD, and the deviation from the canonical one of §9 belongs to the whole family and not to
 // this entity
 router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationDiagnosticValidator, validateFields, createInvestigationDiagnostic);
+
+// Get All Investigation Diagnostics By Investigation - For Admin
+// Code: ESAVI-INVDIAG-002B
+// Declared BEFORE /investigation/:id, or Express would capture 'admin' as the :id of that route.
+// It is the only door to a diagnosis that was retired, and the operation the index
+// IX_investigationDiagnostic_investigation exists for: the partial unique index of sortOrder
+// excludes precisely the rows with deletedAt sealed that this listing has to read
+router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN), ...investigationDiagnosticInvestigationIdValidator, validateFields, getAllInvestigationDiagnosticsByInvestigation);
+
+// Get Investigation Diagnostics By Investigation
+// Code: ESAVI-INVDIAG-002A
+// The listing by parent, and not a global listing with filters: this is a collection, and its
+// diagnoses only make sense read together and in their order. It is entered by the investigationId,
+// never by /, and it admits no filter — not even by diagnosticTypeItemId
+router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticInvestigationIdValidator, validateFields, getInvestigationDiagnosticsByInvestigation);
 
 export default router;

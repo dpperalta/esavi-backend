@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AuthUser } from '../types';
 import {
-    createInvestigationDiagnosticService
+    createInvestigationDiagnosticService,
+    getAllInvestigationDiagnosticsByInvestigationService,
+    getInvestigationDiagnosticsByInvestigationService
 } from '../services/investigationDiagnostic.service';
 
 // Create Investigation Diagnostic Controller
@@ -24,6 +27,66 @@ const createInvestigationDiagnostic = async (req: Request, res: Response, next: 
     }
 }
 
+// Get Active Investigation Diagnostics By Investigation Controller
+// Code: ESAVI-INVDIAG-002A
+const getInvestigationDiagnosticsByInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getInvestigationDiagnosticsByInvestigationService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationDiagnostic.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVDIAG-002A: Error fetching Investigation Diagnostics by Investigation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationDiagnostic.getFailed', req.lang), 500, 'INVDIAG_002A_FETCH_FAILED', error));
+    }
+}
+
+// Get All Investigation Diagnostics By Investigation Controller - For Admin
+// Code: ESAVI-INVDIAG-002B
+const getAllInvestigationDiagnosticsByInvestigation = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getAllInvestigationDiagnosticsByInvestigationService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationDiagnostic.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVDIAG-002B: Error fetching all Investigation Diagnostics by Investigation: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationDiagnostic.getFailed', req.lang), 500, 'INVDIAG_002B_FETCH_FAILED', error));
+    }
+}
+
 export {
-    createInvestigationDiagnostic
+    createInvestigationDiagnostic,
+    getInvestigationDiagnosticsByInvestigation,
+    getAllInvestigationDiagnosticsByInvestigation
 };

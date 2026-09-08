@@ -6,6 +6,7 @@ import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.
 import { AppDetails, AuthUser, CreateInvestigationDiagnosticInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DIAGNOSTIC_TYPE_CATALOG_CODE } from '../constants/investigation.constants';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -124,6 +125,35 @@ const findValidInvestigation = async (investigationId: string, op: string, lang:
         );
     }
     return investigation;
+}
+
+// The same check as findValidInvestigation, relaxed by canViewInactive: the inherited visibility
+// applied to the listings, where the parent is not the target of the write but the gate to the
+// collection. A retired investigation answers 404 for USER and ADMIN, and comes back for whoever may
+// see inactive rows, today SUPERADMIN.
+//
+// Only the state is relaxed. Existence is relaxed for nobody: an investigation that does not exist
+// has no diagnoses to list under any role, and answering an empty page would be a different lie.
+//
+// A retired investigation answers 404 instead of an empty page, because an empty page would say
+// "this investigation has no diagnoses" to somebody who is simply not allowed to see them
+const assertInvestigationIsVisible = async (
+    investigationId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const investigation = await Investigation.findOne({
+        where: canViewInactive ? { investigationId } : { investigationId, isActive: true },
+        attributes: ['investigationId']
+    });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationDiagnostic.investigationNotFound', lang),
+            404,
+            `INVDIAG_${ op }_INVESTIGATION_NOT_FOUND`
+        );
+    }
 }
 
 // The guard of the diagnosticTypeItemId of 001 and 004, with the three usual conditions: the item
@@ -399,6 +429,80 @@ const createInvestigationDiagnosticService = async (
     return diagnostic ? toInvestigationDiagnosticResponse(diagnostic) : null;
 }
 
+// Get Active Investigation Diagnostics By Investigation Service
+// Code: ESAVI-INVDIAG-002A
+// The listing is entered by the foreign key and never by /: a diagnosis does not exist without its
+// investigation, and a global listing has no reader.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter at all
+// — not by diagnosticTypeItemId, not by date range, not by term. Those are out of the scope of this
+// spec: the list of one investigation is three or four rows and the client filters in memory
+const getInvestigationDiagnosticsByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertInvestigationIsVisible(investigationId, '002A', lang, canViewInactive);
+
+    const diagnostics = await InvestigationDiagnostic.findAndCountAll({
+        where: { investigationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE, DIAGNOSTIC_TYPE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: diagnostics.count,
+        rows: diagnostics.rows.map(toInvestigationDiagnosticResponse)
+    };
+}
+
+// Get All Investigation Diagnostics By Investigation Service - For Admin
+// Code: ESAVI-INVDIAG-002B
+// The same listing as 002A without the isActive filter: it is the only door to a diagnosis that was
+// retired, and therefore the entry point of whoever is going to reactivate or purge it. It is also
+// where the 006 sends anybody who needs to see inactive rows, since no admin variant of that
+// operation is declared.
+//
+// paranoid: false is declarative here — the model is not paranoid, so deletedAt is a plain column
+// and no scope would hide the sealed rows — and it is written for the same reason
+// entityActivation.service.ts:21 writes it: the intent is to see everything, including what a 005A
+// sealed. Those are exactly the rows IX_investigationDiagnostic_investigation exists for: the
+// partial unique index leaves them out.
+//
+// The parent guard still applies: an ADMIN sees inactive diagnoses, not the diagnoses of an inactive
+// investigation
+const getAllInvestigationDiagnosticsByInvestigationService = async (
+    investigationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertInvestigationIsVisible(investigationId, '002B', lang, canViewInactive);
+
+    const diagnostics = await InvestigationDiagnostic.findAndCountAll({
+        where: { investigationId },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE, DIAGNOSTIC_TYPE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: diagnostics.count,
+        rows: diagnostics.rows.map(toInvestigationDiagnosticResponse)
+    };
+}
+
 export {
-    createInvestigationDiagnosticService
+    createInvestigationDiagnosticService,
+    getInvestigationDiagnosticsByInvestigationService,
+    getAllInvestigationDiagnosticsByInvestigationService
 };
