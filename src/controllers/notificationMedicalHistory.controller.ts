@@ -7,6 +7,7 @@ import {
     getNotificationMedicalHistoriesByCaseIdService,
     getNotificationMedicalHistoriesByNotificationService,
     getNotificationMedicalHistoryByIdService,
+    purgeNotificationMedicalHistoryService,
     setNotificationMedicalHistoryActivationService,
     updateNotificationMedicalHistoryService
 } from '../services/notificationMedicalHistory.service';
@@ -210,6 +211,26 @@ const activateNotificationMedicalHistory = async (req: Request, res: Response, n
         next(new AppError(getMessage('notificationMedicalHistory.activatedFailed', req.lang), 500, 'MEDHIST_005B_ACTIVATION_FAILED', error));
     }
 }
+// Purging Notification Medical History Controller - For SuperAdmin
+// Code: ESAVI-MEDHIST-005C
+const purgeNotificationMedicalHistory = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        await purgeNotificationMedicalHistoryService(id, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedicalHistory.purgeSuccess', req.lang),
+            data: null
+        });
+    } catch (error) {
+        esaviLog('ESAVI-MEDHIST-005C: Error purging Notification Medical History: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedicalHistory.purgeFailed', req.lang), 500, 'MEDHIST_005C_PURGE_FAILED', error));
+    }
+}
 
 export {
     createNotificationMedicalHistory,
@@ -219,5 +240,6 @@ export {
     getNotificationMedicalHistoriesByCaseId,
     updateNotificationMedicalHistory,
     deleteNotificationMedicalHistory,
-    activateNotificationMedicalHistory
+    activateNotificationMedicalHistory,
+    purgeNotificationMedicalHistory
 };

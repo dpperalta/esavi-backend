@@ -4,6 +4,7 @@ import { DiagnosticTerm, EsaviCase, Notification, NotificationMedicalHistory } f
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateNotificationMedicalHistoryInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -794,6 +795,50 @@ const setNotificationMedicalHistoryActivationService = async (
     }
 }
 
+// Purging Notification Medical History Service - For SuperAdmin
+// Code: ESAVI-MEDHIST-005C
+// notificationMedicalHistory is deliberately left out of the preventPhysicalDelete loop of
+// esaviapp.sql, so the row can really be destroyed — which is what makes a 005C belong to it at all.
+//
+// purgeEntityService serves as it is, with no modification: its canonical guard — the row must have
+// been retired with a 005A first, 409 otherwise — applies over the row itself. The state of the
+// notification is deliberately not checked.
+//
+// This table is a leaf of the graph. Nothing references medicalHistoryId, so destroying a row drags
+// no other one, there is no cascade to count and no ids to dump — which is why this 005C has no
+// dump of its own, unlike the one of its parent. The foreign key it cites towards diagnosticTerm is
+// ON DELETE RESTRICT in the other direction — an antecedent keeps a term from being physically
+// deleted, never the other way round — and that master is in preventPhysicalDelete anyway, so the
+// term it cited survives the purge untouched.
+//
+// No appDetails entry either: the row is destroyed in the same transaction, which is the absence
+// CONVENTIONS.md §6 declares legitimate. The only trace is the warn line purgeEntityService writes
+// with the whole snapshot before destroying it
+const purgeNotificationMedicalHistoryService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string
+) => {
+    const transaction = await sequelize.transaction();
+    try {
+        await purgeEntityService({
+            model: NotificationMedicalHistory,
+            where: { medicalHistoryId: id },
+            transaction,
+            operationCode: 'ESAVI-MEDHIST-005C',
+            userId: authUser?.userId || 'undefined',
+            notFoundMessage: getMessage('notificationMedicalHistory.notFound', lang),
+            notFoundCode: 'MEDHIST_005C_NOT_FOUND',
+            stillActiveMessage: getMessage('notificationMedicalHistory.stillActive', lang, { id }),
+            stillActiveCode: 'MEDHIST_005C_STILL_ACTIVE'
+        });
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationMedicalHistoryService,
     getNotificationMedicalHistoriesByNotificationService,
@@ -801,5 +846,6 @@ export {
     getNotificationMedicalHistoryByIdService,
     getNotificationMedicalHistoriesByCaseIdService,
     updateNotificationMedicalHistoryService,
-    setNotificationMedicalHistoryActivationService
+    setNotificationMedicalHistoryActivationService,
+    purgeNotificationMedicalHistoryService
 };

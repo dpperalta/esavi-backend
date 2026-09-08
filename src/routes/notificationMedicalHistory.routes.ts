@@ -8,6 +8,7 @@ import {
     getNotificationMedicalHistoriesByCaseId,
     deleteNotificationMedicalHistory,
     getNotificationMedicalHistoryById,
+    purgeNotificationMedicalHistory,
     updateNotificationMedicalHistory,
     getNotificationMedicalHistoriesByNotification
 } from '../controllers/notificationMedicalHistory.controller';
@@ -49,6 +50,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // Code: ESAVI-MEDHIST-002A
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryNotificationIdValidator, ...notificationMedicalHistoryListValidator, validateFields, getNotificationMedicalHistoriesByNotification);
 
+// Purge Notification Medical History - For SuperAdmin
+// Code: ESAVI-MEDHIST-005C
+// The table is outside the preventPhysicalDelete loop, so the row really is destroyed. The guard is
+// the canonical one: it must have been retired with a 005A first
+router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicalHistoryIdValidator, validateFields, purgeNotificationMedicalHistory);
 // Activate Notification Medical History - For SuperAdmin
 // Code: ESAVI-MEDHIST-005B
 // It stays in SUPERADMIN with F21 and F22 and not with F33: the reactivation drags the sortOrder
