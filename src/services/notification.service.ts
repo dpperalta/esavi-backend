@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationDiluent, NotificationEvent, NotificationMedication, NotificationPregnancy, NotificationPregnancyComplication, NotificationVaccine, SevereNotification } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationDiluent, NotificationEvent, NotificationMedicalHistory, NotificationMedication, NotificationPregnancy, NotificationPregnancyComplication, NotificationVaccine, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -934,6 +934,47 @@ const dumpNotificationPregnancyComplicationsBeforeCascade = async (
     }
 }
 
+// The dump of the antecedents SPEC F57 added, with the form of the vaccines' one: a direct child of
+// the notification, one hop, reached by notificationId.
+//
+// notificationMedicalHistory is not sealed by ESAVI-NOTIFCN-005A — the cascade of that operation
+// only moves the deletedAt of the two one to one details, and the one to many children with a state
+// of their own stay out of it, exactly like notificationEvent, notificationMedication and
+// notificationVaccine. What does reach them is this 005C: the ON DELETE CASCADE of Postgres destroys
+// them, and this line is the only trace left of it.
+//
+// It is a trace, not a protection: the purge is not blocked and the cascade fires all the same. It is
+// the line of F16, F21 and F22.
+//
+// One single warn line with the count and the list of medicalHistoryId, retired rows included:
+// paranoid: false is what makes the count match what the database is about to destroy. A
+// notification with no antecedents leaves no line at all
+const dumpNotificationMedicalHistoriesBeforeCascade = async (
+    notificationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const medicalHistories = await NotificationMedicalHistory.findAll({
+            where: { notificationId },
+            attributes: ['medicalHistoryId'],
+            paranoid: false,
+            transaction
+        });
+        if( medicalHistories.length === 0 ) {
+            return;
+        }
+        esaviLog(
+            `ESAVI-NOTIFCN-005C: ${ medicalHistories.length } notificationMedicalHistory row(s) dragged by ` +
+            `ON DELETE CASCADE and purged by ${ userId }. medicalHistoryId: ` +
+            `${ medicalHistories.map(( medicalHistory ) => medicalHistory.medicalHistoryId).join(', ') }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(`ESAVI-NOTIFCN-005C: Failed to dump the dragged notificationMedicalHistories: ${ error }`, 'error');
+    }
+}
+
 // Purging Notification Service - For SuperAdmin
 // Code: ESAVI-NOTIFCN-005C
 // notification is outside the preventPhysicalDelete loop of esaviapp.sql:1363-1366, so the row
@@ -966,6 +1007,7 @@ const purgeNotificationService = async (id: string, authUser: AuthUser | undefin
             await dumpNotificationDiluentsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationPregnancyBeforeCascade(id, authUser?.userId || 'undefined', transaction);
             await dumpNotificationPregnancyComplicationsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
+            await dumpNotificationMedicalHistoriesBeforeCascade(id, authUser?.userId || 'undefined', transaction);
         }
 
         await purgeEntityService({

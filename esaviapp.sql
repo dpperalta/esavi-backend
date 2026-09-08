@@ -1002,6 +1002,24 @@ CREATE TABLE IF NOT EXISTS "notificationPregnancyComplication" (
 );
 CREATE INDEX IF NOT EXISTS "IX_notificationPregnancyComplication_pregnancy" ON "notificationPregnancyComplication" ("pregnancyId");
 
+CREATE TABLE IF NOT EXISTS "notificationMedicalHistory" (
+  "medicalHistoryId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "notificationId" uuid NOT NULL,
+  "diagnosticTermId" uuid,
+  "historyRaw" varchar(500),
+  "sortOrder" smallint NOT NULL DEFAULT 0 CHECK ("sortOrder" >= 0),
+  "notes" text,
+  "isActive" boolean NOT NULL DEFAULT true,
+  "createdAt" timestamptz NOT NULL DEFAULT current_timestamp,
+  "updatedAt" timestamptz,
+  "deletedAt" timestamptz,
+  "sysDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT "FK_notificationMedicalHistory_notification" FOREIGN KEY ("notificationId") REFERENCES "notification" ("notificationId") ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT "FK_notificationMedicalHistory_term" FOREIGN KEY ("diagnosticTermId") REFERENCES "diagnosticTerm" ("diagnosticTermId") ON UPDATE CASCADE ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS "IX_notificationMedicalHistory_notification" ON "notificationMedicalHistory" ("notificationId");
+
 -- -----------------------------------------------------------------------------
 -- Investigation split model
 -- -----------------------------------------------------------------------------
@@ -1436,6 +1454,7 @@ BEGIN
       ('notificationVaccine', 'notificationId'),
       ('notificationDiluent', 'vaccineId'),
       ('notificationPregnancyComplication', 'pregnancyId'),
+      ('notificationMedicalHistory', 'notificationId'),
       ('investigationTeamMember', 'investigationId'),
       ('investigationPregnancyCondition', 'investigationId'),
       ('evaluationInstitution', 'investigationId'),
@@ -1467,6 +1486,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS "UQ_notificationDiluent_parent_sortOrder"
   WHERE "deletedAt" IS NULL AND "sortOrder" IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS "UQ_notificationPregnancyComplication_parent_sortOrder"
   ON "notificationPregnancyComplication" ("pregnancyId", "sortOrder")
+  WHERE "deletedAt" IS NULL AND "sortOrder" IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS "UQ_notificationMedicalHistory_parent_sortOrder"
+  ON "notificationMedicalHistory" ("notificationId", "sortOrder")
   WHERE "deletedAt" IS NULL AND "sortOrder" IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS "UQ_investigationTeamMember_parent_sortOrder"
   ON "investigationTeamMember" ("investigationId", "sortOrder")

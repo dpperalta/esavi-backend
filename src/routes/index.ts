@@ -27,6 +27,7 @@ import diluentCatalogRoutes from './diluentCatalog.routes';
 import notificationDiluentRoutes from './notificationDiluent.routes';
 import notificationPregnancyRoutes from './notificationPregnancy.routes';
 import notificationPregnancyComplicationRoutes from './notificationPregnancyComplication.routes';
+import notificationMedicalHistoryRoutes from './notificationMedicalHistory.routes';
 import investigationRoutes from './investigation.routes';
 import investigationSourceRoutes from './investigationSource.routes';
 import investigationAutopsyRoutes from './investigationAutopsy.routes';
@@ -90,6 +91,7 @@ router.use('/notification-pregnancies', notificationPregnancyRoutes);
 // The notification- prefix tells it apart from investigationPregnancyCondition, which is the
 // pregnancy table of the investigation branch
 router.use('/notification-pregnancy-complications', notificationPregnancyComplicationRoutes);
+router.use('/notification-medical-histories', notificationMedicalHistoryRoutes);
 router.use('/investigations', investigationRoutes);
 // The first of the fourteen satellites of investigation. The investigation- prefix is what tells
 // it apart from the notification branch, which has its own sources of verification

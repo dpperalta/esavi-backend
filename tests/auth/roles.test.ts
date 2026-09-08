@@ -390,6 +390,25 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'put',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-004' },
     { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'ADMIN',      code: 'ESAVI-PREGCOMP-005A' },
 
+    // notificationMedicalHistory (SPEC F57) — the relevant medical antecedents of the notified
+    // patient, and the first table this repository added to the DDL. Sixth satellite of notification
+    // and fourth one to many, so it repeats the nine rows of NOTIFEVT, NOTIFMED and NOTIFVAC: the two
+    // listings by notification split by role, the 006 that enters by the caseId because that is what
+    // the client holds, and the 005C the entity gets for being left outside the preventPhysicalDelete
+    // loop on purpose.
+    // The 004 deviates from the family matrix and stays in USER, with F33 and against F21 and F22:
+    // whoever records the antecedent is whoever corrects it. The 005B stays in SUPERADMIN with F21
+    // and F22, because the reactivation drags the sortOrder reassignment (§3.4)
+    { method: 'post',   path: '/api/notification-medical-histories',                              minRole: 'USER',       code: 'ESAVI-MEDHIST-001' },
+    { method: 'get',    path: `/api/notification-medical-histories/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-MEDHIST-006' },
+    { method: 'get',    path: `/api/notification-medical-histories/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-MEDHIST-002B' },
+    { method: 'get',    path: `/api/notification-medical-histories/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-MEDHIST-002A' },
+    { method: 'delete', path: `/api/notification-medical-histories/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-MEDHIST-005C' },
+    { method: 'patch',  path: `/api/notification-medical-histories/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-MEDHIST-005B' },
+    { method: 'get',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-003' },
+    { method: 'put',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-004' },
+    { method: 'delete', path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-MEDHIST-005A' },
+
     // investigation (SPEC F28) — the root of the investigation block and the fourth satellite of
     // esaviCase, one to one with it through UQ_investigation_case. Seven canonical operations plus
     // 006, which reads by the caseId because that is what the client holds, and 005C, which the
@@ -776,7 +795,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(336);
+            expect(ROUTE_RULES).toHaveLength(345);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {

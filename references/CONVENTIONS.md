@@ -173,6 +173,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | notificationEvent | `006` | listar los eventos de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N eventos |
 | notificationMedication | `006` | listar los medicamentos de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N medicamentos |
 | notificationVaccine | `006` | listar las vacunas de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N vacunas |
+| notificationMedicalHistory | `006` | listar los antecedentes médicos de un caso — la cadena `caso → notificación` es uno a uno, pero de la notificación cuelgan N antecedentes |
 | notificationPregnancy | `006` | obtener el embarazo de una notificación — la relación es uno a uno y se entra por el `notificationId` |
 | investigation | `006` | obtener la investigación de un caso — la relación es uno a uno y se entra por el `caseId` |
 | investigationSource | `006` | obtener las fuentes de investigación de un caso — la cadena `caso → investigación → fuente` es uno a uno en los dos saltos |
@@ -351,6 +352,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | notificationDiluent | `NOTIFDIL` |
 | notificationEvent | `NOTIFEVT` |
 | notificationMedication | `NOTIFMED` |
+| notificationMedicalHistory | `MEDHIST` |
 | notificationPregnancy | `NOTIFPRG` |
 | notificationPregnancyComplication | `PREGCOMP` |
 | notificationVaccine | `NOTIFVAC` |
