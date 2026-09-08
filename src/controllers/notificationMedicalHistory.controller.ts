@@ -190,6 +190,26 @@ const deleteNotificationMedicalHistory = async (req: Request, res: Response, nex
         next(new AppError(getMessage('notificationMedicalHistory.deletedFailed', req.lang), 500, 'MEDHIST_005A_DELETE_FAILED', error));
     }
 }
+// Activate Notification Medical History Controller - For SuperAdmin
+// Code: ESAVI-MEDHIST-005B
+const activateNotificationMedicalHistory = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setNotificationMedicalHistoryActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedicalHistory.activatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-MEDHIST-005B: Error activating Notification Medical History: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedicalHistory.activatedFailed', req.lang), 500, 'MEDHIST_005B_ACTIVATION_FAILED', error));
+    }
+}
 
 export {
     createNotificationMedicalHistory,
@@ -198,5 +218,6 @@ export {
     getNotificationMedicalHistoryById,
     getNotificationMedicalHistoriesByCaseId,
     updateNotificationMedicalHistory,
-    deleteNotificationMedicalHistory
+    deleteNotificationMedicalHistory,
+    activateNotificationMedicalHistory
 };

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateNotificationMedicalHistory,
     createNotificationMedicalHistory,
     getAllNotificationMedicalHistoriesByNotification,
     getNotificationMedicalHistoriesByCaseId,
@@ -19,7 +20,7 @@ import {
     updateNotificationMedicalHistoryValidator
 } from '../validators';
 
-const { ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -48,6 +49,11 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // Code: ESAVI-MEDHIST-002A
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryNotificationIdValidator, ...notificationMedicalHistoryListValidator, validateFields, getNotificationMedicalHistoriesByNotification);
 
+// Activate Notification Medical History - For SuperAdmin
+// Code: ESAVI-MEDHIST-005B
+// It stays in SUPERADMIN with F21 and F22 and not with F33: the reactivation drags the sortOrder
+// reassignment, and in the notification block that operation never dropped below SUPERADMIN
+router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicalHistoryIdValidator, validateFields, activateNotificationMedicalHistory);
 // Get Notification Medical History By ID
 // Code: ESAVI-MEDHIST-003
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, validateFields, getNotificationMedicalHistoryById);
