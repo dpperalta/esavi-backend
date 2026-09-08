@@ -172,11 +172,10 @@ const updateInvestigationDiagnostic = async (req: Request, res: Response, next: 
 const deleteInvestigationDiagnostic = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setInvestigationDiagnosticActivationService(id, req.user, req.lang, false);
+        await setInvestigationDiagnosticActivationService(id, req.user, req.lang, false);
         return res.status(200).json({
             ok: true,
-            message: getMessage('investigationDiagnostic.deletedSuccess', req.lang),
-            data
+            message: getMessage('investigationDiagnostic.deletedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-INVDIAG-005A: Error deleting Investigation Diagnostic: ' + error, 'error');
@@ -193,11 +192,10 @@ const deleteInvestigationDiagnostic = async (req: Request, res: Response, next: 
 const activateInvestigationDiagnostic = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await setInvestigationDiagnosticActivationService(id, req.user, req.lang, true);
+        await setInvestigationDiagnosticActivationService(id, req.user, req.lang, true);
         return res.status(200).json({
             ok: true,
-            message: getMessage('investigationDiagnostic.activatedSuccess', req.lang),
-            data
+            message: getMessage('investigationDiagnostic.activatedSuccess', req.lang)
         });
     } catch (error) {
         esaviLog('ESAVI-INVDIAG-005B: Error activating Investigation Diagnostic: ' + error, 'error');

@@ -662,6 +662,36 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/investigation-communities/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOMM-003' },
     { method: 'put',    path: `/api/investigation-communities/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOMM-004' },
 
+    // investigationDiagnostic (SPEC F58) — the final diagnoses the investigated patient leaves the
+    // investigation with, and the SECOND TABLE this repository adds to the DDL after F57, the first
+    // one that also seeds its own catalog. NINE ROWS.
+    // A daughter of investigation and NOT of investigationClinicalEvaluation, deliberately: a final
+    // diagnosis can be known without the clinical evaluation having been run, so the inherited
+    // visibility is a single hop and reads the parent's own isActive — the shape of F31 and F37, not
+    // the two hop chain of F33.
+    // The listing is DUAL and entered by the parent, never by /: 002A on /investigation/:id for USER
+    // returns only the live rows, 002B on /admin/investigation/:id for ADMIN returns them all,
+    // including the ones a 005A sealed. The :id of the other operations is the diagnosticId, because
+    // the row has a key of its own. Its 006 enters by the caseId and walks case -> investigation ->
+    // diagnostics, returning { count, rows } because the last hop is one to many.
+    // TWO ROWS DEVIATE from the canonical matrix, the same deviation as F05 to F41: 001 and 004 on
+    // USER, because the diagnosis is captured in the same operational flow as the case. And 005B is
+    // on ADMIN and not SUPERADMIN, the matrix of the investigation family — so the sortOrder
+    // reassignment the reactivation carries lives in ADMIN too.
+    // 005C exists because investigationDiagnostic is deliberately left OUT of the
+    // preventPhysicalDelete loop of esaviapp.sql.
+    // Nothing here is encrypted: two foreign keys to catalogs, a date and two free texts, with no
+    // person's name among them, so no row raises its minimum for that reason
+    { method: 'post',   path: '/api/investigation-diagnostics',                             minRole: 'USER',       code: 'ESAVI-INVDIAG-001' },
+    { method: 'get',    path: `/api/investigation-diagnostics/case/${ UUID }`,              minRole: 'USER',       code: 'ESAVI-INVDIAG-006' },
+    { method: 'get',    path: `/api/investigation-diagnostics/admin/investigation/${ UUID }`, minRole: 'ADMIN',    code: 'ESAVI-INVDIAG-002B' },
+    { method: 'get',    path: `/api/investigation-diagnostics/investigation/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-INVDIAG-002A' },
+    { method: 'delete', path: `/api/investigation-diagnostics/purge/${ UUID }`,             minRole: 'SUPERADMIN', code: 'ESAVI-INVDIAG-005C' },
+    { method: 'patch',  path: `/api/investigation-diagnostics/activate/${ UUID }`,          minRole: 'ADMIN',      code: 'ESAVI-INVDIAG-005B' },
+    { method: 'get',    path: `/api/investigation-diagnostics/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVDIAG-003' },
+    { method: 'put',    path: `/api/investigation-diagnostics/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVDIAG-004' },
+    { method: 'delete', path: `/api/investigation-diagnostics/${ UUID }`,                   minRole: 'ADMIN',      code: 'ESAVI-INVDIAG-005A' },
+
     // finalClassification (SPEC F41) — the causality verdict of the WHO/PAHO algorithm, and the
     // fifth and last satellite of esaviCase to get a spec. NINE ROWS, and it is the first entity
     // since F26 with 005A and 005B: the table has an isActive column of its own (esaviapp.sql:1275),
@@ -795,7 +825,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(345);
+            expect(ROUTE_RULES).toHaveLength(354);
         });
 
         it('has a role below every minimum it uses, so the 403 side is always testable', () => {
