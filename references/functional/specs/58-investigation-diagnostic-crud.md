@@ -11,7 +11,7 @@
 
 La investigación termina en un diagnóstico y **no hay ninguna columna donde escribirlo**. `investigationClinicalEvaluation` (`esaviapp.sql:1182`) guarda `completeClinicalSummary`, `signsAndSymptoms` y `familyClinicalDetails`: tres campos `text` de prosa libre. `investigation` (`:1026`) guarda `statusItemId`, que es el **desenlace** del paciente —recuperado, fallecido—, no lo que se le diagnosticó. Y `finalClassification` (`:1357`) guarda la **causalidad** frente a la vacuna, que es otra pregunta distinta. El diagnóstico final, hoy, vive dentro de un párrafo de texto que nadie puede agregar, contar ni cruzar con el maestro clínico.
 
-**A — Es la segunda tabla nueva del repositorio, y la primera que siembra catálogo.** F57 abrió la puerta apoyándose en F47: se edita `esaviapp.sql` en el sitio, sin script de migración, porque el sistema está en desarrollo y la base se carga entera. Ese supuesto sigue vigente. La diferencia con F57 es que aquí no basta con el `CREATE TABLE`: la tabla trae una FK a `catalogItem` cuyo `catalogType` **no existe todavía**, así que el spec siembra también los tres `CALL "upsertCatalogItem"` de `diagnosticType`. **El esquema pasa de 50 a 51 tablas.** La línea de `CLAUDE.md` que hoy dice «49 tables» arrastra el ajuste pendiente de F57 y queda en 51.
+**A — Es la segunda tabla nueva del repositorio, y la primera que siembra catálogo.** F57 abrió la puerta apoyándose en F47: se edita `esaviapp.sql` en el sitio, sin script de migración, porque el sistema está en desarrollo y la base se carga entera. Ese supuesto sigue vigente. La diferencia con F57 es que aquí no basta con el `CREATE TABLE`: la tabla trae una FK a `catalogItem` cuyo `catalogType` **no existe todavía**, así que el spec siembra también los tres `CALL "upsertCatalogItem"` de `diagnosticType`. **El esquema pasa de 49 a 50 tablas.** La línea de `CLAUDE.md` dice hoy «49 tables» y «46» modelos, cifras que ya son correctas —F57 dejó contadas su tabla y su modelo—, así que este spec las deja en 50 y 47.
 
 **B — De forma es el gemelo de F33 con una diferencia de profundidad y dos columnas propias.** PK propia con `DEFAULT gen_random_uuid()`, FK `NOT NULL` al padre con `ON DELETE CASCADE`, `diagnosticTermId` anulable con `ON DELETE RESTRICT`, una sola columna de texto libre, `sortOrder` por trigger, `isActive` propio y las cinco transversales. Pero F33 es **nieta** —cuelga de `investigationMedicalHistory`— y ésta es **hija directa** de `investigation`: la visibilidad heredada es de **un salto**, como en `investigationTeamMember` y `investigationVaccineAdministered`. Y añade dos columnas que ninguna hermana de resolución clínica tiene: `diagnosticDate` y `diagnosticTypeItemId`.
 
@@ -34,7 +34,7 @@ La investigación termina en un diagnóstico y **no hay ninguna columna donde es
 - **La tabla nueva en `esaviapp.sql`**, con la forma de §3.1: `CREATE TABLE`, su índice `IX_investigationDiagnostic_investigation`, su fila en el bucle `setSortOrderByParent` y su índice único parcial `UQ_investigationDiagnostic_parent_sortOrder`. **Fuera** de `preventPhysicalDelete`. Se inserta al final del bloque `-- Investigation split model`, después de `investigationCommunity` (`esaviapp.sql:1355`) y antes de `finalClassification` (`:1357`).
 - **La siembra del `catalogType` `diagnosticType`**, tres `CALL "upsertCatalogItem"` en el bloque de siembra, junto a `evaluationInstitutionType` (`:1783`): `PRESUMPTIVE` / Presuntivo, `CONFIRMED` / Confirmado, `DIFFERENTIAL` / Diferencial, con `value` idéntico al `code` y `sortOrder` 1 a 3. Es la primera vez que un spec de entidad siembra el catálogo del que depende, en vez de declararlo precondición de despliegue.
 - **La constante `DIAGNOSTIC_TYPE_CATALOG_CODE = 'diagnosticType'`** en `src/constants/investigation.constants.ts`, junto a las tres que ya viven ahí, y **nunca escrita como literal en el servicio** — la misma regla que verifican por `grep` los criterios de aceptación de F28.
-- **La cuenta de tablas de `CLAUDE.md`**, que queda en **51**, y la de modelos si la línea la cita.
+- **La cuenta de tablas de `CLAUDE.md`**, que queda en **50**, y la de modelos, que queda en **47**.
 - Los siete artefactos completos: modelo, asociaciones, tipos, validadores, servicio, controlador y ruta, bajo la ruta base `/api/investigation-diagnostics`.
 - **Nueve operaciones y ninguna más:** `001` crear, `002A` listar activos por investigación, `002B` listar todos por investigación, `003` obtener por ID, `004` actualizar, `005A` desactivar, `005B` reactivar, `005C` borrado físico y **`006` listar los diagnósticos de un caso**. El `006` tiene ruta HTTP, como el de `INVTEAM` e `INVVACAD`, y **se registra en la tabla de operaciones no canónicas de `references/CONVENTIONS.md` §6**.
 - **Matriz de roles de la familia de investigación**, no la canónica de §9: `001`, `002A`, `003`, `004` y `006` para **USER**; `002B`, `005A` y `005B` para **ADMIN**; `005C` para **SUPERADMIN**. Es la matriz literal de `INVTEAM`, `INVPREG` e `INVVACAD` — quien captura la investigación es el mismo USER que captura su diagnóstico. La desviación frente a §9 se razona en §6.
@@ -57,7 +57,7 @@ La investigación termina en un diagnóstico y **no hay ninguna columna donde es
 - **`sortOrder` asignado por la base.** El `001` nunca lo envía. Exige la lista explícita `CREATE_FIELDS` en el `create`, por la razón que F16 §3.2 documentó: sin ella la validación `notNull` de Sequelize mata el alta antes de que el trigger llegue a ejecutarse.
 - **Reasignación de `sortOrder` en `ESAVI-INVDIAG-005B`** cuando el número que ocupaba la fila ya lo tomó otro diagnóstico vivo de la misma investigación. Es una **escritura con intención propia**, declarada como no diferencial en §3.5.
 - **Normalización al escribir: solo `trim()`** sobre `diagnosticName` y `notes`, con `normalizeText`. Ningún `toTitleCase` ni `toConstantCase` — no hay `code` propio, y el del término lo normaliza `resolveDiagnosticTermService`.
-- **`005A` no se bloquea por nada.** La tabla es hoja del grafo: ninguna de las 51 la referencia. Sella `deletedAt`, lo que **libera el `sortOrder`** del índice parcial — deliberado.
+- **`005A` no se bloquea por nada.** La tabla es hoja del grafo: ninguna de las 50 la referencia. Sella `deletedAt`, lo que **libera el `sortOrder`** del índice parcial — deliberado.
 - **`005C` sin volcado de cascada propio**, porque no arrastra nada. Guarda canónica: la fila debe estar en `isActive: false` → si no, 409. La aporta `purgeEntityService` tal cual.
 - **Un volcado `warn` en un archivo ajeno, y ningún bloqueo:** `investigation.service.ts` gana `dumpInvestigationDiagnosticsBeforeCascade`, la **décima** función de volcado de `ESAVI-INVESTGN-005C`, contada como la de `investigationTeamMember` (`investigation.service.ts:865`). Es la **única escritura de este spec fuera de su propia tabla**.
 - **Update diferencial con `buildDifferentialUpdate`** (SPEC F12), con la tabla de `candidates` campo por campo de §3.5: dos inmutables que no entran, dos derivados que entran **siempre**, y tres anulables.
@@ -157,7 +157,7 @@ CALL "upsertCatalogItem"('diagnosticType', 'Diagnostic type', 'DIFFERENTIAL', 'D
 
 **Sin `preventPhysicalDelete`.** La tabla **no** se añade a la lista de `:1507-1522`, así que un `DELETE` físico ejecuta y le corresponde `005C`. Es deliberado y sigue a las nueve hijas transaccionales.
 
-**Hoja del grafo.** Ninguna de las 51 tablas la referenciará. Su `005C` no arrastra nada y no lleva volcado de cascada.
+**Hoja del grafo.** Ninguna de las 50 tablas la referenciará. Su `005C` no arrastra nada y no lleva volcado de cascada.
 
 ### 3.2 Modelo Sequelize
 
@@ -443,7 +443,7 @@ En `002A`, `002B` y `006`, `data` es el `{ count, rows }` de `findAndCountAll`, 
 3. **La siembra del catálogo y su constante.** Los tres `CALL "upsertCatalogItem"` de §3.1 tras `evaluationInstitutionType` (`:1787`), y `DIAGNOSTIC_TYPE_CATALOG_CODE = 'diagnosticType'` en `src/constants/investigation.constants.ts`, junto a las tres que ya viven ahí y con su comentario de dos líneas explicando que el DDL sí la siembra —a diferencia de `VACCINATION_SITE_CATALOG_CODE`.
    *Verificación:* tras cargar el DDL, `SELECT ci."code", ci."value", ci."sortOrder" FROM "catalogItem" ci JOIN "catalogType" ct USING ("catalogTypeId") WHERE ct."code" = 'diagnosticType' ORDER BY ci."sortOrder"` devuelve **exactamente tres** filas, `PRESUMPTIVE` / `CONFIRMED` / `DIFFERENTIAL`, con `code` igual a `value`; ejecutar el DDL dos veces seguidas **no** duplica ninguna; `grep -rn "'diagnosticType'" src/` devuelve **una sola** línea, la de la constante.
 
-4. **La cuenta de tablas en `CLAUDE.md`.** Dejarla en **51** en la sección *Database schema*, y ajustar la cuenta de modelos existentes si la línea la cita.
+4. **La cuenta de tablas en `CLAUDE.md`.** Dejarla en **50** en la sección *Database schema*, y la de modelos en **47**.
    *Verificación:* la cifra coincide con `grep -c "^CREATE TABLE IF NOT EXISTS" esaviapp.sql`; la lista de tablas sin modelo que la línea enumera sigue siendo correcta.
 
 5. **Modelo y asociaciones.** `src/models/investigationDiagnostic.model.ts` con los ocho atributos de datos y las seis transversales, `sortOrder` **sin `defaultValue`**, `diagnosticRaw` en `STRING(500)` y `diagnosticDate` en `DATEONLY`. `src/models/associations/investigationDiagnostic.associations.ts` con los cuatro vínculos de §3.2. Alta en `src/models/index.ts`, en el barrel de asociaciones y en `initModels()`.
@@ -499,7 +499,7 @@ En `002A`, `002B` y `006`, `data` es el `{ count, rows }` de `findAndCountAll`, 
 3. Un `DELETE` físico directo sobre una fila **ejecuta**, y purgar la investigación padre destruye sus diagnósticos por `ON DELETE CASCADE`.
 4. El `catalogType` `diagnosticType` existe con **exactamente tres** ítems —`PRESUMPTIVE`, `CONFIRMED`, `DIFFERENTIAL`—, con `code` igual a `value` y `sortOrder` 1 a 3. **Cargar el DDL dos veces no duplica ninguno**: `upsertCatalogItem` es idempotente.
 5. `grep -rn "'diagnosticType'" src/` devuelve **una sola** línea: la de `DIAGNOSTIC_TYPE_CATALOG_CODE`. El literal no aparece en ningún servicio, controlador, validador ni test.
-6. `CLAUDE.md` dice 51 tablas y la cifra coincide con `grep -c "^CREATE TABLE IF NOT EXISTS" esaviapp.sql`.
+6. `CLAUDE.md` dice 50 tablas y la cifra coincide con `grep -c "^CREATE TABLE IF NOT EXISTS" esaviapp.sql`. La cuenta de modelos dice 47 y las tres tablas sin modelo siguen siendo `appPermission`, `appRolePermission` e `investigationCovidHistory`.
 
 **Del alta (`001`):**
 

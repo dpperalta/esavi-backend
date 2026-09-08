@@ -61,7 +61,7 @@ Four suites, each enforcing a convention rather than a feature:
 
 ## Database schema
 
-The schema is **not** created by Sequelize — there is no `sequelize.sync()`. `esaviapp.sql` at the repo root is the authoritative DDL: **49 tables** covering auth and system config, catalogs, geography, health facilities, clinical catalogs, patients, ESAVI cases, notifications and investigations. **46** of them currently have models in `src/models/`; the three that do not are `appPermission`, `appRolePermission` and `investigationCovidHistory`. Adding an entity means writing a model that matches the existing SQL table.
+The schema is **not** created by Sequelize — there is no `sequelize.sync()`. `esaviapp.sql` at the repo root is the authoritative DDL: **50 tables** covering auth and system config, catalogs, geography, health facilities, clinical catalogs, patients, ESAVI cases, notifications and investigations. **47** of them currently have models in `src/models/`; the three that do not are `appPermission`, `appRolePermission` and `investigationCovidHistory`. Adding an entity means writing a model that matches the existing SQL table.
 
 Model conventions: `timestamps: false` + `freezeTableName: true`, camelCase table names quoted in SQL (`"catalogItem"`), UUID PKs defaulting to `sequelize.literal('gen_random_uuid()')`, and every table carries `isActive`, `deletedAt`, `sysDetails` (JSONB) and `appDetails` (JSONB array).
 
