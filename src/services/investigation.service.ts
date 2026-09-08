@@ -1,6 +1,6 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, EvaluationInstitution } from '../models';
+import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, InvestigationDiagnostic, EvaluationInstitution } from '../models';
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -747,6 +747,47 @@ const setInvestigationActivationService = async (
 // investigation is outside the preventPhysicalDelete loop of esaviapp.sql:1369-1373, so the row
 // can really be destroyed. This is the only path that releases the caseId: once the row is gone
 // UQ_investigation_case is free and the case admits a new investigation. It does not touch the
+// The dump of the final diagnoses dragged by the ON DELETE CASCADE of ESAVI-INVESTGN-005C. SPEC F58.
+//
+// The only piece this spec writes outside its own table, and it writes nothing: it is a trace and
+// not a protection. The purge is not blocked and the cascade fires all the same, which is the line
+// F16, F21, F22 and F31 already took.
+//
+// Unlike the twelve blocks above it is a function of its own with a try/catch, because a dump must
+// never be the reason an irreversible operation the SUPERADMIN already confirmed fails halfway: if
+// the query throws, the failure is logged and the purge continues.
+//
+// The ids and not a snapshot per row: a diagnosis carries no encrypted column, but N rows hang from
+// one investigation and a snapshot each would bury the line that matters. The count answers how many
+// were lost and the ids answer which ones, which is what a later audit needs. paranoid: false counts
+// the ones a 005A sealed too, because the cascade destroys them all the same
+const dumpInvestigationDiagnosticsBeforeCascade = async (
+    investigationId: string,
+    userId: string,
+    transaction: Transaction
+) => {
+    try {
+        const diagnostics = await InvestigationDiagnostic.findAll({
+            where: { investigationId },
+            attributes: ['diagnosticId'],
+            paranoid: false,
+            transaction
+        });
+        if( diagnostics.length === 0 ) return;
+
+        const ids = diagnostics.map(diagnostic => diagnostic.diagnosticId).join(', ');
+        esaviLog(
+            `ESAVI-INVESTGN-005C: ${ diagnostics.length } investigation diagnostic(s) dragged by ON DELETE CASCADE, purged by ${ userId }. Ids: ${ ids }`,
+            'warn'
+        );
+    } catch (error) {
+        esaviLog(
+            `ESAVI-INVESTGN-005C: Failed to dump the investigation diagnostics before the cascade: ${ error }`,
+            'error'
+        );
+    }
+}
+
 // case — the foreign key runs from the investigation to the case and not the other way round.
 // WARNING: the fourteen detail tables of investigation declare ON DELETE CASCADE on
 // investigationId, so a 005C drags the whole detailed investigation with it without asking for
@@ -928,6 +969,8 @@ const purgeInvestigationService = async (id: string, authUser: AuthUser | undefi
                 'warn'
             );
         }
+
+        await dumpInvestigationDiagnosticsBeforeCascade(id, authUser?.userId || 'undefined', transaction);
 
         await purgeEntityService({
             model: Investigation,
