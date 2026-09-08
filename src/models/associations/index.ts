@@ -18,6 +18,7 @@ import { initNotificationVaccineAssociations } from './notificationVaccine.assoc
 import { initNotificationDiluentAssociations } from './notificationDiluent.associations';
 import { initNotificationPregnancyAssociations } from './notificationPregnancy.associations';
 import { initNotificationPregnancyComplicationAssociations } from './notificationPregnancyComplication.associations';
+import { initNotificationMedicalHistoryAssociations } from './notificationMedicalHistory.associations';
 import { initInvestigationAssociations } from './investigation.associations';
 import { initInvestigationSourceAssociations } from './investigationSource.associations';
 import { initInvestigationAutopsyAssociations } from './investigationAutopsy.associations';
@@ -56,6 +57,7 @@ export const initAssociations = (): void => {
     initNotificationDiluentAssociations();
     initNotificationPregnancyAssociations();
     initNotificationPregnancyComplicationAssociations();
+    initNotificationMedicalHistoryAssociations();
     initInvestigationAssociations();
     initInvestigationSourceAssociations();
     initInvestigationAutopsyAssociations();

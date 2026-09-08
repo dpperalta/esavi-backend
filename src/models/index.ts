@@ -28,6 +28,7 @@ import { DiluentCatalog } from './diluentCatalog.model';
 import { NotificationDiluent } from './notificationDiluent.model';
 import { NotificationPregnancy } from './notificationPregnancy.model';
 import { NotificationPregnancyComplication } from './notificationPregnancyComplication.model';
+import { NotificationMedicalHistory } from './notificationMedicalHistory.model';
 import { Investigation } from './investigation.model';
 import { InvestigationSource } from './investigationSource.model';
 import { InvestigationAutopsy } from './investigationAutopsy.model';
@@ -80,6 +81,7 @@ export {
     NotificationDiluent,
     NotificationPregnancy,
     NotificationPregnancyComplication,
+    NotificationMedicalHistory,
     Investigation,
     InvestigationSource,
     InvestigationAutopsy,
