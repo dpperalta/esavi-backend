@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, DiagnosticTerm, EsaviCase, Investigation, InvestigationDiagnostic } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateInvestigationDiagnosticInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DIAGNOSTIC_TYPE_CATALOG_CODE } from '../constants/investigation.constants';
@@ -767,11 +768,61 @@ const updateInvestigationDiagnosticService = async (
     return updated ? toInvestigationDiagnosticResponse(updated) : null;
 }
 
+// Set Investigation Diagnostic Activation Service
+// Code: ESAVI-INVDIAG-005A / ESAVI-INVDIAG-005B
+// One service for the two operations, as the rest of the repository does it. Neither is a
+// differential update: they are state writes with an intent of their own, they record a fact even
+// though no data column changes, and that is why they go through setEntityActiveStatusService and
+// never through buildDifferentialUpdate.
+//
+// The 005A seals deletedAt, which frees the sortOrder from the partial unique index. That is correct
+// and deliberate: the gap stays available for the next diagnosis.
+//
+// The 005A is blocked by nothing. investigationDiagnostic is a leaf of the graph: none of the 50
+// tables references it, so there are no children to query and no state to drag. It does not check
+// the state of the investigation either — whoever retires a diagnosis acts on the row's own state,
+// which exists independently of its parent — and it writes nothing in investigationClinicalEvaluation,
+// finalClassification or caseWorkflow, not even when the one being withdrawn was the last live
+// diagnosis of the investigation
+const setInvestigationDiagnosticActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const diagnostic = await setEntityActiveStatusService({
+            model: InvestigationDiagnostic,
+            where: { diagnosticId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('investigationDiagnostic.notFound', lang),
+            notFoundCode: `INVDIAG_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`investigationDiagnostic.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `INVDIAG_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-INVDIAG-${ op }`,
+                detail: `Investigation diagnostic ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return diagnostic;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createInvestigationDiagnosticService,
     getInvestigationDiagnosticsByInvestigationService,
     getAllInvestigationDiagnosticsByInvestigationService,
     getInvestigationDiagnosticByIdService,
     getInvestigationDiagnosticsByCaseIdService,
+    setInvestigationDiagnosticActivationService,
     updateInvestigationDiagnosticService
 };

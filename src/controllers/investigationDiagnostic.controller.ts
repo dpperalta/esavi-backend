@@ -7,6 +7,7 @@ import {
     getInvestigationDiagnosticByIdService,
     getInvestigationDiagnosticsByCaseIdService,
     getInvestigationDiagnosticsByInvestigationService,
+    setInvestigationDiagnosticActivationService,
     updateInvestigationDiagnosticService
 } from '../services/investigationDiagnostic.service';
 
@@ -165,11 +166,33 @@ const updateInvestigationDiagnostic = async (req: Request, res: Response, next: 
     }
 }
 
+// Delete Investigation Diagnostic Controller
+// Code: ESAVI-INVDIAG-005A
+const deleteInvestigationDiagnostic = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setInvestigationDiagnosticActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationDiagnostic.deletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVDIAG-005A: Error deleting Investigation Diagnostic: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationDiagnostic.deletedFailed', req.lang), 500, 'INVDIAG_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationDiagnostic,
     getInvestigationDiagnosticsByInvestigation,
     getAllInvestigationDiagnosticsByInvestigation,
     getInvestigationDiagnosticById,
     getInvestigationDiagnosticsByCaseId,
-    updateInvestigationDiagnostic
+    updateInvestigationDiagnostic,
+    deleteInvestigationDiagnostic
 };

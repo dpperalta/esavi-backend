@@ -3,6 +3,7 @@ import { tokenValidation, validateFields, validateUserRole } from '../middleware
 import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationDiagnostic,
+    deleteInvestigationDiagnostic,
     getAllInvestigationDiagnosticsByInvestigation,
     getInvestigationDiagnosticById,
     getInvestigationDiagnosticsByCaseId,
@@ -65,5 +66,12 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationDiag
 // is differential — the write is fired by the real change of value and never by the presence of the
 // key — so resending the whole response of the GET writes nothing at all
 router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticIdValidator, ...updateInvestigationDiagnosticValidator, validateFields, updateInvestigationDiagnostic);
+
+// Delete Investigation Diagnostic
+// Code: ESAVI-INVDIAG-005A
+// ADMIN, the canonical role for the soft delete. It seals deletedAt, which frees the sortOrder from
+// the partial unique index — deliberate: the gap stays available for the next diagnosis, and it is
+// the collision ESAVI-INVDIAG-005B has to resolve
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...investigationDiagnosticIdValidator, validateFields, deleteInvestigationDiagnostic);
 
 export default router;
