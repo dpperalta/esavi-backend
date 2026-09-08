@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationMedicalHistory,
     getAllNotificationMedicalHistoriesByNotification,
+    getNotificationMedicalHistoryById,
     getNotificationMedicalHistoriesByNotification
 } from '../controllers/notificationMedicalHistory.controller';
 import {
     createNotificationMedicalHistoryValidator,
+    notificationMedicalHistoryIdValidator,
     notificationMedicalHistoryListValidator,
     notificationMedicalHistoryNotificationIdValidator
 } from '../validators';
@@ -34,5 +36,9 @@ router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), 
 // Get Active Notification Medical Histories By Notification
 // Code: ESAVI-MEDHIST-002A
 router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryNotificationIdValidator, ...notificationMedicalHistoryListValidator, validateFields, getNotificationMedicalHistoriesByNotification);
+
+// Get Notification Medical History By ID
+// Code: ESAVI-MEDHIST-003
+router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, validateFields, getNotificationMedicalHistoryById);
 
 export default router;

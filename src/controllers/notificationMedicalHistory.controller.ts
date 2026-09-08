@@ -4,7 +4,8 @@ import { AuthUser } from '../types';
 import {
     createNotificationMedicalHistoryService,
     getAllNotificationMedicalHistoriesByNotificationService,
-    getNotificationMedicalHistoriesByNotificationService
+    getNotificationMedicalHistoriesByNotificationService,
+    getNotificationMedicalHistoryByIdService
 } from '../services/notificationMedicalHistory.service';
 
 // Create Notification Medical History Controller
@@ -85,8 +86,34 @@ const getAllNotificationMedicalHistoriesByNotification = async (req: Request, re
     }
 }
 
+// Get Notification Medical History By ID Controller
+// Code: ESAVI-MEDHIST-003
+const getNotificationMedicalHistoryById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getNotificationMedicalHistoryByIdService(
+            id,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedicalHistory.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-MEDHIST-003: Error fetching Notification Medical History by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedicalHistory.getFailed', req.lang), 500, 'MEDHIST_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createNotificationMedicalHistory,
     getNotificationMedicalHistoriesByNotification,
-    getAllNotificationMedicalHistoriesByNotification
+    getAllNotificationMedicalHistoriesByNotification,
+    getNotificationMedicalHistoryById
 };

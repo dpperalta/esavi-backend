@@ -362,6 +362,31 @@ const createNotificationMedicalHistoryService = async (
     return medicalHistory ? toNotificationMedicalHistoryResponse(medicalHistory) : null;
 }
 
+// Get Notification Medical History By ID Service
+// Code: ESAVI-MEDHIST-003
+// The inherited visibility of one hop, applied whole: the antecedent comes back only if it is active
+// and its notification is too. The two conditions are evaluated the same way and neither has
+// priority — it is enough that one fails — and both are relaxed together by canViewInactive, so
+// today a SUPERADMIN reads what a USER and an ADMIN get a 404 for.
+//
+// This is not the access by notification: whoever wants the collection enters through the 002A
+const getNotificationMedicalHistoryByIdService = async (
+    id: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const medicalHistory = await findMedicalHistoryWithRelations(id, canViewInactive);
+    if( !medicalHistory ) {
+        throw new AppError(
+            getMessage('notificationMedicalHistory.notFound', lang),
+            404,
+            'MEDHIST_003_NOT_FOUND'
+        );
+    }
+
+    return toNotificationMedicalHistoryResponse(medicalHistory);
+}
+
 // Get Active Notification Medical Histories By Notification Service
 // Code: ESAVI-MEDHIST-002A
 // The listing is entered by the foreign key and never by /: an antecedent does not exist without its
@@ -436,5 +461,6 @@ const getAllNotificationMedicalHistoriesByNotificationService = async (
 export {
     createNotificationMedicalHistoryService,
     getNotificationMedicalHistoriesByNotificationService,
-    getAllNotificationMedicalHistoriesByNotificationService
+    getAllNotificationMedicalHistoriesByNotificationService,
+    getNotificationMedicalHistoryByIdService
 };
