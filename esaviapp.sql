@@ -1354,6 +1354,27 @@ CREATE TABLE IF NOT EXISTS "investigationCommunity" (
   CONSTRAINT "FK_investigationCommunity_investigation" FOREIGN KEY ("investigationId") REFERENCES "investigation" ("investigationId") ON UPDATE CASCADE ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS "investigationDiagnostic" (
+  "diagnosticId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "investigationId" uuid NOT NULL,
+  "diagnosticTermId" uuid,
+  "diagnosticRaw" varchar(500),
+  "diagnosticDate" date,
+  "diagnosticTypeItemId" uuid,
+  "sortOrder" smallint NOT NULL DEFAULT 0 CHECK ("sortOrder" >= 0),
+  "notes" text,
+  "isActive" boolean NOT NULL DEFAULT true,
+  "createdAt" timestamptz NOT NULL DEFAULT current_timestamp,
+  "updatedAt" timestamptz,
+  "deletedAt" timestamptz,
+  "sysDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT "FK_investigationDiagnostic_investigation" FOREIGN KEY ("investigationId") REFERENCES "investigation" ("investigationId") ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT "FK_investigationDiagnostic_term" FOREIGN KEY ("diagnosticTermId") REFERENCES "diagnosticTerm" ("diagnosticTermId") ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT "FK_investigationDiagnostic_diagnosticType" FOREIGN KEY ("diagnosticTypeItemId") REFERENCES "catalogItem" ("catalogItemId") ON UPDATE CASCADE ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS "IX_investigationDiagnostic_investigation" ON "investigationDiagnostic" ("investigationId");
+
 CREATE TABLE IF NOT EXISTS "finalClassification" (
   "finalClassificationId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "caseId" uuid NOT NULL,
@@ -1458,7 +1479,8 @@ BEGIN
       ('investigationTeamMember', 'investigationId'),
       ('investigationPregnancyCondition', 'investigationId'),
       ('evaluationInstitution', 'investigationId'),
-      ('investigationVaccineAdministered', 'investigationId')
+      ('investigationVaccineAdministered', 'investigationId'),
+      ('investigationDiagnostic', 'investigationId')
     ) AS v(table_name, parent_column)
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', 'TRG_' || cfg.table_name || '_setSortOrder', cfg.table_name);
@@ -1501,6 +1523,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS "UQ_evaluationInstitution_parent_sortOrder"
   WHERE "deletedAt" IS NULL AND "sortOrder" IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS "UQ_investigationVaccineAdministered_parent_sortOrder"
   ON "investigationVaccineAdministered" ("investigationId", "sortOrder")
+  WHERE "deletedAt" IS NULL AND "sortOrder" IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS "UQ_investigationDiagnostic_parent_sortOrder"
+  ON "investigationDiagnostic" ("investigationId", "sortOrder")
   WHERE "deletedAt" IS NULL AND "sortOrder" IS NOT NULL;
 
 
