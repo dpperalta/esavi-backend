@@ -6,6 +6,7 @@ import {
     getAllNotificationMedicalHistoriesByNotification,
     getNotificationMedicalHistoriesByCaseId,
     getNotificationMedicalHistoryById,
+    updateNotificationMedicalHistory,
     getNotificationMedicalHistoriesByNotification
 } from '../controllers/notificationMedicalHistory.controller';
 import {
@@ -13,7 +14,8 @@ import {
     notificationMedicalHistoryCaseIdValidator,
     notificationMedicalHistoryIdValidator,
     notificationMedicalHistoryListValidator,
-    notificationMedicalHistoryNotificationIdValidator
+    notificationMedicalHistoryNotificationIdValidator,
+    updateNotificationMedicalHistoryValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -48,5 +50,11 @@ router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...noti
 // Get Notification Medical History By ID
 // Code: ESAVI-MEDHIST-003
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, validateFields, getNotificationMedicalHistoryById);
+// Update Notification Medical History
+// Code: ESAVI-MEDHIST-004
+// USER and not ADMIN, which is the declared deviation from the matrix of the notification family:
+// whoever records the antecedent is whoever corrects it, and forcing an ADMIN in to fix a capture
+// typo would break the operational flow in half
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, ...updateNotificationMedicalHistoryValidator, validateFields, updateNotificationMedicalHistory);
 
 export default router;
