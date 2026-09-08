@@ -4,6 +4,7 @@ import { AuthUser } from '../types';
 import {
     createInvestigationDiagnosticService,
     getAllInvestigationDiagnosticsByInvestigationService,
+    getInvestigationDiagnosticByIdService,
     getInvestigationDiagnosticsByInvestigationService
 } from '../services/investigationDiagnostic.service';
 
@@ -85,8 +86,30 @@ const getAllInvestigationDiagnosticsByInvestigation = async (req: Request, res: 
     }
 }
 
+// Get Investigation Diagnostic By ID Controller
+// Code: ESAVI-INVDIAG-003
+const getInvestigationDiagnosticById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await getInvestigationDiagnosticByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationDiagnostic.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVDIAG-003: Error fetching Investigation Diagnostic by ID: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationDiagnostic.getFailed', req.lang), 500, 'INVDIAG_003_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationDiagnostic,
     getInvestigationDiagnosticsByInvestigation,
-    getAllInvestigationDiagnosticsByInvestigation
+    getAllInvestigationDiagnosticsByInvestigation,
+    getInvestigationDiagnosticById
 };

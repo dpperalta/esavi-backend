@@ -4,10 +4,12 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createInvestigationDiagnostic,
     getAllInvestigationDiagnosticsByInvestigation,
+    getInvestigationDiagnosticById,
     getInvestigationDiagnosticsByInvestigation
 } from '../controllers/investigationDiagnostic.controller';
 import {
     createInvestigationDiagnosticValidator,
+    investigationDiagnosticIdValidator,
     investigationDiagnosticInvestigationIdValidator
 } from '../validators';
 
@@ -37,5 +39,12 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // diagnoses only make sense read together and in their order. It is entered by the investigationId,
 // never by /, and it admits no filter — not even by diagnosticTypeItemId
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticInvestigationIdValidator, validateFields, getInvestigationDiagnosticsByInvestigation);
+
+// Get Investigation Diagnostic By ID
+// Code: ESAVI-INVDIAG-003
+// Declared AFTER every literal route, or Express would capture 'case', 'admin', 'investigation',
+// 'purge' and 'activate' as an :id and the UUID validator would answer 400. :id is the
+// diagnosticId, never the investigationId: the access by parent is the 002A
+router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticIdValidator, validateFields, getInvestigationDiagnosticById);
 
 export default router;

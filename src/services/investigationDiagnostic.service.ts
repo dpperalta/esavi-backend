@@ -501,8 +501,34 @@ const getAllInvestigationDiagnosticsByInvestigationService = async (
     };
 }
 
+// Get Investigation Diagnostic By ID Service
+// Code: ESAVI-INVDIAG-003
+// The inherited visibility of one hop, applied whole: the diagnosis comes back only if it is active
+// and its investigation is too. The two conditions are evaluated the same way and neither has
+// priority — it is enough that one fails — and both are relaxed together by canViewInactive, so
+// today a SUPERADMIN reads what a USER and an ADMIN get a 404 for.
+//
+// This is not the access by investigation: whoever wants the collection enters through the 002A
+const getInvestigationDiagnosticByIdService = async (
+    id: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const diagnostic = await findDiagnosticWithRelations(id, canViewInactive);
+    if( !diagnostic ) {
+        throw new AppError(
+            getMessage('investigationDiagnostic.notFound', lang),
+            404,
+            'INVDIAG_003_NOT_FOUND'
+        );
+    }
+
+    return toInvestigationDiagnosticResponse(diagnostic);
+}
+
 export {
     createInvestigationDiagnosticService,
     getInvestigationDiagnosticsByInvestigationService,
-    getAllInvestigationDiagnosticsByInvestigationService
+    getAllInvestigationDiagnosticsByInvestigationService,
+    getInvestigationDiagnosticByIdService
 };
