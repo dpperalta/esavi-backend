@@ -1,6 +1,6 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { CatalogItem, CatalogType, DiagnosticTerm, Investigation, InvestigationDiagnostic } from '../models';
+import { CatalogItem, CatalogType, DiagnosticTerm, EsaviCase, Investigation, InvestigationDiagnostic } from '../models';
 import { AppError, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateInvestigationDiagnosticInput } from '../types';
@@ -526,9 +526,71 @@ const getInvestigationDiagnosticByIdService = async (
     return toInvestigationDiagnosticResponse(diagnostic);
 }
 
+// Get Investigation Diagnostics By Case ID Service
+// Code: ESAVI-INVDIAG-006
+// The real query of the domain: the client holds the caseId, not the investigationId. It crosses the
+// one to one hop up to the investigation — one to one by UQ_investigation_case — from which N
+// diagnoses hang, so it returns { count, rows } like the two listings and not a single record.
+//
+// The two 404 are deliberately distinct, and the difference matters to the client: it needs to know
+// which link of the chain broke — whether the case is not there, or whether it has no visible
+// investigation. Those are two different actions on the user's side, and one generic message would
+// make them indistinguishable.
+//
+// Only the active diagnoses come back, with the same criterion as 002A: whoever needs the retired
+// ones enters through the 002B, which is the admin door, with the investigationId this very endpoint
+// returns on every row. No admin variant of the 006 is declared, so not even a SUPERADMIN gets
+// inactive rows back from here
+const getInvestigationDiagnosticsByCaseIdService = async (
+    caseId: string,
+    lang: string,
+    includeInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    const esaviCase = await EsaviCase.findOne({
+        where: { caseId, isActive: true },
+        attributes: ['caseId']
+    });
+    if( !esaviCase ) {
+        throw new AppError(
+            getMessage('investigationDiagnostic.caseNotFound', lang),
+            404,
+            'INVDIAG_006_CASE_NOT_FOUND'
+        );
+    }
+
+    const where = includeInactive ? { caseId } : { caseId, isActive: true };
+    const investigation = await Investigation.findOne({ where, attributes: ['investigationId'] });
+    if( !investigation ) {
+        throw new AppError(
+            getMessage('investigationDiagnostic.investigationNotFound', lang),
+            404,
+            'INVDIAG_006_INVESTIGATION_NOT_FOUND'
+        );
+    }
+
+    // An investigation with no diagnoses answers 200 with an empty page and never 404: the chain is
+    // whole, there is simply nothing recorded yet
+    const diagnostics = await InvestigationDiagnostic.findAndCountAll({
+        where: { investigationId: investigation.investigationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE, DIAGNOSTIC_TYPE_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: diagnostics.count,
+        rows: diagnostics.rows.map(toInvestigationDiagnosticResponse)
+    };
+}
+
 export {
     createInvestigationDiagnosticService,
     getInvestigationDiagnosticsByInvestigationService,
     getAllInvestigationDiagnosticsByInvestigationService,
-    getInvestigationDiagnosticByIdService
+    getInvestigationDiagnosticByIdService,
+    getInvestigationDiagnosticsByCaseIdService
 };

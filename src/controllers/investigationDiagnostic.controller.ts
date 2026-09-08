@@ -5,6 +5,7 @@ import {
     createInvestigationDiagnosticService,
     getAllInvestigationDiagnosticsByInvestigationService,
     getInvestigationDiagnosticByIdService,
+    getInvestigationDiagnosticsByCaseIdService,
     getInvestigationDiagnosticsByInvestigationService
 } from '../services/investigationDiagnostic.service';
 
@@ -107,9 +108,39 @@ const getInvestigationDiagnosticById = async (req: Request, res: Response, next:
     }
 }
 
+// Get Investigation Diagnostics By Case ID Controller
+// Code: ESAVI-INVDIAG-006
+const getInvestigationDiagnosticsByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const caseId = (req.params.caseId).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getInvestigationDiagnosticsByCaseIdService(
+            caseId,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationDiagnostic.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVDIAG-006: Error fetching Investigation Diagnostics by Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationDiagnostic.getFailed', req.lang), 500, 'INVDIAG_006_FETCH_FAILED', error));
+    }
+}
+
 export {
     createInvestigationDiagnostic,
     getInvestigationDiagnosticsByInvestigation,
     getAllInvestigationDiagnosticsByInvestigation,
-    getInvestigationDiagnosticById
+    getInvestigationDiagnosticById,
+    getInvestigationDiagnosticsByCaseId
 };

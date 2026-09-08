@@ -5,10 +5,12 @@ import {
     createInvestigationDiagnostic,
     getAllInvestigationDiagnosticsByInvestigation,
     getInvestigationDiagnosticById,
+    getInvestigationDiagnosticsByCaseId,
     getInvestigationDiagnosticsByInvestigation
 } from '../controllers/investigationDiagnostic.controller';
 import {
     createInvestigationDiagnosticValidator,
+    investigationDiagnosticCaseIdValidator,
     investigationDiagnosticIdValidator,
     investigationDiagnosticInvestigationIdValidator
 } from '../validators';
@@ -24,6 +26,14 @@ const router = Router();
 // INVVACAD, and the deviation from the canonical one of §9 belongs to the whole family and not to
 // this entity
 router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationDiagnosticValidator, validateFields, createInvestigationDiagnostic);
+
+// Get Investigation Diagnostics By Case ID
+// Code: ESAVI-INVDIAG-006
+// Declared BEFORE /:id, or Express would capture 'case' as the :id of that route. The real query of
+// the domain: the client holds the caseId and not the investigationId. No admin variant is
+// declared — whoever needs the retired ones enters through the 002B with the investigationId every
+// row of this response carries
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...investigationDiagnosticCaseIdValidator, validateFields, getInvestigationDiagnosticsByCaseId);
 
 // Get All Investigation Diagnostics By Investigation - For Admin
 // Code: ESAVI-INVDIAG-002B
