@@ -183,6 +183,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | investigationClinicalEvaluation | `006` | obtener la evaluación clínica de un caso — la cadena `caso → investigación → evaluación` es uno a uno en los dos saltos |
 | investigationVaccinationContext | `006` | obtener el contexto de vacunación de un caso — la cadena `caso → investigación → contexto` es uno a uno en los dos saltos |
 | investigationVaccineAdministered | `006` | listar las vacunas administradas de un caso — la cadena `caso → investigación` es uno a uno y la última `investigación → vacunas` es uno a muchos, así que devuelve `{ count, rows }` |
+| investigationDiagnostic | `006` | listar los diagnósticos finales de un caso — la cadena `caso → investigación` es uno a uno por `UQ_investigation_case`, pero de la investigación cuelgan N diagnósticos |
 | investigationColdChain | `006` | obtener la cadena de frío de un caso — la cadena `caso → investigación → cadena de frío` es uno a uno en los dos saltos |
 | investigationAdministrationError | `006` | obtener el error de administración de un caso — la cadena `caso → investigación → error` es uno a uno en los dos saltos |
 | investigationCommunity | `006` | obtener el registro comunitario de un caso — la cadena `caso → investigación → comunidad` es uno a uno en los dos saltos |
@@ -340,6 +341,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | investigationClinicalEvaluation | `INVCLIEV` |
 | investigationColdChain | `INVCOLD` |
 | investigationCommunity | `INVCOMM` |
+| investigationDiagnostic | `INVDIAG` |
 | investigationMedicalHistory | `INVMEDH` |
 | investigationPregnancyCondition | `INVPREG` |
 | investigationSource | `INVSRC` |
