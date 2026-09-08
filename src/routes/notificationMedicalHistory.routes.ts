@@ -4,13 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     activateNotificationMedicalHistory,
     createNotificationMedicalHistory,
+    deleteNotificationMedicalHistory,
     getAllNotificationMedicalHistoriesByNotification,
     getNotificationMedicalHistoriesByCaseId,
-    deleteNotificationMedicalHistory,
+    getNotificationMedicalHistoriesByNotification,
     getNotificationMedicalHistoryById,
     purgeNotificationMedicalHistory,
-    updateNotificationMedicalHistory,
-    getNotificationMedicalHistoriesByNotification
+    updateNotificationMedicalHistory
 } from '../controllers/notificationMedicalHistory.controller';
 import {
     createNotificationMedicalHistoryValidator,
@@ -27,7 +27,7 @@ const router = Router();
 
 // The nine routes of this entity are declared in a fixed order: the five literal paths — /case,
 // /admin/notification, /notification, /purge and /activate — go before /:id, or Express would
-// capture them as an :id and the UUID validator would answer 400
+// capture them as an :id and the UUID validator would answer 400 for routes that do exist
 
 // Create Notification Medical History
 // Code: ESAVI-MEDHIST-001
@@ -37,8 +37,10 @@ router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationM
 // Code: ESAVI-MEDHIST-006
 // The real query of the domain, and the only non-canonical operation of the entity. Like the 006 of
 // NOTIFEVT, NOTIFMED and NOTIFVAC it does have an HTTP route: it is a read, and it opens no door the
-// 002A does not have open already
+// 002A does not have open already. No admin variant is declared: whoever needs to see the retired
+// ones enters the 002B with the notificationId this endpoint returns
 router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryCaseIdValidator, ...notificationMedicalHistoryListValidator, validateFields, getNotificationMedicalHistoriesByCaseId);
+
 // Get All Notification Medical Histories By Notification - For Admin
 // Code: ESAVI-MEDHIST-002B
 // Two distinct routes and not one GET branching by role, which is why each one carries its own
@@ -55,20 +57,25 @@ router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...noti
 // The table is outside the preventPhysicalDelete loop, so the row really is destroyed. The guard is
 // the canonical one: it must have been retired with a 005A first
 router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicalHistoryIdValidator, validateFields, purgeNotificationMedicalHistory);
+
 // Activate Notification Medical History - For SuperAdmin
 // Code: ESAVI-MEDHIST-005B
 // It stays in SUPERADMIN with F21 and F22 and not with F33: the reactivation drags the sortOrder
 // reassignment, and in the notification block that operation never dropped below SUPERADMIN
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicalHistoryIdValidator, validateFields, activateNotificationMedicalHistory);
+
 // Get Notification Medical History By ID
 // Code: ESAVI-MEDHIST-003
+// Not the access by notification: for that there is the 002A
 router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, validateFields, getNotificationMedicalHistoryById);
+
 // Update Notification Medical History
 // Code: ESAVI-MEDHIST-004
 // USER and not ADMIN, which is the declared deviation from the matrix of the notification family:
 // whoever records the antecedent is whoever corrects it, and forcing an ADMIN in to fix a capture
 // typo would break the operational flow in half
 router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, ...updateNotificationMedicalHistoryValidator, validateFields, updateNotificationMedicalHistory);
+
 // Delete Notification Medical History - For Admin
 // Code: ESAVI-MEDHIST-005A
 // Blocked by nothing: the table is a leaf of the graph. It seals deletedAt, which frees the
