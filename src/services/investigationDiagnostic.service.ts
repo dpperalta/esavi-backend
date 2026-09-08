@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, DiagnosticTerm, EsaviCase, Investigation, InvestigationDiagnostic } from '../models';
-import { AppError, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateInvestigationDiagnosticInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
@@ -354,6 +354,31 @@ const findDiagnosticWithRelations = async (id: string, includeInactive: boolean 
     });
 }
 
+// The read ESAVI-INVDIAG-004 works from. Two differences with the one above, and both are
+// deliberate. It does not narrow the attributes: buildDifferentialUpdate compares the whole stored
+// row, and an instance read with a narrowed `attributes` reads back undefined for what it left out,
+// so every comparison would count as a change. And it keeps the diagnosticTerm include, because the
+// update needs the master's name to compute the effective name and its code and source to decide
+// whether the resolution has to run again.
+//
+// The parent include stays, so the inherited visibility is checked in the same query the update
+// instance comes from
+const findDiagnosticRow = async (id: string, includeInactive: boolean = false, transaction?: Transaction) => {
+    return await InvestigationDiagnostic.findOne({
+        where: includeInactive ? { diagnosticId: id } : { diagnosticId: id, isActive: true },
+        include: [
+            {
+                ...INVESTIGATION_INCLUDE,
+                required: true,
+                where: includeInactive ? {} : { isActive: true }
+            },
+            DIAGNOSTIC_TERM_INCLUDE,
+            DIAGNOSTIC_TYPE_INCLUDE
+        ],
+        transaction
+    });
+}
+
 // Create Investigation Diagnostic Service
 // Code: ESAVI-INVDIAG-001
 // Everything inside a single transaction, because the resolution against the clinical master may
@@ -587,10 +612,166 @@ const getInvestigationDiagnosticsByCaseIdService = async (
     };
 }
 
+// Update Investigation Diagnostic Service
+// Code: ESAVI-INVDIAG-004
+// Inside a transaction, for the same reason as the 001: the resolution against the clinical master
+// may write in diagnosticTerm.
+//
+// investigationId and sortOrder are ignored whether or not they arrive in the body, and neither
+// answers 400: the first one is immutable — moving a diagnosis to another investigation is not
+// updating it, it is creating a different one — and the second one is governed by the database.
+// Answering 400 for a field a client resends whole from a GET is hostile for no reason
+const updateInvestigationDiagnosticService = async (
+    id: string,
+    data: Partial<CreateInvestigationDiagnosticInput>,
+    authUser: AuthUser | undefined,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const diagnostic = await findDiagnosticRow(id, canViewInactive, transaction);
+        if( !diagnostic ) {
+            throw new AppError(
+                getMessage('investigationDiagnostic.notFound', lang),
+                404,
+                'INVDIAG_004_NOT_FOUND'
+            );
+        }
+
+        // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
+        const stored = diagnostic.get({ plain: true }) as Record<string, unknown>;
+        const storedTerm = stored.diagnosticTerm as { code: string | null, name: string, source: TermSource } | null;
+
+        // What the GET shows as the name of the diagnosis, and the only thing an incoming
+        // diagnosticName can be compared against: this table has a single text column, so
+        // storedEffectiveName is unambiguous where F16 had to choose between two.
+        //
+        // The GET carries no diagnosticName of its own — it exposes diagnosticRaw and
+        // diagnosticTerm.name and lets the client compose them — so a PUT resending the whole
+        // response arrives with the key ABSENT and falls through to the stored effective name. That
+        // is what keeps the trap F16 paid for closed: the text the investigator wrote is never
+        // rewritten by an echo of the GET
+        const storedEffectiveName = ( stored.diagnosticRaw as string | null ) ?? storedTerm?.name ?? null;
+        const incomingName = data.diagnosticName !== undefined
+            ? normalizeText(data.diagnosticName)
+            : storedEffectiveName;
+
+        // The resolution is re-fired by the change of value, never by the presence of the key
+        // (SPEC F12). The stored code and source are the ones of the term that was resolved, read
+        // from the include: a PUT resending them consults nothing and writes nothing
+        const storedCode = storedTerm?.code ?? null;
+        const storedSource = storedTerm?.source ?? null;
+
+        const codeArrived = data.diagnosticCode !== undefined;
+        const trimmedIncomingCode = normalizeText(data.diagnosticCode);
+        const incomingCode = codeArrived
+            ? ( trimmedIncomingCode ? toConstantCase(trimmedIncomingCode) : null )
+            : storedCode;
+        const sourceArrived = data.source !== undefined && data.source !== null;
+        const incomingSource = sourceArrived ? ( data.source as TermSource ) : storedSource;
+
+        const mustResolveAgain = incomingCode !== storedCode
+            || ( sourceArrived && incomingSource !== storedSource )
+            || incomingName !== storedEffectiveName;
+
+        const resolved: ResolvedDiagnosticTerm = mustResolveAgain
+            ? await resolveDiagnosticTerm(
+                incomingCode,
+                incomingName ?? '',
+                incomingSource,
+                '004',
+                authUser,
+                lang,
+                transaction
+            )
+            : {
+                diagnosticTermId: stored.diagnosticTermId as string | null,
+                diagnosticRaw: stored.diagnosticRaw as string | null
+            };
+
+        // The type guard is fired by the change of value too, and for the same reason: a PUT
+        // resending the stored diagnosticTypeItemId consults nothing. An explicit null does not go
+        // through it either — erasing a type is legitimate and needs no catalog to validate against
+        const typeArrived = data.diagnosticTypeItemId !== undefined;
+        const incomingTypeItemId = typeArrived ? ( data.diagnosticTypeItemId ?? null ) : undefined;
+        if( typeArrived && incomingTypeItemId !== ( stored.diagnosticTypeItemId as string | null ) ) {
+            await assertValidDiagnosticType(incomingTypeItemId, '004', lang, transaction);
+        }
+
+        // The guard runs over the RESULTING term and excludes the row itself, so re-sending its own
+        // term is a 200 that writes nothing while landing on another live sister is a 409
+        await assertNoDuplicateDiagnostic(
+            stored.investigationId as string,
+            resolved.diagnosticTermId,
+            '004',
+            lang,
+            transaction,
+            id
+        );
+
+        // investigationId, sortOrder and isActive are deliberately absent: the first two are
+        // immutable and the state moves through 005A and 005B. The two derived fields enter ALWAYS —
+        // with the resolved value or with the stored one — so a resolution that did not change
+        // anything produces no diff and therefore no write.
+        //
+        // The three nullable ones are compared against undefined and NEVER by truthiness: an
+        // explicit null erases the value and does count as a difference, while an absent key leaves
+        // it as it was. diagnosticDate is compared as the YYYY-MM-DD string DATEONLY returns, never
+        // as a Date
+        const candidates: Record<string, unknown> = {
+            diagnosticTermId: resolved.diagnosticTermId,
+            diagnosticRaw: resolved.diagnosticRaw,
+            diagnosticDate: data.diagnosticDate !== undefined ? ( data.diagnosticDate ?? null ) : undefined,
+            diagnosticTypeItemId: incomingTypeItemId,
+            // Trimmed and never title cased, or a PUT resending the GET would rewrite what the
+            // investigator wrote
+            notes: data.notes !== undefined ? normalizeText(data.notes) : undefined
+        };
+
+        // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
+        // sysDetails.version bump that TRG_investigationDiagnostic_setSysDetails fires on every write
+        const objectToUpdate = buildDifferentialUpdate(stored, candidates);
+        if( Object.keys(objectToUpdate).length > 0 ) {
+            // Written by hand so the service does not depend on a trigger for a column it owns: the
+            // generic loop of esaviapp.sql drops TRG_<table>_setUpdatedAt and never creates it
+            objectToUpdate.updatedAt = new Date();
+
+            // The history is extended, never overwritten
+            const currentAppDetails = Array.isArray(diagnostic.appDetails)
+                ? diagnostic.appDetails
+                : [];
+            const newEntry: AppDetails = {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: 'ESAVI-INVDIAG-004',
+                detail: 'Investigation diagnostic updated by service'
+            };
+            await diagnostic.update({
+                ...objectToUpdate,
+                appDetails: [
+                    ...currentAppDetails,
+                    newEntry
+                ]
+            }, { transaction });
+        }
+
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+
+    const updated = await findDiagnosticWithRelations(id, true);
+    return updated ? toInvestigationDiagnosticResponse(updated) : null;
+}
+
 export {
     createInvestigationDiagnosticService,
     getInvestigationDiagnosticsByInvestigationService,
     getAllInvestigationDiagnosticsByInvestigationService,
     getInvestigationDiagnosticByIdService,
-    getInvestigationDiagnosticsByCaseIdService
+    getInvestigationDiagnosticsByCaseIdService,
+    updateInvestigationDiagnosticService
 };

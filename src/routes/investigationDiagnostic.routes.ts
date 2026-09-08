@@ -6,13 +6,15 @@ import {
     getAllInvestigationDiagnosticsByInvestigation,
     getInvestigationDiagnosticById,
     getInvestigationDiagnosticsByCaseId,
-    getInvestigationDiagnosticsByInvestigation
+    getInvestigationDiagnosticsByInvestigation,
+    updateInvestigationDiagnostic
 } from '../controllers/investigationDiagnostic.controller';
 import {
     createInvestigationDiagnosticValidator,
     investigationDiagnosticCaseIdValidator,
     investigationDiagnosticIdValidator,
-    investigationDiagnosticInvestigationIdValidator
+    investigationDiagnosticInvestigationIdValidator,
+    updateInvestigationDiagnosticValidator
 } from '../validators';
 
 const { ADMIN, USER } = ROLES;
@@ -56,5 +58,12 @@ router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...inv
 // 'purge' and 'activate' as an :id and the UUID validator would answer 400. :id is the
 // diagnosticId, never the investigationId: the access by parent is the 002A
 router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticIdValidator, validateFields, getInvestigationDiagnosticById);
+
+// Update Investigation Diagnostic
+// Code: ESAVI-INVDIAG-004
+// USER, like the 001: whoever captures the investigation is who corrects its diagnoses. The update
+// is differential — the write is fired by the real change of value and never by the presence of the
+// key — so resending the whole response of the GET writes nothing at all
+router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticIdValidator, ...updateInvestigationDiagnosticValidator, validateFields, updateInvestigationDiagnostic);
 
 export default router;

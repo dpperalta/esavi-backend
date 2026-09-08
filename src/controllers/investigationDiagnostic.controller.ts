@@ -6,7 +6,8 @@ import {
     getAllInvestigationDiagnosticsByInvestigationService,
     getInvestigationDiagnosticByIdService,
     getInvestigationDiagnosticsByCaseIdService,
-    getInvestigationDiagnosticsByInvestigationService
+    getInvestigationDiagnosticsByInvestigationService,
+    updateInvestigationDiagnosticService
 } from '../services/investigationDiagnostic.service';
 
 // Create Investigation Diagnostic Controller
@@ -137,10 +138,38 @@ const getInvestigationDiagnosticsByCaseId = async (req: Request, res: Response, 
     }
 }
 
+// Update Investigation Diagnostic Controller
+// Code: ESAVI-INVDIAG-004
+const updateInvestigationDiagnostic = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await updateInvestigationDiagnosticService(
+            id,
+            req.body,
+            req.user,
+            req.lang,
+            canViewInactive(req.user as AuthUser)
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationDiagnostic.updatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVDIAG-004: Error updating Investigation Diagnostic: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationDiagnostic.updatedFailed', req.lang), 500, 'INVDIAG_004_UPDATE_FAILED', error));
+    }
+}
+
 export {
     createInvestigationDiagnostic,
     getInvestigationDiagnosticsByInvestigation,
     getAllInvestigationDiagnosticsByInvestigation,
     getInvestigationDiagnosticById,
-    getInvestigationDiagnosticsByCaseId
+    getInvestigationDiagnosticsByCaseId,
+    updateInvestigationDiagnostic
 };
