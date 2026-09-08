@@ -4,11 +4,13 @@ import { ROLES } from '../constants/roles.constants';
 import {
     createNotificationMedicalHistory,
     getAllNotificationMedicalHistoriesByNotification,
+    getNotificationMedicalHistoriesByCaseId,
     getNotificationMedicalHistoryById,
     getNotificationMedicalHistoriesByNotification
 } from '../controllers/notificationMedicalHistory.controller';
 import {
     createNotificationMedicalHistoryValidator,
+    notificationMedicalHistoryCaseIdValidator,
     notificationMedicalHistoryIdValidator,
     notificationMedicalHistoryListValidator,
     notificationMedicalHistoryNotificationIdValidator
@@ -26,6 +28,12 @@ const router = Router();
 // Code: ESAVI-MEDHIST-001
 router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationMedicalHistoryValidator, validateFields, createNotificationMedicalHistory);
 
+// Get Notification Medical Histories by Case
+// Code: ESAVI-MEDHIST-006
+// The real query of the domain, and the only non-canonical operation of the entity. Like the 006 of
+// NOTIFEVT, NOTIFMED and NOTIFVAC it does have an HTTP route: it is a read, and it opens no door the
+// 002A does not have open already
+router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryCaseIdValidator, ...notificationMedicalHistoryListValidator, validateFields, getNotificationMedicalHistoriesByCaseId);
 // Get All Notification Medical Histories By Notification - For Admin
 // Code: ESAVI-MEDHIST-002B
 // Two distinct routes and not one GET branching by role, which is why each one carries its own

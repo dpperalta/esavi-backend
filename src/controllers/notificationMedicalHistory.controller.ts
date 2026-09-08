@@ -4,6 +4,7 @@ import { AuthUser } from '../types';
 import {
     createNotificationMedicalHistoryService,
     getAllNotificationMedicalHistoriesByNotificationService,
+    getNotificationMedicalHistoriesByCaseIdService,
     getNotificationMedicalHistoriesByNotificationService,
     getNotificationMedicalHistoryByIdService
 } from '../services/notificationMedicalHistory.service';
@@ -86,6 +87,35 @@ const getAllNotificationMedicalHistoriesByNotification = async (req: Request, re
     }
 }
 
+// Get Notification Medical Histories By Case ID Controller
+// Code: ESAVI-MEDHIST-006
+const getNotificationMedicalHistoriesByCaseId = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const caseId = (req.params.caseId).toString().trim();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await getNotificationMedicalHistoriesByCaseIdService(
+            caseId,
+            req.lang,
+            canViewInactive(req.user as AuthUser),
+            limit,
+            offset
+        );
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedicalHistory.getSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-MEDHIST-006: Error fetching Notification Medical Histories by Case: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedicalHistory.getFailed', req.lang), 500, 'MEDHIST_006_FETCH_FAILED', error));
+    }
+}
+
 // Get Notification Medical History By ID Controller
 // Code: ESAVI-MEDHIST-003
 const getNotificationMedicalHistoryById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -115,5 +145,6 @@ export {
     createNotificationMedicalHistory,
     getNotificationMedicalHistoriesByNotification,
     getAllNotificationMedicalHistoriesByNotification,
-    getNotificationMedicalHistoryById
+    getNotificationMedicalHistoryById,
+    getNotificationMedicalHistoriesByCaseId
 };
