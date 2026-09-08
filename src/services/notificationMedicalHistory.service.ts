@@ -5,6 +5,7 @@ import { AppError, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { AppDetails, AuthUser, CreateNotificationMedicalHistoryInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
+import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -108,6 +109,35 @@ const findValidNotification = async (notificationId: string, op: string, lang: s
         );
     }
     return notification;
+}
+
+// The same check as findValidNotification, relaxed by canViewInactive: the inherited visibility
+// applied to the listings, where the parent is not the target of the write but the gate to the
+// collection. A retired notification answers 404 for USER and ADMIN, and comes back for whoever may
+// see inactive rows, today SUPERADMIN.
+//
+// Only the state is relaxed. Existence is relaxed for nobody: a notification that does not exist has
+// no antecedents to list under any role, and answering an empty page would be a different lie.
+//
+// A retired notification answers 404 instead of an empty page, because an empty page would say
+// "this notification has no antecedents" to somebody who is simply not allowed to see them
+const assertNotificationIsVisible = async (
+    notificationId: string,
+    op: string,
+    lang: string,
+    canViewInactive: boolean = false
+) => {
+    const notification = await Notification.findOne({
+        where: canViewInactive ? { notificationId } : { notificationId, isActive: true },
+        attributes: ['notificationId']
+    });
+    if( !notification ) {
+        throw new AppError(
+            getMessage('notificationMedicalHistory.notificationNotFound', lang),
+            404,
+            `MEDHIST_${ op }_NOTIFICATION_NOT_FOUND`
+        );
+    }
 }
 
 // The free texts are normalized on write with trim, and a text that is blank after trimming is no
@@ -332,6 +362,79 @@ const createNotificationMedicalHistoryService = async (
     return medicalHistory ? toNotificationMedicalHistoryResponse(medicalHistory) : null;
 }
 
+// Get Active Notification Medical Histories By Notification Service
+// Code: ESAVI-MEDHIST-002A
+// The listing is entered by the foreign key and never by /: an antecedent does not exist without its
+// notification, and a global listing has no reader.
+//
+// Ordered by sortOrder ascending, which is the whole point of the column, and with no filter by
+// diagnosticTermId or text — those are out of the scope of this spec
+const getNotificationMedicalHistoriesByNotificationService = async (
+    notificationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertNotificationIsVisible(notificationId, '002A', lang, canViewInactive);
+
+    const medicalHistories = await NotificationMedicalHistory.findAndCountAll({
+        where: { notificationId, isActive: true },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        limit,
+        offset
+    });
+
+    return {
+        count: medicalHistories.count,
+        rows: medicalHistories.rows.map(toNotificationMedicalHistoryResponse)
+    };
+}
+
+// Get All Notification Medical Histories By Notification Service - For Admin
+// Code: ESAVI-MEDHIST-002B
+// The same listing as 002A without the isActive filter: it is the only door to an antecedent that
+// was retired, and therefore the entry point of whoever is going to reactivate or purge it. It is
+// also where the 006 sends anybody who needs to see inactive rows, since no admin variant of that
+// operation is declared.
+//
+// paranoid: false is declarative here — the model is not paranoid, so deletedAt is a plain column
+// and no scope would hide the sealed rows — and it is written for the same reason
+// entityActivation.service.ts:21 writes it: the intent is to see everything, including what a 005A
+// sealed. Those are exactly the rows IX_notificationMedicalHistory_notification exists for: the
+// partial unique index leaves them out.
+//
+// The parent guard still applies: an ADMIN sees inactive antecedents, not the antecedents of an
+// inactive notification
+const getAllNotificationMedicalHistoriesByNotificationService = async (
+    notificationId: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    await assertNotificationIsVisible(notificationId, '002B', lang, canViewInactive);
+
+    const medicalHistories = await NotificationMedicalHistory.findAndCountAll({
+        where: { notificationId },
+        attributes: RESPONSE_ATTRIBUTES,
+        include: [DIAGNOSTIC_TERM_INCLUDE],
+        order: [['sortOrder', 'ASC']],
+        paranoid: false,
+        limit,
+        offset
+    });
+
+    return {
+        count: medicalHistories.count,
+        rows: medicalHistories.rows.map(toNotificationMedicalHistoryResponse)
+    };
+}
+
 export {
-    createNotificationMedicalHistoryService
+    createNotificationMedicalHistoryService,
+    getNotificationMedicalHistoriesByNotificationService,
+    getAllNotificationMedicalHistoriesByNotificationService
 };

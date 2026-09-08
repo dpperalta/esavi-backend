@@ -2,13 +2,17 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
-    createNotificationMedicalHistory
+    createNotificationMedicalHistory,
+    getAllNotificationMedicalHistoriesByNotification,
+    getNotificationMedicalHistoriesByNotification
 } from '../controllers/notificationMedicalHistory.controller';
 import {
-    createNotificationMedicalHistoryValidator
+    createNotificationMedicalHistoryValidator,
+    notificationMedicalHistoryListValidator,
+    notificationMedicalHistoryNotificationIdValidator
 } from '../validators';
 
-const { USER } = ROLES;
+const { ADMIN, USER } = ROLES;
 
 const router = Router();
 
@@ -19,5 +23,16 @@ const router = Router();
 // Create Notification Medical History
 // Code: ESAVI-MEDHIST-001
 router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationMedicalHistoryValidator, validateFields, createNotificationMedicalHistory);
+
+// Get All Notification Medical Histories By Notification - For Admin
+// Code: ESAVI-MEDHIST-002B
+// Two distinct routes and not one GET branching by role, which is why each one carries its own
+// letter in the five places. It goes before /notification/:id, or that one would swallow the
+// literal /admin segment
+router.get('/admin/notification/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicalHistoryNotificationIdValidator, ...notificationMedicalHistoryListValidator, validateFields, getAllNotificationMedicalHistoriesByNotification);
+
+// Get Active Notification Medical Histories By Notification
+// Code: ESAVI-MEDHIST-002A
+router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryNotificationIdValidator, ...notificationMedicalHistoryListValidator, validateFields, getNotificationMedicalHistoriesByNotification);
 
 export default router;
