@@ -41,6 +41,7 @@ import investigationVaccineAdministeredRoutes from './investigationVaccineAdmini
 import investigationColdChainRoutes from './investigationColdChain.routes';
 import investigationAdministrationErrorRoutes from './investigationAdministrationError.routes';
 import investigationCommunityRoutes from './investigationCommunity.routes';
+import investigationDiagnosticRoutes from './investigationDiagnostic.routes';
 import finalClassificationRoutes from './finalClassification.routes';
 import caseWorkflowRoutes from './caseWorkflow.routes';
 import systemConfigRoutes from './systemConfig.routes';
@@ -138,6 +139,11 @@ router.use('/investigation-vaccines-administered', investigationVaccineAdministe
 router.use('/investigation-cold-chains', investigationColdChainRoutes);
 router.use('/investigation-administration-errors', investigationAdministrationErrorRoutes);
 router.use('/investigation-communities', investigationCommunityRoutes);
+// The final diagnoses the investigated patient leaves the investigation with. A daughter of
+// investigation and not of investigationClinicalEvaluation, deliberately: a final diagnosis can be
+// known without the clinical evaluation having been run, so it is entered by /investigation/:id or
+// by /case/:caseId and never by /
+router.use('/investigation-diagnostics', investigationDiagnosticRoutes);
 
 // The causality verdict of the WHO/PAHO algorithm — the fifth and last satellite of esaviCase,
 // and the only entity of the series whose conditional flag closes a block instead of opening it
