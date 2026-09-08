@@ -7,6 +7,7 @@ import {
     getNotificationMedicalHistoriesByCaseIdService,
     getNotificationMedicalHistoriesByNotificationService,
     getNotificationMedicalHistoryByIdService,
+    setNotificationMedicalHistoryActivationService,
     updateNotificationMedicalHistoryService
 } from '../services/notificationMedicalHistory.service';
 
@@ -169,11 +170,33 @@ const updateNotificationMedicalHistory = async (req: Request, res: Response, nex
     }
 }
 
+// Delete Notification Medical History Controller
+// Code: ESAVI-MEDHIST-005A
+const deleteNotificationMedicalHistory = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setNotificationMedicalHistoryActivationService(id, req.user, req.lang, false);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('notificationMedicalHistory.deletedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-MEDHIST-005A: Error deleting Notification Medical History: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('notificationMedicalHistory.deletedFailed', req.lang), 500, 'MEDHIST_005A_DELETE_FAILED', error));
+    }
+}
+
 export {
     createNotificationMedicalHistory,
     getNotificationMedicalHistoriesByNotification,
     getAllNotificationMedicalHistoriesByNotification,
     getNotificationMedicalHistoryById,
     getNotificationMedicalHistoriesByCaseId,
-    updateNotificationMedicalHistory
+    updateNotificationMedicalHistory,
+    deleteNotificationMedicalHistory
 };

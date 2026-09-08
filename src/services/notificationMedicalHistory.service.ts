@@ -3,6 +3,7 @@ import { sequelize } from '../database/connection';
 import { DiagnosticTerm, EsaviCase, Notification, NotificationMedicalHistory } from '../models';
 import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
+import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { AppDetails, AuthUser, CreateNotificationMedicalHistoryInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -673,11 +674,60 @@ const updateNotificationMedicalHistoryService = async (
     return updated ? toNotificationMedicalHistoryResponse(updated) : null;
 }
 
+// Set Notification Medical History Activation Service
+// Code: ESAVI-MEDHIST-005A / ESAVI-MEDHIST-005B
+// One service for the two operations, as the rest of the repository does it. Neither is a
+// differential update: they are state writes with an intent of their own, they record a fact even
+// though no data column changes, and that is why they go through setEntityActiveStatusService and
+// never through buildDifferentialUpdate.
+//
+// The 005A seals deletedAt, which frees the sortOrder from the partial unique index. That is correct
+// and deliberate: the gap stays available for the next antecedent.
+//
+// The 005A is blocked by nothing. notificationMedicalHistory is a leaf of the graph: none of the 49
+// tables references it, so there are no children to query and no state to drag. It does not check
+// the state of the notification either — whoever retires an antecedent acts on the row's own state,
+// which exists independently of its parent — and it never touches hasRelevantMedicalHistory, not
+// even when the one being withdrawn was the last live antecedent of the notification
+const setNotificationMedicalHistoryActivationService = async (
+    id: string,
+    authUser: AuthUser | undefined,
+    lang: string,
+    isActive: boolean = true
+) => {
+    const op = isActive ? '005B' : '005A';
+    const transaction = await sequelize.transaction();
+    try {
+        const medicalHistory = await setEntityActiveStatusService({
+            model: NotificationMedicalHistory,
+            where: { medicalHistoryId: id },
+            isActive,
+            transaction,
+            notFoundMessage: getMessage('notificationMedicalHistory.notFound', lang),
+            notFoundCode: `MEDHIST_${ op }_NOT_FOUND`,
+            alreadyInStateMessage: getMessage(`notificationMedicalHistory.${ isActive ? 'alreadyActive' : 'alreadyInactive' }`, lang, { id }),
+            alreadyInStateCode: `MEDHIST_${ op }_` + ( isActive ? 'ALREADY_ACTIVE' : 'ALREADY_INACTIVE' ),
+            appDetail: {
+                createdAt: new Date(),
+                user: authUser?.userId || 'undefined',
+                method: `ESAVI-MEDHIST-${ op }`,
+                detail: `Notification medical history ${ isActive ? 'activated' : 'deactivated' } by service`
+            }
+        });
+        await transaction.commit();
+        return medicalHistory;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
 export {
     createNotificationMedicalHistoryService,
     getNotificationMedicalHistoriesByNotificationService,
     getAllNotificationMedicalHistoriesByNotificationService,
     getNotificationMedicalHistoryByIdService,
     getNotificationMedicalHistoriesByCaseIdService,
-    updateNotificationMedicalHistoryService
+    updateNotificationMedicalHistoryService,
+    setNotificationMedicalHistoryActivationService
 };

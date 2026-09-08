@@ -5,6 +5,7 @@ import {
     createNotificationMedicalHistory,
     getAllNotificationMedicalHistoriesByNotification,
     getNotificationMedicalHistoriesByCaseId,
+    deleteNotificationMedicalHistory,
     getNotificationMedicalHistoryById,
     updateNotificationMedicalHistory,
     getNotificationMedicalHistoriesByNotification
@@ -56,5 +57,10 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedic
 // whoever records the antecedent is whoever corrects it, and forcing an ADMIN in to fix a capture
 // typo would break the operational flow in half
 router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, ...updateNotificationMedicalHistoryValidator, validateFields, updateNotificationMedicalHistory);
+// Delete Notification Medical History - For Admin
+// Code: ESAVI-MEDHIST-005A
+// Blocked by nothing: the table is a leaf of the graph. It seals deletedAt, which frees the
+// sortOrder from the partial unique index, and it does not touch the notification's flag
+router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicalHistoryIdValidator, validateFields, deleteNotificationMedicalHistory);
 
 export default router;
