@@ -187,6 +187,27 @@ const deleteInvestigationDiagnostic = async (req: Request, res: Response, next: 
     }
 }
 
+// Activate Investigation Diagnostic Controller
+// Code: ESAVI-INVDIAG-005B
+const activateInvestigationDiagnostic = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    const id = (req.params.id).toString().trim();
+    try {
+        const data = await setInvestigationDiagnosticActivationService(id, req.user, req.lang, true);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('investigationDiagnostic.activatedSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-INVDIAG-005B: Error activating Investigation Diagnostic: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('investigationDiagnostic.activatedFailed', req.lang), 500, 'INVDIAG_005B_ACTIVATION_FAILED', error));
+    }
+}
+
 export {
     createInvestigationDiagnostic,
     getInvestigationDiagnosticsByInvestigation,
@@ -194,5 +215,6 @@ export {
     getInvestigationDiagnosticById,
     getInvestigationDiagnosticsByCaseId,
     updateInvestigationDiagnostic,
-    deleteInvestigationDiagnostic
+    deleteInvestigationDiagnostic,
+    activateInvestigationDiagnostic
 };

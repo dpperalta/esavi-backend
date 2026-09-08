@@ -768,6 +768,64 @@ const updateInvestigationDiagnosticService = async (
     return updated ? toInvestigationDiagnosticResponse(updated) : null;
 }
 
+// The one piece of ESAVI-INVDIAG-005B that is not a clean delegation, and the reason the whole
+// operation exists as a function of its own.
+//
+// TRG_investigationDiagnostic_setSortOrder fires BEFORE INSERT only, and entityActivation.service.ts
+// clears deletedAt without looking at the number. The partial unique index is over
+// (investigationId, sortOrder) WHERE deletedAt IS NULL, so reactivating a diagnosis whose number was
+// taken by a live sister in the meantime would violate it in the helper's own UPDATE — and it is not
+// a deferrable constraint, so it would blow up there and not at commit.
+//
+// The order of the two writes is the whole point: while deletedAt is still sealed the row is outside
+// the partial index, so this update is free. Doing it after the helper would fail.
+//
+// Only on the way back: a 005A is what frees the number, so it never collides. The reactivation
+// revalidates nothing else — not the duplicate term, not the diagnostic type, not the state of the
+// investigation. Bringing a row back to life is undoing a deactivation, not rewriting it, and the
+// row is historical data. The consequence — a 005B can resurrect a diagnosticTermId that already
+// exists live, or one pointing at a catalogItem deactivated since — is assumed and declared in §6
+// and §7: the duplicate is visible, correctable with a 005A and breaks nothing
+const reassignSortOrderOnCollision = async (id: string, transaction: Transaction) => {
+    const diagnostic = await InvestigationDiagnostic.findOne({
+        where: { diagnosticId: id },
+        paranoid: false,
+        transaction
+    });
+    // No row: the helper raises the 404. Already live: a 005B on it is a 409, and there is nothing
+    // to move either way
+    if( !diagnostic || diagnostic.deletedAt === null ) {
+        return;
+    }
+
+    const collision = await InvestigationDiagnostic.findOne({
+        where: {
+            investigationId: diagnostic.investigationId,
+            sortOrder: diagnostic.sortOrder as number,
+            deletedAt: null,
+            diagnosticId: { [Op.ne]: id }
+        },
+        attributes: ['diagnosticId'],
+        paranoid: false,
+        transaction
+    });
+    if( !collision ) {
+        return;
+    }
+
+    // The same count TRG_investigationDiagnostic_setSortOrder does on insert, so the reactivated
+    // diagnosis reappears at the end of the list
+    const highest = await InvestigationDiagnostic.max<number, InvestigationDiagnostic>('sortOrder', {
+        where: { investigationId: diagnostic.investigationId, deletedAt: null },
+        transaction
+    });
+
+    await diagnostic.update(
+        { sortOrder: ( Number(highest) || 0 ) + 1 },
+        { transaction, fields: ['sortOrder'] }
+    );
+}
+
 // Set Investigation Diagnostic Activation Service
 // Code: ESAVI-INVDIAG-005A / ESAVI-INVDIAG-005B
 // One service for the two operations, as the rest of the repository does it. Neither is a
@@ -793,6 +851,13 @@ const setInvestigationDiagnosticActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // BEFORE the helper, never after: while deletedAt is still sealed the row is outside the
+        // partial unique index, so the number can be moved freely. Inverting the two makes the
+        // index fail inside the helper's own UPDATE
+        if( isActive ) {
+            await reassignSortOrderOnCollision(id, transaction);
+        }
+
         const diagnostic = await setEntityActiveStatusService({
             model: InvestigationDiagnostic,
             where: { diagnosticId: id },

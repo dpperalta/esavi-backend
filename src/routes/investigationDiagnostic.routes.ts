@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import {
+    activateInvestigationDiagnostic,
     createInvestigationDiagnostic,
     deleteInvestigationDiagnostic,
     getAllInvestigationDiagnosticsByInvestigation,
@@ -52,6 +53,15 @@ router.get('/admin/investigation/:id', tokenValidation, validateUserRole(ADMIN),
 // diagnoses only make sense read together and in their order. It is entered by the investigationId,
 // never by /, and it admits no filter — not even by diagnosticTypeItemId
 router.get('/investigation/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticInvestigationIdValidator, validateFields, getInvestigationDiagnosticsByInvestigation);
+
+// Activate Investigation Diagnostic
+// Code: ESAVI-INVDIAG-005B
+// Declared BEFORE /:id, or Express would capture 'activate' as the :id of that route. ADMIN and not
+// SUPERADMIN: it is the matrix of the investigation family, the same as INVTEAM, INVPREG and
+// INVVACAD. The reassignment of sortOrder therefore lives in ADMIN — breaking the symmetry with the
+// ten sisters of the chain to protect a reassignment the service resolves without ambiguity is a
+// cost with no benefit
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...investigationDiagnosticIdValidator, validateFields, activateInvestigationDiagnostic);
 
 // Get Investigation Diagnostic By ID
 // Code: ESAVI-INVDIAG-003
