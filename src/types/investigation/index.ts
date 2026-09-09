@@ -10,4 +10,5 @@ export * from './investigationVaccineAdministered.types';
 export * from './investigationColdChain.types';
 export * from './investigationAdministrationError.types';
 export * from './investigationCommunity.types';
+export * from './investigationDiagnostic.types';
 export * from './evaluationInstitution.types';

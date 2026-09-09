@@ -41,6 +41,7 @@ import { InvestigationVaccineAdministered } from './investigationVaccineAdminist
 import { InvestigationColdChain } from './investigationColdChain.model';
 import { InvestigationAdministrationError } from './investigationAdministrationError.model';
 import { InvestigationCommunity } from './investigationCommunity.model';
+import { InvestigationDiagnostic } from './investigationDiagnostic.model';
 import { FinalClassification } from './finalClassification.model';
 import { EvaluationInstitution } from './evaluationInstitution.model';
 import { CaseWorkflow } from './caseWorkflow.model';
@@ -94,6 +95,7 @@ export {
     InvestigationColdChain,
     InvestigationAdministrationError,
     InvestigationCommunity,
+    InvestigationDiagnostic,
     FinalClassification,
     EvaluationInstitution,
     CaseWorkflow,

@@ -38,6 +38,7 @@ export * from './investigationVaccineAdministered.validator';
 export * from './investigationColdChain.validator';
 export * from './investigationAdministrationError.validator';
 export * from './investigationCommunity.validator';
+export * from './investigationDiagnostic.validator';
 export * from './finalClassification.validator';
 export * from './caseWorkflow.validator';
 export * from './evaluationInstitution.validator';
