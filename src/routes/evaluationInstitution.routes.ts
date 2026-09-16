@@ -71,6 +71,8 @@ router.put('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitu
 
 // Delete Evaluation Institution - Soft delete
 // Code: ESAVI-EVALINST-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...evaluationInstitutionIdValidator, validateFields, deleteEvaluationInstitution);
+// USER and not ADMIN, following the same reason as 001: retracting an institution is part of the
+// same clinical evaluation flow that creates and updates it
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionIdValidator, validateFields, deleteEvaluationInstitution);
 
 export default router;
