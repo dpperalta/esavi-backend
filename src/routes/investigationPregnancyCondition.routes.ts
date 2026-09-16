@@ -70,6 +70,8 @@ router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationPreg
 
 // Delete Investigation Pregnancy Condition - Soft delete
 // Code: ESAVI-INVPREG-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...investigationPregnancyConditionIdValidator, validateFields, deleteInvestigationPregnancyCondition);
+// USER and not ADMIN, following the same reason as 001: retracting the condition is part of the
+// same clinical flow that creates and updates it
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionIdValidator, validateFields, deleteInvestigationPregnancyCondition);
 
 export default router;

@@ -1807,11 +1807,11 @@ CALL "upsertCatalogItem"('outcome', 'Outcome', '0', 'Desconocido', 'UNKNOWN', 0)
 --CALL "upsertCatalogItem"('pharmaceuticalForm', 'Pharmaceutical form', 'SOLUTION', 'Solution', 'SOLUTION', 1);
 --CALL "upsertCatalogItem"('pharmaceuticalForm', 'Pharmaceutical form', 'SUSPENSION', 'Suspension', 'SUSPENSION', 2);
 
-CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'HOSPITAL', 'Hospital', 'HOSPITAL', 1);
-CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'HEALTH_CENTER', 'Health center', 'HEALTH_CENTER', 2);
-CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'LABORATORY', 'Laboratory', 'LABORATORY', 3);
-CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'PRIVATE_PRACTICE', 'Private practice', 'PRIVATE_PRACTICE', 4);
-CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'OTHER', 'Other', 'OTHER', 5);
+CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'THE_SAME', 'La misma', 'THE_SAME', 1);
+CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'DIFFERENT', 'Diferente', 'DIFFERENT', 2);
+--CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'LABORATORY', 'Laboratory', 'LABORATORY', 3);
+--CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'PRIVATE_PRACTICE', 'Private practice', 'PRIVATE_PRACTICE', 4);
+--CALL "upsertCatalogItem"('evaluationInstitutionType', 'Evaluation institution type', 'OTHER', 'Other', 'OTHER', 5);
 
 CALL "upsertCatalogItem"('diagnosticType', 'Diagnostic type', 'PRESUMPTIVE',  'Presuntivo',  'PRESUMPTIVE',  1);
 CALL "upsertCatalogItem"('diagnosticType', 'Diagnostic type', 'CONFIRMED',    'Confirmado',  'CONFIRMED',    2);

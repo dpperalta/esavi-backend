@@ -88,9 +88,10 @@ router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationDiag
 
 // Delete Investigation Diagnostic
 // Code: ESAVI-INVDIAG-005A
-// ADMIN, the canonical role for the soft delete. It seals deletedAt, which frees the sortOrder from
-// the partial unique index — deliberate: the gap stays available for the next diagnosis, and it is
-// the collision ESAVI-INVDIAG-005B has to resolve
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...investigationDiagnosticIdValidator, validateFields, deleteInvestigationDiagnostic);
+// USER and not ADMIN, departing from the canonical role for soft delete: it is part of the same
+// clinical flow that captures and updates the diagnostic. It seals deletedAt, which frees the
+// sortOrder from the partial unique index — deliberate: the gap stays available for the next
+// diagnosis, and it is the collision ESAVI-INVDIAG-005B has to resolve
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticIdValidator, validateFields, deleteInvestigationDiagnostic);
 
 export default router;

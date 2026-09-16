@@ -79,6 +79,8 @@ router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationVacc
 
 // Delete Investigation Vaccine Administered - Soft delete
 // Code: ESAVI-INVVACAD-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...investigationVaccineAdministeredIdValidator, validateFields, deleteInvestigationVaccineAdministered);
+// USER and not ADMIN, following the same reason as 004: it is part of the same clinical flow that
+// captures and updates the vaccine administered record
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredIdValidator, validateFields, deleteInvestigationVaccineAdministered);
 
 export default router;

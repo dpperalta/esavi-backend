@@ -64,6 +64,8 @@ router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationIdVa
 
 // Soft delete Investigation
 // Code: ESAVI-INVESTGN-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...investigationIdValidator, validateFields, deleteInvestigation);
+// USER and not ADMIN, departing from the canonical matrix for the same reason as 001 and 004:
+// retracting an investigation is part of the same clinical flow that creates and completes it
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationIdValidator, validateFields, deleteInvestigation);
 
 export default router;
