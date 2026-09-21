@@ -559,7 +559,7 @@ Los produce `errorHandler` (`src/middlewares/errorHandler.middleware.ts`), últi
 | `401` | Token ausente, inválido o expirado · **credenciales inválidas en login** |
 | `403` | Nivel de rol insuficiente (lo emite `validateUserRole`) |
 | `404` | El recurso o una FK referenciada no existe |
-| `409` | Conflicto: `code`/`email` duplicado, **en create y en update por igual**; la fila ya está en el estado pedido en `005A`/`005B`; la fila **sigue activa** al intentar purgarla en `005C` |
+| `409` | Conflicto: `code`/`email` duplicado, **en create y en update por igual**; la fila ya está en el estado pedido en `005A`/`005B`; la fila **sigue activa** al intentar purgarla en `005C`; **el expediente está cerrado** al escribir sobre su contenido (`<PREFIJO>_<op>_CASE_CLOSED`, ver «Expediente cerrado» en §11) |
 | `500` | Error inesperado |
 
 Un duplicado es `409` siempre. Usar `400` en create y `409` en update para el mismo caso, como ocurre hoy, hace imposible que el frontend distinga.
@@ -797,6 +797,42 @@ El genérico hace cuatro cosas, en este orden:
 El volcado al log es el **único** rastro que queda de una operación irreversible, y por eso es obligatorio y va antes del `destroy`. Sale de la instancia de Sequelize, así que los campos cifrados con `esaviCrypt` se escriben **cifrados**: el descifrado ocurre al construir la respuesta, no al leer de la base. Ninguna entidad filtra PII en claro al log por esta vía.
 
 El `where` filtra **solo por la PK**, como en la activación. Meter `isActive: false` en el `where` convertiría el 409 del segundo caso en un 404 que miente: el recurso existe, lo que pasa es que todavía está vivo.
+
+### Expediente cerrado — `assertCaseIsOpen`
+
+Un expediente cuyo flujo (`caseWorkflow`) está en `CLOSED` no se edita: solo un ADMIN lo reabre, con `ESAVI-CASEFLOW-009`. La regla la aplica el servidor y no solo el cliente, porque lo que separa lo que puede hacer un USER de lo que necesita un ADMIN es precisamente esa reapertura (SPEC F61).
+
+**Qué alcanza.** Toda escritura sobre una tabla del expediente, sin distinguir cabecera de satélite:
+
+- `ESAVI-CASE-004`, y las cuatro escrituras de `notifier`.
+- `004`, `005A` y `005B` de las cuatro cabeceras de fase (`classification`, `notification`, `investigation`, `finalClassification`). Su `001` ya lo cubre `CASEFLOW_012`, que lanza `advanceCaseWorkflowStageService`.
+- `001`, `004`, `005A` y `005B` de todo satélite de `notification` y de `investigation`, a cualquier profundidad. Las tablas 1:1 sin `isActive` solo exponen `001` y `004`.
+
+**Qué no alcanza.** Las lecturas; todo `005C` (es SUPERADMIN, exige la fila ya retirada y es gobierno del dato, no captura); `ESAVI-CASE-001`, `-005A` y `-005B` (crean el caso o actúan sobre su ciclo de vida entero); `patient` (se comparte entre casos); las operaciones de `caseWorkflow` (tienen sus propias reglas de estado); y las cascadas internas, que no son rutas.
+
+**El guardia.** `assertCaseIsOpen(caseId, prefix, op, lang, transaction?)`, exportado de `src/services/caseWorkflow.service.ts`. Si el flujo del caso está en `CLOSED`, lanza un `AppError` 409 con el mensaje `caseWorkflow.caseClosed` y el `code` `<PREFIJO>_<op>_CASE_CLOSED` (por ejemplo `NOTIFEVT_004_CASE_CLOSED`); en cualquier otro caso no hace nada:
+
+- **Un caso sin fila de flujo no está cerrado.** Cerrar exige la fila (`ESAVI-CASEFLOW-008`), así que su ausencia —un caso anterior a F44— no puede significar «cerrado».
+- **Solo `CLOSED` bloquea.** `PENDING_VALIDATION`, `OPEN`, `REOPENED` y los `IN_*` no.
+- **No filtra por `isActive`** y **no toma ningún bloqueo** sobre la fila del flujo: la carrera con un `008` simultáneo deja entrar una escritura que habría entrado igual milisegundos antes.
+- **No hay clave i18n nueva.** El `code` distingue la operación y el mensaje siempre dice lo mismo: `caseWorkflow.caseClosed`.
+
+**Dónde se invoca.** La regla es: **existencia y visibilidad primero, cierre después, y todo lo demás a continuación.** Un id inexistente sigue siendo 404 aunque el caso esté cerrado, y una FK inactiva o un duplicado sobre un caso cerrado responden `409 *_CASE_CLOSED`, no el error de la FK.
+
+| Operación | Punto de inserción |
+|---|---|
+| `001` de satélite | Justo después de comprobar que el padre existe y está activo |
+| `001` de `notifier` | Después de validar que el caso existe |
+| `004` | Justo después del 404 de la fila y, si el servicio la tiene, de la comprobación de alcance geográfico; **antes** de FKs, unicidad y `buildDifferentialUpdate` |
+| `005A` / `005B` | **Antes** de delegar en `setEntityActiveStatusService` y de `reassignSortOrderOnCollision`, con una lectura mínima nueva de la fila (solo la PK y la cadena hasta `caseId`, **sin** filtro de `isActive`, porque el `005B` actúa sobre filas retiradas). Si la fila no existe no se evalúa el guardia y responde su 404 el servicio genérico |
+
+**De dónde sale el `caseId`.** De la cadena hasta `esaviCase` que el servicio ya lee para la visibilidad heredada: se añade `'caseId'` a los `attributes` del último eslabón y no cuesta ninguna consulta nueva. Si ese include **viaja en la respuesta**, no se amplía —cambiaría el contrato—: se toma el `caseId` del `case` anidado que ya trae. El guardia corre dentro de la transacción de la operación cuando la hay.
+
+**Update diferencial.** El guardia va **antes** del diff, igual que la validación de FK y la unicidad: un `PUT` sobre un caso cerrado responde 409 **aunque no cambie nada**, porque la regla es sobre el expediente y no sobre el contenido del body. El contrato de `candidates` de cada `004` no cambia.
+
+**El cliente.** El sufijo `_CASE_CLOSED` es la interfaz: `/_CASE_CLOSED$/` reconoce todas las operaciones guardadas y las tres de `caseWorkflow` que ya lo usaban (`CASEFLOW_007`, `_010` y `_012`).
+
+**Toda ruta nueva de esas familias entra en `CLOSED_GUARD_RULES`** (`tests/contract/caseClosedGuard.test.ts`) con su fila `{ method, path, code }`, y su servicio invoca el guardia. La meta-prueba `the matrix itself` deriva de `ROUTE_RULES` (`tests/setup/routeRules.ts`) toda escritura de las 28 entidades y exige que la matriz sea exactamente esa: un satélite nuevo sin guardia deja la suite en rojo nombrando la ruta que falta.
 
 ### Transacciones
 
@@ -1262,6 +1298,7 @@ La ruta base va en **kebab-case plural**: `/catalog-items`, `/geo-level-types`, 
 - [ ] El `catch` del controlador sigue el idiom de tres pasos.
 - [ ] El servicio valida las FK, normaliza en escritura y extiende `appDetails` sin sobrescribirlo.
 - [ ] El update es **diferencial y pasa por `buildDifferentialUpdate`**: solo viajan al `UPDATE` los campos cuyo valor normalizado difiere del guardado, y sin diferencias no hay escritura, ni entrada de auditoría, ni evento en `sysDetails`.
+- [ ] Si la escritura es sobre el contenido de un expediente (`esaviCase`, `notifier`, una cabecera de fase o un satélite de `notification` o `investigation`), el servicio invoca `assertCaseIsOpen` tras el 404 y antes de FKs, unicidad y diff, y la ruta figura en `CLOSED_GUARD_RULES`.
 - [ ] Hay transacción si se hace más de una escritura dependiente.
 - [ ] Las claves i18n existen en `es.json`, `en.json` **y** `nl.json`, y todas las referenciadas desde el código existen.
 - [ ] No queda código comentado.
