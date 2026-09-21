@@ -975,13 +975,13 @@ describe('notificationMedicalHistory contract', () => {
         expect(r.body.code).toBe('MEDHIST_005A_NOT_FOUND');
     });
 
-    it('el rol minimo es ADMIN: un USER recibe 403', async () => {
+    it('el rol minimo es USER: un ANALYTICS recibe 403', async () => {
         const { notificationId } = await notifyNewCase();
         const created = await create({ notificationId, historyName: 'Asma' });
         const id = created.body.data.medicalHistoryId;
 
-        expect((await remove(id, 'USER')).status).toBe(403);
-        expect((await remove(id, 'ADMIN')).status).toBe(200);
+        expect((await remove(id, 'ANALYTICS')).status).toBe(403);
+        expect((await remove(id, 'USER')).status).toBe(200);
     });
 
     it('la fila retirada desaparece del 002A y del 006 pero sigue en el 002B', async () => {
@@ -1054,15 +1054,14 @@ describe('notificationMedicalHistory contract', () => {
         expect(r.body.code).toBe('MEDHIST_005B_ALREADY_ACTIVE');
     });
 
-    it('34 — el rol minimo es SUPERADMIN: un ADMIN recibe 403', async () => {
+    it('34 — el rol minimo es ADMIN: un USER recibe 403', async () => {
         const { notificationId } = await notifyNewCase();
         const created = await create({ notificationId, historyName: 'Asma' });
         const id = created.body.data.medicalHistoryId;
         await remove(id);
 
-        expect((await activate(id, 'ADMIN')).status).toBe(403);
         expect((await activate(id, 'USER')).status).toBe(403);
-        expect((await activate(id, 'SUPERADMIN')).status).toBe(200);
+        expect((await activate(id, 'ADMIN')).status).toBe(200);
     });
 
     // 35 — the 005B does not revalidate the duplicate guard nor the parent state

@@ -596,10 +596,11 @@ describe('notificationEvent contract', () => {
             expect(response.body.data.notificationId).toBe(notificationId);
         });
 
-        it('answers 403 for a USER', async () => {
+        it('answers 200 for a USER and 403 for an ANALYTICS', async () => {
             const { eventId } = await newEvent();
 
-            expect(( await updateEvent(eventId, { notes: 'x' }, 'USER') ).status).toBe(403);
+            expect(( await updateEvent(eventId, { notes: 'x' }, 'ANALYTICS') ).status).toBe(403);
+            expect(( await updateEvent(eventId, { notes: 'x' }, 'USER') ).status).toBe(200);
         });
 
     });
@@ -666,11 +667,12 @@ describe('notificationEvent contract', () => {
             ]);
         });
 
-        it('answers 403 for an ADMIN on the activation', async () => {
+        it('answers 403 for a USER on the activation and 200 for an ADMIN', async () => {
             const { eventId } = await newEvent();
             await deleteEvent(eventId);
 
-            expect(( await activateEvent(eventId, 'ADMIN') ).status).toBe(403);
+            expect(( await activateEvent(eventId, 'USER') ).status).toBe(403);
+            expect(( await activateEvent(eventId, 'ADMIN') ).status).toBe(200);
         });
 
     });

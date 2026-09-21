@@ -711,11 +711,12 @@ describe('notificationMedication contract', () => {
             expect(unknown.body.code).toBe('NOTIFMED_005B_NOT_FOUND');
         });
 
-        it('refuses the reactivation to an ADMIN', async () => {
+        it('refuses the reactivation to a USER and lets an ADMIN through', async () => {
             const { medicationId } = await newMedication();
             await deleteMedication(medicationId);
 
-            expect(( await activateMedication(medicationId, 'ADMIN') ).status).toBe(403);
+            expect(( await activateMedication(medicationId, 'USER') ).status).toBe(403);
+            expect(( await activateMedication(medicationId, 'ADMIN') ).status).toBe(200);
         });
 
     });
