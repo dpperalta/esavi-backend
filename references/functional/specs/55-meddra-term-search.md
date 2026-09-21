@@ -4,6 +4,8 @@
 > **Depende de:** SPEC 01 (roles), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F26 (`systemConfig`, su catálogo de defaults y el `006` de lectura por `(code, scope)` — implementado)**, **SPEC F43 (`appConfig.helper.ts`, la precedencia «`systemConfig` gana, `.env` es fallback», y `rateLimit.middleware.ts` — implementado)**
 > **Fecha:** 2026-09-02
 > **Objetivo:** Dar un endpoint de solo lectura que consulte el API oficial de MedDRA y devuelva `{ count, rows }` con `code`, `name` y `termGroup`, configurado íntegramente desde `systemConfig`.
+>
+> **Corrección del 2026-09-21:** la redacción original decía que el API devolvía la clave `pcode` y que el backend la traducía a `code`. La clave del API es `code`; el servicio la lee tal cual y no hay traducción.
 
 ---
 
@@ -24,7 +26,7 @@
 2. **La configuración se cachea para siempre.** `dataStoreConfig.js:7-8` guarda `cachedMedDRAConfig` y `cachedSearchBody` en variables de módulo sin TTL. Rotar una credencial exige recargar la página. Aquí la configuración se lee fresca en cada petición, que es la decisión que el [SPEC F43 §3.6](./43-auth-password-reset.md) ya fijó para SMTP.
 3. **No hay control de consumo.** El plugin llama al API en cada pulsación pasado el debounce, sin caché de resultados. MedDRA es un diccionario licenciado y de pago: cada llamada cuesta.
 
-**D — La forma de la respuesta no encaja con los campos del formulario.** El API devuelve `{ pcode, name }` —`types.ts:1-4` declara `LLTResult { pcode: string; name: string; [key: string]: unknown }`— y `notificationEvent` guarda `esaviCode` y `esaviName`. La traducción `pcode → code` la hace hoy el componente de React (`MedDRASearchField.js:45`). Este spec la mueve al backend, para que todo consumidor reciba ya la forma que va a guardar.
+**D — La forma de la respuesta no encaja con los campos del formulario.** El API devuelve `{ code, name }` y `notificationEvent` guarda `esaviCode` y `esaviName`. Este spec normaliza la respuesta en el backend —recorta, descarta las filas malformadas y añade `termGroup`—, para que todo consumidor reciba ya la forma que va a guardar.
 
 ---
 
@@ -99,10 +101,10 @@ export interface MeddraSearchResult {
     rows: MeddraSearchRow[];
 }
 
-// Lo que el API externo devuelve por fila. `pcode` y `name` son lo único garantizado
-// (references/external/meddra/.d2/shell/src/D2App/types.ts:1-4); el resto se ignora
+// Lo que el API externo devuelve por fila. `code` y `name` son lo único garantizado;
+// el resto se ignora
 export interface MeddraApiTerm {
-    pcode?: unknown;
+    code?: unknown;
     name?: unknown;
     [key: string]: unknown;
 }
@@ -198,7 +200,7 @@ Respuesta no 2xx → **502** `MEDDRA_006_SEARCH_FAILED`, mensaje `meddra.searchF
 
 **10. Normalización de las filas.** La respuesta cruda se desenvuelve igual que en `meddra.js:41-42`: si es un array, es la lista; si no, se toma `data.results` y luego `data.data`; si no hay ninguno, lista vacía. Después, por cada elemento:
 
-- `code` = `String( item.pcode ).trim()`. Si `pcode` es `undefined`, `null` o queda vacío, **la fila se descarta en silencio** y no cuenta.
+- `code` = `String( item.code ).trim()`. Si `code` es `undefined`, `null` o queda vacío, **la fila se descarta en silencio** y no cuenta.
 - `name` = `String( item.name ).trim()`. Misma regla.
 - `termGroup` = el literal derivado en el punto 5.
 - **Duplicados por `code`: gana la primera aparición.** Es el mismo criterio que `meddraParser.helper.ts` aplica al importar el `.asc`.
@@ -332,7 +334,7 @@ Un `null` no es configuración utilizable: `isUsableValue` ya lo descarta antes 
 12. **Suite de roles.** Añadir la fila `ESAVI-MEDDRA-006` a `ROUTE_RULES` en `tests/auth/roles.test.ts` y subir el total esperado de **330 a 331**.
     *Verificación:* `npm test -- roles` pasa, y el `toHaveLength` falla si alguien añade una ruta sin regla.
 
-13. **Suite de contrato.** `tests/contract/meddra.test.ts`. Cubre: 400 por término corto; 503 `MEDDRA_006_DISABLED` con el interruptor apagado —que es el estado natural en `.env.test`—; y el camino feliz con `global.fetch` simulado, comprobando la traducción `pcode → code`, el `termGroup` derivado, el descarte de filas sin `pcode`, el descarte de duplicados y que la segunda llamada al mismo término no vuelve a invocar `fetch`.
+13. **Suite de contrato.** `tests/contract/meddra.test.ts`. Cubre: 400 por término corto; 503 `MEDDRA_006_DISABLED` con el interruptor apagado —que es el estado natural en `.env.test`—; y el camino feliz con `global.fetch` simulado, comprobando la lectura de `code`, el `termGroup` derivado, el descarte de filas sin `code`, el descarte de duplicados y que la segunda llamada al mismo término no vuelve a invocar `fetch`.
     *Verificación:* `npm test -- meddra` pasa y ninguna prueba sale a la red.
 
 ---
@@ -340,7 +342,7 @@ Un `null` no es configuración utilizable: `isUsableValue` ya lo descarta antes 
 ## 5. Criterios de aceptación
 
 - [ ] `GET /api/meddra/search?term=fieb` con token `USER` responde 200 con `{ ok, message, data: { count, rows } }`.
-- [ ] Cada fila de `rows` tiene exactamente tres claves: `code`, `name` y `termGroup`. `grep -n "pcode" src/` no devuelve resultados fuera de `meddra.service.ts`.
+- [ ] Cada fila de `rows` tiene exactamente tres claves: `code`, `name` y `termGroup`. `grep -rn "pcode" src/` no devuelve resultados.
 - [ ] `count` es igual a `rows.length` en todas las respuestas.
 - [ ] Un término sin coincidencias responde **200** con `{ count: 0, rows: [] }`, no 404.
 - [ ] `?term=fi` responde **400**; sin `term`, **400**.
@@ -352,7 +354,7 @@ Un `null` no es configuración utilizable: `isUsableValue` ya lo descarta antes 
 - [ ] Dos búsquedas seguidas del mismo término en el mismo idioma invocan `fetch` **una** vez.
 - [ ] Dos búsquedas del mismo término con `?lang=es` y `?lang=en` invocan `fetch` **dos** veces y mandan `language: "Spanish"` y `language: "English"`.
 - [ ] El cuerpo enviado al API contiene todas las claves de `ESAVI_MEDDRA_SEARCH_CONFIG` y solo `searchterms[0].searchterm` y `language` difieren de lo configurado.
-- [ ] Una respuesta del API con dos filas del mismo `pcode` produce **una** fila; una fila sin `pcode` no aparece y no rompe la respuesta.
+- [ ] Una respuesta del API con dos filas del mismo `code` produce **una** fila; una fila sin `code` no aparece y no rompe la respuesta.
 - [ ] `POST /api/system-configs/sync` crea las ocho filas de `scope` `MEDDRA`; una segunda llamada no modifica ninguna.
 - [ ] `ESAVI_MEDDRA_USERNAME` y `ESAVI_MEDDRA_PASSWORD` se guardan como `{ "enc": "..." }`; `ESAVI-SYSCONF-003` no las devuelve en claro a un rol por debajo de SUPERADMIN.
 - [ ] Los cinco lugares del código de operación coinciden — con la salvedad de `appDetails.method`, que aquí no existe porque la operación no escribe: ruta, controlador, servicio, `AppError` y `esaviLog` llevan `ESAVI-MEDDRA-006`.
@@ -385,9 +387,9 @@ Un `null` no es configuración utilizable: `isUsableValue` ya lo descarta antes 
 - **No:** cachear la configuración, aunque el plugin lo haga (`dataStoreConfig.js:7-8`). Apagar el interruptor o rotar una credencial tendría que esperar a un reinicio, y eso convierte `ESAVI_MEDDRA_ENABLED` en un adorno.
 - **Sí:** `termGroup` derivado de las banderas de la configuración. El API no lo devuelve y el campo tiene que salir de algún sitio verificable.
 - **No:** `termGroup` fijo en `'LLT'`. Funcionaría hoy, y mentiría el día que alguien ponga `pt: true` en la configuración, que es exactamente el día en que nadie miraría este código.
-- **No:** devolver un campo `id`. `MedDRASearchField.js:45` hace `result.id || result.pcode` precisamente porque el API no garantiza `id`. En MedDRA el `pcode` **es** el identificador del término, y `diagnosticTerm` identifica por el par `(source, code)`, no por un id del proveedor.
+- **No:** devolver un campo `id`. El API no garantiza un `id` propio. En MedDRA el `code` **es** el identificador del término, y `diagnosticTerm` identifica por el par `(source, code)`, no por un id del proveedor.
 - **No:** portar el modo mock del plugin. Un interruptor que hace que el backend invente datos clínicos es un riesgo que no compensa; las pruebas simulan `fetch`, que es donde debe estar la costura.
-- **Sí:** descartar en silencio las filas malformadas. Una fila sin `pcode` no debe tumbar una búsqueda que devolvió otras diecinueve correctas. Queda el `warn` en el log.
+- **Sí:** descartar en silencio las filas malformadas. Una fila sin `code` no debe tumbar una búsqueda que devolvió otras diecinueve correctas. Queda el `warn` en el log.
 - **No:** paginación. Es un autocompletado: el `take` de la configuración lo acota y el usuario refina escribiendo más.
 
 ---

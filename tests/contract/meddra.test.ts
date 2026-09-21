@@ -247,14 +247,14 @@ describe('meddra contract', () => {
 
     describe('the answer', () => {
 
-        it('translates pcode to code, stamps the derived termGroup and drops what is malformed', async () => {
+        it('reads code, stamps the derived termGroup and drops what is malformed', async () => {
             await configureMeddra();
             mockFetch([
-                { pcode: '10016558', name: 'Fiebre', extra: 'ignored' },
-                { pcode: '10027669', name: 'Fiebre Amarilla' },
-                // Same pcode as the first one: the first appearance wins
-                { pcode: '10016558', name: 'Fiebre duplicada' },
-                // No pcode: dropped in silence, and it must not bring the answer down
+                { code: '10016558', name: 'Fiebre', extra: 'ignored' },
+                { code: '10027669', name: 'Fiebre Amarilla' },
+                // Same code as the first one: the first appearance wins
+                { code: '10016558', name: 'Fiebre duplicada' },
+                // No code: dropped in silence, and it must not bring the answer down
                 { name: 'Sin código' }
             ]);
 
@@ -269,7 +269,7 @@ describe('meddra contract', () => {
                 { code: '10016558', name: 'Fiebre', termGroup: 'LLT' },
                 { code: '10027669', name: 'Fiebre Amarilla', termGroup: 'LLT' }
             ]);
-            // Exactly three keys per row: no pcode and no id leak through
+            // Exactly three keys per row: no extra key of the API leaks through
             for( const row of response.body.data.rows ) {
                 expect(Object.keys(row).sort()).toEqual(['code', 'name', 'termGroup']);
             }
@@ -287,10 +287,10 @@ describe('meddra contract', () => {
 
         it('unwraps the list from `results` and from `data`', async () => {
             await configureMeddra();
-            mockFetch({ results: [ { pcode: '1', name: 'Uno' } ] });
+            mockFetch({ results: [ { code: '1', name: 'Uno' } ] });
             const fromResults = await search('envoltura uno');
 
-            mockFetch({ data: [ { pcode: '2', name: 'Dos' } ] });
+            mockFetch({ data: [ { code: '2', name: 'Dos' } ] });
             const fromData = await search('envoltura dos');
 
             expect(fromResults.body.data.rows).toEqual([ { code: '1', name: 'Uno', termGroup: 'LLT' } ]);
@@ -331,7 +331,7 @@ describe('meddra contract', () => {
 
         it('serves the second identical search without calling the API again', async () => {
             await configureMeddra();
-            const fetchMock = mockFetch([ { pcode: '10016558', name: 'Fiebre' } ]);
+            const fetchMock = mockFetch([ { code: '10016558', name: 'Fiebre' } ]);
 
             const first = await search('cache uno');
             const second = await search('cache uno');
@@ -342,7 +342,7 @@ describe('meddra contract', () => {
 
         it('keys the cache by language: the same term in es and en is two calls', async () => {
             await configureMeddra();
-            const fetchMock = mockFetch([ { pcode: '10016558', name: 'Fiebre' } ]);
+            const fetchMock = mockFetch([ { code: '10016558', name: 'Fiebre' } ]);
 
             await search('idioma uno', 'es');
             await search('idioma uno', 'en');
