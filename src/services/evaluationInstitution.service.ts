@@ -6,6 +6,7 @@ import { AppDetails, AuthUser, CreateEvaluationInstitutionInput } from '../types
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 
 // The catalogType every evaluationInstitutionTypeItemId must belong to. The foreign key of the DDL
 // points at catalogItem without distinguishing the type, so this code is the only defence against an
@@ -59,7 +60,8 @@ const CLINICAL_EVALUATION_INCLUDE = {
     include: [{
         model: Investigation,
         as: 'investigation',
-        attributes: ['investigationId', 'isActive']
+        // caseId feeds the guard of SPEC F61. It never reaches the response, which drops the chain
+        attributes: ['investigationId', 'caseId', 'isActive']
     }]
 };
 
@@ -138,7 +140,7 @@ const findValidClinicalEvaluation = async (
         include: [{
             model: Investigation,
             as: 'investigation',
-            attributes: ['investigationId'],
+            attributes: ['investigationId', 'caseId'],
             required: true,
             where: canViewInactive ? {} : { isActive: true }
         }]
@@ -378,7 +380,11 @@ const createEvaluationInstitutionService = async (
         // No relaxation of any of the three checks here, not even for SUPERADMIN: a sealed clinical
         // evaluation, or one of an inactive investigation, takes no new institutions whoever asks.
         // It is the criterion of F31 and F33 for their 001
-        await findValidClinicalEvaluation(data.investigationId, '001', lang);
+        const clinicalEvaluation = await findValidClinicalEvaluation(data.investigationId, '001', lang);
+
+        // SPEC F61: a closed case file takes no new row. Right after the chain is known to exist and be
+        // active, and before any other rule, so the answer does not depend on the body
+        await assertCaseIsOpen(clinicalEvaluation.investigation!.caseId, 'EVALINST', '001', lang, transaction);
 
         // Normalization first, so what the identification rule and the duplicate guard look at is
         // what is going to be stored. institutionName gets only the trim
@@ -585,6 +591,10 @@ const updateEvaluationInstitutionService = async (
                 'EVALINST_004_NOT_FOUND'
             );
         }
+
+        // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+        // foreign keys, rules and the diff — so the answer does not depend on the body
+        await assertCaseIsOpen(institution.clinicalEvaluation!.investigation!.caseId, 'EVALINST', '004', lang, transaction);
 
         // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
         const stored = institution.get({ plain: true }) as Record<string, unknown>;
@@ -807,6 +817,23 @@ const setEvaluationInstitutionActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await EvaluationInstitution.findByPk(id, {
+            attributes: ['evaluationInstitutionId'],
+            include: [{
+                model: InvestigationClinicalEvaluation,
+                as: 'clinicalEvaluation',
+                attributes: ['investigationId'],
+                include: [{ model: Investigation, as: 'investigation', attributes: ['caseId'] }]
+            }],
+            transaction
+        });
+        if( current ) {
+            await assertCaseIsOpen(current.clinicalEvaluation!.investigation!.caseId, 'EVALINST', op, lang, transaction);
+        }
+
         // Only on the way back: a 005A is what frees the number, so it never collides.
         // The reactivation revalidates nothing else — not the duplicate guard, not the two masters,
         // not the identification rule, not the state of the clinical evaluation or of the

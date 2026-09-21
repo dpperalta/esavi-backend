@@ -8,6 +8,7 @@ import { purgeEntityService } from './common/entityPurge.service';
 import { AppDetails, AuthUser, CreateInvestigationPregnancyConditionInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -64,7 +65,8 @@ const MEDICAL_HISTORY_INCLUDE = {
     include: [{
         model: Investigation,
         as: 'investigation',
-        attributes: ['investigationId', 'isActive']
+        // caseId feeds the guard of SPEC F61. It never reaches the response, which drops the chain
+        attributes: ['investigationId', 'caseId', 'isActive']
     }]
 };
 
@@ -125,7 +127,7 @@ const findValidMedicalHistory = async (
         include: [{
             model: Investigation,
             as: 'investigation',
-            attributes: ['investigationId'],
+            attributes: ['investigationId', 'caseId'],
             required: true,
             where: canViewInactive ? {} : { isActive: true }
         }]
@@ -348,7 +350,11 @@ const createInvestigationPregnancyConditionService = async (
         // No relaxation of any of the three checks here, not even for SUPERADMIN: a sealed medical
         // history, or one of an inactive investigation, takes no new conditions whoever asks. It is
         // the criterion of F31 §3.5 for its 001
-        await findValidMedicalHistory(data.investigationId, '001', lang);
+        const medicalHistory = await findValidMedicalHistory(data.investigationId, '001', lang);
+
+        // SPEC F61: a closed case file takes no new row. Right after the chain is known to exist and be
+        // active, and before any other rule, so the answer does not depend on the body
+        await assertCaseIsOpen(medicalHistory.investigation!.caseId, 'INVPREG', '001', lang, transaction);
 
         const resolved = await resolveConditionTerm(
             data.conditionCode,
@@ -537,6 +543,10 @@ const updateInvestigationPregnancyConditionService = async (
                 'INVPREG_004_NOT_FOUND'
             );
         }
+
+        // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+        // foreign keys, rules and the diff — so the answer does not depend on the body
+        await assertCaseIsOpen(condition.medicalHistory!.investigation!.caseId, 'INVPREG', '004', lang, transaction);
 
         // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
         const stored = condition.get({ plain: true }) as Record<string, unknown>;
@@ -748,6 +758,23 @@ const setInvestigationPregnancyConditionActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await InvestigationPregnancyCondition.findByPk(id, {
+            attributes: ['pregnancyConditionId'],
+            include: [{
+                model: InvestigationMedicalHistory,
+                as: 'medicalHistory',
+                attributes: ['investigationId'],
+                include: [{ model: Investigation, as: 'investigation', attributes: ['caseId'] }]
+            }],
+            transaction
+        });
+        if( current ) {
+            await assertCaseIsOpen(current.medicalHistory!.investigation!.caseId, 'INVPREG', op, lang, transaction);
+        }
+
         // Only on the way back: a 005A is what frees the number, so it never collides.
         // The reactivation revalidates nothing else — not the duplicate guard, not the term, not the
         // state of the medical history or of the investigation. Bringing a row back to life is

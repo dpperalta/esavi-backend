@@ -3,9 +3,10 @@ import type { Model, ModelStatic } from 'sequelize';
 import {
     CatalogItem, CatalogType, Classification, DiagnosticTerm, EsaviCase, FinalClassification, HealthFacility,
     Investigation, NonSevereNotification, Notification, NotificationEvent, NotificationMedicalHistory,
-    InvestigationAdministrationError, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationColdChain,
-    InvestigationCommunity, InvestigationDiagnostic, InvestigationMedicalHistory, InvestigationSource,
-    InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered,
+    EvaluationInstitution, InvestigationAdministrationError, InvestigationAutopsy, InvestigationClinicalEvaluation,
+    InvestigationColdChain, InvestigationCommunity, InvestigationDiagnostic, InvestigationMedicalHistory,
+    InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext,
+    InvestigationVaccineAdministered,
     NotificationDiluent, NotificationMedication, NotificationPregnancy, NotificationPregnancyComplication,
     NotificationVaccine, Notifier, Patient, SevereNotification, SystemConfig, VaccineWhodrug
 } from '../../src/models';
@@ -136,6 +137,16 @@ const CLOSED_GUARD_RULES: ClosedGuardRule[] = [
     { method: 'delete', path: `/api/investigation-diagnostics/${ UUID }`,                               code: 'ESAVI-INVDIAG-005A' },
     { method: 'patch',  path: `/api/investigation-diagnostics/activate/${ UUID }`,                      code: 'ESAVI-INVDIAG-005B' },
 
+    // paso 5, grandchildren: they hang from the medical history and from the clinical evaluation
+    { method: 'post',   path: '/api/investigation-pregnancy-conditions',                     code: 'ESAVI-INVPREG-001' },
+    { method: 'put',    path: `/api/investigation-pregnancy-conditions/${ UUID }`,           code: 'ESAVI-INVPREG-004' },
+    { method: 'delete', path: `/api/investigation-pregnancy-conditions/${ UUID }`,           code: 'ESAVI-INVPREG-005A' },
+    { method: 'patch',  path: `/api/investigation-pregnancy-conditions/activate/${ UUID }`,  code: 'ESAVI-INVPREG-005B' },
+    { method: 'post',   path: '/api/evaluation-institutions',                                code: 'ESAVI-EVALINST-001' },
+    { method: 'put',    path: `/api/evaluation-institutions/${ UUID }`,                      code: 'ESAVI-EVALINST-004' },
+    { method: 'delete', path: `/api/evaluation-institutions/${ UUID }`,                      code: 'ESAVI-EVALINST-005A' },
+    { method: 'patch',  path: `/api/evaluation-institutions/activate/${ UUID }`,             code: 'ESAVI-EVALINST-005B' },
+
     // final classification (SPEC F41)
     { method: 'put',    path: `/api/final-classifications/${ UUID }`,          code: 'ESAVI-FINCLASS-004' },
     { method: 'delete', path: `/api/final-classifications/${ UUID }`,          code: 'ESAVI-FINCLASS-005A' },
@@ -241,6 +252,48 @@ const FAMILIES: Record<string, Family> = {
     INVCOLD: oneToOneFamily('/api/investigation-cold-chains', InvestigationColdChain),
     INVADMER: oneToOneFamily('/api/investigation-administration-errors', InvestigationAdministrationError),
     INVCOMM: oneToOneFamily('/api/investigation-communities', InvestigationCommunity),
+    INVPREG: {
+        basePath: '/api/investigation-pregnancy-conditions',
+        // The parent is the medical history, whose primary key IS the investigationId
+        countRows: ( _caseId, parentId ) => InvestigationPregnancyCondition.count({ where: { investigationId: parentId } }),
+        listPath: target => `/api/investigation-pregnancy-conditions/investigation/${ target.parentId }`,
+        createParent: async caseId => {
+            const investigationId = await createInvestigationParent(caseId);
+            await InvestigationMedicalHistory.create({ investigationId });
+            return investigationId;
+        },
+        create: async ( _caseId, isActive, parentId ) => {
+            termCounter += 1;
+            const term = await DiagnosticTerm.create({
+                source: 'LOCAL', code: `CG${ runTag }${ termCounter }`, name: `Anemia ${ runTag } ${ termCounter }`
+            });
+            const values = { investigationId: parentId, diagnosticTermId: term.getDataValue('diagnosticTermId'), isActive };
+            return ( await InvestigationPregnancyCondition.create(values, insertOmittingSortOrder(values)) )
+                .getDataValue('pregnancyConditionId');
+        },
+        read: async rowId => ( await InvestigationPregnancyCondition.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ investigationId: parentId, conditionName: 'Anemia' })
+    },
+    EVALINST: {
+        basePath: '/api/evaluation-institutions',
+        // The parent is the clinical evaluation, whose primary key IS the investigationId
+        countRows: ( _caseId, parentId ) => EvaluationInstitution.count({ where: { investigationId: parentId } }),
+        listPath: target => `/api/evaluation-institutions/investigation/${ target.parentId }`,
+        createParent: async caseId => {
+            const investigationId = await createInvestigationParent(caseId);
+            await InvestigationClinicalEvaluation.create({ investigationId });
+            return investigationId;
+        },
+        create: async ( _caseId, isActive, parentId ) => {
+            const values = { investigationId: parentId, institutionName: 'MINSAL', isActive };
+            return ( await EvaluationInstitution.create(values, insertOmittingSortOrder(values)) )
+                .getDataValue('evaluationInstitutionId');
+        },
+        read: async rowId => ( await EvaluationInstitution.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ investigationId: parentId, institutionName: 'MINSAL' })
+    },
     INVTEAM: {
         basePath: '/api/investigation-team-members',
         countRows: ( _caseId, parentId ) => InvestigationTeamMember.count({ where: { investigationId: parentId } }),
