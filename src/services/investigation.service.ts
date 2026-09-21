@@ -10,7 +10,7 @@ import {
     VACCINATION_SITE_CATALOG_CODE
 } from '../constants/investigation.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
-import { advanceCaseWorkflowStageService } from './caseWorkflow.service';
+import { advanceCaseWorkflowStageService, assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { cascadeClearSatellite, cascadeSealSatellite } from './common/satelliteCascade.service';
 import { clinicalEvaluationLogSnapshot } from './investigationClinicalEvaluation.service';
@@ -406,6 +406,10 @@ const updateInvestigationService = async (
         throw new AppError(getMessage('investigation.notFound', lang), 404, 'INVESTGN_004_NOT_FOUND');
     }
 
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // foreign keys, uniqueness and the diff — so the answer does not depend on the body
+    await assertCaseIsOpen(investigation.caseId, 'INVESTGN', '004', lang);
+
     // Resolved and validated before the diff and independently of it: a foreign key arriving with
     // a UUID is checked even when it matches what is stored.
     // The status is resolved only when the key travels, which is where this operation departs from
@@ -692,6 +696,14 @@ const setInvestigationActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await Investigation.findByPk(id, { attributes: ['investigationId', 'caseId'], transaction });
+        if( current ) {
+            await assertCaseIsOpen(current.caseId, 'INVESTGN', op, lang, transaction);
+        }
+
         // The where filters by the primary key only: the generic service is the one that tells
         // 'does not exist' (404) from 'already in that state' (409)
         await setEntityActiveStatusService({

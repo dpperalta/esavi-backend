@@ -10,7 +10,7 @@ import {
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
-import { advanceCaseWorkflowStageService } from './caseWorkflow.service';
+import { advanceCaseWorkflowStageService, assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the three precedence values, seeded with three items of
@@ -447,6 +447,10 @@ const updateFinalClassificationService = async (
         throw new AppError(getMessage('finalClassification.notFound', lang), 404, 'FINCLASS_004_NOT_FOUND');
     }
 
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // foreign keys, uniqueness and the diff — so the answer does not depend on the body
+    await assertCaseIsOpen(finalClassification.caseId, 'FINCLASS', '004', lang);
+
     const stored = finalClassification.get({ plain: true }) as Record<string, unknown>;
 
     // The two coherence rules look at the resulting state — what travels merged with what is
@@ -543,6 +547,14 @@ const setFinalClassificationActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await FinalClassification.findByPk(id, { attributes: ['finalClassificationId', 'caseId'], transaction });
+        if( current ) {
+            await assertCaseIsOpen(current.caseId, 'FINCLASS', op, lang, transaction);
+        }
+
         // The where filters by the primary key only: the generic service is the one that tells
         // 'does not exist' (404) from 'already in that state' (409)
         await setEntityActiveStatusService({

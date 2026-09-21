@@ -15,7 +15,7 @@ import {
 import { AppDetails, AuthUser, ClassificationListFilters, CreateClassificationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
-import { advanceCaseWorkflowStageService } from './caseWorkflow.service';
+import { advanceCaseWorkflowStageService, assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the three age units. Without this check any active
@@ -407,6 +407,10 @@ const updateClassificationService = async (
         throw new AppError(getMessage('classification.notFound', lang), 404, 'CLASSIF_004_NOT_FOUND');
     }
 
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // foreign keys, uniqueness and the diff — so the answer does not depend on the body
+    await assertCaseIsOpen(classification.caseId, 'CLASSIF', '004', lang);
+
     // Recalculated always, even when the PUT touches nothing related. It is the manual way of
     // correcting an age that went stale after its two source dates changed, until the
     // propagation spec exists, and it keeps a single path for the rule
@@ -506,6 +510,14 @@ const setClassificationActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await Classification.findByPk(id, { attributes: ['classificationId', 'caseId'], transaction });
+        if( current ) {
+            await assertCaseIsOpen(current.caseId, 'CLASSIF', op, lang, transaction);
+        }
+
         // The where filters by the primary key only: the generic service is the one that tells
         // 'does not exist' (404) from 'already in that state' (409)
         await setEntityActiveStatusService({
