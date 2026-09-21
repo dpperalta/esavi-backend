@@ -940,6 +940,49 @@ const setCaseWorkflowActivationService = async (
     }
 }
 
+/**
+ * Rejects a write over the content of a closed case file (SPEC F61).
+ *
+ * Every write service of the case file — the case, its notifiers, the four phase headers and
+ * every satellite of `notification` and `investigation` — calls it right after the 404 of its own
+ * row and before anything else: foreign keys, uniqueness and the differential diff. A closed file
+ * is not edited, and the answer does not depend on what the body carries.
+ *
+ * It throws 409 `<prefix>_<op>_CASE_CLOSED` when the workflow of the case is `CLOSED`, and returns
+ * without doing anything in every other situation:
+ *
+ *  - **No workflow row** means a case created before SPEC F44. It cannot be closed either, because
+ *    closing needs the row (`ESAVI-CASEFLOW-008`), so an absent workflow reads as "not closed".
+ *  - **`isActive` is not filtered**: the state of the workflow is the fact, whether or not its row
+ *    has been retired.
+ *  - `PENDING_VALIDATION` and every other state do not block. Only `CLOSED` does.
+ *
+ * It runs inside `transaction` when one is passed and takes no lock on the workflow row: a race
+ * with a simultaneous 008 lets in a write that would have entered milliseconds earlier anyway.
+ */
+const assertCaseIsOpen = async (
+    caseId: string,
+    prefix: string,
+    op: string,
+    lang: string,
+    transaction?: Transaction
+): Promise<void> => {
+    const workflow = await CaseWorkflow.findOne({
+        where: { caseId },
+        attributes: ['caseWorkflowId'],
+        include: [{ ...STATUS_INCLUDE, attributes: ['code'] }],
+        transaction
+    });
+
+    if( workflow?.status?.code === STATUS.CLOSED ) {
+        throw new AppError(
+            getMessage('caseWorkflow.caseClosed', lang),
+            409,
+            `${ prefix }_${ op }_CASE_CLOSED`
+        );
+    }
+}
+
 // ESAVI-CASEFLOW-012 - Advance Case Workflow Stage Service
 /**
  * Moves the file into a stage, sealing its start and closing the previous one.
@@ -988,9 +1031,12 @@ const advanceCaseWorkflowStageService = async (
             );
         }
 
-        // The only rule of process this service enforces, and it has no backing in the schema:
-        // no column and no constraint imposes it. Retiring it is one line, with no migration and
-        // no contract change — SPEC F44 §3.5 says so explicitly for whoever evaluates it later
+        // The rule of process of this service, and it has no backing in the schema: no column and
+        // no constraint imposes it. Retiring it is one line, with no migration and no contract
+        // change — SPEC F44 §3.5 says so explicitly for whoever evaluates it later. Since SPEC F61
+        // the same rule guards every write of the file through `assertCaseIsOpen`, which is not
+        // reused here: this operation needs the whole row for what it does next, and a missing
+        // workflow is a 404 for it
         if( workflow.status?.code === STATUS.CLOSED ) {
             throw new AppError(
                 getMessage('caseWorkflow.caseClosed', lang),
@@ -1071,6 +1117,7 @@ export {
     resolveCaseWorkflowValidationService,
     setCaseWorkflowActivationService,
     advanceCaseWorkflowStageService,
+    assertCaseIsOpen,
     toCaseWorkflowResponse,
     DETAIL_INCLUDE,
     resolveStatusItem,

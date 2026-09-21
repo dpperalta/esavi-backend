@@ -263,6 +263,39 @@ const seedCaseWorkflow = async (caseId: string): Promise<void> => {
 }
 
 /**
+ * Moves the workflow of a case fixture to the given state, by its `caseWorkflowStatus` code (SPEC F61).
+ *
+ * Closing through `ESAVI-CASEFLOW-008` needs the four stages sealed and the preconditions of
+ * that operation, which the write-guard suite has no reason to build. This writes the state
+ * straight on the row, so a test can put a case in `CLOSED` — or back in `OPEN` — in one call.
+ * The row must exist: call `seedCaseWorkflow` first.
+ */
+const setCaseWorkflowStatus = async (caseId: string, code: string): Promise<void> => {
+    const statusItem = await CatalogItem.findOne({
+        where: { code, isActive: true },
+        include: [{
+            model: CatalogType,
+            as: 'catalogType',
+            where: { code: 'caseWorkflowStatus' },
+            attributes: []
+        }]
+    });
+
+    if( !statusItem ) {
+        throw new Error(`The caseWorkflowStatus catalog has no item with code "${ code }".`);
+    }
+
+    const [ updated ] = await CaseWorkflow.update(
+        { statusItemId: statusItem.getDataValue('catalogItemId') },
+        { where: { caseId } }
+    );
+
+    if( updated === 0 ) {
+        throw new Error(`Case ${ caseId } has no workflow row. Call seedCaseWorkflow first.`);
+    }
+}
+
+/**
  * Closes the pool so Jest exits without open handles.
  */
 const closeTestDatabase = async (): Promise<void> => {
@@ -278,5 +311,6 @@ export {
     setupTestDatabase,
     openTestConnection,
     seedCaseWorkflow,
+    setCaseWorkflowStatus,
     closeTestDatabase
 }
