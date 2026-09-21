@@ -76,10 +76,12 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedic
 // typo would break the operational flow in half
 router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, ...updateNotificationMedicalHistoryValidator, validateFields, updateNotificationMedicalHistory);
 
-// Delete Notification Medical History - For Admin
+// Delete Notification Medical History - Logical delete, for User
 // Code: ESAVI-MEDHIST-005A
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
 // Blocked by nothing: the table is a leaf of the graph. It seals deletedAt, which frees the
 // sortOrder from the partial unique index, and it does not touch the notification's flag
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicalHistoryIdValidator, validateFields, deleteNotificationMedicalHistory);
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, validateFields, deleteNotificationMedicalHistory);
 
 export default router;

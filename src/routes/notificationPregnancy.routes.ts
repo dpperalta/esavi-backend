@@ -63,6 +63,8 @@ router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationPregn
 
 // Delete Notification Pregnancy - Soft delete
 // Code: ESAVI-NOTIFPRG-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationPregnancyIdValidator, validateFields, deleteNotificationPregnancy);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyIdValidator, validateFields, deleteNotificationPregnancy);
 
 export default router;

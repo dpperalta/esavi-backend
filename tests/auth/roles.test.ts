@@ -254,8 +254,8 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'delete', path: `/api/notification-events/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005C' },
     { method: 'patch',  path: `/api/notification-events/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005B' },
     { method: 'get',    path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-003' },
-    { method: 'put',    path: `/api/notification-events/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-004' },
-    { method: 'delete', path: `/api/notification-events/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-005A' },
+    { method: 'put',    path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-004' },
+    { method: 'delete', path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-005A' },
 
     // notificationMedication (SPEC F21) — the fourth satellite of notification and the second one to
     // many, so it repeats the surface of notificationEvent without variation: eight canonical
@@ -271,8 +271,8 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'delete', path: `/api/notification-medications/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFMED-005C' },
     { method: 'patch',  path: `/api/notification-medications/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFMED-005B' },
     { method: 'get',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-003' },
-    { method: 'put',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-004' },
-    { method: 'delete', path: `/api/notification-medications/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-005A' },
+    { method: 'put',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-004' },
+    { method: 'delete', path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-005A' },
 
     // vaccineWhodrug (SPEC F18) — the seven canonical operations, with the canonical role matrix
     // and no deviation (§3.4). No 005C: the table sits inside the preventPhysicalDelete loop of
@@ -316,8 +316,8 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'delete', path: `/api/notification-vaccines/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFVAC-005C' },
     { method: 'patch',  path: `/api/notification-vaccines/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFVAC-005B' },
     { method: 'get',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-003' },
-    { method: 'put',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-004' },
-    { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-005A' },
+    { method: 'put',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-004' },
+    { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-005A' },
 
     // diluentCatalog (SPEC F23) — the third and last of the flat clinical catalogs, so it repeats the
     // seven rows of DIAGTERM and WHODRUG with the canonical role matrix and no deviation (§3.4).
@@ -347,8 +347,8 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'delete', path: `/api/notification-diluents/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005C' },
     { method: 'patch',  path: `/api/notification-diluents/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005B' },
     { method: 'get',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-003' },
-    { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-004' },
-    { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-005A' },
+    { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-004' },
+    { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-005A' },
 
     // notificationPregnancy (SPEC F25) — the seventh satellite of notification, and a shape none of
     // the six before it had: one to one *and* with its own state. severeNotification and
@@ -368,7 +368,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/notification-pregnancies/activate/${ UUID }`,         minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFPRG-005B' },
     { method: 'get',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-003' },
     { method: 'put',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-004' },
-    { method: 'delete', path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'ADMIN',      code: 'ESAVI-NOTIFPRG-005A' },
+    { method: 'delete', path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-005A' },
 
     // notificationPregnancyComplication (SPEC F27) — the eighth and last satellite of notification,
     // and a granddaughter like notificationDiluent but of a different shape: the first hop is one to
@@ -388,7 +388,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/notification-pregnancy-complications/activate/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-PREGCOMP-005B' },
     { method: 'get',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-003' },
     { method: 'put',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-004' },
-    { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'ADMIN',      code: 'ESAVI-PREGCOMP-005A' },
+    { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-005A' },
 
     // notificationMedicalHistory (SPEC F57) — the relevant medical antecedents of the notified
     // patient, and the first table this repository added to the DDL. Sixth satellite of notification
@@ -407,7 +407,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/notification-medical-histories/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-MEDHIST-005B' },
     { method: 'get',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-003' },
     { method: 'put',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-004' },
-    { method: 'delete', path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'ADMIN',      code: 'ESAVI-MEDHIST-005A' },
+    { method: 'delete', path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-005A' },
 
     // investigation (SPEC F28) — the root of the investigation block and the fourth satellite of
     // esaviCase, one to one with it through UQ_investigation_case. Seven canonical operations plus

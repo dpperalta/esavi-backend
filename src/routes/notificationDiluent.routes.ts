@@ -61,10 +61,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationDilue
 
 // Update Notification Diluent
 // Code: ESAVI-NOTIFDIL-004
-router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationDiluentIdValidator, ...updateNotificationDiluentValidator, validateFields, updateNotificationDiluent);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationDiluentIdValidator, ...updateNotificationDiluentValidator, validateFields, updateNotificationDiluent);
 
 // Delete Notification Diluent - Soft delete
 // Code: ESAVI-NOTIFDIL-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationDiluentIdValidator, validateFields, deleteNotificationDiluent);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationDiluentIdValidator, validateFields, deleteNotificationDiluent);
 
 export default router;

@@ -70,10 +70,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedic
 
 // Update Notification Medication
 // Code: ESAVI-NOTIFMED-004
-router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationIdValidator, ...updateNotificationMedicationValidator, validateFields, updateNotificationMedication);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationIdValidator, ...updateNotificationMedicationValidator, validateFields, updateNotificationMedication);
 
 // Delete Notification Medication - Logical delete
 // Code: ESAVI-NOTIFMED-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationIdValidator, validateFields, deleteNotificationMedication);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationIdValidator, validateFields, deleteNotificationMedication);
 
 export default router;

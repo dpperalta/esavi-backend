@@ -70,10 +70,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationEvent
 
 // Update Notification Event
 // Code: ESAVI-NOTIFEVT-004
-router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, ...updateNotificationEventValidator, validateFields, updateNotificationEvent);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationEventIdValidator, ...updateNotificationEventValidator, validateFields, updateNotificationEvent);
 
 // Delete Notification Event - Logical delete
 // Code: ESAVI-NOTIFEVT-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, validateFields, deleteNotificationEvent);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationEventIdValidator, validateFields, deleteNotificationEvent);
 
 export default router;
