@@ -476,7 +476,18 @@ Dos consecuencias que son regla:
 | activate (`005B`) | `SUPERADMIN` |
 | borrado físico (`005C`) | `SUPERADMIN` |
 
-**Excepción declarada — el alta del árbol de notificación es `USER`.** Quien notifica es el USER, así que el `001` de las entidades que componen una notificación admite `USER` y no `ADMIN`: `patient`, `esaviCase`, `notification`, `severeNotification`, `nonSevereNotification`, `notificationEvent`, `notificationVaccine`, `notificationDiluent`, `notificationMedication`, `notificationPregnancy` y `notificationPregnancyComplication`. **Solo el `001`**: en esas mismas entidades el `004`, el `005A` y el `002B` siguen la matriz canónica, porque corregir o dar de baja lo notificado no es notificar. Ninguna entidad fuera de ese árbol hereda la excepción por analogía.
+**Excepción declarada — el expediente clínico se escribe como `USER`.** Quien notifica e investiga es el USER, así que las entidades que componen el expediente se apartan de la matriz canónica:
+
+| Entidades | `001` | `004` | `005A` | `005B` | `002B` | `005C` |
+|---|---|---|---|---|---|---|
+| Satélites de `notification` y de `investigation`, a cualquier profundidad | `USER` | `USER` | `USER` | `ADMIN` | `ADMIN` | `SUPERADMIN` |
+| Cabeceras del expediente: `patient`, `esaviCase`, `notifier`, `classification`, `notification`, `investigation`, `finalClassification` | `USER` | `USER` | por entidad, ver `ROUTE_RULES` | `SUPERADMIN` | `ADMIN` | `SUPERADMIN` |
+
+Una entidad expone solo las operaciones que su tabla admite: las de una sola fila por padre, sin `isActive`, no tienen `005A` ni `005B`, y las tablas protegidas por `preventPhysicalDelete` no tienen `005C` (§6). Las celdas de la tabla son el rol mínimo **cuando la operación existe**.
+
+- **La razón.** Quien registra un dato clínico lo corrige y lo retira; retirar es borrado lógico, reversible con `005B`. Deshacer la retirada de un USER es supervisión del caso y va en `ADMIN`. Destruir va en `SUPERADMIN`.
+- **El límite.** La excepción cubre las entidades de la tabla y ninguna más. Un spec nuevo que cuelgue de `notification` o de `investigation` la hereda sin tener que justificarla. Un spec fuera de ese árbol sigue la matriz canónica.
+- **Lo que la tabla no esconde.** El `005A` de las cabeceras no es uniforme —`notifier` e `investigation` lo tienen en `USER`; `esaviCase`, `patient`, `classification`, `notification` y `finalClassification`, en `ADMIN`—. Está declarado como «por entidad» y no como regla; `ROUTE_RULES` es la fuente de la verdad.
 
 Los predicados de `src/helpers/permissions.helper.ts` (`canViewInactive`, `isAdmin`, …) **no autorizan**: modulan comportamiento dentro de un endpoint ya autorizado — típicamente si se ven o no los registros inactivos:
 

@@ -287,7 +287,9 @@ const normalizeApiTerms = ( terms: MeddraApiTerm[], termGroup: MeddraTermGroup )
     let discarded = 0;
 
     for( const term of terms ) {
-        const code = term.pcode === undefined || term.pcode === null ? '' : String( term.pcode ).trim();
+        console.log({term});
+        //const code = term.pcode === undefined || term.pcode === null ? '' : String( term.pcode ).trim();
+        const code = term.code === undefined || term.code === null ? '' : String( term.code ).trim();
         const name = term.name === undefined || term.name === null ? '' : String( term.name ).trim();
 
         if( code === '' || name === '' || seen.has( code ) ) {
