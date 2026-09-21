@@ -2,6 +2,7 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Notification, NonSevereNotification } from '../models';
 import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage } from '../helpers';
 import { purgeEntityService } from './common/entityPurge.service';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNonSevereNotificationInput } from '../types';
 import { NotificationType } from '../constants/notification.constants';
 
@@ -124,7 +125,7 @@ const findNonSevereNotificationRow = async (id: string, includeInactive: boolean
 const assertNotificationIsValid = async (notificationId: string, op: string, lang: string) => {
     const notification = await Notification.findOne({
         where: { notificationId, isActive: true },
-        attributes: ['notificationId', 'notificationType']
+        attributes: ['notificationId', 'caseId', 'notificationType']
     });
     if( !notification ) {
         throw new AppError(
@@ -133,6 +134,10 @@ const assertNotificationIsValid = async (notificationId: string, op: string, lan
             `NSEVNOT_${ op }_NOTIFICATION_NOT_FOUND`
         );
     }
+
+    // SPEC F61: a closed case file takes no new row. Right after the parent is known to exist and
+    // be active, and before any other rule, so the answer does not depend on the body
+    await assertCaseIsOpen(notification.caseId, 'NSEVNOT', op, lang);
 
     if( notification.notificationType !== NON_SEVERE_TYPE ) {
         throw new AppError(
@@ -393,6 +398,11 @@ const updateNonSevereNotificationService = async (
     if( !nonSevereNotification ) {
         throw new AppError(getMessage('nonSevereNotification.notFound', lang), 404, 'NSEVNOT_004_NOT_FOUND');
     }
+
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // the pregnancy rule and the diff included — so the answer does not depend on the body. The
+    // caseId comes from the case nested in the header include this row is already read with
+    await assertCaseIsOpen(nonSevereNotification.notification!.case!.caseId, 'NSEVNOT', '004', lang);
 
     // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending
     // whole the record just read with a GET is the normal use of a form, and writing it back

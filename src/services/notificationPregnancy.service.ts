@@ -4,6 +4,7 @@ import { CatalogItem, EsaviCase, Notification, NotificationPregnancy, Patient, S
 import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyInput } from '../types';
 import {
     GESTATION_MAX_DAYS,
@@ -24,7 +25,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const NOTIFICATION_INCLUDE = {
     model: Notification,
     as: 'notification',
-    attributes: ['notificationId', 'isActive']
+    // caseId feeds the guard of SPEC F61. It never reaches the response, which drops the include
+    attributes: ['notificationId', 'caseId', 'isActive']
 };
 
 // sysDetails is trigger metadata and never leaves the service. The parent is dropped here after
@@ -61,7 +63,7 @@ const normalizeText = (value: string | null | undefined): string | null => {
 const findValidNotification = async (notificationId: string, op: string, lang: string) => {
     const notification = await Notification.findOne({
         where: { notificationId, isActive: true },
-        attributes: ['notificationId'],
+        attributes: ['notificationId', 'caseId'],
         include: [{
             model: EsaviCase,
             as: 'case',
@@ -80,6 +82,11 @@ const findValidNotification = async (notificationId: string, op: string, lang: s
             `NOTIFPRG_${ op }_NOTIFICATION_NOT_FOUND`
         );
     }
+
+    // SPEC F61: a closed case file takes no new row. Right after the parent is known to exist and
+    // be active, and before any other rule, so the answer does not depend on the body
+    await assertCaseIsOpen(notification.caseId, 'NOTIFPRG', op, lang);
+
     return notification;
 }
 
@@ -416,6 +423,10 @@ const updateNotificationPregnancyService = async (
         throw new AppError(getMessage('notificationPregnancy.notFound', lang), 404, 'NOTIFPRG_004_NOT_FOUND');
     }
 
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // foreign keys, uniqueness and the diff — so the answer does not depend on the body
+    await assertCaseIsOpen(notificationPregnancy.notification!.caseId, 'NOTIFPRG', '004', lang);
+
     // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate, and an
     // instance read with a narrowed `attributes` reads back undefined for what it left out, so every
     // comparison would count as a change
@@ -527,6 +538,17 @@ const setNotificationPregnancyActivationService = async (
     isActive: boolean = true
 ) => {
     const op = isActive ? '005B' : '005A';
+
+    // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+    // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+    // not evaluated and the generic service answers its 404 as always
+    const current = await NotificationPregnancy.findByPk(id, {
+        attributes: ['pregnancyId'],
+        include: [{ model: Notification, as: 'notification', attributes: ['caseId'] }]
+    });
+    if( current ) {
+        await assertCaseIsOpen(current.notification!.caseId, 'NOTIFPRG', op, lang);
+    }
 
     await setEntityActiveStatusService({
         model: NotificationPregnancy,

@@ -1,5 +1,10 @@
 import request from 'supertest';
-import { Classification, EsaviCase, FinalClassification, HealthFacility, Investigation, Notification, Notifier, Patient } from '../../src/models';
+import {
+    CatalogItem, CatalogType, Classification, DiagnosticTerm, EsaviCase, FinalClassification, HealthFacility,
+    Investigation, NonSevereNotification, Notification, NotificationEvent, NotificationMedicalHistory,
+    NotificationMedication, NotificationPregnancy, NotificationVaccine, Notifier, Patient, SevereNotification,
+    SystemConfig
+} from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { getMessage } from '../../src/helpers';
@@ -57,6 +62,34 @@ const CLOSED_GUARD_RULES: ClosedGuardRule[] = [
     { method: 'delete', path: `/api/investigations/${ UUID }`,           code: 'ESAVI-INVESTGN-005A' },
     { method: 'patch',  path: `/api/investigations/activate/${ UUID }`,  code: 'ESAVI-INVESTGN-005B' },
 
+    // paso 4, one to one details of the notification. No 005A or 005B: their tables have no isActive
+    { method: 'post',   path: '/api/severe-notifications',                    code: 'ESAVI-SEVNOT-001' },
+    { method: 'put',    path: `/api/severe-notifications/${ UUID }`,          code: 'ESAVI-SEVNOT-004' },
+    { method: 'post',   path: '/api/non-severe-notifications',                code: 'ESAVI-NSEVNOT-001' },
+    { method: 'put',    path: `/api/non-severe-notifications/${ UUID }`,      code: 'ESAVI-NSEVNOT-004' },
+
+    // paso 4, collections of the notification (SPEC F16, F21, F22, F25 and F57) and its pregnancy
+    { method: 'post',   path: '/api/notification-events',                                code: 'ESAVI-NOTIFEVT-001' },
+    { method: 'put',    path: `/api/notification-events/${ UUID }`,                      code: 'ESAVI-NOTIFEVT-004' },
+    { method: 'delete', path: `/api/notification-events/${ UUID }`,                      code: 'ESAVI-NOTIFEVT-005A' },
+    { method: 'patch',  path: `/api/notification-events/activate/${ UUID }`,             code: 'ESAVI-NOTIFEVT-005B' },
+    { method: 'post',   path: '/api/notification-medications',                           code: 'ESAVI-NOTIFMED-001' },
+    { method: 'put',    path: `/api/notification-medications/${ UUID }`,                 code: 'ESAVI-NOTIFMED-004' },
+    { method: 'delete', path: `/api/notification-medications/${ UUID }`,                 code: 'ESAVI-NOTIFMED-005A' },
+    { method: 'patch',  path: `/api/notification-medications/activate/${ UUID }`,        code: 'ESAVI-NOTIFMED-005B' },
+    { method: 'post',   path: '/api/notification-vaccines',                              code: 'ESAVI-NOTIFVAC-001' },
+    { method: 'put',    path: `/api/notification-vaccines/${ UUID }`,                    code: 'ESAVI-NOTIFVAC-004' },
+    { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    code: 'ESAVI-NOTIFVAC-005A' },
+    { method: 'patch',  path: `/api/notification-vaccines/activate/${ UUID }`,           code: 'ESAVI-NOTIFVAC-005B' },
+    { method: 'post',   path: '/api/notification-pregnancies',                           code: 'ESAVI-NOTIFPRG-001' },
+    { method: 'put',    path: `/api/notification-pregnancies/${ UUID }`,                 code: 'ESAVI-NOTIFPRG-004' },
+    { method: 'delete', path: `/api/notification-pregnancies/${ UUID }`,                 code: 'ESAVI-NOTIFPRG-005A' },
+    { method: 'patch',  path: `/api/notification-pregnancies/activate/${ UUID }`,        code: 'ESAVI-NOTIFPRG-005B' },
+    { method: 'post',   path: '/api/notification-medical-histories',                     code: 'ESAVI-MEDHIST-001' },
+    { method: 'put',    path: `/api/notification-medical-histories/${ UUID }`,           code: 'ESAVI-MEDHIST-004' },
+    { method: 'delete', path: `/api/notification-medical-histories/${ UUID }`,           code: 'ESAVI-MEDHIST-005A' },
+    { method: 'patch',  path: `/api/notification-medical-histories/activate/${ UUID }`,  code: 'ESAVI-MEDHIST-005B' },
+
     // final classification (SPEC F41)
     { method: 'put',    path: `/api/final-classifications/${ UUID }`,          code: 'ESAVI-FINCLASS-004' },
     { method: 'delete', path: `/api/final-classifications/${ UUID }`,          code: 'ESAVI-FINCLASS-005A' },
@@ -75,6 +108,8 @@ const ROLE_BY_OP: Record<string, TestRole> = {
 interface Prepared {
     caseId: string;
     rowId: string;
+    // The notification the row hangs from, for the satellites; empty for the rest
+    parentId: string;
 }
 
 interface Family {
@@ -87,19 +122,138 @@ interface Family {
     // Roles that differ from ROLE_BY_OP: a case whose facility has no geoLocation is visible to an
     // ADMIN only, which is what F49 makes of the cases this suite builds
     roles?: Partial<Record<string, TestRole>>;
-    // How many rows the case holds, for the families whose guarded operation is a 001
-    countRows?: ( caseId: string ) => Promise<number>;
+    // How many rows the case or its parent holds, for the families whose guarded operation is a 001
+    countRows?: ( caseId: string, parentId: string ) => Promise<number>;
+    // The list read of the entity, when it is not the base path itself
+    listPath?: ( target: Prepared ) => string;
+    // True when the rule of the family needs a female patient on the case: the pregnancy
+    needsFemalePatient?: boolean;
+    // Creates the notification a satellite hangs from, over the case
+    createParent?: ( caseId: string ) => Promise<string>;
     // Creates the row straight on the model, over the case, with the requested activity
-    create: ( caseId: string, isActive: boolean ) => Promise<string>;
+    create: ( caseId: string, isActive: boolean, parentId: string ) => Promise<string>;
     // Reads it back whole, to compare what a rejected write must not have touched
     read: ( rowId: string ) => Promise<Record<string, unknown>>;
     // A body for the 004 that really changes a field
     changingBody: Record<string, unknown>;
     // A valid 001 body: for the phase headers it is the request that already answered CASEFLOW_012
-    createBody?: ( caseId: string ) => Record<string, unknown>;
+    createBody?: ( caseId: string, parentId: string ) => Record<string, unknown>;
 }
 
+const runTag = Date.now().toString(36).toUpperCase();
+let termCounter = 0;
+
+const notificationOf = async ( caseId: string, notificationType: 'SEVERE' | 'NON_SEVERE' ): Promise<string> =>
+    ( await Notification.create({ caseId, notificationType, esaviDescription: 'Fever after the dose' }) )
+        .getDataValue('notificationId');
+
+const createNonSevereParent = ( caseId: string ) => notificationOf(caseId, 'NON_SEVERE');
+
+// The collections keep their sortOrder for the trigger of the table to assign, so the column is
+// left out of the INSERT: listing the fields is what makes it absent from the statement
+const insertOmittingSortOrder = <T extends Record<string, unknown>>( values: T ): { fields: never } =>
+    ({ fields: Object.keys(values) as never });
+
 const FAMILIES: Record<string, Family> = {
+    SEVNOT: {
+        basePath: '/api/severe-notifications',
+        countRows: ( _caseId, parentId ) => SevereNotification.count({ where: { notificationId: parentId } }),
+        listPath: target => `/api/severe-notifications/case/${ target.caseId }`,
+        createParent: caseId => notificationOf(caseId, 'SEVERE'),
+        // The primary key of the detail IS the notificationId. A retired detail carries the seal of
+        // deletedAt, which is what its purge asks for: the table has no isActive
+        create: async ( _caseId, isActive, parentId ) => {
+            await SevereNotification.create({ notificationId: parentId, ...( isActive ? {} : { deletedAt: new Date() } ) });
+            return parentId;
+        },
+        read: async rowId => ( await SevereNotification.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ notificationId: parentId })
+    },
+    NSEVNOT: {
+        basePath: '/api/non-severe-notifications',
+        countRows: ( _caseId, parentId ) => NonSevereNotification.count({ where: { notificationId: parentId } }),
+        listPath: target => `/api/non-severe-notifications/case/${ target.caseId }`,
+        createParent: createNonSevereParent,
+        create: async ( _caseId, isActive, parentId ) => {
+            await NonSevereNotification.create({ notificationId: parentId, ...( isActive ? {} : { deletedAt: new Date() } ) });
+            return parentId;
+        },
+        read: async rowId => ( await NonSevereNotification.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ notificationId: parentId })
+    },
+    NOTIFEVT: {
+        basePath: '/api/notification-events',
+        countRows: ( _caseId, parentId ) => NotificationEvent.count({ where: { notificationId: parentId } }),
+        listPath: target => `/api/notification-events/notification/${ target.parentId }`,
+        createParent: createNonSevereParent,
+        create: async ( _caseId, isActive, parentId ) => {
+            const values = { notificationId: parentId, esaviName: 'Fiebre', isActive };
+            return ( await NotificationEvent.create(values, insertOmittingSortOrder(values)) ).getDataValue('eventId');
+        },
+        read: async rowId => ( await NotificationEvent.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ notificationId: parentId, esaviName: 'Fiebre' })
+    },
+    NOTIFMED: {
+        basePath: '/api/notification-medications',
+        countRows: ( _caseId, parentId ) => NotificationMedication.count({ where: { notificationId: parentId } }),
+        listPath: target => `/api/notification-medications/notification/${ target.parentId }`,
+        createParent: createNonSevereParent,
+        create: async ( _caseId, isActive, parentId ) => {
+            const values = { notificationId: parentId, medicationName: 'Ibuprofeno', isActive };
+            return ( await NotificationMedication.create(values, insertOmittingSortOrder(values)) ).getDataValue('medicationId');
+        },
+        read: async rowId => ( await NotificationMedication.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { dose: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ notificationId: parentId, medicationName: 'Ibuprofeno' })
+    },
+    NOTIFVAC: {
+        basePath: '/api/notification-vaccines',
+        countRows: ( _caseId, parentId ) => NotificationVaccine.count({ where: { notificationId: parentId } }),
+        listPath: target => `/api/notification-vaccines/notification/${ target.parentId }`,
+        createParent: createNonSevereParent,
+        create: async ( _caseId, isActive, parentId ) => {
+            const values = { notificationId: parentId, vaccineName: 'BCG', isActive };
+            return ( await NotificationVaccine.create(values, insertOmittingSortOrder(values)) ).getDataValue('vaccineId');
+        },
+        read: async rowId => ( await NotificationVaccine.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ notificationId: parentId, vaccineName: 'BCG' })
+    },
+    NOTIFPRG: {
+        basePath: '/api/notification-pregnancies',
+        needsFemalePatient: true,
+        countRows: ( _caseId, parentId ) => NotificationPregnancy.count({ where: { notificationId: parentId } }),
+        listPath: target => `/api/notification-pregnancies/notification/${ target.parentId }`,
+        createParent: createNonSevereParent,
+        create: async ( _caseId, isActive, parentId ) =>
+            ( await NotificationPregnancy.create({
+                notificationId: parentId, wasPregnantAtVaccination: 'YES', isActive
+            }) ).getDataValue('pregnancyId'),
+        read: async rowId => ( await NotificationPregnancy.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ notificationId: parentId, wasPregnantAtVaccination: 'YES' })
+    },
+    MEDHIST: {
+        basePath: '/api/notification-medical-histories',
+        countRows: ( _caseId, parentId ) => NotificationMedicalHistory.count({ where: { notificationId: parentId } }),
+        listPath: target => `/api/notification-medical-histories/notification/${ target.parentId }`,
+        createParent: createNonSevereParent,
+        create: async ( _caseId, isActive, parentId ) => {
+            termCounter += 1;
+            const term = await DiagnosticTerm.create({
+                source: 'LOCAL', code: `CG${ runTag }${ termCounter }`, name: `Asma ${ runTag } ${ termCounter }`
+            });
+            const values = { notificationId: parentId, diagnosticTermId: term.getDataValue('diagnosticTermId'), isActive };
+            return ( await NotificationMedicalHistory.create(values, insertOmittingSortOrder(values)) )
+                .getDataValue('medicalHistoryId');
+        },
+        read: async rowId => ( await NotificationMedicalHistory.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ notificationId: parentId, historyName: 'Asma' })
+    },
     CASE: {
         basePath: '/api/esavi-cases',
         hasNoPurge: true,
@@ -186,17 +340,22 @@ describe('case closed guard contract', () => {
 
     let caseCounter = 0;
 
+    // The pregnancy is the one rule of paso 4 that reads the patient: its 001 needs the sex item the
+    // configuration names, and a case whose patient carries it
+    let femaleItemId: string;
+
     // Every case is minted fresh: the phase headers are one to one, so two tests cannot share one.
     // `withWorkflow: false` builds the case as one created before SPEC F44, with no workflow row
-    const createCaseFixture = async ( options: { withWorkflow?: boolean } = {} ): Promise<string> => {
-        const { withWorkflow = true } = options;
+    const createCaseFixture = async ( options: { withWorkflow?: boolean, female?: boolean } = {} ): Promise<string> => {
+        const { withWorkflow = true, female = false } = options;
         caseCounter += 1;
         const patient = await Patient.create({
             names: esaviCrypt(`ClosedGuard ${ caseCounter }`),
             lastNames: esaviCrypt(`Probe ${ suffix }`),
             documentNumber: esaviCrypt(`CG${ caseCounter }${ suffix }`),
             healthSystemCode: `CG${ caseCounter }${ suffix }`,
-            birthDate: '2000-05-04'
+            birthDate: '2000-05-04',
+            sexItemId: female ? femaleItemId : null
         });
         const facility = await HealthFacility.create({
             localCode: `CG${ caseCounter }${ suffix }`,
@@ -218,15 +377,18 @@ describe('case closed guard contract', () => {
         return caseId;
     };
 
-    // A row of the family over a fresh case. A 005B needs the row retired first, so the activity
-    // is decided by the operation under test
+    // The row of the family over a fresh case, with its parent when it has one. A 005B needs the row
+    // retired first, so the activity is decided by the operation under test. A 001 creates its row, so
+    // it starts without one
     const prepare = async (
         code: string,
         options: { withWorkflow?: boolean } = {}
     ): Promise<Prepared> => {
-        const caseId = await createCaseFixture(options);
-        const rowId = await FAMILIES[prefixOf(code)].create(caseId, opOf(code) !== '005B');
-        return { caseId, rowId };
+        const family = FAMILIES[prefixOf(code)];
+        const caseId = await createCaseFixture({ ...options, female: family.needsFemalePatient });
+        const parentId = family.createParent ? await family.createParent(caseId) : '';
+        const rowId = opOf(code) === '001' ? '' : await family.create(caseId, opOf(code) !== '005B', parentId);
+        return { caseId, rowId, parentId };
     };
 
     // `target.caseId` feeds the body of a 001, `target.rowId` replaces the placeholder of the path
@@ -235,7 +397,7 @@ describe('case closed guard contract', () => {
         const op = opOf(rule.code);
         const url = rule.path.replace(UUID, target.rowId) + query;
         const call = request(app)[rule.method](url).set(authHeader(roleOf(rule)));
-        if( op === '001' ) return call.send(family.createBody!(target.caseId));
+        if( op === '001' ) return call.send(family.createBody!(target.caseId, target.parentId));
         return op === '004' ? call.send(family.changingBody) : call;
     };
 
@@ -254,6 +416,24 @@ describe('case closed guard contract', () => {
     beforeAll(async () => {
         consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
         await seedTestUsers();
+
+        // The configuration row of the female sex item, created through ESAVI-SYSCONF-001 as
+        // notificationPregnancy.test.ts does. Any earlier row is retired by renaming its code: the
+        // service reads by (code, scope), and systemConfigHistory does not allow destroying it
+        const sexType = await CatalogType.create({ code: `sexCG${ runTag }`, name: `Sex CG ${ runTag }` });
+        femaleItemId = ( await CatalogItem.create({
+            catalogTypeId: sexType.getDataValue('catalogTypeId'), code: `FCG${ runTag }`, name: 'Femenino', value: '2'
+        }) ).getDataValue('catalogItemId');
+        await SystemConfig.update({ code: `RETIRED_CG_${ runTag }` }, { where: { code: 'PREGNANCY_FEMALE_SEX_ITEM' } });
+        const config = await request(app).post('/api/system-configs').set(authHeader('SUPERADMIN')).send({
+            code: 'PREGNANCY_FEMALE_SEX_ITEM',
+            name: 'Pregnancy female sex item',
+            value: femaleItemId,
+            valueType: 'string',
+            scope: 'GLOBAL',
+            isEncrypted: false
+        });
+        expect(config.status).toBe(201);
     });
 
     afterAll(async () => {
@@ -269,7 +449,7 @@ describe('case closed guard contract', () => {
 
         // What a rejected write must not have moved: the row, or the row count for a 001
         const observe = ( target: Prepared ) => op === '001'
-            ? family.countRows!(target.caseId)
+            ? family.countRows!(target.caseId, target.parentId)
             : family.read(target.rowId).then(snapshotOf);
 
         it(`answers 409 ${ expectedCode } on a closed case and writes nothing`, async () => {
@@ -320,7 +500,7 @@ describe('case closed guard contract', () => {
         });
 
         it('answers 404 and not 409 for a row or a case that does not exist', async () => {
-            const response = await send(rule, { rowId: UUID, caseId: UUID });
+            const response = await send(rule, { rowId: UUID, caseId: UUID, parentId: UUID });
 
             expect(response.status).toBe(404);
         });
@@ -386,12 +566,13 @@ describe('case closed guard contract', () => {
 
         it.each(allKeys)('%s is readable on a closed case', async key => {
             const family = FAMILIES[key];
-            const caseId = await createCaseFixture();
-            const rowId = await family.create(caseId, true);
-            await setCaseWorkflowStatus(caseId, 'CLOSED');
+            const target = await prepare(`ESAVI-${ key }-004`);
+            await setCaseWorkflowStatus(target.caseId, 'CLOSED');
 
-            const byId = await request(app).get(`${ family.basePath }/${ rowId }`).set(authHeader('ADMIN'));
-            const list = await request(app).get(family.basePath).set(authHeader('ADMIN'));
+            const byId = await request(app).get(`${ family.basePath }/${ target.rowId }`).set(authHeader('ADMIN'));
+            const list = await request(app)
+                .get(family.listPath ? family.listPath(target) : family.basePath)
+                .set(authHeader('ADMIN'));
 
             expect(byId.status).toBe(200);
             expect(list.status).toBe(200);
@@ -399,12 +580,11 @@ describe('case closed guard contract', () => {
 
         it.each(allKeys.filter(key => !FAMILIES[key].hasNoPurge))('%s 005C purges a retired row of a closed case', async key => {
             const family = FAMILIES[key];
-            const caseId = await createCaseFixture();
-            const rowId = await family.create(caseId, false);
-            await setCaseWorkflowStatus(caseId, 'CLOSED');
+            const target = await prepare(`ESAVI-${ key }-005B`);
+            await setCaseWorkflowStatus(target.caseId, 'CLOSED');
 
             const response = await request(app)
-                .delete(`${ family.basePath }/purge/${ rowId }`)
+                .delete(`${ family.basePath }/purge/${ target.rowId }`)
                 .set(authHeader('SUPERADMIN'));
 
             expect(response.status).toBe(200);
