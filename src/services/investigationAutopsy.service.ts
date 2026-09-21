@@ -4,6 +4,7 @@ import { CatalogItem, EsaviCase, Investigation, InvestigationAutopsy } from '../
 import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage, toTimeString } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationAutopsyInput, InvestigationAutopsyListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 
 // The investigation travels in every response: it is what governs the visibility of the autopsy,
@@ -87,7 +88,7 @@ const findInvestigationAutopsyRow = async (id: string, includeInactive: boolean 
 const assertInvestigationIsValid = async (investigationId: string, op: string, lang: string) => {
     const investigation = await Investigation.findOne({
         where: { investigationId, isActive: true },
-        attributes: ['investigationId']
+        attributes: ['investigationId', 'caseId']
     });
     if( !investigation ) {
         throw new AppError(
@@ -96,6 +97,10 @@ const assertInvestigationIsValid = async (investigationId: string, op: string, l
             `INVAUT_${ op }_INVESTIGATION_NOT_FOUND`
         );
     }
+
+    // SPEC F61: a closed case file takes no new row. Right after the investigation is known to exist
+    // and be active, and before any other rule, so the answer does not depend on the body
+    await assertCaseIsOpen(investigation.caseId, 'INVAUT', op, lang);
 }
 
 // The one to one is imposed by the primary key itself, which is also the foreign key: there is no
@@ -444,6 +449,11 @@ const updateInvestigationAutopsyService = async (
     if( !investigationAutopsy ) {
         throw new AppError(getMessage('investigationAutopsy.notFound', lang), 404, 'INVAUT_004_NOT_FOUND');
     }
+
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // foreign keys, rules and the diff — so the answer does not depend on the body. The caseId comes from the case nested in the
+    // investigation include this row is already read with
+    await assertCaseIsOpen(investigationAutopsy.investigation!.case!.caseId, 'INVAUT', '004', lang);
 
     // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
     // the record just read with a GET is the normal use of a form, and writing it back would fill

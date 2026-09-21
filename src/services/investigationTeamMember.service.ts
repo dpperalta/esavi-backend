@@ -6,6 +6,7 @@ import { purgeEntityService } from './common/entityPurge.service';
 import { AppError, buildDifferentialUpdate, getMessage, normalizeName } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationTeamMemberInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 
 // The order of the three listings, and there is no createdAt DESC here: sortOrder is what the
 // domain orders the investigating team by, and the whole reason the column exists. createdAt is
@@ -109,7 +110,7 @@ const findInvestigationTeamMemberRow = async (id: string, includeInactive: boole
 const assertInvestigationIsValid = async (investigationId: string, op: string, lang: string) => {
     const investigation = await Investigation.findOne({
         where: { investigationId, isActive: true },
-        attributes: ['investigationId']
+        attributes: ['investigationId', 'caseId']
     });
     if( !investigation ) {
         throw new AppError(
@@ -118,6 +119,10 @@ const assertInvestigationIsValid = async (investigationId: string, op: string, l
             `INVTEAM_${ op }_INVESTIGATION_NOT_FOUND`
         );
     }
+
+    // SPEC F61: a closed case file takes no new row. Right after the investigation is known to exist
+    // and be active, and before any other rule, so the answer does not depend on the body
+    await assertCaseIsOpen(investigation.caseId, 'INVTEAM', op, lang);
 }
 
 // The same check as assertInvestigationIsValid, relaxed by canViewInactive: the inherited
@@ -433,6 +438,11 @@ const updateInvestigationTeamMemberService = async (
         );
     }
 
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // foreign keys, rules and the diff — so the answer does not depend on the body. The caseId comes
+    // from the case nested in the investigation include this row is already read with
+    await assertCaseIsOpen(member.investigation!.case!.caseId, 'INVTEAM', '004', lang);
+
     // The name is normalized once and used twice: by the duplicate guard and by the diff. The guard
     // runs only when fullName travels — with no new name there is nothing to check — and it runs
     // BEFORE the diff and independently of it: renaming a row to a name another ACTIVE member of the
@@ -587,6 +597,18 @@ const setInvestigationTeamMemberActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await InvestigationTeamMember.findByPk(id, {
+            attributes: ['investigationTeamMemberId'],
+            include: [{ model: Investigation, as: 'investigation', attributes: ['caseId'] }],
+            transaction
+        });
+        if( current ) {
+            await assertCaseIsOpen(current.investigation!.caseId, 'INVTEAM', op, lang, transaction);
+        }
+
         // Only on the way back: a 005A is what frees the number, so it never collides.
         // The reactivation revalidates nothing else — not the duplicate fullName, not the state of
         // the investigation. Bringing a row back to life is undoing a deactivation, not rewriting

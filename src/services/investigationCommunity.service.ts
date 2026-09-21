@@ -9,6 +9,7 @@ import {
     InvestigationCommunityListFilters
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 
 // The investigation travels in every response, narrowed to three fields: what the client needs is to
@@ -78,7 +79,7 @@ const findInvestigationCommunityWithRelations = async (id: string, includeInacti
 const assertInvestigationIsValid = async (investigationId: string, op: string, lang: string) => {
     const investigation = await Investigation.findOne({
         where: { investigationId, isActive: true },
-        attributes: ['investigationId']
+        attributes: ['investigationId', 'caseId']
     });
     if( !investigation ) {
         throw new AppError(
@@ -87,6 +88,10 @@ const assertInvestigationIsValid = async (investigationId: string, op: string, l
             `INVCOMM_${ op }_INVESTIGATION_NOT_FOUND`
         );
     }
+
+    // SPEC F61: a closed case file takes no new row. Right after the investigation is known to exist
+    // and be active, and before any other rule, so the answer does not depend on the body
+    await assertCaseIsOpen(investigation.caseId, 'INVCOMM', op, lang);
 }
 
 // The one to one is imposed by the primary key itself, which is also the foreign key: there is no
@@ -437,6 +442,11 @@ export const updateInvestigationCommunityService = async (
     if( !community ) {
         throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_004_NOT_FOUND');
     }
+
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // foreign keys, rules and the diff — so the answer does not depend on the body. The caseId is one of the attributes
+    // of the investigation include this row is already read with
+    await assertCaseIsOpen(community.investigation!.caseId, 'INVCOMM', '004', lang);
 
     // Differential update — SPEC F12: only what really changed reaches the UPDATE. Resending whole
     // the record just read with a GET is the normal use of a form, and writing it back would fill

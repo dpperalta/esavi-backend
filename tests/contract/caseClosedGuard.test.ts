@@ -1,9 +1,13 @@
 import request from 'supertest';
+import type { Model, ModelStatic } from 'sequelize';
 import {
     CatalogItem, CatalogType, Classification, DiagnosticTerm, EsaviCase, FinalClassification, HealthFacility,
     Investigation, NonSevereNotification, Notification, NotificationEvent, NotificationMedicalHistory,
+    InvestigationAdministrationError, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationColdChain,
+    InvestigationCommunity, InvestigationDiagnostic, InvestigationMedicalHistory, InvestigationSource,
+    InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered,
     NotificationDiluent, NotificationMedication, NotificationPregnancy, NotificationPregnancyComplication,
-    NotificationVaccine, Notifier, Patient, SevereNotification, SystemConfig
+    NotificationVaccine, Notifier, Patient, SevereNotification, SystemConfig, VaccineWhodrug
 } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
@@ -100,6 +104,38 @@ const CLOSED_GUARD_RULES: ClosedGuardRule[] = [
     { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,           code: 'ESAVI-PREGCOMP-005A' },
     { method: 'patch',  path: `/api/notification-pregnancy-complications/activate/${ UUID }`,  code: 'ESAVI-PREGCOMP-005B' },
 
+    // paso 5, one to one details of the investigation. No 005A or 005B: their tables have no isActive
+    { method: 'post',   path: '/api/investigation-sources',                                         code: 'ESAVI-INVSRC-001' },
+    { method: 'put',    path: `/api/investigation-sources/${ UUID }`,                                   code: 'ESAVI-INVSRC-004' },
+    { method: 'post',   path: '/api/investigation-autopsies',                                       code: 'ESAVI-INVAUT-001' },
+    { method: 'put',    path: `/api/investigation-autopsies/${ UUID }`,                                 code: 'ESAVI-INVAUT-004' },
+    { method: 'post',   path: '/api/investigation-medical-histories',                               code: 'ESAVI-INVMEDH-001' },
+    { method: 'put',    path: `/api/investigation-medical-histories/${ UUID }`,                         code: 'ESAVI-INVMEDH-004' },
+    { method: 'post',   path: '/api/investigation-clinical-evaluations',                            code: 'ESAVI-INVCLIEV-001' },
+    { method: 'put',    path: `/api/investigation-clinical-evaluations/${ UUID }`,                      code: 'ESAVI-INVCLIEV-004' },
+    { method: 'post',   path: '/api/investigation-vaccination-contexts',                            code: 'ESAVI-INVVACTX-001' },
+    { method: 'put',    path: `/api/investigation-vaccination-contexts/${ UUID }`,                      code: 'ESAVI-INVVACTX-004' },
+    { method: 'post',   path: '/api/investigation-cold-chains',                                     code: 'ESAVI-INVCOLD-001' },
+    { method: 'put',    path: `/api/investigation-cold-chains/${ UUID }`,                               code: 'ESAVI-INVCOLD-004' },
+    { method: 'post',   path: '/api/investigation-administration-errors',                           code: 'ESAVI-INVADMER-001' },
+    { method: 'put',    path: `/api/investigation-administration-errors/${ UUID }`,                     code: 'ESAVI-INVADMER-004' },
+    { method: 'post',   path: '/api/investigation-communities',                                     code: 'ESAVI-INVCOMM-001' },
+    { method: 'put',    path: `/api/investigation-communities/${ UUID }`,                               code: 'ESAVI-INVCOMM-004' },
+
+    // paso 5, collections of the investigation
+    { method: 'post',   path: '/api/investigation-team-members',                                    code: 'ESAVI-INVTEAM-001' },
+    { method: 'put',    path: `/api/investigation-team-members/${ UUID }`,                              code: 'ESAVI-INVTEAM-004' },
+    { method: 'delete', path: `/api/investigation-team-members/${ UUID }`,                              code: 'ESAVI-INVTEAM-005A' },
+    { method: 'patch',  path: `/api/investigation-team-members/activate/${ UUID }`,                     code: 'ESAVI-INVTEAM-005B' },
+    { method: 'post',   path: '/api/investigation-vaccines-administered',                           code: 'ESAVI-INVVACAD-001' },
+    { method: 'put',    path: `/api/investigation-vaccines-administered/${ UUID }`,                     code: 'ESAVI-INVVACAD-004' },
+    { method: 'delete', path: `/api/investigation-vaccines-administered/${ UUID }`,                     code: 'ESAVI-INVVACAD-005A' },
+    { method: 'patch',  path: `/api/investigation-vaccines-administered/activate/${ UUID }`,            code: 'ESAVI-INVVACAD-005B' },
+    { method: 'post',   path: '/api/investigation-diagnostics',                                     code: 'ESAVI-INVDIAG-001' },
+    { method: 'put',    path: `/api/investigation-diagnostics/${ UUID }`,                               code: 'ESAVI-INVDIAG-004' },
+    { method: 'delete', path: `/api/investigation-diagnostics/${ UUID }`,                               code: 'ESAVI-INVDIAG-005A' },
+    { method: 'patch',  path: `/api/investigation-diagnostics/activate/${ UUID }`,                      code: 'ESAVI-INVDIAG-005B' },
+
     // final classification (SPEC F41)
     { method: 'put',    path: `/api/final-classifications/${ UUID }`,          code: 'ESAVI-FINCLASS-004' },
     { method: 'delete', path: `/api/final-classifications/${ UUID }`,          code: 'ESAVI-FINCLASS-005A' },
@@ -153,6 +189,10 @@ interface Family {
 const runTag = Date.now().toString(36).toUpperCase();
 let termCounter = 0;
 
+// The master entry every vaccine administered points at. Resolved once, in beforeAll, because the 001
+// body of INVVACAD carries it
+let whodrugId: string;
+
 // The item of the pregnancyComplicationType catalog the complications point at. Resolved once, in
 // beforeAll, because the 001 body of PREGCOMP carries it
 let complicationTypeItemId: string;
@@ -168,7 +208,85 @@ const createNonSevereParent = ( caseId: string ) => notificationOf(caseId, 'NON_
 const insertOmittingSortOrder = <T extends Record<string, unknown>>( values: T ): { fields: never } =>
     ({ fields: Object.keys(values) as never });
 
+const asModel = ( model: unknown ): ModelStatic<Model> => model as ModelStatic<Model>;
+
+const createInvestigationParent = async ( caseId: string ): Promise<string> =>
+    ( await Investigation.create({ caseId }) ).getDataValue('investigationId');
+
+// The one to one details of the investigation share everything but their model and the columns their
+// 001 cannot do without. The primary key of the detail IS the investigationId, and a retired detail
+// carries the seal of deletedAt, which is what its purge asks for: those tables have no isActive
+const oneToOneFamily = ( basePath: string, model: unknown, required: Record<string, unknown> = {} ): Family => ({
+    basePath,
+    countRows: ( _caseId, parentId ) => asModel(model).count({ where: { investigationId: parentId } }),
+    listPath: target => `${ basePath }/case/${ target.caseId }`,
+    createParent: createInvestigationParent,
+    create: async ( _caseId, isActive, parentId ) => {
+        await asModel(model).create({
+            investigationId: parentId, ...required, ...( isActive ? {} : { deletedAt: new Date() } )
+        } as never);
+        return parentId;
+    },
+    read: async rowId => ( await asModel(model).findByPk(rowId, { raw: true }) ) as unknown as Record<string, unknown>,
+    changingBody: { notes: 'Closed guard probe' },
+    createBody: ( _caseId, parentId ) => ({ investigationId: parentId, ...required })
+});
+
 const FAMILIES: Record<string, Family> = {
+    INVSRC: oneToOneFamily('/api/investigation-sources', InvestigationSource),
+    INVAUT: oneToOneFamily('/api/investigation-autopsies', InvestigationAutopsy, { isDeath: true, deathDate: '2024-06-01' }),
+    INVMEDH: oneToOneFamily('/api/investigation-medical-histories', InvestigationMedicalHistory),
+    INVCLIEV: oneToOneFamily('/api/investigation-clinical-evaluations', InvestigationClinicalEvaluation),
+    INVVACTX: oneToOneFamily('/api/investigation-vaccination-contexts', InvestigationVaccinationContext),
+    INVCOLD: oneToOneFamily('/api/investigation-cold-chains', InvestigationColdChain),
+    INVADMER: oneToOneFamily('/api/investigation-administration-errors', InvestigationAdministrationError),
+    INVCOMM: oneToOneFamily('/api/investigation-communities', InvestigationCommunity),
+    INVTEAM: {
+        basePath: '/api/investigation-team-members',
+        countRows: ( _caseId, parentId ) => InvestigationTeamMember.count({ where: { investigationId: parentId } }),
+        listPath: target => `/api/investigation-team-members/investigation/${ target.parentId }`,
+        createParent: createInvestigationParent,
+        create: async ( _caseId, isActive, parentId ) => {
+            const values = { investigationId: parentId, fullName: 'Ana Perez', isActive };
+            return ( await InvestigationTeamMember.create(values, insertOmittingSortOrder(values)) )
+                .getDataValue('investigationTeamMemberId');
+        },
+        read: async rowId => ( await InvestigationTeamMember.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ investigationId: parentId, fullName: 'Ana Perez' })
+    },
+    INVVACAD: {
+        basePath: '/api/investigation-vaccines-administered',
+        countRows: ( _caseId, parentId ) => InvestigationVaccineAdministered.count({ where: { investigationId: parentId } }),
+        listPath: target => `/api/investigation-vaccines-administered/investigation/${ target.parentId }`,
+        createParent: createInvestigationParent,
+        create: async ( _caseId, isActive, parentId ) => {
+            const values = { investigationId: parentId, vaccineWhodrugId: whodrugId, isActive };
+            return ( await InvestigationVaccineAdministered.create(values, insertOmittingSortOrder(values)) )
+                .getDataValue('vaccineAdministeredId');
+        },
+        read: async rowId => ( await InvestigationVaccineAdministered.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ investigationId: parentId, vaccineWhodrugId: whodrugId })
+    },
+    INVDIAG: {
+        basePath: '/api/investigation-diagnostics',
+        countRows: ( _caseId, parentId ) => InvestigationDiagnostic.count({ where: { investigationId: parentId } }),
+        listPath: target => `/api/investigation-diagnostics/investigation/${ target.parentId }`,
+        createParent: createInvestigationParent,
+        create: async ( _caseId, isActive, parentId ) => {
+            termCounter += 1;
+            const term = await DiagnosticTerm.create({
+                source: 'LOCAL', code: `CG${ runTag }${ termCounter }`, name: `Fisico ${ runTag } ${ termCounter }`
+            });
+            const values = { investigationId: parentId, diagnosticTermId: term.getDataValue('diagnosticTermId'), isActive };
+            return ( await InvestigationDiagnostic.create(values, insertOmittingSortOrder(values)) )
+                .getDataValue('diagnosticId');
+        },
+        read: async rowId => ( await InvestigationDiagnostic.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({ investigationId: parentId, diagnosticName: 'Fisico' })
+    },
     SEVNOT: {
         basePath: '/api/severe-notifications',
         countRows: ( _caseId, parentId ) => SevereNotification.count({ where: { notificationId: parentId } }),
@@ -485,6 +603,10 @@ describe('case closed guard contract', () => {
             isEncrypted: false
         });
         expect(config.status).toBe(201);
+
+        whodrugId = ( await VaccineWhodrug.create({
+            drugCode: `CGVA${ runTag }`, drugName: `Vaccine CG ${ runTag }`
+        }) ).getDataValue('vaccineWhodrugId');
 
         // The catalog the complications anchor to is created once and reused: other suites may have
         // seeded it already
