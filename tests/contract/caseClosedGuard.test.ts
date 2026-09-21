@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { Classification, EsaviCase, FinalClassification, HealthFacility, Investigation, Notification, Patient } from '../../src/models';
+import { Classification, EsaviCase, FinalClassification, HealthFacility, Investigation, Notification, Notifier, Patient } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { getMessage } from '../../src/helpers';
@@ -32,6 +32,16 @@ interface ClosedGuardRule {
 const UUID = '00000000-0000-4000-8000-000000000000';
 
 const CLOSED_GUARD_RULES: ClosedGuardRule[] = [
+    // esaviCase (SPEC F06). Only the 004: the 001 creates the case, and the 005A and 005B act on the
+    // life cycle of the whole case and not on its content
+    { method: 'put',    path: `/api/esavi-cases/${ UUID }`,              code: 'ESAVI-CASE-004' },
+
+    // notifier (SPEC F07)
+    { method: 'post',   path: '/api/notifiers',                          code: 'ESAVI-NOTIFIER-001' },
+    { method: 'put',    path: `/api/notifiers/${ UUID }`,                code: 'ESAVI-NOTIFIER-004' },
+    { method: 'delete', path: `/api/notifiers/${ UUID }`,                code: 'ESAVI-NOTIFIER-005A' },
+    { method: 'patch',  path: `/api/notifiers/activate/${ UUID }`,       code: 'ESAVI-NOTIFIER-005B' },
+
     // classification (SPEC F09). The 001 is covered by CASEFLOW_012, not by this matrix
     { method: 'put',    path: `/api/classifications/${ UUID }`,          code: 'ESAVI-CLASSIF-004' },
     { method: 'delete', path: `/api/classifications/${ UUID }`,          code: 'ESAVI-CLASSIF-005A' },
@@ -56,6 +66,7 @@ const CLOSED_GUARD_RULES: ClosedGuardRule[] = [
 // The role that reaches each operation: 004 is USER, the retirement is ADMIN and the return
 // SUPERADMIN, as ROUTE_RULES declares
 const ROLE_BY_OP: Record<string, TestRole> = {
+    '001': 'USER',
     '004': 'USER',
     '005A': 'ADMIN',
     '005B': 'SUPERADMIN'
@@ -69,19 +80,54 @@ interface Prepared {
 interface Family {
     // The base path of the entity, used by the reads and the purge
     basePath: string;
+    // True for the four phase headers, whose 001 is covered by CASEFLOW_012 and not by the matrix
+    isPhase?: boolean;
+    // True for the entities with no 005C: the case is retired by its own 005A and never purged
+    hasNoPurge?: boolean;
+    // Roles that differ from ROLE_BY_OP: a case whose facility has no geoLocation is visible to an
+    // ADMIN only, which is what F49 makes of the cases this suite builds
+    roles?: Partial<Record<string, TestRole>>;
+    // How many rows the case holds, for the families whose guarded operation is a 001
+    countRows?: ( caseId: string ) => Promise<number>;
     // Creates the row straight on the model, over the case, with the requested activity
     create: ( caseId: string, isActive: boolean ) => Promise<string>;
     // Reads it back whole, to compare what a rejected write must not have touched
     read: ( rowId: string ) => Promise<Record<string, unknown>>;
     // A body for the 004 that really changes a field
     changingBody: Record<string, unknown>;
-    // A valid 001 body, for the families whose 001 already answered CASEFLOW_012
+    // A valid 001 body: for the phase headers it is the request that already answered CASEFLOW_012
     createBody?: ( caseId: string ) => Record<string, unknown>;
 }
 
 const FAMILIES: Record<string, Family> = {
+    CASE: {
+        basePath: '/api/esavi-cases',
+        hasNoPurge: true,
+        roles: { '004': 'ADMIN' },
+        // The row of this family IS the case
+        create: async ( caseId, isActive ) => {
+            if( !isActive ) {
+                await EsaviCase.update({ isActive: false }, { where: { caseId } });
+            }
+            return caseId;
+        },
+        read: async rowId => ( await EsaviCase.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { details: 'Closed guard probe' }
+    },
+    NOTIFIER: {
+        basePath: '/api/notifiers',
+        create: async ( caseId, isActive ) =>
+            ( await Notifier.create({
+                caseId, firstName: esaviCrypt('Ana'), lastName: esaviCrypt('Perez'), isActive
+            }) ).getDataValue('notifierId'),
+        read: async rowId => ( await Notifier.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        countRows: caseId => Notifier.count({ where: { caseId } }),
+        changingBody: { room: 'Closed guard probe' },
+        createBody: caseId => ({ caseId, firstName: 'Ana', lastName: 'Perez' })
+    },
     CLASSIF: {
         basePath: '/api/classifications',
+        isPhase: true,
         create: async ( caseId, isActive ) =>
             ( await Classification.create({ caseId, isSeriousEvent: false, isActive }) ).getDataValue('classificationId'),
         read: async rowId => ( await Classification.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
@@ -90,6 +136,7 @@ const FAMILIES: Record<string, Family> = {
     },
     NOTIFCN: {
         basePath: '/api/notifications',
+        isPhase: true,
         create: async ( caseId, isActive ) =>
             ( await Notification.create({
                 caseId, notificationType: 'NON_SEVERE', esaviDescription: 'Fever after the dose', isActive
@@ -100,6 +147,7 @@ const FAMILIES: Record<string, Family> = {
     },
     INVESTGN: {
         basePath: '/api/investigations',
+        isPhase: true,
         create: async ( caseId, isActive ) =>
             ( await Investigation.create({ caseId, isActive }) ).getDataValue('investigationId'),
         read: async rowId => ( await Investigation.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
@@ -108,6 +156,7 @@ const FAMILIES: Record<string, Family> = {
     },
     FINCLASS: {
         basePath: '/api/final-classifications',
+        isPhase: true,
         create: async ( caseId, isActive ) =>
             ( await FinalClassification.create({ caseId, isActive }) ).getDataValue('finalClassificationId'),
         read: async rowId => ( await FinalClassification.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
@@ -115,6 +164,14 @@ const FAMILIES: Record<string, Family> = {
         createBody: caseId => ({ caseId })
     }
 };
+
+const roleOf = ( rule: ClosedGuardRule ): TestRole => {
+    const [ , prefix, op ] = rule.code.split('-');
+    return FAMILIES[prefix].roles?.[op] ?? ROLE_BY_OP[op];
+};
+
+// What a request that succeeds answers: a 001 creates
+const successStatusOf = ( rule: ClosedGuardRule ): number => rule.method === 'post' ? 201 : 200;
 
 const prefixOf = ( code: string ): string => code.split('-')[1];
 const opOf = ( code: string ): string => code.split('-')[2];
@@ -150,7 +207,9 @@ describe('case closed guard contract', () => {
             healthFacilityId: facility.getDataValue('healthFacilityId'),
             caseCode: `CG-${ suffix }-${ caseCounter }`,
             reportDate: new Date().toISOString().slice(0, 10),
-            eventDate: '2024-05-04'
+            // No eventDate on purpose: the suite mints a case per test, and a dated one would crowd the
+            // first page of the eventDate range filters of esaviCase.test.ts, which read a shared table
+            eventDate: null
         });
         const caseId = esaviCase.getDataValue('caseId');
         if( withWorkflow ) {
@@ -170,11 +229,13 @@ describe('case closed guard contract', () => {
         return { caseId, rowId };
     };
 
-    const send = ( rule: ClosedGuardRule, rowId: string, query: string = '' ) => {
+    // `target.caseId` feeds the body of a 001, `target.rowId` replaces the placeholder of the path
+    const send = ( rule: ClosedGuardRule, target: Prepared, query: string = '' ) => {
         const family = FAMILIES[prefixOf(rule.code)];
         const op = opOf(rule.code);
-        const url = rule.path.replace(UUID, rowId) + query;
-        const call = request(app)[rule.method](url).set(authHeader(ROLE_BY_OP[op]));
+        const url = rule.path.replace(UUID, target.rowId) + query;
+        const call = request(app)[rule.method](url).set(authHeader(roleOf(rule)));
+        if( op === '001' ) return call.send(family.createBody!(target.caseId));
         return op === '004' ? call.send(family.changingBody) : call;
     };
 
@@ -206,55 +267,60 @@ describe('case closed guard contract', () => {
         const expectedCode = `${ prefix }_${ op }_CASE_CLOSED`;
         const family = FAMILIES[prefix];
 
-        it(`answers 409 ${ expectedCode } on a closed case and writes nothing`, async () => {
-            const { caseId, rowId } = await prepare(rule.code);
-            const before = snapshotOf(await family.read(rowId));
-            await setCaseWorkflowStatus(caseId, 'CLOSED');
+        // What a rejected write must not have moved: the row, or the row count for a 001
+        const observe = ( target: Prepared ) => op === '001'
+            ? family.countRows!(target.caseId)
+            : family.read(target.rowId).then(snapshotOf);
 
-            const response = await send(rule, rowId);
+        it(`answers 409 ${ expectedCode } on a closed case and writes nothing`, async () => {
+            const target = await prepare(rule.code);
+            const before = await observe(target);
+            await setCaseWorkflowStatus(target.caseId, 'CLOSED');
+
+            const response = await send(rule, target);
 
             expect(response.status).toBe(409);
             expect(response.body.ok).toBe(false);
             expect(response.body.code).toBe(expectedCode);
             expect(response.body.message).toBe(getMessage('caseWorkflow.caseClosed', 'es'));
-            expect(snapshotOf(await family.read(rowId))).toEqual(before);
+            expect(await observe(target)).toEqual(before);
         });
 
         it('answers the message of the request language', async () => {
-            const { caseId, rowId } = await prepare(rule.code);
-            await setCaseWorkflowStatus(caseId, 'CLOSED');
+            const target = await prepare(rule.code);
+            await setCaseWorkflowStatus(target.caseId, 'CLOSED');
 
-            const response = await send(rule, rowId, '?lang=en');
+            const response = await send(rule, target, '?lang=en');
 
             expect(response.status).toBe(409);
             expect(response.body.message).toBe(getMessage('caseWorkflow.caseClosed', 'en'));
         });
 
         it('answers as before once ESAVI-CASEFLOW-009 reopens the case', async () => {
-            const { caseId, rowId } = await prepare(rule.code);
-            await setCaseWorkflowStatus(caseId, 'CLOSED');
-            expect(( await send(rule, rowId) ).status).toBe(409);
+            const target = await prepare(rule.code);
+            await setCaseWorkflowStatus(target.caseId, 'CLOSED');
+            expect(( await send(rule, target) ).status).toBe(409);
 
-            expect(( await reopen(caseId) ).status).toBe(200);
+            expect(( await reopen(target.caseId) ).status).toBe(200);
 
-            expect(( await send(rule, rowId) ).status).toBe(200);
+            expect(( await send(rule, target) ).status).toBe(successStatusOf(rule));
         });
 
         it('does not block a case in PENDING_VALIDATION', async () => {
-            const { caseId, rowId } = await prepare(rule.code);
-            await setCaseWorkflowStatus(caseId, 'PENDING_VALIDATION');
+            const target = await prepare(rule.code);
+            await setCaseWorkflowStatus(target.caseId, 'PENDING_VALIDATION');
 
-            expect(( await send(rule, rowId) ).status).toBe(200);
+            expect(( await send(rule, target) ).status).toBe(successStatusOf(rule));
         });
 
         it('does not block a case with no workflow row', async () => {
-            const { rowId } = await prepare(rule.code, { withWorkflow: false });
+            const target = await prepare(rule.code, { withWorkflow: false });
 
-            expect(( await send(rule, rowId) ).status).toBe(200);
+            expect(( await send(rule, target) ).status).toBe(successStatusOf(rule));
         });
 
-        it('answers 404 and not 409 for an id that does not exist', async () => {
-            const response = await send(rule, UUID);
+        it('answers 404 and not 409 for a row or a case that does not exist', async () => {
+            const response = await send(rule, { rowId: UUID, caseId: UUID });
 
             expect(response.status).toBe(404);
         });
@@ -269,7 +335,7 @@ describe('case closed guard contract', () => {
 
             const response = await request(app)
                 .put(rule.path.replace(UUID, rowId))
-                .set(authHeader('USER'))
+                .set(authHeader(roleOf(rule)))
                 .send({});
 
             expect(response.status).toBe(409);
@@ -278,31 +344,33 @@ describe('case closed guard contract', () => {
     });
 
     describe('a rejected retirement or return leaves the row as it was', () => {
-        it.each(['CLASSIF', 'NOTIFCN', 'INVESTGN', 'FINCLASS'])('%s keeps isActive after a rejected 005A', async key => {
-            const rule = CLOSED_GUARD_RULES.find(r => r.code === `ESAVI-${ key }-005A`)!;
-            const { caseId, rowId } = await prepare(rule.code);
-            await setCaseWorkflowStatus(caseId, 'CLOSED');
+        const retirements = CLOSED_GUARD_RULES.filter(rule => opOf(rule.code) === '005A');
+        const returns = CLOSED_GUARD_RULES.filter(rule => opOf(rule.code) === '005B');
 
-            expect(( await send(rule, rowId) ).status).toBe(409);
+        it.each(retirements)('$code keeps isActive after the rejection', async rule => {
+            const target = await prepare(rule.code);
+            await setCaseWorkflowStatus(target.caseId, 'CLOSED');
 
-            expect(( await FAMILIES[key].read(rowId) ).isActive).toBe(true);
+            expect(( await send(rule, target) ).status).toBe(409);
+
+            expect(( await FAMILIES[prefixOf(rule.code)].read(target.rowId) ).isActive).toBe(true);
         });
 
-        it.each(['CLASSIF', 'NOTIFCN', 'INVESTGN', 'FINCLASS'])('%s keeps isActive false after a rejected 005B', async key => {
-            const rule = CLOSED_GUARD_RULES.find(r => r.code === `ESAVI-${ key }-005B`)!;
-            const { caseId, rowId } = await prepare(rule.code);
-            await setCaseWorkflowStatus(caseId, 'CLOSED');
+        it.each(returns)('$code keeps isActive false after the rejection', async rule => {
+            const target = await prepare(rule.code);
+            await setCaseWorkflowStatus(target.caseId, 'CLOSED');
 
-            expect(( await send(rule, rowId) ).status).toBe(409);
+            expect(( await send(rule, target) ).status).toBe(409);
 
-            expect(( await FAMILIES[key].read(rowId) ).isActive).toBe(false);
+            expect(( await FAMILIES[prefixOf(rule.code)].read(target.rowId) ).isActive).toBe(false);
         });
     });
 
     describe('outside the guard', () => {
-        const keys = Object.keys(FAMILIES);
+        const allKeys = Object.keys(FAMILIES);
+        const phaseKeys = allKeys.filter(key => FAMILIES[key].isPhase);
 
-        it.each(keys)('%s 001 on a closed case still answers CASEFLOW_012_CASE_CLOSED', async key => {
+        it.each(phaseKeys)('%s 001 on a closed case still answers CASEFLOW_012_CASE_CLOSED', async key => {
             const caseId = await createCaseFixture();
             await setCaseWorkflowStatus(caseId, 'CLOSED');
             const family = FAMILIES[key];
@@ -316,20 +384,20 @@ describe('case closed guard contract', () => {
             expect(response.body.code).toBe('CASEFLOW_012_CASE_CLOSED');
         });
 
-        it.each(keys)('%s is readable on a closed case', async key => {
+        it.each(allKeys)('%s is readable on a closed case', async key => {
             const family = FAMILIES[key];
             const caseId = await createCaseFixture();
             const rowId = await family.create(caseId, true);
             await setCaseWorkflowStatus(caseId, 'CLOSED');
 
-            const byId = await request(app).get(`${ family.basePath }/${ rowId }`).set(authHeader('USER'));
-            const list = await request(app).get(family.basePath).set(authHeader('USER'));
+            const byId = await request(app).get(`${ family.basePath }/${ rowId }`).set(authHeader('ADMIN'));
+            const list = await request(app).get(family.basePath).set(authHeader('ADMIN'));
 
             expect(byId.status).toBe(200);
             expect(list.status).toBe(200);
         });
 
-        it.each(keys)('%s 005C purges a retired row of a closed case', async key => {
+        it.each(allKeys.filter(key => !FAMILIES[key].hasNoPurge))('%s 005C purges a retired row of a closed case', async key => {
             const family = FAMILIES[key];
             const caseId = await createCaseFixture();
             const rowId = await family.create(caseId, false);

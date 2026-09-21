@@ -7,7 +7,7 @@ import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
 import { cascadeSealSatellite } from './common/satelliteCascade.service';
-import { createCaseWorkflowService } from './caseWorkflow.service';
+import { assertCaseIsOpen, createCaseWorkflowService } from './caseWorkflow.service';
 import { resolveGeoSubtreeIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
@@ -459,6 +459,11 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
             transaction
         });
         await assertFacilityGeoLocationInScope(savedFacility?.geoLocationId, authUser, '004', lang);
+
+        // SPEC F61: a closed case file is not edited. After the 404 and the scope — a caller with no
+        // view of the row is told nothing about its state — and before anything else, so the answer
+        // does not depend on the body
+        await assertCaseIsOpen(id, 'CASE', '004', lang, transaction);
 
         if( data.healthFacilityId ) {
             await assertHealthFacilityIsValid(data.healthFacilityId, '004', lang, transaction, authUser);
