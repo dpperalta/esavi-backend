@@ -2,8 +2,8 @@ import request from 'supertest';
 import {
     CatalogItem, CatalogType, Classification, DiagnosticTerm, EsaviCase, FinalClassification, HealthFacility,
     Investigation, NonSevereNotification, Notification, NotificationEvent, NotificationMedicalHistory,
-    NotificationMedication, NotificationPregnancy, NotificationVaccine, Notifier, Patient, SevereNotification,
-    SystemConfig
+    NotificationDiluent, NotificationMedication, NotificationPregnancy, NotificationPregnancyComplication,
+    NotificationVaccine, Notifier, Patient, SevereNotification, SystemConfig
 } from '../../src/models';
 import { app } from '../../src/app';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
@@ -90,6 +90,16 @@ const CLOSED_GUARD_RULES: ClosedGuardRule[] = [
     { method: 'delete', path: `/api/notification-medical-histories/${ UUID }`,           code: 'ESAVI-MEDHIST-005A' },
     { method: 'patch',  path: `/api/notification-medical-histories/activate/${ UUID }`,  code: 'ESAVI-MEDHIST-005B' },
 
+    // paso 4, grandchildren: they hang from the vaccine and from the pregnancy, one hop further down
+    { method: 'post',   path: '/api/notification-diluents',                                    code: 'ESAVI-NOTIFDIL-001' },
+    { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                          code: 'ESAVI-NOTIFDIL-004' },
+    { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                          code: 'ESAVI-NOTIFDIL-005A' },
+    { method: 'patch',  path: `/api/notification-diluents/activate/${ UUID }`,                 code: 'ESAVI-NOTIFDIL-005B' },
+    { method: 'post',   path: '/api/notification-pregnancy-complications',                     code: 'ESAVI-PREGCOMP-001' },
+    { method: 'put',    path: `/api/notification-pregnancy-complications/${ UUID }`,           code: 'ESAVI-PREGCOMP-004' },
+    { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,           code: 'ESAVI-PREGCOMP-005A' },
+    { method: 'patch',  path: `/api/notification-pregnancy-complications/activate/${ UUID }`,  code: 'ESAVI-PREGCOMP-005B' },
+
     // final classification (SPEC F41)
     { method: 'put',    path: `/api/final-classifications/${ UUID }`,          code: 'ESAVI-FINCLASS-004' },
     { method: 'delete', path: `/api/final-classifications/${ UUID }`,          code: 'ESAVI-FINCLASS-005A' },
@@ -142,6 +152,10 @@ interface Family {
 
 const runTag = Date.now().toString(36).toUpperCase();
 let termCounter = 0;
+
+// The item of the pregnancyComplicationType catalog the complications point at. Resolved once, in
+// beforeAll, because the 001 body of PREGCOMP carries it
+let complicationTypeItemId: string;
 
 const notificationOf = async ( caseId: string, notificationType: 'SEVERE' | 'NON_SEVERE' ): Promise<string> =>
     ( await Notification.create({ caseId, notificationType, esaviDescription: 'Fever after the dose' }) )
@@ -235,6 +249,43 @@ const FAMILIES: Record<string, Family> = {
         read: async rowId => ( await NotificationPregnancy.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
         changingBody: { notes: 'Closed guard probe' },
         createBody: ( _caseId, parentId ) => ({ notificationId: parentId, wasPregnantAtVaccination: 'YES' })
+    },
+    NOTIFDIL: {
+        basePath: '/api/notification-diluents',
+        // The parent is the vaccine, and it hangs from the notification the fixture builds first
+        countRows: ( _caseId, parentId ) => NotificationDiluent.count({ where: { vaccineId: parentId } }),
+        listPath: target => `/api/notification-diluents/vaccine/${ target.parentId }`,
+        createParent: async caseId => {
+            const values = { notificationId: await createNonSevereParent(caseId), vaccineName: 'BCG' };
+            return ( await NotificationVaccine.create(values, insertOmittingSortOrder(values)) ).getDataValue('vaccineId');
+        },
+        create: async ( _caseId, isActive, parentId ) => {
+            const values = { vaccineId: parentId, diluentName: 'Agua esteril', isActive };
+            return ( await NotificationDiluent.create(values, insertOmittingSortOrder(values)) ).getDataValue('diluentId');
+        },
+        read: async rowId => ( await NotificationDiluent.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { batchNumber: 'CG-PROBE' },
+        createBody: ( _caseId, parentId ) => ({ vaccineId: parentId, diluentName: 'Agua esteril' })
+    },
+    PREGCOMP: {
+        basePath: '/api/notification-pregnancy-complications',
+        // The parent is the pregnancy, and it hangs from the notification the fixture builds first
+        countRows: ( _caseId, parentId ) => NotificationPregnancyComplication.count({ where: { pregnancyId: parentId } }),
+        listPath: target => `/api/notification-pregnancy-complications/pregnancy/${ target.parentId }`,
+        createParent: async caseId =>
+            ( await NotificationPregnancy.create({
+                notificationId: await createNonSevereParent(caseId), wasPregnantAtVaccination: 'YES'
+            }) ).getDataValue('pregnancyId'),
+        create: async ( _caseId, isActive, parentId ) => {
+            const values = { pregnancyId: parentId, complicationTypeItemId, complicationRawName: 'Eclampsia', isActive };
+            return ( await NotificationPregnancyComplication.create(values, insertOmittingSortOrder(values)) )
+                .getDataValue('complicationId');
+        },
+        read: async rowId => ( await NotificationPregnancyComplication.findByPk(rowId, { raw: true }) ) as Record<string, unknown>,
+        changingBody: { notes: 'Closed guard probe' },
+        createBody: ( _caseId, parentId ) => ({
+            pregnancyId: parentId, complicationTypeItemId, complicationName: 'Eclampsia'
+        })
     },
     MEDHIST: {
         basePath: '/api/notification-medical-histories',
@@ -434,6 +485,17 @@ describe('case closed guard contract', () => {
             isEncrypted: false
         });
         expect(config.status).toBe(201);
+
+        // The catalog the complications anchor to is created once and reused: other suites may have
+        // seeded it already
+        const complicationType = await CatalogType.findOne({ where: { code: 'pregnancyComplicationType' } })
+            ?? await CatalogType.create({ code: 'pregnancyComplicationType', name: 'Pregnancy Complication Type' });
+        complicationTypeItemId = ( await CatalogItem.create({
+            catalogTypeId: complicationType.getDataValue('catalogTypeId'),
+            code: `CONGCG${ runTag }`,
+            name: 'Anomalias congenitas',
+            value: '1'
+        }) ).getDataValue('catalogItemId');
     });
 
     afterAll(async () => {

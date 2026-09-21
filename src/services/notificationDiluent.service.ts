@@ -4,6 +4,7 @@ import { DiluentCatalog, Notification, NotificationDiluent, NotificationVaccine 
 import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNotificationDiluentInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 
@@ -41,7 +42,8 @@ const VACCINE_INCLUDE = {
     include: [{
         model: Notification,
         as: 'notification',
-        attributes: ['notificationId', 'isActive']
+        // caseId feeds the guard of SPEC F61. It never reaches the response, which drops the chain
+        attributes: ['notificationId', 'caseId', 'isActive']
     }]
 };
 
@@ -134,7 +136,7 @@ const findValidVaccine = async (vaccineId: string, op: string, lang: string) => 
         include: [{
             model: Notification,
             as: 'notification',
-            attributes: ['notificationId'],
+            attributes: ['notificationId', 'caseId'],
             required: true,
             where: { isActive: true }
         }]
@@ -146,6 +148,11 @@ const findValidVaccine = async (vaccineId: string, op: string, lang: string) => 
             `NOTIFDIL_${ op }_VACCINE_NOT_FOUND`
         );
     }
+
+    // SPEC F61: a closed case file takes no new row. Right after the parent chain is known to exist
+    // and be active, and before any other rule, so the answer does not depend on the body
+    await assertCaseIsOpen(vaccine.notification!.caseId, 'NOTIFDIL', op, lang);
+
     return vaccine;
 }
 
@@ -466,6 +473,10 @@ const updateNotificationDiluentService = async (
             throw new AppError(getMessage('notificationDiluent.notFound', lang), 404, 'NOTIFDIL_004_NOT_FOUND');
         }
 
+        // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+        // foreign keys, uniqueness and the diff — so the answer does not depend on the body
+        await assertCaseIsOpen(notificationDiluent.vaccine!.notification!.caseId, 'NOTIFDIL', '004', lang, transaction);
+
         // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate, and an
         // instance read with a narrowed `attributes` reads back undefined for what it left out, so
         // every comparison would count as a change
@@ -643,6 +654,23 @@ const setNotificationDiluentActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await NotificationDiluent.findByPk(id, {
+            attributes: ['diluentId'],
+            include: [{
+                model: NotificationVaccine,
+                as: 'vaccine',
+                attributes: ['vaccineId'],
+                include: [{ model: Notification, as: 'notification', attributes: ['caseId'] }]
+            }],
+            transaction
+        });
+        if( current ) {
+            await assertCaseIsOpen(current.vaccine!.notification!.caseId, 'NOTIFDIL', op, lang, transaction);
+        }
+
         // Only on the way back: a 005A is what frees the number, so it never collides.
         // The reactivation revalidates nothing else — not the master, not the minimum content, not
         // the temporal coherence, not the state of the parent vaccine. Bringing a row back to life
