@@ -16,6 +16,7 @@ import { getMessage } from '../../src/helpers';
 import { closeTestDatabase, seedCaseWorkflow, setCaseWorkflowStatus } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 import type { TestRole } from '../setup/auth';
+import { ROUTE_RULES, UUID } from '../setup/routeRules';
 
 /**
  * Contract suite for SPEC F61: a case whose workflow is CLOSED accepts no write over its content.
@@ -38,8 +39,6 @@ interface ClosedGuardRule {
     path: string;
     code: string;
 }
-
-const UUID = '00000000-0000-4000-8000-000000000000';
 
 const CLOSED_GUARD_RULES: ClosedGuardRule[] = [
     // esaviCase (SPEC F06). Only the 004: the 001 creates the case, and the 005A and 005B act on the
@@ -549,6 +548,30 @@ const roleOf = ( rule: ClosedGuardRule ): TestRole => {
 // What a request that succeeds answers: a 001 creates
 const successStatusOf = ( rule: ClosedGuardRule ): number => rule.method === 'post' ? 201 : 200;
 
+// The 28 abbreviations whose writes the guard covers, as §3.2 of the spec lists them. They are written
+// out here, apart from FAMILIES, so that a family left out of one list is caught by the other
+const GUARDED_PREFIXES = [
+    'CASE', 'NOTIFIER',
+    'CLASSIF', 'NOTIFCN', 'INVESTGN', 'FINCLASS',
+    'SEVNOT', 'NSEVNOT', 'NOTIFEVT', 'NOTIFMED', 'NOTIFVAC', 'NOTIFPRG', 'MEDHIST', 'NOTIFDIL', 'PREGCOMP',
+    'INVSRC', 'INVAUT', 'INVMEDH', 'INVCLIEV', 'INVVACTX', 'INVCOLD', 'INVADMER', 'INVCOMM',
+    'INVTEAM', 'INVVACAD', 'INVDIAG', 'INVPREG', 'EVALINST'
+];
+
+// The operations of those entities that stay outside the guard, and why (§2 of the spec): the 001 of
+// the four phase headers answers CASEFLOW_012, and the case is created by its 001 and lives or dies
+// as a whole through its 005A and 005B
+const PHASE_HEADERS = ['CLASSIF', 'NOTIFCN', 'INVESTGN', 'FINCLASS'];
+const OUT_OF_THE_MATRIX = [
+    ...PHASE_HEADERS.map(prefix => `ESAVI-${ prefix }-001`),
+    'ESAVI-CASE-001',
+    'ESAVI-CASE-005A',
+    'ESAVI-CASE-005B'
+];
+
+const ruleKey = ( rule: { method: string, path: string, code: string } ): string =>
+    `${ rule.code } ${ rule.method.toUpperCase() } ${ rule.path }`;
+
 const prefixOf = ( code: string ): string => code.split('-')[1];
 const opOf = ( code: string ): string => code.split('-')[2];
 
@@ -676,6 +699,44 @@ describe('case closed guard contract', () => {
     afterAll(async () => {
         consoleError.mockRestore();
         await closeTestDatabase();
+    });
+
+    // The guard against forgetting, and the reason a service can be left without the check only by
+    // leaving the suite red. It reads ROUTE_RULES, the matrix that already lists every route of the
+    // application, takes every write of the 28 entities, and demands that CLOSED_GUARD_RULES holds
+    // exactly those. A new satellite is in ROUTE_RULES the day its routes exist, so it appears here
+    // as a missing row until the guard is added and its row written
+    describe('the matrix itself', () => {
+        const expected = ROUTE_RULES
+            .filter(rule => GUARDED_PREFIXES.includes(rule.code.split('-')[1]))
+            .filter(rule => rule.method !== 'get')
+            .filter(rule => !rule.path.includes('/purge/'))
+            .filter(rule => !OUT_OF_THE_MATRIX.includes(rule.code))
+            .map(ruleKey)
+            .sort();
+
+        const declared = CLOSED_GUARD_RULES.map(ruleKey).sort();
+
+        it('lists every write of the 28 entities that ROUTE_RULES declares, and nothing else', () => {
+            const missing = expected.filter(key => !declared.includes(key));
+            const surplus = declared.filter(key => !expected.includes(key));
+
+            expect({ missing, surplus }).toEqual({ missing: [], surplus: [] });
+        });
+
+        it('has the 85 rows of §3.2 of the spec', () => {
+            expect(CLOSED_GUARD_RULES).toHaveLength(85);
+            expect(expected).toHaveLength(85);
+        });
+
+        it('has no row twice', () => {
+            expect(new Set(declared).size).toBe(declared.length);
+        });
+
+        it('has one family for each of the 28 abbreviations, and no other', () => {
+            expect(Object.keys(FAMILIES).sort()).toEqual([...GUARDED_PREFIXES].sort());
+            expect(GUARDED_PREFIXES).toHaveLength(28);
+        });
     });
 
     describe.each(CLOSED_GUARD_RULES)('$code — $method $path', rule => {
