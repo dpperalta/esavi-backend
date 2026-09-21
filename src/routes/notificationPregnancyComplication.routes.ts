@@ -51,10 +51,12 @@ router.get('/pregnancy/:id', tokenValidation, validateUserRole(USER), ...notific
 // Declared with the literal paths, before /:id
 router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationPregnancyComplicationIdValidator, validateFields, purgeNotificationPregnancyComplication);
 
-// Activate Notification Pregnancy Complication - For SuperAdmin
+// Activate Notification Pregnancy Complication - For Admin
 // Code: ESAVI-PREGCOMP-005B
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
-router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationPregnancyComplicationIdValidator, validateFields, activateNotificationPregnancyComplication);
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationPregnancyComplicationIdValidator, validateFields, activateNotificationPregnancyComplication);
 
 // Get Notification Pregnancy Complication by ID
 // Code: ESAVI-PREGCOMP-003

@@ -58,11 +58,11 @@ router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...noti
 // the canonical one: it must have been retired with a 005A first
 router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicalHistoryIdValidator, validateFields, purgeNotificationMedicalHistory);
 
-// Activate Notification Medical History - For SuperAdmin
+// Activate Notification Medical History - For Admin
 // Code: ESAVI-MEDHIST-005B
-// It stays in SUPERADMIN with F21 and F22 and not with F33: the reactivation drags the sortOrder
-// reassignment, and in the notification block that operation never dropped below SUPERADMIN
-router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicalHistoryIdValidator, validateFields, activateNotificationMedicalHistory);
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// retirement belongs to whoever supervises the case, not to the system administrator
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicalHistoryIdValidator, validateFields, activateNotificationMedicalHistory);
 
 // Get Notification Medical History By ID
 // Code: ESAVI-MEDHIST-003

@@ -48,10 +48,12 @@ router.get('/vaccine/:id', tokenValidation, validateUserRole(USER), ...notificat
 // Declared with the literal paths, before /:id
 router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationDiluentIdValidator, validateFields, purgeNotificationDiluent);
 
-// Activate Notification Diluent - For SuperAdmin
+// Activate Notification Diluent - For Admin
 // Code: ESAVI-NOTIFDIL-005B
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
-router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationDiluentIdValidator, validateFields, activateNotificationDiluent);
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationDiluentIdValidator, validateFields, activateNotificationDiluent);
 
 // Get Notification Diluent by ID
 // Code: ESAVI-NOTIFDIL-003

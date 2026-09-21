@@ -244,15 +244,16 @@ const ROUTE_RULES: RouteRule[] = [
     // preventPhysicalDelete loop of esaviapp.sql:1355-1361.
     // ESAVI-NOTIFEVT-006 does have a row here, unlike the 006 of DIAGTERM: it is a read with an
     // HTTP route of its own. The two listings are entered by the foreign key and never by /
-    // The 001 is USER and not ADMIN: it belongs to the notification tree, whose creates the USER
-    // performs because the USER is the one who notifies (CONVENTIONS.md, declared exception to the
-    // canonical matrix). The 004, the 005A and the 002B stay ADMIN
+    // The 001, the 004 and the 005A are USER and not ADMIN: the notification tree is written by the USER
+    // because the USER is the one who notifies, and whoever records the row corrects and retires it
+    // (CONVENTIONS.md §9, declared exception to the canonical matrix; SPEC F60). The 005B is ADMIN and
+    // the 002B stays ADMIN
     { method: 'post',   path: '/api/notification-events',                              minRole: 'USER',       code: 'ESAVI-NOTIFEVT-001' },
     { method: 'get',    path: `/api/notification-events/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFEVT-006' },
     { method: 'get',    path: `/api/notification-events/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-002B' },
     { method: 'get',    path: `/api/notification-events/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFEVT-002A' },
     { method: 'delete', path: `/api/notification-events/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005C' },
-    { method: 'patch',  path: `/api/notification-events/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005B' },
+    { method: 'patch',  path: `/api/notification-events/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-005B' },
     { method: 'get',    path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-003' },
     { method: 'put',    path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-004' },
     { method: 'delete', path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-005A' },
@@ -269,7 +270,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/notification-medications/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-002B' },
     { method: 'get',    path: `/api/notification-medications/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFMED-002A' },
     { method: 'delete', path: `/api/notification-medications/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFMED-005C' },
-    { method: 'patch',  path: `/api/notification-medications/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFMED-005B' },
+    { method: 'patch',  path: `/api/notification-medications/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-005B' },
     { method: 'get',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-003' },
     { method: 'put',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-004' },
     { method: 'delete', path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-005A' },
@@ -314,7 +315,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/notification-vaccines/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-002B' },
     { method: 'get',    path: `/api/notification-vaccines/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFVAC-002A' },
     { method: 'delete', path: `/api/notification-vaccines/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFVAC-005C' },
-    { method: 'patch',  path: `/api/notification-vaccines/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFVAC-005B' },
+    { method: 'patch',  path: `/api/notification-vaccines/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-005B' },
     { method: 'get',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-003' },
     { method: 'put',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-004' },
     { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-005A' },
@@ -345,7 +346,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/notification-diluents/admin/vaccine/${ UUID }`,      minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-002B' },
     { method: 'get',    path: `/api/notification-diluents/vaccine/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFDIL-002A' },
     { method: 'delete', path: `/api/notification-diluents/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005C' },
-    { method: 'patch',  path: `/api/notification-diluents/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005B' },
+    { method: 'patch',  path: `/api/notification-diluents/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-005B' },
     { method: 'get',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-003' },
     { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-004' },
     { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-005A' },
@@ -365,7 +366,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'post',   path: '/api/notification-pregnancies',                            minRole: 'USER',       code: 'ESAVI-NOTIFPRG-001' },
     { method: 'get',    path: `/api/notification-pregnancies/notification/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-NOTIFPRG-006' },
     { method: 'delete', path: `/api/notification-pregnancies/purge/${ UUID }`,            minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFPRG-005C' },
-    { method: 'patch',  path: `/api/notification-pregnancies/activate/${ UUID }`,         minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFPRG-005B' },
+    { method: 'patch',  path: `/api/notification-pregnancies/activate/${ UUID }`,         minRole: 'ADMIN',      code: 'ESAVI-NOTIFPRG-005B' },
     { method: 'get',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-003' },
     { method: 'put',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-004' },
     { method: 'delete', path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-005A' },
@@ -385,7 +386,7 @@ const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: `/api/notification-pregnancy-complications/admin/pregnancy/${ UUID }`, minRole: 'ADMIN', code: 'ESAVI-PREGCOMP-002B' },
     { method: 'get',    path: `/api/notification-pregnancy-complications/pregnancy/${ UUID }`,       minRole: 'USER',  code: 'ESAVI-PREGCOMP-002A' },
     { method: 'delete', path: `/api/notification-pregnancy-complications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-PREGCOMP-005C' },
-    { method: 'patch',  path: `/api/notification-pregnancy-complications/activate/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-PREGCOMP-005B' },
+    { method: 'patch',  path: `/api/notification-pregnancy-complications/activate/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-PREGCOMP-005B' },
     { method: 'get',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-003' },
     { method: 'put',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-004' },
     { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-005A' },
@@ -396,15 +397,14 @@ const ROUTE_RULES: RouteRule[] = [
     // listings by notification split by role, the 006 that enters by the caseId because that is what
     // the client holds, and the 005C the entity gets for being left outside the preventPhysicalDelete
     // loop on purpose.
-    // The 004 deviates from the family matrix and stays in USER, with F33 and against F21 and F22:
-    // whoever records the antecedent is whoever corrects it. The 005B stays in SUPERADMIN with F21
-    // and F22, because the reactivation drags the sortOrder reassignment (§3.4)
+    // The 004 and the 005A are USER and the 005B is ADMIN, under the clinical file exception of
+    // CONVENTIONS.md §9 (SPEC F60): whoever records the antecedent is whoever corrects and retires it
     { method: 'post',   path: '/api/notification-medical-histories',                              minRole: 'USER',       code: 'ESAVI-MEDHIST-001' },
     { method: 'get',    path: `/api/notification-medical-histories/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-MEDHIST-006' },
     { method: 'get',    path: `/api/notification-medical-histories/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-MEDHIST-002B' },
     { method: 'get',    path: `/api/notification-medical-histories/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-MEDHIST-002A' },
     { method: 'delete', path: `/api/notification-medical-histories/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-MEDHIST-005C' },
-    { method: 'patch',  path: `/api/notification-medical-histories/activate/${ UUID }`,           minRole: 'SUPERADMIN', code: 'ESAVI-MEDHIST-005B' },
+    { method: 'patch',  path: `/api/notification-medical-histories/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-MEDHIST-005B' },
     { method: 'get',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-003' },
     { method: 'put',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-004' },
     { method: 'delete', path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-005A' },
