@@ -6,6 +6,7 @@ import { AppDetails, AuthUser, CreateInvestigationVaccineAdministeredInput } fro
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 
 // There is no CREATE_FIELDS here, and that is a decision and not an omission. In the eight sister
 // tables of the setSortOrderByParent loop the column is NOT NULL, so Sequelize runs its own notNull
@@ -43,7 +44,8 @@ const RESPONSE_ATTRIBUTES: (keyof InferAttributes<InvestigationVaccineAdminister
 const INVESTIGATION_INCLUDE = {
     model: Investigation,
     as: 'investigation',
-    attributes: ['investigationId', 'isActive'],
+    // caseId feeds the guard of SPEC F61. It never reaches the response, which drops the include
+    attributes: ['investigationId', 'caseId', 'isActive'],
     required: true
 };
 
@@ -104,7 +106,7 @@ const findValidInvestigation = async (
 ) => {
     const investigation = await Investigation.findOne({
         where: canViewInactive ? { investigationId } : { investigationId, isActive: true },
-        attributes: ['investigationId'],
+        attributes: ['investigationId', 'caseId'],
         transaction
     });
     if( !investigation ) {
@@ -255,7 +257,11 @@ const createInvestigationVaccineAdministeredService = async (
     try {
         // Nothing relaxed here, not even for SUPERADMIN: a retired investigation takes no new
         // vaccines whoever asks. It is the criterion of F31, F33 and F35 for their 001
-        await findValidInvestigation(data.investigationId, '001', lang, false, transaction);
+        const investigation = await findValidInvestigation(data.investigationId, '001', lang, false, transaction);
+
+        // SPEC F61: a closed case file takes no new row. Right after the investigation is known to exist
+        // and be active, and before any other rule, so the answer does not depend on the body
+        await assertCaseIsOpen(investigation.caseId, 'INVVACAD', '001', lang, transaction);
 
         // The presence of vaccineWhodrugId is the validator's job and the service does not repeat
         // it: in the create the body IS the complete resulting state
@@ -485,6 +491,10 @@ const updateInvestigationVaccineAdministeredService = async (
             );
         }
 
+        // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+        // foreign keys, rules and the diff — so the answer does not depend on the body
+        await assertCaseIsOpen(vaccine.investigation!.caseId, 'INVVACAD', '004', lang, transaction);
+
         // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
         const stored = vaccine.get({ plain: true }) as Record<string, unknown>;
 
@@ -693,6 +703,18 @@ const setInvestigationVaccineAdministeredActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await InvestigationVaccineAdministered.findByPk(id, {
+            attributes: ['vaccineAdministeredId'],
+            include: [{ model: Investigation, as: 'investigation', attributes: ['caseId'] }],
+            transaction
+        });
+        if( current ) {
+            await assertCaseIsOpen(current.investigation!.caseId, 'INVVACAD', op, lang, transaction);
+        }
+
         // Only on the way back: a 005A is what frees the number, so it never collides
         if( isActive ) {
             await prepareReactivation(id, lang, transaction);

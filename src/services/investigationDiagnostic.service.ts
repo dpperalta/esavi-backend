@@ -9,6 +9,7 @@ import { AppDetails, AuthUser, CreateInvestigationDiagnosticInput } from '../typ
 import { TermSource } from '../constants/enums.constants';
 import { DIAGNOSTIC_TYPE_CATALOG_CODE } from '../constants/investigation.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -59,7 +60,8 @@ const RESPONSE_ATTRIBUTES: (keyof InferAttributes<InvestigationDiagnostic>)[] = 
 const INVESTIGATION_INCLUDE = {
     model: Investigation,
     as: 'investigation',
-    attributes: ['investigationId', 'isActive']
+    // caseId feeds the guard of SPEC F61. It never reaches the response, which drops the include
+    attributes: ['investigationId', 'caseId', 'isActive']
 };
 
 // The resolved master term, with six fields. The jsonb column of the master stays out: it carries
@@ -117,7 +119,7 @@ const toInvestigationDiagnosticResponse = (diagnostic: InvestigationDiagnostic) 
 const findValidInvestigation = async (investigationId: string, op: string, lang: string) => {
     const investigation = await Investigation.findOne({
         where: { investigationId, isActive: true },
-        attributes: ['investigationId', 'isActive']
+        attributes: ['investigationId', 'caseId', 'isActive']
     });
     if( !investigation ) {
         throw new AppError(
@@ -396,7 +398,11 @@ const createInvestigationDiagnosticService = async (
     try {
         // Not relaxed by canViewInactive for anybody: a retired investigation takes no new
         // diagnoses, whoever asks. It is the criterion of F31, F33 and F57 for their 001
-        await findValidInvestigation(data.investigationId, '001', lang);
+        const investigation = await findValidInvestigation(data.investigationId, '001', lang);
+
+        // SPEC F61: a closed case file takes no new row. Right after the investigation is known to exist
+        // and be active, and before any other rule, so the answer does not depend on the body
+        await assertCaseIsOpen(investigation.caseId, 'INVDIAG', '001', lang, transaction);
 
         await assertValidDiagnosticType(data.diagnosticTypeItemId, '001', lang, transaction);
 
@@ -642,6 +648,10 @@ const updateInvestigationDiagnosticService = async (
             );
         }
 
+        // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+        // foreign keys, rules and the diff — so the answer does not depend on the body
+        await assertCaseIsOpen(diagnostic.investigation!.caseId, 'INVDIAG', '004', lang, transaction);
+
         // The whole row, never narrowed: that is the precondition of buildDifferentialUpdate
         const stored = diagnostic.get({ plain: true }) as Record<string, unknown>;
         const storedTerm = stored.diagnosticTerm as { code: string | null, name: string, source: TermSource } | null;
@@ -852,6 +862,18 @@ const setInvestigationDiagnosticActivationService = async (
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await InvestigationDiagnostic.findByPk(id, {
+            attributes: ['diagnosticId'],
+            include: [{ model: Investigation, as: 'investigation', attributes: ['caseId'] }],
+            transaction
+        });
+        if( current ) {
+            await assertCaseIsOpen(current.investigation!.caseId, 'INVDIAG', op, lang, transaction);
+        }
+
         // BEFORE the helper, never after: while deletedAt is still sealed the row is outside the
         // partial unique index, so the number can be moved freely. Inverting the two makes the
         // index fail inside the helper's own UPDATE

@@ -16,10 +16,10 @@ export interface MeddraSearchResult {
     rows: MeddraSearchRow[];
 }
 
-// What the external API returns per row. pcode and name are the only guaranteed keys
-// (references/external/meddra/.d2/shell/src/D2App/types.ts:1-4); everything else is ignored
+// What the external API returns per row. code and name are the only guaranteed keys;
+// everything else is ignored
 export interface MeddraApiTerm {
-    pcode?: unknown;
+    code?: unknown;
     name?: unknown;
     [key: string]: unknown;
 }

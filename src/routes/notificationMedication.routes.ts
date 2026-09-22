@@ -57,10 +57,12 @@ router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...noti
 // Declared with the literal paths, before /:id
 router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicationIdValidator, validateFields, purgeNotificationMedication);
 
-// Activate Notification Medication - For SuperAdmin
+// Activate Notification Medication - For Admin
 // Code: ESAVI-NOTIFMED-005B
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
-router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationMedicationIdValidator, validateFields, activateNotificationMedication);
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationIdValidator, validateFields, activateNotificationMedication);
 
 // Get Notification Medication by ID
 // Code: ESAVI-NOTIFMED-003
@@ -70,10 +72,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedic
 
 // Update Notification Medication
 // Code: ESAVI-NOTIFMED-004
-router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationIdValidator, ...updateNotificationMedicationValidator, validateFields, updateNotificationMedication);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationIdValidator, ...updateNotificationMedicationValidator, validateFields, updateNotificationMedication);
 
 // Delete Notification Medication - Logical delete
 // Code: ESAVI-NOTIFMED-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicationIdValidator, validateFields, deleteNotificationMedication);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicationIdValidator, validateFields, deleteNotificationMedication);
 
 export default router;

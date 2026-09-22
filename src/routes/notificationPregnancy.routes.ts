@@ -46,10 +46,12 @@ router.get('/notification/:notificationId', tokenValidation, validateUserRole(US
 // Declared with the literal paths, before /:id
 router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationPregnancyIdValidator, validateFields, purgeNotificationPregnancy);
 
-// Activate Notification Pregnancy - For SuperAdmin
+// Activate Notification Pregnancy - For Admin
 // Code: ESAVI-NOTIFPRG-005B
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
-router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationPregnancyIdValidator, validateFields, activateNotificationPregnancy);
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationPregnancyIdValidator, validateFields, activateNotificationPregnancy);
 
 // Get Notification Pregnancy by ID
 // Code: ESAVI-NOTIFPRG-003
@@ -63,6 +65,8 @@ router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationPregn
 
 // Delete Notification Pregnancy - Soft delete
 // Code: ESAVI-NOTIFPRG-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationPregnancyIdValidator, validateFields, deleteNotificationPregnancy);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyIdValidator, validateFields, deleteNotificationPregnancy);
 
 export default router;

@@ -274,11 +274,11 @@ const unwrapApiTerms = ( payload: unknown ): MeddraApiTerm[] => {
 }
 
 /**
- * §3.5 point 10 — `pcode` becomes `code`, the `termGroup` is the derived one, malformed rows are
- * dropped in silence and the first appearance wins on duplicates, which is the same criterion
+ * §3.5 point 10 — the `code` is trimmed to a string, the `termGroup` is the derived one, malformed rows
+ * are dropped in silence and the first appearance wins on duplicates, which is the same criterion
  * `meddraParser.helper.ts` applies when importing the `.asc`.
  *
- * A dropped row never aborts the answer: one row without `pcode` must not bring down a search that
+ * A dropped row never aborts the answer: one row without `code` must not bring down a search that
  * returned another nineteen correct ones. The `warn` in the log is what is left of it.
  */
 const normalizeApiTerms = ( terms: MeddraApiTerm[], termGroup: MeddraTermGroup ): MeddraSearchRow[] => {
@@ -287,7 +287,7 @@ const normalizeApiTerms = ( terms: MeddraApiTerm[], termGroup: MeddraTermGroup )
     let discarded = 0;
 
     for( const term of terms ) {
-        const code = term.pcode === undefined || term.pcode === null ? '' : String( term.pcode ).trim();
+        const code = term.code === undefined || term.code === null ? '' : String( term.code ).trim();
         const name = term.name === undefined || term.name === null ? '' : String( term.name ).trim();
 
         if( code === '' || name === '' || seen.has( code ) ) {

@@ -57,10 +57,12 @@ router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...noti
 // Declared with the literal paths, before /:id
 router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationEventIdValidator, validateFields, purgeNotificationEvent);
 
-// Activate Notification Event - For SuperAdmin
+// Activate Notification Event - For Admin
 // Code: ESAVI-NOTIFEVT-005B
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
-router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationEventIdValidator, validateFields, activateNotificationEvent);
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, validateFields, activateNotificationEvent);
 
 // Get Notification Event by ID
 // Code: ESAVI-NOTIFEVT-003
@@ -70,10 +72,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationEvent
 
 // Update Notification Event
 // Code: ESAVI-NOTIFEVT-004
-router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, ...updateNotificationEventValidator, validateFields, updateNotificationEvent);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationEventIdValidator, ...updateNotificationEventValidator, validateFields, updateNotificationEvent);
 
 // Delete Notification Event - Logical delete
 // Code: ESAVI-NOTIFEVT-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, validateFields, deleteNotificationEvent);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationEventIdValidator, validateFields, deleteNotificationEvent);
 
 export default router;

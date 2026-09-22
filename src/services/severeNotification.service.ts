@@ -2,6 +2,7 @@ import { sequelize } from '../database/connection';
 import { EsaviCase, Notification, SevereNotification } from '../models';
 import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage } from '../helpers';
 import { purgeEntityService } from './common/entityPurge.service';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateSevereNotificationInput } from '../types';
 import { NotificationType } from '../constants/notification.constants';
 
@@ -78,7 +79,7 @@ const findSevereNotificationRow = async (id: string, includeInactive: boolean = 
 const assertNotificationIsValid = async (notificationId: string, op: string, lang: string) => {
     const notification = await Notification.findOne({
         where: { notificationId, isActive: true },
-        attributes: ['notificationId', 'notificationType']
+        attributes: ['notificationId', 'caseId', 'notificationType']
     });
     if( !notification ) {
         throw new AppError(
@@ -87,6 +88,10 @@ const assertNotificationIsValid = async (notificationId: string, op: string, lan
             `SEVNOT_${ op }_NOTIFICATION_NOT_FOUND`
         );
     }
+
+    // SPEC F61: a closed case file takes no new row. Right after the parent is known to exist and
+    // be active, and before any other rule, so the answer does not depend on the body
+    await assertCaseIsOpen(notification.caseId, 'SEVNOT', op, lang);
 
     if( notification.notificationType !== SEVERE_TYPE ) {
         throw new AppError(
@@ -263,6 +268,11 @@ const updateSevereNotificationService = async (
     if( !severeNotification ) {
         throw new AppError(getMessage('severeNotification.notFound', lang), 404, 'SEVNOT_004_NOT_FOUND');
     }
+
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // the pregnancy rule and the diff included — so the answer does not depend on the body. The
+    // caseId comes from the case nested in the header include this row is already read with
+    await assertCaseIsOpen(severeNotification.notification!.case!.caseId, 'SEVNOT', '004', lang);
 
     // The pregnancy rule is evaluated over the resulting state and not over the body: otherwise a
     // PUT moving hasPregnancyComplications from YES to NO without touching the description would

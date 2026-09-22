@@ -57,10 +57,12 @@ router.get('/notification/:id', tokenValidation, validateUserRole(USER), ...noti
 // Declared with the literal paths, before /:id
 router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationVaccineIdValidator, validateFields, purgeNotificationVaccine);
 
-// Activate Notification Vaccine - For SuperAdmin
+// Activate Notification Vaccine - For Admin
 // Code: ESAVI-NOTIFVAC-005B
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
-router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...notificationVaccineIdValidator, validateFields, activateNotificationVaccine);
+router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationVaccineIdValidator, validateFields, activateNotificationVaccine);
 
 // Get Notification Vaccine by ID
 // Code: ESAVI-NOTIFVAC-003
@@ -70,10 +72,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationVacci
 
 // Update Notification Vaccine
 // Code: ESAVI-NOTIFVAC-004
-router.put('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationVaccineIdValidator, ...updateNotificationVaccineValidator, validateFields, updateNotificationVaccine);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineIdValidator, ...updateNotificationVaccineValidator, validateFields, updateNotificationVaccine);
 
 // Delete Notification Vaccine - Soft delete
 // Code: ESAVI-NOTIFVAC-005A
-router.delete('/:id', tokenValidation, validateUserRole(ADMIN), ...notificationVaccineIdValidator, validateFields, deleteNotificationVaccine);
+// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// corrects and retires it. Retiring is a logical delete, reversible with 005B
+router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineIdValidator, validateFields, deleteNotificationVaccine);
 
 export default router;

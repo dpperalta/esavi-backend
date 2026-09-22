@@ -5,6 +5,7 @@ import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage
 import { AppDetails, AuthUser, CreateNotifierInput, NotifierListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 
 // Code of the catalogType that groups the valid professions. Without this check any active
@@ -131,6 +132,11 @@ const assertGeoLocationIsValid = async (geoLocationId: string, op: string, lang:
 // mistake, not an integrity violation
 const createNotifierService = async (data: CreateNotifierInput, authUser: AuthUser | undefined, lang: string) => {
     await assertCaseIsValid(data.caseId, '001', lang);
+
+    // SPEC F61: a closed case file takes no new notifier. Right after the case is known to exist,
+    // and before the foreign keys, so the answer does not depend on the body
+    await assertCaseIsOpen(data.caseId, 'NOTIFIER', '001', lang);
+
     if( data.professionItemId ) {
         await assertProfessionIsValid(data.professionItemId, '001', lang);
     }
@@ -244,6 +250,10 @@ const updateNotifierService = async (id: string, data: Partial<CreateNotifierInp
         throw new AppError(getMessage('notifier.notFound', lang), 404, 'NOTIFIER_004_NOT_FOUND');
     }
 
+    // SPEC F61: a closed case file is not edited. Right after the 404 and before anything else —
+    // foreign keys, uniqueness and the diff — so the answer does not depend on the body
+    await assertCaseIsOpen(notifier.caseId, 'NOTIFIER', '004', lang);
+
     if( data.professionItemId ) {
         await assertProfessionIsValid(data.professionItemId, '004', lang);
     }
@@ -323,6 +333,14 @@ const setNotifierActivationService = async (id: string, authUser: AuthUser | und
     const op = isActive ? '005B' : '005A';
     const transaction = await sequelize.transaction();
     try {
+        // SPEC F61: a closed case file does not retire or return its rows. The read is minimal and
+        // unfiltered by isActive — 005B acts on retired rows. If the row does not exist the guard is
+        // not evaluated and the generic service answers its 404 as always
+        const current = await Notifier.findByPk(id, { attributes: ['notifierId', 'caseId'], transaction });
+        if( current ) {
+            await assertCaseIsOpen(current.caseId, 'NOTIFIER', op, lang, transaction);
+        }
+
         // The where filters by the primary key only: the generic service is the one that tells
         // 'does not exist' (404) from 'already in that state' (409)
         await setEntityActiveStatusService({

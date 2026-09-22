@@ -773,10 +773,11 @@ describe('notificationPregnancyComplication contract', () => {
             expect(again.body.code).toBe('PREGCOMP_005A_ALREADY_INACTIVE');
         });
 
-        it('rejects a USER', async () => {
+        it('rejects an ANALYTICS and lets a USER retire it', async () => {
             const { complicationId } = await newComplication();
 
-            expect(( await deleteComplication(complicationId, 'USER') ).status).toBe(403);
+            expect(( await deleteComplication(complicationId, 'ANALYTICS') ).status).toBe(403);
+            expect(( await deleteComplication(complicationId, 'USER') ).status).toBe(200);
         });
 
         it('frees the sortOrder for the next complication', async () => {
@@ -861,12 +862,12 @@ describe('notificationPregnancyComplication contract', () => {
             expect(unknown.body.code).toBe('PREGCOMP_005B_NOT_FOUND');
         });
 
-        it('rejects a USER and an ADMIN', async () => {
+        it('rejects a USER and lets an ADMIN through', async () => {
             const { complicationId } = await newComplication();
             await deleteComplication(complicationId);
 
             expect(( await activateComplication(complicationId, 'USER') ).status).toBe(403);
-            expect(( await activateComplication(complicationId, 'ADMIN') ).status).toBe(403);
+            expect(( await activateComplication(complicationId, 'ADMIN') ).status).toBe(200);
         });
 
         it('revalidates nothing: a retired pregnancy still answers 200', async () => {
