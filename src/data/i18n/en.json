@@ -78,7 +78,9 @@
         "samePassword": "The new password must be different from the current one",
         "alreadyActive": "The user with ID {{id}} is already active",
         "alreadyInactive": "The user with ID {{id}} is already inactive",
-        "idRequired": "The user ID is required"
+        "idRequired": "The user ID is required",
+        "searchSuccess": "User search completed successfully",
+        "searchQueryRequired": "The search query must contain at least one word from the name, email or username"
     },
     "role": {
         "notFound": "One or more roles were not found. Please check the role names and try again."
