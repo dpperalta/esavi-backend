@@ -281,6 +281,12 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
     // break the comparison in silence — everything would count as a change — with no test
     // telling it apart from a legitimate one. esaviCrypt is applied after the diff
     const stored = decryptPii(user.get({ plain: true }) as Record<string, unknown>);
+    // nameTokens is compared as a list of plain-text tokens, never ciphertext against
+    // ciphertext: each token was encrypted on its own, so the stored array is decrypted
+    // element by element before it reaches buildDifferentialUpdate
+    stored.nameTokens = Array.isArray(stored.nameTokens)
+        ? (stored.nameTokens as string[]).map((token) => esaviDecrypt(token))
+        : [];
     // displayName is never received: it is recomposed from the resulting first and last name,
     // over the stored value of whichever did not arrive. Derived, so it travels always and the
     // helper is the one that decides whether it changed
@@ -292,7 +298,10 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
         firstName: firstName ? nextFirstName : undefined,
         lastName: lastName ? nextLastName : undefined,
         phone: phone ? phone.trim() : undefined,
-        displayName: nextFirstName && nextLastName ? `${ nextFirstName } ${ nextLastName }` : undefined
+        displayName: nextFirstName && nextLastName ? `${ nextFirstName } ${ nextLastName }` : undefined,
+        // Derived, not conditioned by presence: it enters the diff on every update, and it is
+        // buildDifferentialUpdate — not this line — that decides whether it actually changed
+        nameTokens: toNameTokens(nextFirstName, nextLastName)
     });
 
     // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
@@ -307,6 +316,9 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
         if( objectToUpdate[field] ) {
             objectToUpdate[field] = esaviCrypt(objectToUpdate[field] as string);
         }
+    }
+    if( 'nameTokens' in objectToUpdate ) {
+        objectToUpdate.nameTokens = (objectToUpdate.nameTokens as string[]).map((token) => esaviCrypt(token));
     }
 
     const newEntry: AppDetails = {
