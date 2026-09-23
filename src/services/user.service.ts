@@ -188,6 +188,48 @@ const getUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = D
     return { count, rows: rows.map(toUserListRow) };
 }
 
+// Search Users Service
+// Code: ESAVI-USER-008
+// A single q is resolved through three branches in one Op.or: name tokens (conjunctive,
+// Op.contains over the GIN index), email equality and username equality — never a heuristic on
+// the shape of q, so a half-typed email still reaches the name branch (SPEC F62 §3.3)
+const searchUsersService = async (
+    q: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET
+) => {
+    // Op.contains: [] is true for every row — an empty token set would turn this endpoint into a
+    // dump of the whole roster. toNameTokens(q) tokenizing to zero elements — a string made only
+    // of combining diacritical marks, for instance — must stop the query, not fall back to the
+    // email/username branches (SPEC F62 §3.4)
+    const tokens = toNameTokens(q);
+    if( tokens.length === 0 ) {
+        throw new AppError(getMessage('user.searchQueryRequired', lang), 400, 'USER_008_QUERY_REQUIRED');
+    }
+    const encryptedTokens = tokens.map(esaviCrypt);
+    const { count, rows } = await AppUser.findAndCountAll({
+        where: {
+            [Op.or]: [
+                { nameTokens: { [Op.contains]: encryptedTokens } },
+                { email: esaviCrypt(normalizeEmail(q)) },
+                { username: esaviCrypt(q.trim()) }
+            ],
+            ...( canViewInactive ? {} : { isActive: true } )
+        },
+        attributes: LIST_EXCLUDE,
+        include: [ROLES_INCLUDE],
+        distinct: true,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    // toUserResponse, not toUserListRow (SPEC F62 §3.5, §3.6): a search result is a single row
+    // read, not a page of the roster, so its audit trail travels like the 003's does
+    return { count, rows: rows.map(toUserResponse) };
+}
+
 // Get All Users Service - For Admin
 // Code: ESAVI-USER-002B
 const getAllUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
@@ -501,6 +543,7 @@ export {
     createUserService,
     getUsersService,
     getAllUsersService,
+    searchUsersService,
     getUserByIdService,
     getOwnProfileService,
     updateUserService,
