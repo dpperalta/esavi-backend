@@ -1,6 +1,6 @@
 # SPEC F61 — Rechazar toda escritura sobre un expediente cerrado
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 05 (códigos de operación), SPEC 08 (`lang` requerido en servicios), **SPEC F44 (`caseWorkflow` — aporta el estado `CLOSED`, la reapertura `ESAVI-CASEFLOW-009` y el precedente `CASEFLOW_012_CASE_CLOSED`)**, SPEC F12 (update diferencial — el guardia va antes del diff), SPEC F06, F07, F09, F10, F13, F14, F16, F21, F22, F24, F25, F27, F28–F41, F57 y F58 (las 28 entidades cuyos servicios reciben el guardia)
 > **Fecha:** 2026-09-21
 > **Objetivo:** Que el servidor rechace con 409 toda escritura sobre el contenido de un expediente cuyo flujo está en `CLOSED`, igual que ya rechaza abrir una fase nueva.
