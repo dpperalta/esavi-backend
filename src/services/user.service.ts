@@ -3,7 +3,7 @@ import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole } from '../models';
 import { AppDetails, AuthUser, ChangePasswordInput, CreateUserInput, CreateUserServiceParams } from '../types';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toNameTokens, toTitleCase } from '../helpers';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -30,8 +30,8 @@ const ROLES_INCLUDE = {
     attributes: ['roleId', 'name', 'code', 'level']
 };
 
-// passwordHash and sysDetails never leave the service
-const LIST_EXCLUDE = { exclude: ['passwordHash', 'sysDetails'] };
+// passwordHash and sysDetails never leave the service. nameTokens governs search, not the response
+const LIST_EXCLUDE = { exclude: ['passwordHash', 'sysDetails', 'nameTokens'] };
 
 // A user list is read newest first. Alphabetical is impossible: the names are encrypted and
 // ORDER BY would sort by the ciphertext
@@ -130,6 +130,7 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
             lastName: esaviCrypt(normalizedLastName),
             email: esaviCrypt(normalizedEmail),
             displayName: esaviCrypt(`${normalizedFirstName} ${normalizedLastName}`),
+            nameTokens: toNameTokens(normalizedFirstName, normalizedLastName).map(esaviCrypt),
             phone: phone ?? undefined,
             passwordHash: passwordHash,
             requiresPasswordChange: true,
