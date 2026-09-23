@@ -3,6 +3,7 @@ import {
     createUser,
     getUsers,
     getAllUsers,
+    searchUsers,
     getUserById,
     getOwnProfile,
     updateUser,
@@ -13,6 +14,7 @@ import {
 import {
     createUserValidator,
     userListValidator,
+    userSearchValidator,
     userIdValidator,
     updateUserValidator,
     changePasswordValidator
@@ -47,6 +49,10 @@ router.patch('/me/password', tokenValidation, validateUserRole(USER), ...changeP
 // Activate User
 // Code: ESAVI-USER-005B
 router.patch('/activate/:id', tokenValidation, validateUserRole(SUPERADMIN), ...userIdValidator, validateFields, activateUser);
+
+// Search Users
+// Code: ESAVI-USER-008
+router.get('/search', tokenValidation, validateUserRole(ADMIN), ...userSearchValidator, ...userListValidator, validateFields, searchUsers);
 
 // Literal routes are declared above this point: Express would capture them as an :id
 // and the UUID validator would answer 400
