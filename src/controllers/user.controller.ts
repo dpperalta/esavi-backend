@@ -3,6 +3,7 @@ import {
     createUserService,
     getUsersService,
     getAllUsersService,
+    searchUsersService,
     getUserByIdService,
     getOwnProfileService,
     updateUserService,
@@ -73,6 +74,29 @@ const getAllUsers = async ( req: Request, res: Response, next: NextFunction ): P
             return;
         }
         next(new AppError(getMessage('user.getFailedPlural', req.lang), 500, 'USER_002B_FETCH_FAILED', error));
+    }
+}
+
+// Search Users Controller
+// Code: ESAVI-USER-008
+const searchUsers = async ( req: Request, res: Response, next: NextFunction ): Promise<Response | void> => {
+    const q = (req.query.q as string).toString();
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+    try {
+        const data = await searchUsersService(q, req.lang, canViewInactive(req.user as AuthUser), limit, offset);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('user.searchSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-USER-008: Error searching users: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('user.getFailedPlural', req.lang), 500, 'USER_008_FETCH_FAILED', error));
     }
 }
 
@@ -201,6 +225,7 @@ export {
     createUser,
     getUsers,
     getAllUsers,
+    searchUsers,
     getUserById,
     getOwnProfile,
     updateUser,
