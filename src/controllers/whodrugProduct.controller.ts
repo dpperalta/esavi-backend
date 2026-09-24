@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { getAllWhodrugProductsService, searchWhodrugProductsService, syncWhodrugProductsService } from '../services/whodrugProduct.service';
 import { SyncWhodrugProductsInput, WhodrugProductListFilters } from '../types';
 import { WHODRUG_SEARCH_DEFAULT_LIMIT } from '../constants/whodrug.constants';
@@ -15,7 +15,7 @@ const readAdminListFilters = (query: Request['query']): WhodrugProductListFilter
 // Code: ESAVI-WHODPROD-002B
 const getAllWhodrugProducts = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await getAllWhodrugProductsService(readAdminListFilters(req.query));
+        const data = await getAllWhodrugProductsService(readAdminListFilters(req.query), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('whodrugProduct.listed', req.lang),
@@ -65,7 +65,7 @@ const searchWhodrugProducts = async (req: Request, res: Response, next: NextFunc
     const term = (req.query.term as string).trim();
     const limit = req.query.limit ? parseInt(req.query.limit as string) : WHODRUG_SEARCH_DEFAULT_LIMIT;
     try {
-        const data = await searchWhodrugProductsService(term, limit, req.lang);
+        const data = await searchWhodrugProductsService(term, limit, req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('whodrugProduct.searched', req.lang),

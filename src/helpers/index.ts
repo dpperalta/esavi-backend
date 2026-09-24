@@ -1,4 +1,5 @@
 export * from './age.helper';
+export * from './appDetailsAuthors.helper';
 export * from './appError.helper';
 export * from './appConfig.helper';
 export * from './catalogItemParser.helper';

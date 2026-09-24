@@ -1,12 +1,13 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification, NotificationMedication } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toTitleCase, canViewAuditAuthors } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNotificationMedicationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Codes of the two catalogTypes these foreign keys point at. Nothing in the database checks them:
 // the only validateCatalogItemType trigger of the DDL is the one of healthFacility, so without
@@ -320,7 +321,7 @@ const createNotificationMedicationService = async (
     // Re-read so the response carries the two resolved catalog items and the sortOrder the trigger
     // assigned, which the create instance does not know
     const notificationMedication = await findNotificationMedicationWithRelations(created.medicationId, true);
-    return notificationMedication ? toNotificationMedicationResponse(notificationMedication) : null;
+    return resolveAppDetailsAuthorsService(notificationMedication ? toNotificationMedicationResponse(notificationMedication) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Notification Medications By Notification Service
@@ -340,7 +341,8 @@ const getNotificationMedicationsByNotificationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '002A', lang, canViewInactive);
 
@@ -352,10 +354,10 @@ const getNotificationMedicationsByNotificationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationMedications.count,
         rows: notificationMedications.rows.map(toNotificationMedicationResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Notification Medications By Notification Service - For Admin
@@ -371,7 +373,8 @@ const getAllNotificationMedicationsByNotificationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '002B', lang, canViewInactive);
 
@@ -384,10 +387,10 @@ const getAllNotificationMedicationsByNotificationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationMedications.count,
         rows: notificationMedications.rows.map(toNotificationMedicationResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Notification Medication By ID Service
@@ -397,12 +400,12 @@ const getAllNotificationMedicationsByNotificationService = async (
 // SUPERADMIN. The three failures answer the same 404 without distinguishing, because telling them
 // apart would confirm to a USER that a medication exists under a notification it is not allowed to
 // see
-const getNotificationMedicationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getNotificationMedicationByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const notificationMedication = await findNotificationMedicationWithRelations(id, canViewInactive);
     if( !notificationMedication ) {
         throw new AppError(getMessage('notificationMedication.notFound', lang), 404, 'NOTIFMED_003_NOT_FOUND');
     }
-    return toNotificationMedicationResponse(notificationMedication);
+    return resolveAppDetailsAuthorsService(toNotificationMedicationResponse(notificationMedication), canViewAuthors);
 }
 
 // Get Notification Medications By Case ID Service
@@ -420,7 +423,8 @@ const getNotificationMedicationsByCaseIdService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
@@ -448,10 +452,10 @@ const getNotificationMedicationsByCaseIdService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationMedications.count,
         rows: notificationMedications.rows.map(toNotificationMedicationResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Update Notification Medication Service
@@ -571,7 +575,7 @@ const updateNotificationMedicationService = async (
     }
 
     const updated = await findNotificationMedicationWithRelations(id, true);
-    return updated ? toNotificationMedicationResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toNotificationMedicationResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-NOTIFMED-005B that is not a clean delegation, and the reason this entity

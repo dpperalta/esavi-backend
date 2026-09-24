@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AppRoleListFilters, AuthUser } from '../types';
 import {
     createAppRoleService,
@@ -42,7 +42,7 @@ const getAppRoles = async (req: Request, res: Response, next: NextFunction): Pro
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getActiveAppRolesService(readListFilters(req.query), limit, offset);
+        const data = await getActiveAppRolesService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appRole.getSuccessPlural', req.lang),
@@ -64,7 +64,7 @@ const getAllAppRoles = async (req: Request, res: Response, next: NextFunction): 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllAppRolesService(readListFilters(req.query), limit, offset);
+        const data = await getAllAppRolesService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appRole.getSuccessPlural', req.lang),
@@ -85,7 +85,7 @@ const getAllAppRoles = async (req: Request, res: Response, next: NextFunction): 
 const getAppRoleById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getAppRoleByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getAppRoleByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appRole.getSuccess', req.lang),

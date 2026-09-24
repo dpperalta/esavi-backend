@@ -1,12 +1,13 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole } from '../models';
-import { AppError, getMessage } from '../helpers';
+import { AppError, getMessage, canViewAuditAuthors } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, BulkAssignRolesInput, CreateAppUserRoleInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The PII columns returned for the assigned user, and the appRole attributes.
 // Both are listed column by column so no listing drags the password hash or the audit JSONB along
@@ -105,7 +106,7 @@ const assignAppUserRoleService = async (data: CreateAppUserRoleInput, authUser: 
             updatedAt: new Date(),
             appDetails: [...currentAppDetails, newEntry]
         });
-        return { assignment: toAssignmentResponse(existingAssignment), created: false };
+        return resolveAppDetailsAuthorsService<{ assignment: unknown; created: boolean }>({ assignment: toAssignmentResponse(existingAssignment), created: false }, canViewAuditAuthors(authUser));
     }
     const newAssignment = await AppUserRole.create({
         userId,
@@ -114,12 +115,12 @@ const assignAppUserRoleService = async (data: CreateAppUserRoleInput, authUser: 
         isActive: true,
         appDetails: [newEntry]
     });
-    return { assignment: toAssignmentResponse(newAssignment), created: true };
+    return resolveAppDetailsAuthorsService<{ assignment: unknown; created: boolean }>({ assignment: toAssignmentResponse(newAssignment), created: true }, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-USERROLE-002A - Get App User Roles By User Service
 // Only the assignments in force: a revoked role must not look like a privilege the user still holds
-const getAppUserRolesByUserService = async (userId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAppUserRolesByUserService = async (userId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     // The same user owns every row of this listing, so it is fetched and decrypted once
     // for the whole response rather than per row
     const user = await AppUser.findOne({
@@ -136,16 +137,16 @@ const getAppUserRolesByUserService = async (userId: string, lang: string, limit:
         limit,
         offset
     });
-    return {
+    return resolveAppDetailsAuthorsService({
         count: assignments.count,
         user: toUserResponse(user),
         rows: assignments.rows.map(toAssignmentResponse)
-    };
+    }, canViewAuthors);
 }
 
 // ESAVI-USERROLE-002B - Get All App User Roles By User Service - For Admin
 // Same listing without the isActive filter: administration needs to see what was revoked
-const getAllAppUserRolesByUserService = async (userId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllAppUserRolesByUserService = async (userId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const user = await AppUser.findOne({
         where: { userId },
         attributes: USER_ATTRIBUTES
@@ -160,17 +161,17 @@ const getAllAppUserRolesByUserService = async (userId: string, lang: string, lim
         limit,
         offset
     });
-    return {
+    return resolveAppDetailsAuthorsService({
         count: assignments.count,
         user: toUserResponse(user),
         rows: assignments.rows.map(toAssignmentResponse)
-    };
+    }, canViewAuthors);
 }
 
 // ESAVI-USERROLE-003 - Get App User Role By ID Service
 // A revoked assignment is a 404 unless the requester can see inactive rows, which today
 // means SUPERADMIN. includeInactive is resolved at the controller with canViewInactive
-const getAppUserRoleByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getAppUserRoleByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const assignment = await AppUserRole.findOne({
         where: {
             userRoleId: id,
@@ -181,7 +182,7 @@ const getAppUserRoleByIdService = async (id: string, lang: string, includeInacti
     if (!assignment) {
         throw new AppError(getMessage('appUserRole.notFound', lang), 404, 'USERROLE_003_NOT_FOUND');
     }
-    return toAssignmentResponse(assignment);
+    return resolveAppDetailsAuthorsService(toAssignmentResponse(assignment), canViewAuthors);
 }
 
 // ESAVI-USERROLE-007 - Bulk Assign Roles Service
@@ -262,7 +263,7 @@ const bulkAssignRolesService = async (data: BulkAssignRolesInput, authUser: Auth
             }, { transaction }));
         }
         await transaction.commit();
-        return { count: rows.length, rows: rows.map(toAssignmentResponse) };
+        return resolveAppDetailsAuthorsService({ count: rows.length, rows: rows.map(toAssignmentResponse) }, canViewAuditAuthors(authUser));
     } catch (error) {
         await transaction.rollback();
         throw error;
@@ -272,7 +273,7 @@ const bulkAssignRolesService = async (data: BulkAssignRolesInput, authUser: Auth
 // ESAVI-USERROLE-006 - Get App User Roles By Role Service - For Admin
 // Answers "who is SUPERADMIN today". Here the user does travel inside every row and gets
 // decrypted per row: identifying the users is the whole point of the endpoint
-const getAppUserRolesByRoleService = async (roleId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAppUserRolesByRoleService = async (roleId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     // The same role owns every row of this listing, so it is fetched once for the whole response
     const role = await AppRole.findOne({
         where: { roleId },
@@ -288,11 +289,11 @@ const getAppUserRolesByRoleService = async (roleId: string, lang: string, limit:
         limit,
         offset
     });
-    return {
+    return resolveAppDetailsAuthorsService({
         count: assignments.count,
         role: role.toJSON(),
         rows: assignments.rows.map(toAssignmentResponse)
-    };
+    }, canViewAuthors);
 }
 
 // ESAVI-USERROLE-005A / 005B - Setting App User Role Active/Inactive Service

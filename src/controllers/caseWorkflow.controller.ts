@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, CaseWorkflowListFilters, CaseWorkflowStage } from '../types';
 import {
     closeCaseWorkflowService,
@@ -29,7 +29,7 @@ const getCaseWorkflows = async (req: Request, res: Response, next: NextFunction)
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getCaseWorkflowsService(listFilters(req), limit, offset, req.lang);
+        const data = await getCaseWorkflowsService(listFilters(req), limit, offset, req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('caseWorkflow.listSuccess', req.lang),
@@ -53,7 +53,7 @@ const getAllCaseWorkflows = async (req: Request, res: Response, next: NextFuncti
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllCaseWorkflowsService(listFilters(req), limit, offset, req.lang);
+        const data = await getAllCaseWorkflowsService(listFilters(req), limit, offset, req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('caseWorkflow.listSuccess', req.lang),
@@ -77,7 +77,8 @@ const getCaseWorkflowById = async (req: Request, res: Response, next: NextFuncti
         const data = await getCaseWorkflowByIdService(
             id.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -105,7 +106,8 @@ const getCaseWorkflowByCaseId = async (req: Request, res: Response, next: NextFu
         const data = await getCaseWorkflowByCaseIdService(
             caseId.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

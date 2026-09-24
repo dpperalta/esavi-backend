@@ -1,12 +1,13 @@
 import { InferAttributes, Op, QueryTypes, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { EsaviCase, Notification, NotificationVaccine, VaccineWhodrug } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNotificationVaccineInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The columns the INSERT of ESAVI-NOTIFVAC-001 writes, listed one by one so sortOrder stays out of
 // it. Omitting the value is not enough: the column is allowNull: false and Sequelize runs its own
@@ -324,7 +325,7 @@ const createNotificationVaccineService = async (
     // Re-read so the response carries the resolved master entry and the sortOrder the trigger
     // assigned, which the create instance does not know
     const notificationVaccine = await findNotificationVaccineWithRelations(created.vaccineId, true);
-    return notificationVaccine ? toNotificationVaccineResponse(notificationVaccine) : null;
+    return resolveAppDetailsAuthorsService(notificationVaccine ? toNotificationVaccineResponse(notificationVaccine) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Notification Vaccines By Notification Service
@@ -344,7 +345,8 @@ const getNotificationVaccinesByNotificationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '002A', lang, canViewInactive);
 
@@ -356,10 +358,10 @@ const getNotificationVaccinesByNotificationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationVaccines.count,
         rows: notificationVaccines.rows.map(toNotificationVaccineResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Notification Vaccines By Notification Service - For Admin
@@ -375,7 +377,8 @@ const getAllNotificationVaccinesByNotificationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '002B', lang, canViewInactive);
 
@@ -388,10 +391,10 @@ const getAllNotificationVaccinesByNotificationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationVaccines.count,
         rows: notificationVaccines.rows.map(toNotificationVaccineResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Notification Vaccine By ID Service
@@ -400,12 +403,12 @@ const getAllNotificationVaccinesByNotificationService = async (
 // active, and its notification must be active too, unless canViewInactive says otherwise — today
 // SUPERADMIN. The three failures answer the same 404 without distinguishing, because telling them
 // apart would confirm to a USER that a vaccine exists under a notification it is not allowed to see
-const getNotificationVaccineByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getNotificationVaccineByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const notificationVaccine = await findNotificationVaccineWithRelations(id, canViewInactive);
     if( !notificationVaccine ) {
         throw new AppError(getMessage('notificationVaccine.notFound', lang), 404, 'NOTIFVAC_003_NOT_FOUND');
     }
-    return toNotificationVaccineResponse(notificationVaccine);
+    return resolveAppDetailsAuthorsService(toNotificationVaccineResponse(notificationVaccine), canViewAuthors);
 }
 
 // Get Notification Vaccines By Case ID Service
@@ -424,7 +427,8 @@ const getNotificationVaccinesByCaseIdService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
@@ -452,10 +456,10 @@ const getNotificationVaccinesByCaseIdService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationVaccines.count,
         rows: notificationVaccines.rows.map(toNotificationVaccineResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Update Notification Vaccine Service
@@ -577,7 +581,7 @@ const updateNotificationVaccineService = async (
     }
 
     const updated = await findNotificationVaccineWithRelations(id, true);
-    return updated ? toNotificationVaccineResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toNotificationVaccineResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-NOTIFVAC-005B that is not a clean delegation, and the reason this entity

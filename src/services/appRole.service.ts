@@ -1,11 +1,12 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, isSuperAdmin, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, isSuperAdmin, toConstantCase, canViewAuditAuthors } from '../helpers';
 import { AppRole, AppUserRole } from '../models';
 import { AppDetails, AppRoleListFilters, AuthUser, CreateAppRoleInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // sysDetails is trigger metadata, never part of the domain response
 const LIST_EXCLUDE = { exclude: ['sysDetails'] };
@@ -70,7 +71,7 @@ const createAppRoleService = async (data: CreateAppRoleInput, authUser: AuthUser
         isActive: true,
         appDetails: [newEntry]
     });
-    return toAppRoleResponse(appRole);
+    return resolveAppDetailsAuthorsService(toAppRoleResponse(appRole), canViewAuditAuthors(authUser));
 }
 
 // Shared by both listings. name and code are the canonical parameters (SPEC F52), joined with
@@ -89,8 +90,8 @@ const buildAppRoleWhere = (filters: AppRoleListFilters): Record<string, unknown>
 
 // Get Active App Roles Service
 // Code: ESAVI-APPROLE-002A
-const getActiveAppRolesService = async (filters: AppRoleListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
-    return await AppRole.findAndCountAll({
+const getActiveAppRolesService = async (filters: AppRoleListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
+    return resolveAppDetailsAuthorsService(await AppRole.findAndCountAll({
         where: {
             ...buildAppRoleWhere(filters),
             isActive: true
@@ -99,24 +100,24 @@ const getActiveAppRolesService = async (filters: AppRoleListFilters = {}, limit:
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get All App Roles Service - For Admin
 // Code: ESAVI-APPROLE-002B
-const getAllAppRolesService = async (filters: AppRoleListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
-    return await AppRole.findAndCountAll({
+const getAllAppRolesService = async (filters: AppRoleListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
+    return resolveAppDetailsAuthorsService(await AppRole.findAndCountAll({
         where: buildAppRoleWhere(filters),
         attributes: LIST_EXCLUDE,
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get App Role By ID Service
 // Code: ESAVI-APPROLE-003
-const getAppRoleByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getAppRoleByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const where = canViewInactive ? { roleId: id } : { roleId: id, isActive: true };
     const appRole = await AppRole.findOne({ where, attributes: LIST_EXCLUDE });
     if( !appRole ) {
@@ -125,7 +126,7 @@ const getAppRoleByIdService = async (id: string, lang: string, canViewInactive: 
     // 005A refuses to retire a role with carriers. Without this count the client only finds out
     // by receiving the 409, and has no other way of asking beforehand
     const activeUserCount = await AppUserRole.count({ where: { roleId: id, isActive: true } });
-    return { ...appRole.toJSON(), activeUserCount };
+    return resolveAppDetailsAuthorsService({ ...appRole.toJSON(), activeUserCount }, canViewAuthors);
 }
 
 // Update App Role Service
@@ -174,7 +175,7 @@ const updateAppRoleService = async (id: string, data: Partial<CreateAppRoleInput
     // nothing is not a change, and appDetails counts changes, not visits — morgan already has
     // the request in access.log
     if( Object.keys(objectToUpdate).length === 0 ) {
-        return toAppRoleResponse(appRole);
+        return resolveAppDetailsAuthorsService(toAppRoleResponse(appRole), canViewAuditAuthors(authUser));
     }
     const newEntry: AppDetails = {
         createdAt: new Date(),
@@ -187,7 +188,7 @@ const updateAppRoleService = async (id: string, data: Partial<CreateAppRoleInput
         updatedAt: new Date(),
         appDetails: [...currentAppDetails, newEntry]
     }, { returning: true });
-    return toAppRoleResponse(updatedAppRole);
+    return resolveAppDetailsAuthorsService(toAppRoleResponse(updatedAppRole), canViewAuditAuthors(authUser));
 }
 
 // Set App Role Activation Service - For SuperAdmin on activation

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, ClassificationListFilters } from '../types';
 import {
     createClassificationService,
@@ -49,7 +49,7 @@ const getClassifications = async (req: Request, res: Response, next: NextFunctio
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getClassificationsService(listFilters(req), limit, offset);
+        const data = await getClassificationsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('classification.getSuccessPlural', req.lang),
@@ -71,7 +71,7 @@ const getAllClassifications = async (req: Request, res: Response, next: NextFunc
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllClassificationsService(listFilters(req), limit, offset);
+        const data = await getAllClassificationsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('classification.getSuccessPlural', req.lang),
@@ -95,7 +95,8 @@ const getClassificationById = async (req: Request, res: Response, next: NextFunc
         const data = await getClassificationByIdService(
             id.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -120,7 +121,8 @@ const getClassificationByCaseId = async (req: Request, res: Response, next: Next
         const data = await getClassificationByCaseIdService(
             caseId.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

@@ -1,10 +1,11 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, HealthFacility } from '../models';
-import { AppError, buildDifferentialUpdate, escapeLike, getMessage, toConstantCase, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, escapeLike, getMessage, toConstantCase, toTitleCase, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateHealthFacilityInput, HealthFacilitySearchInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Code of the catalogType that groups the valid facility types.
 // Must match the value enforced by the TRG_healthFacility_validateCatalogs trigger in esaviapp.sql
@@ -91,11 +92,11 @@ const createHealthFacilityService = async (data: CreateHealthFacilityInput, auth
         isActive: data.isActive !== undefined ? data.isActive : true,
         appDetails: [newEntry]
     });
-    return newHealthFacility;
+    return resolveAppDetailsAuthorsService(newHealthFacility, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-HFAC-002A - Get Active Health Facilities by GeoLocation Service
-const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     if (!geoLocationId) {
         throw new AppError(getMessage('geoLocation.idRequired', lang), 400, 'HFAC_002A_GEOLOCATIONID_REQUIRED');
     }
@@ -108,11 +109,11 @@ const getHealthFacilitiesByGeoLocationService = async (geoLocationId: string, la
         limit,
         offset
     });
-    return healthFacilities;
+    return resolveAppDetailsAuthorsService(healthFacilities, canViewAuthors);
 }
 
 // ESAVI-HFAC-002B - Get All Health Facilities by GeoLocation Service - For Admin
-const getAllHealthFacilitiesByGeoLocationService = async (geoLocationId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllHealthFacilitiesByGeoLocationService = async (geoLocationId: string, lang: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     if (!geoLocationId) {
         throw new AppError(getMessage('geoLocation.idRequired', lang), 400, 'HFAC_002B_GEOLOCATIONID_REQUIRED');
     }
@@ -124,11 +125,11 @@ const getAllHealthFacilitiesByGeoLocationService = async (geoLocationId: string,
         limit,
         offset
     });
-    return healthFacilities;
+    return resolveAppDetailsAuthorsService(healthFacilities, canViewAuthors);
 }
 
 // ESAVI-HFAC-003 - Get Health Facility by ID Service
-const getHealthFacilityByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getHealthFacilityByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const whereClause = includeInactive ? { healthFacilityId: id } : { healthFacilityId: id, isActive: true };
     const healthFacility = await HealthFacility.findOne({
         where: whereClause,
@@ -164,7 +165,7 @@ const getHealthFacilityByIdService = async (id: string, lang: string, includeIna
     if (!healthFacility) {
         throw new AppError(getMessage('healthFacility.notFound', lang), 404, 'HFAC_003_NOT_FOUND');
     }
-    return healthFacility;
+    return resolveAppDetailsAuthorsService(healthFacility, canViewAuthors);
 }
 
 // ESAVI-HFAC-004 - Update Health Facility Service
@@ -288,7 +289,7 @@ const updateHealthFacilityService = async (id: string, data: Partial<CreateHealt
             ]
         }, { returning: true });
     }
-    return updatedHealthFacility;
+    return resolveAppDetailsAuthorsService(updatedHealthFacility, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-HFAC-005A / 005B - Setting Health Facility Active/Inactive Service
@@ -339,7 +340,8 @@ const searchHealthFacilitiesService = async (
     lang: string,
     includeInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const name = filters.name?.trim();
     const code = filters.code?.trim();
@@ -400,7 +402,7 @@ const searchHealthFacilitiesService = async (
         limit,
         offset
     });
-    return healthFacilities;
+    return resolveAppDetailsAuthorsService(healthFacilities, canViewAuthors);
 }
 
 export {

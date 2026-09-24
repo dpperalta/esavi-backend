@@ -1,11 +1,12 @@
 import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, GeoLocation, Patient } from '../models';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, normalizeName, toNameTokens } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, generateHealthSystemCode, getMessage, normalizeName, toNameTokens, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreatePatientInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Code of the catalogType that groups the valid sex values. Unlike healthFacility, there is
 // no TRG_patient_validateCatalogs trigger in esaviapp.sql: without this check any active
@@ -183,12 +184,12 @@ const createPatientService = async (data: CreatePatientInput, authUser: AuthUser
 
     // Re-read so the response carries the resolved sex and residence, not just their ids
     const createdPatient = await findPatientWithRelations(newPatient.patientId, true);
-    return createdPatient ? toPatientResponse(createdPatient) : null;
+    return resolveAppDetailsAuthorsService(createdPatient ? toPatientResponse(createdPatient) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Patients Service
 // Code: ESAVI-PATIENT-002A
-const getPatientsService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getPatientsService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const { count, rows } = await Patient.findAndCountAll({
         where: { isActive: true },
         attributes: LIST_ATTRIBUTES,
@@ -197,12 +198,12 @@ const getPatientsService = async (limit: number = DEFAULT_LIMIT, offset: number 
         limit,
         offset
     });
-    return { count, rows: rows.map(toPatientListRow) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toPatientListRow) }, canViewAuthors);
 }
 
 // Get All Patients Service - For Admin
 // Code: ESAVI-PATIENT-002B
-const getAllPatientsService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllPatientsService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const { count, rows } = await Patient.findAndCountAll({
         attributes: LIST_ATTRIBUTES,
         include: [SEX_INCLUDE, LIST_RESIDENCE_INCLUDE],
@@ -210,17 +211,17 @@ const getAllPatientsService = async (limit: number = DEFAULT_LIMIT, offset: numb
         limit,
         offset
     });
-    return { count, rows: rows.map(toPatientListRow) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toPatientListRow) }, canViewAuthors);
 }
 
 // Get Patient By ID Service
 // Code: ESAVI-PATIENT-003
-const getPatientByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getPatientByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const patient = await findPatientWithRelations(id, canViewInactive);
     if( !patient ) {
         throw new AppError(getMessage('patient.notFound', lang), 404, 'PATIENT_003_NOT_FOUND');
     }
-    return toPatientResponse(patient);
+    return resolveAppDetailsAuthorsService(toPatientResponse(patient), canViewAuthors);
 }
 
 // Update Patient Service
@@ -358,7 +359,7 @@ const updatePatientService = async (id: string, data: Partial<CreatePatientInput
     // Read outside the transaction, once it is committed: the response is the same whether or not
     // anything changed, so both paths converge here
     const updatedPatient = await findPatientWithRelations(id, true);
-    return updatedPatient ? toPatientResponse(updatedPatient) : null;
+    return resolveAppDetailsAuthorsService(updatedPatient ? toPatientResponse(updatedPatient) : null, canViewAuditAuthors(authUser));
 }
 
 // Search Patients By Identifier Service
@@ -371,7 +372,8 @@ const searchPatientsByIdentifierService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const normalized = normalizeDocument(identifier);
     if( !normalized ) {
@@ -394,7 +396,7 @@ const searchPatientsByIdentifierService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toPatientListRow) };
+    return resolveAppDetailsAuthorsService<{ count: number; rows: unknown[] }>({ count, rows: rows.map(toPatientListRow) }, canViewAuthors);
 }
 
 // Search Patients By Name Service
@@ -410,7 +412,8 @@ const searchPatientsByNameService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const tokens = toNameTokens(name);
     if( tokens.length === 0 ) {
@@ -437,7 +440,7 @@ const searchPatientsByNameService = async (
         where: { ...tokensWhere, isActive: false }
     });
 
-    return { count, inactiveCount, rows: rows.map(toPatientListRow) };
+    return resolveAppDetailsAuthorsService<{ count: number; inactiveCount: number; rows: unknown[] }>({ count, inactiveCount, rows: rows.map(toPatientListRow) }, canViewAuthors);
 }
 
 // Setting Patient Active/Inactive Service

@@ -1,5 +1,5 @@
 ﻿import { Request, Response, NextFunction } from "express"
-import { AppError, canViewInactive, esaviLog, getMessage } from "../helpers";
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from "../helpers";
 import { createCatalogItemService, getActiveCatalogItemsByTypeService, getAllCatalogItemsByTypeService, getCatalogItemByIdService, importCatalogItemsService, searchCatalogItemsService, setCatalogItemActivationService, updateCatalogItemService } from "../services/catalogItem.service";
 import { CatalogItemSearchInput, ImportCatalogItemsInput } from "../types";
 
@@ -30,7 +30,7 @@ const getCatalogItemsByType = async (req: Request, res: Response, next: NextFunc
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {        
-        const data = await getActiveCatalogItemsByTypeService(id.toString().trim(), limit, offset);
+        const data = await getActiveCatalogItemsByTypeService(id.toString().trim(), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogItem.getSuccessPlural', req.lang),
@@ -53,7 +53,7 @@ const getAllCatalogItemsByType = async (req: Request, res: Response, next: NextF
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllCatalogItemsByTypeService(id.toString().trim() || '', limit, offset, true);
+        const data = await getAllCatalogItemsByTypeService(id.toString().trim() || '', limit, offset, true, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogItem.getSuccessPlural', req.lang),
@@ -80,7 +80,7 @@ const searchCatalogItems = async (req: Request, res: Response, next: NextFunctio
         catalogTypeId: req.query.catalogTypeId ? (req.query.catalogTypeId as string).trim() : undefined
     };
     try {
-        const data = await searchCatalogItemsService(filters, req.lang, canViewInactive(req.user), limit, offset);
+        const data = await searchCatalogItemsService(filters, req.lang, canViewInactive(req.user), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogItem.getSuccessPlural', req.lang),
@@ -101,7 +101,7 @@ const searchCatalogItems = async (req: Request, res: Response, next: NextFunctio
 const getCatalogItemById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
-        const data = await getCatalogItemByIdService(id.toString().trim(), req.lang, canViewInactive(req.user));
+        const data = await getCatalogItemByIdService(id.toString().trim(), req.lang, canViewInactive(req.user), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogItem.getSuccess', req.lang),

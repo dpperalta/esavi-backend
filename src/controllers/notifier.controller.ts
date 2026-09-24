@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, NotifierListFilters } from '../types';
 import {
     createNotifierService,
@@ -45,7 +45,7 @@ const getNotifiers = async (req: Request, res: Response, next: NextFunction): Pr
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getNotifiersService(listFilters(req), limit, offset);
+        const data = await getNotifiersService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('notifier.getSuccessPlural', req.lang),
@@ -67,7 +67,7 @@ const getAllNotifiers = async (req: Request, res: Response, next: NextFunction):
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllNotifiersService(listFilters(req), limit, offset);
+        const data = await getAllNotifiersService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('notifier.getSuccessPlural', req.lang),
@@ -88,7 +88,7 @@ const getAllNotifiers = async (req: Request, res: Response, next: NextFunction):
 const getNotifierById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getNotifierByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getNotifierByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('notifier.getSuccess', req.lang),

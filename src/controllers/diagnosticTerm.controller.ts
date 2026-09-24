@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import { DiagnosticTermListFilters, ImportDiagnosticTermsInput } from '../types';
 import {
@@ -48,7 +48,7 @@ const getDiagnosticTerms = async (req: Request, res: Response, next: NextFunctio
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getActiveDiagnosticTermsService(readListFilters(req.query), limit, offset);
+        const data = await getActiveDiagnosticTermsService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('diagnosticTerm.getSuccessPlural', req.lang),
@@ -76,7 +76,7 @@ const getAllDiagnosticTerms = async (req: Request, res: Response, next: NextFunc
         reviewStatus: req.query.reviewStatus ? (req.query.reviewStatus as string).trim() : undefined
     };
     try {
-        const data = await getAllDiagnosticTermsService(filters, limit, offset);
+        const data = await getAllDiagnosticTermsService(filters, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('diagnosticTerm.getSuccessPlural', req.lang),
@@ -97,7 +97,7 @@ const getAllDiagnosticTerms = async (req: Request, res: Response, next: NextFunc
 const getDiagnosticTermById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getDiagnosticTermByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getDiagnosticTermByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('diagnosticTerm.getSuccess', req.lang),

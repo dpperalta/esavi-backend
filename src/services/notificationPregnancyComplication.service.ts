@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, DiagnosticTerm, Notification, NotificationPregnancy, NotificationPregnancyComplication } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, canViewAuditAuthors } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
@@ -9,6 +9,7 @@ import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNotificationPregnancyComplicationInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -475,7 +476,7 @@ const createNotificationPregnancyComplicationService = async (
     // Re-read so the response carries the resolved master term, the complication type and the
     // sortOrder the trigger assigned, which the create instance does not know
     const complication = await findComplicationWithRelations(createdId, true);
-    return complication ? toNotificationPregnancyComplicationResponse(complication) : null;
+    return resolveAppDetailsAuthorsService(complication ? toNotificationPregnancyComplicationResponse(complication) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Notification Pregnancy Complications By Pregnancy Service
@@ -492,7 +493,8 @@ const getNotificationPregnancyComplicationsByPregnancyService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertPregnancyIsVisible(pregnancyId, '002A', lang, canViewInactive);
 
@@ -505,10 +507,10 @@ const getNotificationPregnancyComplicationsByPregnancyService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: complications.count,
         rows: complications.rows.map(toNotificationPregnancyComplicationResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Notification Pregnancy Complications By Pregnancy Service - For Admin
@@ -528,7 +530,8 @@ const getAllNotificationPregnancyComplicationsByPregnancyService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertPregnancyIsVisible(pregnancyId, '002B', lang, canViewInactive);
 
@@ -542,10 +545,10 @@ const getAllNotificationPregnancyComplicationsByPregnancyService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: complications.count,
         rows: complications.rows.map(toNotificationPregnancyComplicationResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Notification Pregnancy Complication By ID Service
@@ -561,7 +564,8 @@ const getAllNotificationPregnancyComplicationsByPregnancyService = async (
 const getNotificationPregnancyComplicationByIdService = async (
     id: string,
     lang: string,
-    canViewInactive: boolean = false
+    canViewInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const complication = await findComplicationWithRelations(id, canViewInactive);
     if( !complication ) {
@@ -571,7 +575,7 @@ const getNotificationPregnancyComplicationByIdService = async (
             'PREGCOMP_003_NOT_FOUND'
         );
     }
-    return toNotificationPregnancyComplicationResponse(complication);
+    return resolveAppDetailsAuthorsService(toNotificationPregnancyComplicationResponse(complication), canViewAuthors);
 }
 
 // Update Notification Pregnancy Complication Service
@@ -730,7 +734,7 @@ const updateNotificationPregnancyComplicationService = async (
     }
 
     const updated = await findComplicationWithRelations(id, true);
-    return updated ? toNotificationPregnancyComplicationResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toNotificationPregnancyComplicationResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-PREGCOMP-005B that is not a clean delegation, and the reason this entity

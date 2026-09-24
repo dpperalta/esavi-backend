@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createNotificationMedicalHistoryService,
@@ -44,7 +44,8 @@ const getNotificationMedicalHistoriesByNotification = async (req: Request, res: 
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -73,7 +74,8 @@ const getAllNotificationMedicalHistoriesByNotification = async (req: Request, re
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -102,7 +104,8 @@ const getNotificationMedicalHistoriesByCaseId = async (req: Request, res: Respon
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -127,7 +130,8 @@ const getNotificationMedicalHistoryById = async (req: Request, res: Response, ne
         const data = await getNotificationMedicalHistoryByIdService(
             id,
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

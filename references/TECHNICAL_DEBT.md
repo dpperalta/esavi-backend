@@ -64,16 +64,16 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-042](#deuda-042) | 🟠 | Tres endpoints rechazan con 400 la respuesta de su propio `GET` |
 | [DEUDA-043](#deuda-043) | 🟡 | `sortOrder: 0` no se puede guardar en tres servicios |
 | [DEUDA-044](#deuda-044) | 🟠 | ✅ `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla |
-| [DEUDA-045](#deuda-045) | 🟠 | `appDetails.user` expone el UUID interno del usuario en toda respuesta |
+| [DEUDA-045](#deuda-045) | 🟠 | ✅ `appDetails.user` expone el UUID interno del usuario en toda respuesta |
 | [DEUDA-046](#deuda-046) | 🔴 | ✅ El rate limit se cuenta por IP y sin `trust proxy` |
 
 ## Mapa de resolución
 
 La serie de specs de [`specs/`](./specs/) cubre las entradas 001–030, el
-SPEC 08 cubre 037 y 038, el SPEC 09 cubre 039 y el SPEC F12 cubre 041 — de esta
+SPEC 08 cubre 037 y 038, el SPEC 09 cubre 039, el SPEC F12 cubre 041 — de esta
 última, el SPEC F09 había corregido por adelantado la única entidad que él mismo
-estrenaba. Las entradas 031–036, 040, 042, 043, 045 y 046 todavía no tienen
-spec; 042 y 043 las detectó el propio SPEC F12 al implementarse.
+estrenaba — y el SPEC F59 cubre 045. Las entradas 031, 033–036, 040, 042 y 043
+todavía no tienen spec; 042 y 043 las detectó el propio SPEC F12 al implementarse.
 
 **Saldadas a 2026-08-03**: las 30 entradas 001–030, por los siete specs de la
 serie, más 037 y 038 por el SPEC 08. Los ocho specs están en estado
@@ -97,7 +97,8 @@ producción, en vez de exigir SUPERADMIN), **013** (unicidad **sin** filtrar por
 | [08 — Idioma efectivo](./specs/08-language-propagation.md) | 037, 038 |
 | [09 — CRUD de healthFacility](./specs/09-healthfacility-crud.md) | 039 |
 | [F12 — Update diferencial uniforme](./functional/specs/12-differential.md) | 041 |
-| sin spec | 031, 032, 033, 034, 035, 036, 040, 042, 043, 045, 046 |
+| [F59 — Autor de auditoría por email](./functional/specs/59-appdetails-author-email.md) | 045 |
+| sin spec | 031, 032, 033, 034, 035, 036, 040, 042, 043, 046 |
 
 Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08. El 05 renumera
 líneas que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los
@@ -913,7 +914,13 @@ Hay que decidir cuál de los dos manda. La sección de Normalización de [CONVEN
 ---
 
 <a id="deuda-045"></a>
-## DEUDA-045 🟠 `appDetails.user` expone el UUID interno del usuario en toda respuesta
+## DEUDA-045 🟠 ✅ `appDetails.user` expone el UUID interno del usuario en toda respuesta
+
+> ✅ **Saldada** por el [SPEC F59](./functional/specs/59-appdetails-author-email.md) el 2026-09-23. Ninguna respuesta lleva un UUID en `appDetails[].user`: ADMIN y SUPERADMIN reciben el email descifrado del autor y el resto de roles `null`. Lo guardado sigue siendo el `userId`. `resolveAppDetailsAuthorsService` hace como mucho una consulta por respuesta, y se aplica en las 256 funciones de servicio de 45 archivos cuyo resultado va a la respuesta. Tres correcciones a este diagnóstico:
+>
+> - **El caso «usuario purgado por su `005C`» no existe.** `appUser` no tiene borrado físico. Los autores que no resuelven son los literales `'undefined'` y `'unknown'` (este último, de `catalogType.service.ts`), un UUID sin fila y un usuario con `email` nulo.
+> - **La «decisión pendiente» se resolvió a `null`**, sin literal i18n.
+> - **La visibilidad es por rol, no uniforme.** Se aprobó al cerrar el spec: USER no puede leer emails de otros usuarios por `/api/users`, y tampoco los recibe por `appDetails`.
 
 **Archivos**: `src/types/common/audit.types.ts:18`, y los 38 servicios con operaciones de lectura.
 

@@ -1,12 +1,13 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { EsaviCase, Investigation, InvestigationVaccineAdministered, VaccineWhodrug } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationVaccineAdministeredInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // There is no CREATE_FIELDS here, and that is a decision and not an omission. In the eight sister
 // tables of the setSortOrderByParent loop the column is NOT NULL, so Sequelize runs its own notNull
@@ -310,7 +311,7 @@ const createInvestigationVaccineAdministeredService = async (
     // Re-read so the response carries the master and the sortOrder the trigger assigned, neither of
     // which the create instance knows
     const vaccine = await findVaccineAdministeredWithRelations(createdId, true);
-    return vaccine ? toInvestigationVaccineAdministeredResponse(vaccine) : null;
+    return resolveAppDetailsAuthorsService(vaccine ? toInvestigationVaccineAdministeredResponse(vaccine) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Investigation Vaccines Administered By Investigation Service
@@ -330,7 +331,8 @@ const getInvestigationVaccinesAdministeredByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await findValidInvestigation(investigationId, '002A', lang, canViewInactive);
 
@@ -343,10 +345,10 @@ const getInvestigationVaccinesAdministeredByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: vaccines.count,
         rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Investigation Vaccines Administered By Investigation Service
@@ -360,7 +362,8 @@ const getAllInvestigationVaccinesAdministeredByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await findValidInvestigation(investigationId, '002B', lang, canViewInactive);
 
@@ -374,10 +377,10 @@ const getAllInvestigationVaccinesAdministeredByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: vaccines.count,
         rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Investigation Vaccine Administered By ID Service
@@ -391,7 +394,8 @@ const getAllInvestigationVaccinesAdministeredByInvestigationService = async (
 const getInvestigationVaccineAdministeredByIdService = async (
     vaccineAdministeredId: string,
     lang: string,
-    canViewInactive: boolean = false
+    canViewInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const vaccine = await findVaccineAdministeredWithRelations(vaccineAdministeredId, canViewInactive);
     if( !vaccine ) {
@@ -401,7 +405,7 @@ const getInvestigationVaccineAdministeredByIdService = async (
             'INVVACAD_003_NOT_FOUND'
         );
     }
-    return toInvestigationVaccineAdministeredResponse(vaccine);
+    return resolveAppDetailsAuthorsService(toInvestigationVaccineAdministeredResponse(vaccine), canViewAuthors);
 }
 
 // Get Investigation Vaccines Administered By Case ID Service
@@ -422,7 +426,8 @@ const getInvestigationVaccinesAdministeredByCaseIdService = async (
     lang: string,
     includeInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
@@ -458,10 +463,10 @@ const getInvestigationVaccinesAdministeredByCaseIdService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: vaccines.count,
         rows: vaccines.rows.map(toInvestigationVaccineAdministeredResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Update Investigation Vaccine Administered Service
@@ -594,7 +599,7 @@ const updateInvestigationVaccineAdministeredService = async (
     // Re-read so the response carries the master with its nested fields, whether or not anything was
     // written
     const updated = await findVaccineAdministeredWithRelations(id, true);
-    return updated ? toInvestigationVaccineAdministeredResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationVaccineAdministeredResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The two guards ESAVI-INVVACAD-005B runs before handing over to setEntityActiveStatusService, in

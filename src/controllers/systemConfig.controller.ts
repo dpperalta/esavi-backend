@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { SystemConfigListFilters, SystemConfigValueType } from '../types';
 import {
     createSystemConfigService,
@@ -49,7 +49,7 @@ const getSystemConfigs = async (req: Request, res: Response, next: NextFunction)
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getActiveSystemConfigsService(readListFilters(req.query), limit, offset);
+        const data = await getActiveSystemConfigsService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('systemConfig.getSuccessPlural', req.lang),
@@ -71,7 +71,7 @@ const getAllSystemConfigs = async (req: Request, res: Response, next: NextFuncti
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllSystemConfigsService(readListFilters(req.query), limit, offset);
+        const data = await getAllSystemConfigsService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('systemConfig.getSuccessPlural', req.lang),
@@ -98,7 +98,7 @@ const getSystemConfigById = async (req: Request, res: Response, next: NextFuncti
         // may decrypt, so the two collapse into one predicate here and stay two parameters in the
         // service — the day one of them moves, only this line changes
         const canSeeEverything = canViewInactive(req.user);
-        const data = await getSystemConfigByIdService(id, req.lang, canSeeEverything, canSeeEverything);
+        const data = await getSystemConfigByIdService(id, req.lang, canSeeEverything, canSeeEverything, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('systemConfig.getSuccess', req.lang),
@@ -123,7 +123,7 @@ const getSystemConfigByCode = async (req: Request, res: Response, next: NextFunc
         // The same two decisions as the 003, resting on the same predicate: this endpoint is the
         // other door to the same row
         const canSeeEverything = canViewInactive(req.user);
-        const data = await getSystemConfigByCodeService(code, scope, req.lang, canSeeEverything, canSeeEverything);
+        const data = await getSystemConfigByCodeService(code, scope, req.lang, canSeeEverything, canSeeEverything, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('systemConfig.getByCodeSuccess', req.lang),
@@ -211,7 +211,7 @@ const getSystemConfigHistory = async (req: Request, res: Response, next: NextFun
     try {
         // No permission predicate travels here: the route is already SUPERADMIN-only, so the
         // decryption of the two values needs no rule of its own
-        const data = await getSystemConfigHistoryService(id, limit, offset, req.lang);
+        const data = await getSystemConfigHistoryService(id, limit, offset, req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('systemConfig.historySuccessPlural', req.lang),

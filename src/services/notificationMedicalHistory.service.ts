@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm, EsaviCase, Notification, NotificationMedicalHistory } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, canViewAuditAuthors } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
@@ -9,6 +9,7 @@ import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNotificationMedicalHistoryInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -392,7 +393,7 @@ const createNotificationMedicalHistoryService = async (
     // Re-read so the response carries the resolved master term and the sortOrder the trigger
     // assigned, which the create instance does not know
     const medicalHistory = await findMedicalHistoryWithRelations(createdId, true);
-    return medicalHistory ? toNotificationMedicalHistoryResponse(medicalHistory) : null;
+    return resolveAppDetailsAuthorsService(medicalHistory ? toNotificationMedicalHistoryResponse(medicalHistory) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Notification Medical Histories By Case ID Service
@@ -412,7 +413,8 @@ const getNotificationMedicalHistoriesByCaseIdService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
@@ -441,10 +443,10 @@ const getNotificationMedicalHistoriesByCaseIdService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: medicalHistories.count,
         rows: medicalHistories.rows.map(toNotificationMedicalHistoryResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Notification Medical History By ID Service
@@ -458,7 +460,8 @@ const getNotificationMedicalHistoriesByCaseIdService = async (
 const getNotificationMedicalHistoryByIdService = async (
     id: string,
     lang: string,
-    canViewInactive: boolean = false
+    canViewInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const medicalHistory = await findMedicalHistoryWithRelations(id, canViewInactive);
     if( !medicalHistory ) {
@@ -469,7 +472,7 @@ const getNotificationMedicalHistoryByIdService = async (
         );
     }
 
-    return toNotificationMedicalHistoryResponse(medicalHistory);
+    return resolveAppDetailsAuthorsService(toNotificationMedicalHistoryResponse(medicalHistory), canViewAuthors);
 }
 
 // Get Active Notification Medical Histories By Notification Service
@@ -484,7 +487,8 @@ const getNotificationMedicalHistoriesByNotificationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '002A', lang, canViewInactive);
 
@@ -497,10 +501,10 @@ const getNotificationMedicalHistoriesByNotificationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: medicalHistories.count,
         rows: medicalHistories.rows.map(toNotificationMedicalHistoryResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Notification Medical Histories By Notification Service - For Admin
@@ -523,7 +527,8 @@ const getAllNotificationMedicalHistoriesByNotificationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '002B', lang, canViewInactive);
 
@@ -537,10 +542,10 @@ const getAllNotificationMedicalHistoriesByNotificationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: medicalHistories.count,
         rows: medicalHistories.rows.map(toNotificationMedicalHistoryResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Update Notification Medical History Service
@@ -683,7 +688,7 @@ const updateNotificationMedicalHistoryService = async (
     }
 
     const updated = await findMedicalHistoryWithRelations(id, true);
-    return updated ? toNotificationMedicalHistoryResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toNotificationMedicalHistoryResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-MEDHIST-005B that is not a clean delegation, and the reason this entity

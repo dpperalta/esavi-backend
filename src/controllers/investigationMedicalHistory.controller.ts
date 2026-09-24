@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, InvestigationMedicalHistoryListFilters } from '../types';
 import {
     createInvestigationMedicalHistoryService,
@@ -44,7 +44,7 @@ const getInvestigationMedicalHistories = async (req: Request, res: Response, nex
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getInvestigationMedicalHistoriesService(listFilters(req), limit, offset);
+        const data = await getInvestigationMedicalHistoriesService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationMedicalHistory.getSuccessPlural', req.lang),
@@ -66,7 +66,7 @@ const getAllInvestigationMedicalHistories = async (req: Request, res: Response, 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllInvestigationMedicalHistoriesService(listFilters(req), limit, offset);
+        const data = await getAllInvestigationMedicalHistoriesService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationMedicalHistory.getSuccessPlural', req.lang),
@@ -92,7 +92,8 @@ const getInvestigationMedicalHistoryById = async (req: Request, res: Response, n
         const data = await getInvestigationMedicalHistoryByIdService(
             id.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -119,7 +120,8 @@ const getInvestigationMedicalHistoryByCaseId = async (req: Request, res: Respons
         const data = await getInvestigationMedicalHistoryByCaseIdService(
             caseId.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

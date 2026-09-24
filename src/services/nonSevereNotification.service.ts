@@ -1,10 +1,11 @@
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Notification, NonSevereNotification } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage, canViewAuditAuthors } from '../helpers';
 import { purgeEntityService } from './common/entityPurge.service';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNonSevereNotificationInput } from '../types';
 import { NotificationType } from '../constants/notification.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Only a NON_SEVERE header admits a non severe detail. A SEVERE one never can, which is why the
 // mismatch is a 409 against the state of another row and not a 400 about a malformed body
@@ -328,7 +329,7 @@ const createNonSevereNotificationService = async (
     // Re-read so the response carries the resolved header, its case and the three vaccination
     // objects, not just the raw identifiers
     const created = await findNonSevereNotificationWithRelations(data.notificationId, true);
-    return created ? toNonSevereNotificationResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toNonSevereNotificationResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Non Severe Notification By ID Service
@@ -339,12 +340,12 @@ const createNonSevereNotificationService = async (
 // that a detail exists under a notification it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // header, which is what makes it possible to consult it before purging it
-const getNonSevereNotificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getNonSevereNotificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const nonSevereNotification = await findNonSevereNotificationWithRelations(id, canViewInactive);
     if( !nonSevereNotification ) {
         throw new AppError(getMessage('nonSevereNotification.notFound', lang), 404, 'NSEVNOT_003_NOT_FOUND');
     }
-    return toNonSevereNotificationResponse(nonSevereNotification);
+    return resolveAppDetailsAuthorsService(toNonSevereNotificationResponse(nonSevereNotification), canViewAuthors);
 }
 
 // Get Non Severe Notification By Case ID Service
@@ -356,7 +357,7 @@ const getNonSevereNotificationByIdService = async (id: string, lang: string, can
 // The three 404 are deliberately distinct, and the asymmetry with 003 is intentional: there the
 // client already holds the primary key of the detail, here it enters through a caseId and needs
 // to know which link of the chain broke. A case whose notification is SEVERE falls in the third
-const getNonSevereNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+const getNonSevereNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -379,7 +380,7 @@ const getNonSevereNotificationByCaseIdService = async (caseId: string, lang: str
     if( !nonSevereNotification ) {
         throw new AppError(getMessage('nonSevereNotification.notFound', lang), 404, 'NSEVNOT_006_NOT_FOUND');
     }
-    return toNonSevereNotificationResponse(nonSevereNotification);
+    return resolveAppDetailsAuthorsService(toNonSevereNotificationResponse(nonSevereNotification), canViewAuthors);
 }
 
 // Update Non Severe Notification Service
@@ -493,7 +494,7 @@ const updateNonSevereNotificationService = async (
     // sysDetails.version bump that TRG_nonSevereNotification_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findNonSevereNotificationWithRelations(id, true);
-        return unchanged ? toNonSevereNotificationResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toNonSevereNotificationResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
@@ -517,7 +518,7 @@ const updateNonSevereNotificationService = async (
     });
 
     const updated = await findNonSevereNotificationWithRelations(id, true);
-    return updated ? toNonSevereNotificationResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toNonSevereNotificationResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Non Severe Notification Service - For SuperAdmin

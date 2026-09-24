@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, EvaluationInstitution, Investigation, InvestigationClinicalEvaluation } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, esaviLog, getMessage, toTitleCase } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, esaviLog, getMessage, toTitleCase, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The investigation travels in every response: it is what governs the visibility of the clinical
 // evaluation, and hiding it would leave the client unable to explain why a record it read yesterday
@@ -297,7 +298,7 @@ const createInvestigationClinicalEvaluationService = async (
     // Re-read so the response carries the resolved investigation, its status and its case, not just
     // the raw identifiers
     const created = await findInvestigationClinicalEvaluationWithRelations(data.investigationId, true);
-    return created ? toInvestigationClinicalEvaluationResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toInvestigationClinicalEvaluationResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // The order of the two listings, as in F29 and F32. This entity has no date of the domain that
@@ -344,7 +345,8 @@ const listInclude = (filters: InvestigationClinicalEvaluationListFilters, includ
 const getInvestigationClinicalEvaluationsService = async (
     filters: InvestigationClinicalEvaluationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationClinicalEvaluation.findAndCountAll({
         where: buildListWhere(filters),
@@ -358,7 +360,7 @@ const getInvestigationClinicalEvaluationsService = async (
     // sixteen data columns and trimming them would leave a listing with no content.
     // clinicalDetailsPersonName is decrypted ROW BY ROW here — the same cost F05 assumes in patient,
     // bounded by DEFAULT_LIMIT — so no listing ever returns a ciphertext
-    return { count, rows: rows.map(toInvestigationClinicalEvaluationResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationClinicalEvaluationResponse) }, canViewAuthors);
 }
 
 // Get All Investigation Clinical Evaluations Service - For Admin
@@ -366,7 +368,8 @@ const getInvestigationClinicalEvaluationsService = async (
 const getAllInvestigationClinicalEvaluationsService = async (
     filters: InvestigationClinicalEvaluationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationClinicalEvaluation.findAndCountAll({
         where: buildListWhere(filters),
@@ -376,7 +379,7 @@ const getAllInvestigationClinicalEvaluationsService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toInvestigationClinicalEvaluationResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationClinicalEvaluationResponse) }, canViewAuthors);
 }
 
 // Get Investigation Clinical Evaluation By ID Service
@@ -389,12 +392,12 @@ const getAllInvestigationClinicalEvaluationsService = async (
 // USER that a clinical evaluation exists under an investigation it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // investigation, which is what makes it possible to consult it before purging it
-const getInvestigationClinicalEvaluationByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationClinicalEvaluationByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const evaluation = await findInvestigationClinicalEvaluationWithRelations(id, includeInactive);
     if( !evaluation ) {
         throw new AppError(getMessage('investigationClinicalEvaluation.notFound', lang), 404, 'INVCLIEV_003_NOT_FOUND');
     }
-    return toInvestigationClinicalEvaluationResponse(evaluation);
+    return resolveAppDetailsAuthorsService(toInvestigationClinicalEvaluationResponse(evaluation), canViewAuthors);
 }
 
 // Get Investigation Clinical Evaluation By Case ID Service
@@ -408,7 +411,7 @@ const getInvestigationClinicalEvaluationByIdService = async (id: string, lang: s
 // which link of the chain broke — whether the case is not there, whether it has no visible
 // investigation, or whether the clinical evaluation has not been recorded yet. Those are three
 // different actions on the user's side, and one generic message would make them indistinguishable
-const getInvestigationClinicalEvaluationByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationClinicalEvaluationByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -431,7 +434,7 @@ const getInvestigationClinicalEvaluationByCaseIdService = async (caseId: string,
     if( !evaluation ) {
         throw new AppError(getMessage('investigationClinicalEvaluation.notFound', lang), 404, 'INVCLIEV_006_NOT_FOUND');
     }
-    return toInvestigationClinicalEvaluationResponse(evaluation);
+    return resolveAppDetailsAuthorsService(toInvestigationClinicalEvaluationResponse(evaluation), canViewAuthors);
 }
 
 // Update Investigation Clinical Evaluation Service
@@ -554,7 +557,7 @@ const updateInvestigationClinicalEvaluationService = async (
     // write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationClinicalEvaluationWithRelations(id, true);
-        return unchanged ? toInvestigationClinicalEvaluationResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationClinicalEvaluationResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // The name is encrypted NOW, after the diff, over the value the helper returned — and only when
@@ -585,7 +588,7 @@ const updateInvestigationClinicalEvaluationService = async (
     });
 
     const updated = await findInvestigationClinicalEvaluationWithRelations(id, true);
-    return updated ? toInvestigationClinicalEvaluationResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationClinicalEvaluationResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The row about to be destroyed, dumped at warn level so what disappears leaves a trace.

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createPatientService,
@@ -38,7 +38,7 @@ const getPatients = async (req: Request, res: Response, next: NextFunction): Pro
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getPatientsService(limit, offset);
+        const data = await getPatientsService(limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('patient.getSuccessPlural', req.lang),
@@ -60,7 +60,7 @@ const getAllPatients = async (req: Request, res: Response, next: NextFunction): 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllPatientsService(limit, offset);
+        const data = await getAllPatientsService(limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('patient.getSuccessPlural', req.lang),
@@ -81,7 +81,7 @@ const getAllPatients = async (req: Request, res: Response, next: NextFunction): 
 const getPatientById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getPatientByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getPatientByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('patient.getSuccess', req.lang),
@@ -125,7 +125,7 @@ const searchPatientsByIdentifier = async (req: Request, res: Response, next: Nex
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await searchPatientsByIdentifierService(identifier, req.lang, canViewInactive(req.user as AuthUser), limit, offset);
+        const data = await searchPatientsByIdentifierService(identifier, req.lang, canViewInactive(req.user as AuthUser), limit, offset, canViewAuditAuthors(req.user));
         // A search with no matches is a result, not a missing resource: 200 with an empty page
         // and its own message, so the frontend does not have to branch on the status.
         // Both keys are spelled out so i18n-check can verify them statically
@@ -154,7 +154,7 @@ const searchPatientsByName = async (req: Request, res: Response, next: NextFunct
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await searchPatientsByNameService(name, req.lang, canViewInactive(req.user as AuthUser), limit, offset);
+        const data = await searchPatientsByNameService(name, req.lang, canViewInactive(req.user as AuthUser), limit, offset, canViewAuditAuthors(req.user));
         // Three messages, not two: an empty page can still carry a signal of inactive matches.
         // Both keys are spelled out so i18n-check can verify them statically
         const message = data.count > 0

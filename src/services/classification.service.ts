@@ -10,13 +10,14 @@ import {
     resolveAgeAtEvent,
     SERIOUS_CRITERION_FIELDS,
     SEVERITY_VIOLATION_MESSAGES,
-    SeverityState
+    SeverityState, canViewAuditAuthors
 } from '../helpers';
 import { AppDetails, AuthUser, ClassificationListFilters, CreateClassificationInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { advanceCaseWorkflowStageService, assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Code of the catalogType that groups the three age units. Without this check any active
 // catalogItem of the system would enter as a unit and the stored age would mean nothing
@@ -292,7 +293,7 @@ const createClassificationService = async (data: CreateClassificationInput, auth
 
     // Re-read so the response carries the resolved case and ageUnit, not their ids
     const createdClassification = await findClassificationWithRelations(newClassification.classificationId, true);
-    return createdClassification ? toClassificationResponse(createdClassification) : null;
+    return resolveAppDetailsAuthorsService(createdClassification ? toClassificationResponse(createdClassification) : null, canViewAuditAuthors(authUser));
 }
 
 // The three filters are accumulated with AND, and each one is optional. A filter pointing at a
@@ -317,16 +318,17 @@ const buildListWhere = (filters: ClassificationListFilters = {}): WhereOptions =
 const getClassificationsService = async (
     filters: ClassificationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
-    return await Classification.findAndCountAll({
+    return resolveAppDetailsAuthorsService(await Classification.findAndCountAll({
         where: { ...buildListWhere(filters), isActive: true },
         attributes: LIST_ATTRIBUTES,
         include: [CASE_INCLUDE, AGE_UNIT_INCLUDE],
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get All Classifications Service - For Admin
@@ -334,26 +336,27 @@ const getClassificationsService = async (
 const getAllClassificationsService = async (
     filters: ClassificationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
-    return await Classification.findAndCountAll({
+    return resolveAppDetailsAuthorsService(await Classification.findAndCountAll({
         where: buildListWhere(filters),
         attributes: LIST_ATTRIBUTES,
         include: [CASE_INCLUDE, AGE_UNIT_INCLUDE],
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get Classification By ID Service
 // Code: ESAVI-CLASSIF-003
-const getClassificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getClassificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const classification = await findClassificationWithRelations(id, canViewInactive);
     if( !classification ) {
         throw new AppError(getMessage('classification.notFound', lang), 404, 'CLASSIF_003_NOT_FOUND');
     }
-    return toClassificationResponse(classification);
+    return resolveAppDetailsAuthorsService(toClassificationResponse(classification), canViewAuthors);
 }
 
 // Get Classification By Case ID Service
@@ -363,14 +366,14 @@ const getClassificationByIdService = async (id: string, lang: string, canViewIna
 // single record in a collection would force unwrapping a one-element array on every screen.
 // The two 404 are deliberately distinct: a case that does not exist is a broken link, a case
 // without classification is a pending task, and the client acts differently on each
-const getClassificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+const getClassificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     await assertCaseIsValid(caseId, '006', lang);
 
     const classification = await findClassificationByCaseId(caseId, canViewInactive);
     if( !classification ) {
         throw new AppError(getMessage('classification.notFound', lang), 404, 'CLASSIF_006_NOT_FOUND');
     }
-    return toClassificationResponse(classification);
+    return resolveAppDetailsAuthorsService(toClassificationResponse(classification), canViewAuthors);
 }
 
 // The nine booleans and the description of the resulting state: what is stored merged with what
@@ -469,7 +472,7 @@ const updateClassificationService = async (
     // Nothing changed: no UPDATE, no updatedAt and no audit entry
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findClassificationWithRelations(id, true);
-        return unchanged ? toClassificationResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toClassificationResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
@@ -492,7 +495,7 @@ const updateClassificationService = async (
     });
 
     const updatedClassification = await findClassificationWithRelations(id, true);
-    return updatedClassification ? toClassificationResponse(updatedClassification) : null;
+    return resolveAppDetailsAuthorsService(updatedClassification ? toClassificationResponse(updatedClassification) : null, canViewAuditAuthors(authUser));
 }
 
 // Setting Classification Active/Inactive Service

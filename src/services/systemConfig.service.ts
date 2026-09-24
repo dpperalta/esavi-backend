@@ -10,7 +10,7 @@ import {
     esaviDecrypt,
     getMessage,
     isValidSystemConfigValue,
-    toConstantCase
+    toConstantCase, canViewAuditAuthors
 } from '../helpers';
 import {
     AppDetails,
@@ -22,6 +22,7 @@ import {
 import { SYSTEM_CONFIG_DEFAULTS } from '../data/systemConfig.defaults';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The default of the two columns the DDL resolves on its own. They are applied here and not left to
 // the database because the uniqueness of (code, scope) has to be checked against the value that will
@@ -228,7 +229,7 @@ const createSystemConfigService = async (data: CreateSystemConfigInput, authUser
 
         // Masked even though only a SUPERADMIN gets here: the answer of a create is not the door to
         // read secrets, and the 003 is
-        return maskEncryptedValue(createdConfig);
+        return resolveAppDetailsAuthorsService(maskEncryptedValue(createdConfig), canViewAuditAuthors(authUser));
     } catch (error) {
         await transaction.rollback();
         throw error;
@@ -239,7 +240,8 @@ const createSystemConfigService = async (data: CreateSystemConfigInput, authUser
 const getActiveSystemConfigsService = async (
     filters: SystemConfigListFilters,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const systemConfigs = await SystemConfig.findAndCountAll({
         where: {
@@ -254,14 +256,15 @@ const getActiveSystemConfigsService = async (
         limit,
         offset
     });
-    return maskEncryptedRows(systemConfigs);
+    return resolveAppDetailsAuthorsService(maskEncryptedRows(systemConfigs), canViewAuthors);
 }
 
 // ESAVI-SYSCONF-002B - Get All System Configs Service (including inactive) - For Admin
 const getAllSystemConfigsService = async (
     filters: SystemConfigListFilters,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     // The twin of 002A without isActive in the where, with the same three filters, the same order and
     // the SAME masking: this listing is ADMIN and it does not decrypt either. Being able to see the
@@ -275,7 +278,7 @@ const getAllSystemConfigsService = async (
         limit,
         offset
     });
-    return maskEncryptedRows(systemConfigs);
+    return resolveAppDetailsAuthorsService(maskEncryptedRows(systemConfigs), canViewAuthors);
 }
 
 // The single read shape of the 003 and the 006: same row, same rules, two different doors.
@@ -299,7 +302,8 @@ const getSystemConfigByIdService = async (
     id: string,
     lang: string,
     includeInactive: boolean = false,
-    canDecrypt: boolean = false
+    canDecrypt: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const whereClause = includeInactive ? { systemConfigId: id } : { systemConfigId: id, isActive: true };
     // No include of the history: reading the change log is its own operation, the 007, and it is
@@ -316,7 +320,7 @@ const getSystemConfigByIdService = async (
         // vaccineWhodrug and diluentCatalog already carry
         throw new AppError(getMessage('systemConfig.notFound', lang), 404, 'SYSCONF_003_NOT_FOUND');
     }
-    return shapeSingleSystemConfig(systemConfig, canDecrypt);
+    return resolveAppDetailsAuthorsService(shapeSingleSystemConfig(systemConfig, canDecrypt), canViewAuthors);
 }
 
 // ESAVI-SYSCONF-006 - Get System Config by (code, scope) Service
@@ -329,7 +333,8 @@ const getSystemConfigByCodeService = async (
     rawScope: string | undefined,
     lang: string,
     includeInactive: boolean = false,
-    canDecrypt: boolean = false
+    canDecrypt: boolean = false,
+    canViewAuthors: boolean
 ) => {
     // BOTH normalized before searching, with the same function the 001 writes them with. Without this
     // the endpoint that exists to read by name would answer differently depending on the case the URL
@@ -355,7 +360,7 @@ const getSystemConfigByCodeService = async (
     }
     // The rules of inactive rows and of decryption are EXACTLY those of the 003 — same answer, another
     // door in — so the shaping is the same function and not a copy of it
-    return shapeSingleSystemConfig(systemConfig, canDecrypt);
+    return resolveAppDetailsAuthorsService(shapeSingleSystemConfig(systemConfig, canDecrypt), canViewAuthors);
 }
 
 // ESAVI-SYSCONF-004 - Update System Config Service
@@ -440,7 +445,7 @@ const updateSystemConfigService = async (
     // Nothing changed: no UPDATE, no updatedAt, no appDetails entry, no sysDetails event and no
     // history row. The row goes back as it is, with a 200
     if( Object.keys(objectToUpdate).length === 0 ) {
-        return shapeUpdatedSystemConfig(systemConfig, storedPlainValue);
+        return resolveAppDetailsAuthorsService(shapeUpdatedSystemConfig(systemConfig, storedPlainValue), canViewAuditAuthors(authUser));
     }
 
     // THE CENTRAL RULE OF THE 004: history is written if and only if 'value' is among the keys the
@@ -519,10 +524,10 @@ const updateSystemConfigService = async (
     // The resulting plain value: what the body brought when it changed, what was stored when it did
     // not. `newStoredValue` is the pre-encryption value in both cases, so no second decryption is
     // needed to answer
-    return shapeUpdatedSystemConfig(
+    return resolveAppDetailsAuthorsService(shapeUpdatedSystemConfig(
         updatedSystemConfig,
         valueChanged ? resultingValue : storedPlainValue
-    );
+    ), canViewAuditAuthors(authUser));
 }
 
 // ESAVI-SYSCONF-005A / ESAVI-SYSCONF-005B - Set System Config Activation Service
@@ -580,7 +585,8 @@ const getSystemConfigHistoryService = async (
     id: string,
     limit: number = DEFAULT_LIMIT,
     offset: number = DEFAULT_OFFSET,
-    lang: string
+    lang: string,
+    canViewAuthors: boolean
 ) => {
     // The existence of the PARENT is checked BEFORE querying the child, and that order is the whole
     // point: a non-existent id answering { count: 0, rows: [] } would read as "this configuration
@@ -614,7 +620,7 @@ const getSystemConfigHistoryService = async (
 
     const isEncrypted = systemConfig.isEncrypted === true;
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: history.count,
         rows: history.rows.map(row => {
             const plain = row.get({ plain: true }) as Record<string, unknown>;
@@ -637,7 +643,7 @@ const getSystemConfigHistoryService = async (
                     : null
             };
         })
-    };
+    }, canViewAuthors);
 }
 
 // ESAVI-SYSCONF-008 - Sync System Config Defaults Service
@@ -719,7 +725,7 @@ const syncSystemConfigDefaultsService = async (authUser: AuthUser | undefined, l
         await transaction.commit();
         // Without the full rows: what matters about a sync is what was missing, not the content of
         // what was already there
-        return { created, skipped };
+        return resolveAppDetailsAuthorsService({ created, skipped }, canViewAuditAuthors(authUser));
     } catch (error) {
         await transaction.rollback();
         throw error;

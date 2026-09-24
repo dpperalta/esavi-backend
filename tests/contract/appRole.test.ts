@@ -97,9 +97,10 @@ describe('appRole contract', () => {
         it('create writes one appDetails entry with the operation code', async () => {
             const response = await request(app).get(`/api/roles/${ roleId }`).set(authHeader('USER'));
 
+            // A USER reads the history without its authors (SPEC F59)
             expect(response.body.data.appDetails).toHaveLength(1);
             expect(response.body.data.appDetails[0]).toEqual(
-                expect.objectContaining({ method: 'ESAVI-APPROLE-001', user: getTestUser('ADMIN').userId })
+                expect.objectContaining({ method: 'ESAVI-APPROLE-001', user: null })
             );
         });
 

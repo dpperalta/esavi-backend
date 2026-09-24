@@ -1,12 +1,13 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EvaluationInstitution, HealthFacility, Investigation, InvestigationClinicalEvaluation } from '../models';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateEvaluationInstitutionInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The catalogType every evaluationInstitutionTypeItemId must belong to. The foreign key of the DDL
 // points at catalogItem without distinguishing the type, so this code is the only defence against an
@@ -450,7 +451,7 @@ const createEvaluationInstitutionService = async (
     // Re-read so the response carries the two masters and the sortOrder the trigger assigned, which
     // the create instance does not know
     const institution = await findInstitutionWithRelations(createdId, true);
-    return institution ? toEvaluationInstitutionResponse(institution) : null;
+    return resolveAppDetailsAuthorsService(institution ? toEvaluationInstitutionResponse(institution) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Evaluation Institutions By Investigation Service
@@ -476,7 +477,8 @@ const getEvaluationInstitutionsByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await findValidClinicalEvaluation(investigationId, '002A', lang, canViewInactive);
 
@@ -489,10 +491,10 @@ const getEvaluationInstitutionsByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: institutions.count,
         rows: institutions.rows.map(toEvaluationInstitutionResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Evaluation Institutions By Investigation Service - For Admin
@@ -512,7 +514,8 @@ const getAllEvaluationInstitutionsByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await findValidClinicalEvaluation(investigationId, '002B', lang, canViewInactive);
 
@@ -526,10 +529,10 @@ const getAllEvaluationInstitutionsByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: institutions.count,
         rows: institutions.rows.map(toEvaluationInstitutionResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Evaluation Institution By ID Service
@@ -552,7 +555,8 @@ const getAllEvaluationInstitutionsByInvestigationService = async (
 const getEvaluationInstitutionByIdService = async (
     id: string,
     lang: string,
-    canViewInactive: boolean = false
+    canViewInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const institution = await findInstitutionWithRelations(id, canViewInactive);
     if( !institution ) {
@@ -562,7 +566,7 @@ const getEvaluationInstitutionByIdService = async (
             'EVALINST_003_NOT_FOUND'
         );
     }
-    return toEvaluationInstitutionResponse(institution);
+    return resolveAppDetailsAuthorsService(toEvaluationInstitutionResponse(institution), canViewAuthors);
 }
 
 // Update Evaluation Institution Service
@@ -717,7 +721,7 @@ const updateEvaluationInstitutionService = async (
     // Re-read so the response carries the two masters with their nested fields and the two columns
     // decrypted, whether or not anything was written
     const updated = await findInstitutionWithRelations(id, true);
-    return updated ? toEvaluationInstitutionResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toEvaluationInstitutionResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-EVALINST-005B that is not a clean delegation, and the reason this entity

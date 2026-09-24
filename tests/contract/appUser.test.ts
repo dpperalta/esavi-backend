@@ -128,7 +128,8 @@ describe('appUser contract', () => {
 
             expect(response.body.data.appDetails).toHaveLength(1);
             expect(response.body.data.appDetails[0]).toEqual(
-                expect.objectContaining({ method: 'ESAVI-USER-001', user: getTestUser('ADMIN').userId })
+                // The stored userId is answered as the author's email (SPEC F59)
+                expect.objectContaining({ method: 'ESAVI-USER-001', user: getTestUser('ADMIN').email })
             );
         });
 

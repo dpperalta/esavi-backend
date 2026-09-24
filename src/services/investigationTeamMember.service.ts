@@ -3,10 +3,11 @@ import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationTeamMember } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
-import { AppError, buildDifferentialUpdate, getMessage, normalizeName } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, normalizeName, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationTeamMemberInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The order of the three listings, and there is no createdAt DESC here: sortOrder is what the
 // domain orders the investigating team by, and the whole reason the column exists. createdAt is
@@ -256,7 +257,7 @@ const createInvestigationTeamMemberService = async (
     // Re-read so the response carries the resolved investigation, its status and its case, and the
     // sortOrder the trigger assigned, which the create instance does not know
     const member = await findInvestigationTeamMemberWithRelations(created.investigationTeamMemberId, true);
-    return member ? toInvestigationTeamMemberResponse(member) : null;
+    return resolveAppDetailsAuthorsService(member ? toInvestigationTeamMemberResponse(member) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Investigation Team Members By Investigation Service
@@ -272,7 +273,8 @@ const getInvestigationTeamMembersByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertInvestigationIsVisible(investigationId, '002A', lang, canViewInactive);
 
@@ -285,10 +287,10 @@ const getInvestigationTeamMembersByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: members.count,
         rows: members.rows.map(toInvestigationTeamMemberResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Investigation Team Members By Investigation Service - For Admin
@@ -308,7 +310,8 @@ const getAllInvestigationTeamMembersByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertInvestigationIsVisible(investigationId, '002B', lang, canViewInactive);
 
@@ -322,10 +325,10 @@ const getAllInvestigationTeamMembersByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: members.count,
         rows: members.rows.map(toInvestigationTeamMemberResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Investigation Team Member By ID Service
@@ -341,7 +344,8 @@ const getAllInvestigationTeamMembersByInvestigationService = async (
 const getInvestigationTeamMemberByIdService = async (
     id: string,
     lang: string,
-    includeInactive: boolean = false
+    includeInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const member = await findInvestigationTeamMemberWithRelations(id, includeInactive);
     if( !member ) {
@@ -352,7 +356,7 @@ const getInvestigationTeamMemberByIdService = async (
         );
     }
 
-    return toInvestigationTeamMemberResponse(member);
+    return resolveAppDetailsAuthorsService(toInvestigationTeamMemberResponse(member), canViewAuthors);
 }
 
 // Get Investigation Team Members By Case Service
@@ -374,7 +378,8 @@ const getInvestigationTeamMembersByCaseIdService = async (
     lang: string,
     includeInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
@@ -409,10 +414,10 @@ const getInvestigationTeamMembersByCaseIdService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: members.count,
         rows: members.rows.map(toInvestigationTeamMemberResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Update Investigation Team Member Service
@@ -483,7 +488,7 @@ const updateInvestigationTeamMemberService = async (
     // sysDetails.version bump that TRG_investigationTeamMember_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationTeamMemberWithRelations(id, true);
-        return unchanged ? toInvestigationTeamMemberResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationTeamMemberResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the generic
@@ -507,7 +512,7 @@ const updateInvestigationTeamMemberService = async (
     });
 
     const updated = await findInvestigationTeamMemberWithRelations(id, true);
-    return updated ? toInvestigationTeamMemberResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationTeamMemberResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // UQ_investigationTeamMember_parent_sortOrder is a partial unique index over

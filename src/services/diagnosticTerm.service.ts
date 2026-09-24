@@ -1,7 +1,7 @@
 import { CreationAttributes, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm } from '../models';
-import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseMeddraAscFile, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseMeddraAscFile, toConstantCase, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // 90 000 rows in batches of 1000 are 90 iterations of two queries. The batch is the unit of the
 // transaction, so it is also the unit of what survives a failure halfway through
@@ -90,11 +91,11 @@ const createDiagnosticTermService = async (data: CreateDiagnosticTermInput, auth
         isActive: data.isActive !== undefined ? data.isActive : true,
         appDetails: [newEntry]
     });
-    return newDiagnosticTerm;
+    return resolveAppDetailsAuthorsService(newDiagnosticTerm, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-DIAGTERM-002A - Get Active Diagnostic Terms Service
-const getActiveDiagnosticTermsService = async (filters: DiagnosticTermListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveDiagnosticTermsService = async (filters: DiagnosticTermListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const diagnosticTerms = await DiagnosticTerm.findAndCountAll({
         where: {
             ...buildDiagnosticTermWhere(filters),
@@ -106,11 +107,11 @@ const getActiveDiagnosticTermsService = async (filters: DiagnosticTermListFilter
         limit,
         offset
     });
-    return diagnosticTerms;
+    return resolveAppDetailsAuthorsService(diagnosticTerms, canViewAuthors);
 }
 
 // ESAVI-DIAGTERM-002B - Get All Diagnostic Terms Service (including inactive) - For Admin
-const getAllDiagnosticTermsService = async (filters: DiagnosticTermListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllDiagnosticTermsService = async (filters: DiagnosticTermListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const diagnosticTerms = await DiagnosticTerm.findAndCountAll({
         where: buildDiagnosticTermWhere(filters),
         // sysDetails is internal and never exposed by the API
@@ -119,11 +120,11 @@ const getAllDiagnosticTermsService = async (filters: DiagnosticTermListFilters, 
         limit,
         offset
     });
-    return diagnosticTerms;
+    return resolveAppDetailsAuthorsService(diagnosticTerms, canViewAuthors);
 }
 
 // ESAVI-DIAGTERM-003 - Get Diagnostic Term by ID Service
-const getDiagnosticTermByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getDiagnosticTermByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const whereClause = includeInactive ? { diagnosticTermId: id } : { diagnosticTermId: id, isActive: true };
     // No includes: the entity has no associations at all, so there is nothing to join
     const diagnosticTerm = await DiagnosticTerm.findOne({
@@ -134,7 +135,7 @@ const getDiagnosticTermByIdService = async (id: string, lang: string, includeIna
     if (!diagnosticTerm) {
         throw new AppError(getMessage('diagnosticTerm.notFound', lang), 404, 'DIAGTERM_003_NOT_FOUND');
     }
-    return diagnosticTerm;
+    return resolveAppDetailsAuthorsService(diagnosticTerm, canViewAuthors);
 }
 
 // ESAVI-DIAGTERM-004 - Update Diagnostic Term Service
@@ -199,7 +200,7 @@ const updateDiagnosticTermService = async (id: string, data: Partial<CreateDiagn
             ]
         }, { returning: true });
     }
-    return updatedDiagnosticTerm;
+    return resolveAppDetailsAuthorsService(updatedDiagnosticTerm, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-DIAGTERM-005A / ESAVI-DIAGTERM-005B - Set Diagnostic Term Activation Service

@@ -1,6 +1,6 @@
 ﻿import { NextFunction, Request, Response } from 'express';
 import { createGeoLevelTypeService, getActiveGeoLevelTypesService, getAllGeoLevelTypesService, getGeoLevelTypeByIdService, setGeoLevelTypeActivationService, updateGeoLevelTypeService } from '../services/geoLevelType.service'
-import { esaviLog, getMessage, canViewInactive, AppError } from '../helpers';
+import { esaviLog, getMessage, canViewInactive, AppError, canViewAuditAuthors } from '../helpers';
 import { CreateGeoLevelTypeInput, GeoLevelTypeListFilters } from '../types/geography/geoLevelType.types';
 
 // Unwraps the two query filters, identical in both listings
@@ -36,7 +36,7 @@ const getGeoLevelTypes = async(req: Request, res: Response, next: NextFunction):
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
         const filters = readListFilters(req.query);
-        const data = canViewInactive(req.user) ? await getAllGeoLevelTypesService( filters, limit,  offset ) : await getActiveGeoLevelTypesService( filters, limit,  offset );
+        const data = canViewInactive(req.user) ? await getAllGeoLevelTypesService( filters, limit,  offset, canViewAuditAuthors(req.user) ) : await getActiveGeoLevelTypesService( filters, limit,  offset, canViewAuditAuthors(req.user) );
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.getSuccessPlural', req.lang),
@@ -57,7 +57,7 @@ const getGeoLevelTypes = async(req: Request, res: Response, next: NextFunction):
 const getGeoLevelTypeById = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        const data = await getGeoLevelTypeByIdService(id, req.lang, canViewInactive(req.user));
+        const data = await getGeoLevelTypeByIdService(id, req.lang, canViewInactive(req.user), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLevelType.getSuccess', req.lang),

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { DiluentCatalogListFilters } from '../types';
 import {
     createDiluentCatalogService,
@@ -43,7 +43,7 @@ const getDiluentCatalogs = async (req: Request, res: Response, next: NextFunctio
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getActiveDiluentCatalogsService(readListFilters(req.query), limit, offset);
+        const data = await getActiveDiluentCatalogsService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('diluentCatalog.getSuccessPlural', req.lang),
@@ -66,7 +66,7 @@ const getAllDiluentCatalogs = async (req: Request, res: Response, next: NextFunc
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
         // The same single filter as the public listing: this variant adds none of its own
-        const data = await getAllDiluentCatalogsService(readListFilters(req.query), limit, offset);
+        const data = await getAllDiluentCatalogsService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('diluentCatalog.getSuccessPlural', req.lang),
@@ -90,7 +90,7 @@ const getDiluentCatalogById = async (req: Request, res: Response, next: NextFunc
         // canViewInactive is SUPERADMIN-only, so an ADMIN gets the same 404 as a USER even though the
         // 002B listing does show it inactive rows. The asymmetry is deliberate and is the same one
         // healthFacility, diagnosticTerm and vaccineWhodrug already have
-        const data = await getDiluentCatalogByIdService(id, req.lang, canViewInactive(req.user));
+        const data = await getDiluentCatalogByIdService(id, req.lang, canViewInactive(req.user), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('diluentCatalog.getSuccess', req.lang),

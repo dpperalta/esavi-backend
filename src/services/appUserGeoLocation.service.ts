@@ -1,13 +1,14 @@
 import { Op, QueryTypes } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppUser, AppUserGeoLocation, GeoLocation } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, canViewAuditAuthors } from '../helpers';
 import { esaviDecrypt } from '../helpers/crypto.helper';
 import { AppDetails, AuthUser, BulkAssignGeoLocationsInput, CreateAppUserGeoLocationInput, ReassignGeoLocationInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { MAX_GEO_SUBTREE_DEPTH } from './common/geoScope.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Shape of one row of the recursive CTE. Raw SQL is outside Sequelize's typing,
 // so the contract is declared here rather than inferred
@@ -113,7 +114,7 @@ const createAppUserGeoLocationService = async (data: CreateAppUserGeoLocationInp
             updatedAt: new Date(),
             appDetails: [...currentAppDetails, newEntry]
         });
-        return { assignment: existingAssignment, created: false };
+        return resolveAppDetailsAuthorsService<{ assignment: unknown; created: boolean }>({ assignment: existingAssignment, created: false }, canViewAuditAuthors(authUser));
     }
     const newAssignment = await AppUserGeoLocation.create({
         userId,
@@ -124,13 +125,13 @@ const createAppUserGeoLocationService = async (data: CreateAppUserGeoLocationInp
         isActive: data.isActive !== undefined ? data.isActive : true,
         appDetails: [newEntry]
     });
-    return { assignment: newAssignment, created: true };
+    return resolveAppDetailsAuthorsService<{ assignment: unknown; created: boolean }>({ assignment: newAssignment, created: true }, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-USERGEO-002A - Get App User Geo Locations By User Service
 // `current` defaults to true at the route: whoever reads the operational state of a user
 // should not be shown assignments that already expired
-const getAppUserGeoLocationsByUserService = async (userId: string, lang: string, current: boolean, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAppUserGeoLocationsByUserService = async (userId: string, lang: string, current: boolean, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     // The same user owns every row of this listing, so it is fetched and decrypted once
     // for the whole response rather than per row
     const user = await AppUser.findOne({
@@ -151,16 +152,16 @@ const getAppUserGeoLocationsByUserService = async (userId: string, lang: string,
         limit,
         offset
     });
-    return {
+    return resolveAppDetailsAuthorsService({
         count: assignments.count,
         user: toUserResponse(user),
         rows: assignments.rows.map(toAssignmentResponse)
-    };
+    }, canViewAuthors);
 }
 
 // ESAVI-USERGEO-002B - Get All App User Geo Locations By User Service - For Admin
 // Same listing without the isActive filter, and with `current` defaulting to false at the route
-const getAllAppUserGeoLocationsByUserService = async (userId: string, lang: string, current: boolean, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllAppUserGeoLocationsByUserService = async (userId: string, lang: string, current: boolean, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const user = await AppUser.findOne({
         where: { userId },
         attributes: USER_ATTRIBUTES
@@ -178,16 +179,16 @@ const getAllAppUserGeoLocationsByUserService = async (userId: string, lang: stri
         limit,
         offset
     });
-    return {
+    return resolveAppDetailsAuthorsService({
         count: assignments.count,
         user: toUserResponse(user),
         rows: assignments.rows.map(toAssignmentResponse)
-    };
+    }, canViewAuthors);
 }
 
 // ESAVI-USERGEO-003 - Get App User Geo Location By ID Service
 // Unlike the listings, a single row carries its own user: there is no repetition to avoid
-const getAppUserGeoLocationByIdService = async (id: string, lang: string, includeInactive: boolean) => {
+const getAppUserGeoLocationByIdService = async (id: string, lang: string, includeInactive: boolean, canViewAuthors: boolean) => {
     const assignment = await AppUserGeoLocation.findOne({
         where: {
             userGeoLocationId: id,
@@ -207,7 +208,7 @@ const getAppUserGeoLocationByIdService = async (id: string, lang: string, includ
     if (!assignment) {
         throw new AppError(getMessage('appUserGeoLocation.notFound', lang), 404, 'USERGEO_003_NOT_FOUND');
     }
-    return toAssignmentResponse(assignment);
+    return resolveAppDetailsAuthorsService(toAssignmentResponse(assignment), canViewAuthors);
 }
 
 // ESAVI-USERGEO-004 - Update App User Geo Location Service
@@ -244,7 +245,7 @@ const updateAppUserGeoLocationService = async (id: string, data: Partial<CreateA
     // Nothing changed: no UPDATE, no updatedAt and no audit entry. This also covers the empty
     // body, which used to need a shortcut of its own
     if (Object.keys(objectToUpdate).length === 0) {
-        return assignment;
+        return resolveAppDetailsAuthorsService(assignment, canViewAuditAuthors(authUser));
     }
     const newEntry: AppDetails = {
         createdAt: new Date(),
@@ -258,7 +259,7 @@ const updateAppUserGeoLocationService = async (id: string, data: Partial<CreateA
         updatedAt: new Date(),
         appDetails: [...currentAppDetails, newEntry]
     });
-    return assignment;
+    return resolveAppDetailsAuthorsService(assignment, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-USERGEO-005A / 005B - Setting App User Geo Location Active/Inactive Service
@@ -420,7 +421,7 @@ const reassignAppUserGeoLocationService = async (id: string, data: ReassignGeoLo
             }]
         }, { transaction });
         await transaction.commit();
-        return target;
+        return resolveAppDetailsAuthorsService(target, canViewAuditAuthors(authUser));
     } catch (error) {
         await transaction.rollback();
         throw error;
@@ -508,7 +509,7 @@ const bulkAssignGeoLocationsService = async (data: BulkAssignGeoLocationsInput, 
             }, { transaction }));
         }
         await transaction.commit();
-        return { count: rows.length, rows };
+        return resolveAppDetailsAuthorsService({ count: rows.length, rows }, canViewAuditAuthors(authUser));
     } catch (error) {
         await transaction.rollback();
         throw error;
@@ -519,7 +520,7 @@ const bulkAssignGeoLocationsService = async (data: BulkAssignGeoLocationsInput, 
 // The assignment stays one row and the inheritance is resolved on read. Expanding on write
 // would multiply the rows and go stale the moment a new child geoLocation is created.
 // Read-only: it never writes appDetails
-const resolveUserCoverageService = async (userId: string, lang: string) => {
+const resolveUserCoverageService = async (userId: string, lang: string, canViewAuthors: boolean) => {
     const user = await AppUser.findOne({
         where: { userId },
         attributes: ['userId']
@@ -562,7 +563,7 @@ const resolveUserCoverageService = async (userId: string, lang: string) => {
             type: QueryTypes.SELECT
         }
     );
-    return {
+    return resolveAppDetailsAuthorsService({
         assigned: coverage
             .filter(( row ) => row.isAssigned )
             .map(({ geoLocationId, name, level }) => ({ geoLocationId, name, level })),
@@ -570,7 +571,7 @@ const resolveUserCoverageService = async (userId: string, lang: string) => {
         coverage: coverage.map(({ geoLocationId, name, level, parentGeoLocationId }) =>
             ({ geoLocationId, name, level, parentGeoLocationId })),
         count: coverage.length
-    };
+    }, canViewAuthors);
 }
 
 export {

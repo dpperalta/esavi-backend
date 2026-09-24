@@ -1,7 +1,7 @@
 import { cast, col, CreationAttributes, fn, literal, Op, Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { VaccineWhodrug } from '../models';
-import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseWhodrugXlsxFile, WhodrugFileError } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, esaviLog, getMessage, parseWhodrugXlsxFile, WhodrugFileError, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -18,6 +18,7 @@ import {
 } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The real file is around 3000 rows, which is three batches. The size is the one the .asc importer
 // already uses: the batch is the unit of the transaction, so it is also the unit of what survives a
@@ -136,11 +137,11 @@ const createVaccineWhodrugService = async (data: CreateVaccineWhodrugInput, auth
         isActive: data.isActive !== undefined ? data.isActive : true,
         appDetails: [newEntry]
     });
-    return stripSysDetails(newVaccineWhodrug);
+    return resolveAppDetailsAuthorsService(stripSysDetails(newVaccineWhodrug), canViewAuditAuthors(authUser));
 }
 
 // ESAVI-WHODRUG-002A - Get Active Vaccine Whodrugs Service
-const getActiveVaccineWhodrugsService = async (filters: VaccineWhodrugListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveVaccineWhodrugsService = async (filters: VaccineWhodrugListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const vaccineWhodrugs = await VaccineWhodrug.findAndCountAll({
         where: {
             ...buildVaccineWhodrugWhere(filters),
@@ -152,11 +153,11 @@ const getActiveVaccineWhodrugsService = async (filters: VaccineWhodrugListFilter
         limit,
         offset
     });
-    return vaccineWhodrugs;
+    return resolveAppDetailsAuthorsService(vaccineWhodrugs, canViewAuthors);
 }
 
 // ESAVI-WHODRUG-002B - Get All Vaccine Whodrugs Service (including inactive) - For Admin
-const getAllVaccineWhodrugsService = async (filters: VaccineWhodrugListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllVaccineWhodrugsService = async (filters: VaccineWhodrugListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     // The twin of 002A without isActive in the where, and with no filter of its own: unlike
     // diagnosticTerm, this entity has no review queue to look into
     const vaccineWhodrugs = await VaccineWhodrug.findAndCountAll({
@@ -167,11 +168,11 @@ const getAllVaccineWhodrugsService = async (filters: VaccineWhodrugListFilters, 
         limit,
         offset
     });
-    return vaccineWhodrugs;
+    return resolveAppDetailsAuthorsService(vaccineWhodrugs, canViewAuthors);
 }
 
 // ESAVI-WHODRUG-003 - Get Vaccine Whodrug by ID Service
-const getVaccineWhodrugByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getVaccineWhodrugByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const whereClause = includeInactive ? { vaccineWhodrugId: id } : { vaccineWhodrugId: id, isActive: true };
     // No includes: the entity has no associations at all, so there is nothing to join
     const vaccineWhodrug = await VaccineWhodrug.findOne({
@@ -182,7 +183,7 @@ const getVaccineWhodrugByIdService = async (id: string, lang: string, includeIna
     if (!vaccineWhodrug) {
         throw new AppError(getMessage('vaccineWhodrug.notFound', lang), 404, 'WHODRUG_003_NOT_FOUND');
     }
-    return vaccineWhodrug;
+    return resolveAppDetailsAuthorsService(vaccineWhodrug, canViewAuthors);
 }
 
 // How every nullable text column enters `candidates`: null empties the column and undefined means
@@ -275,7 +276,7 @@ const updateVaccineWhodrugService = async (id: string, data: Partial<CreateVacci
             ]
         }, { returning: true });
     }
-    return stripSysDetails(updatedVaccineWhodrug);
+    return resolveAppDetailsAuthorsService(stripSysDetails(updatedVaccineWhodrug), canViewAuditAuthors(authUser));
 }
 
 // ESAVI-WHODRUG-005A / ESAVI-WHODRUG-005B - Set Vaccine Whodrug Activation Service
@@ -640,24 +641,24 @@ const getTreeLevelOptions = async (
 // operation code requires. A single service parameterized by level would collapse them into one
 
 // ESAVI-WHODRUG-006A - Get WHODrug Abbreviations Service
-const getWhodrugAbbreviationsService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
-    getTreeLevelOptions('abbreviation', filters, lang);
+const getWhodrugAbbreviationsService = async (filters: VaccineWhodrugTreeFilters, lang: string, canViewAuthors: boolean) =>
+    resolveAppDetailsAuthorsService(getTreeLevelOptions('abbreviation', filters, lang), canViewAuthors);
 
 // ESAVI-WHODRUG-006B - Get WHODrug Drug Names Service
-const getWhodrugDrugNamesService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
-    getTreeLevelOptions('drugName', filters, lang);
+const getWhodrugDrugNamesService = async (filters: VaccineWhodrugTreeFilters, lang: string, canViewAuthors: boolean) =>
+    resolveAppDetailsAuthorsService(getTreeLevelOptions('drugName', filters, lang), canViewAuthors);
 
 // ESAVI-WHODRUG-006C - Get WHODrug MA Holders Service
-const getWhodrugMaHoldersService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
-    getTreeLevelOptions('maHolders', filters, lang);
+const getWhodrugMaHoldersService = async (filters: VaccineWhodrugTreeFilters, lang: string, canViewAuthors: boolean) =>
+    resolveAppDetailsAuthorsService(getTreeLevelOptions('maHolders', filters, lang), canViewAuthors);
 
 // ESAVI-WHODRUG-006D - Get WHODrug Forms Service
-const getWhodrugFormsService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
-    getTreeLevelOptions('formTranslations', filters, lang);
+const getWhodrugFormsService = async (filters: VaccineWhodrugTreeFilters, lang: string, canViewAuthors: boolean) =>
+    resolveAppDetailsAuthorsService(getTreeLevelOptions('formTranslations', filters, lang), canViewAuthors);
 
 // ESAVI-WHODRUG-006E - Get WHODrug Strengths Service
-const getWhodrugStrengthsService = async (filters: VaccineWhodrugTreeFilters, lang: string) =>
-    getTreeLevelOptions('strength', filters, lang);
+const getWhodrugStrengthsService = async (filters: VaccineWhodrugTreeFilters, lang: string, canViewAuthors: boolean) =>
+    resolveAppDetailsAuthorsService(getTreeLevelOptions('strength', filters, lang), canViewAuthors);
 
 export {
     createVaccineWhodrugService,

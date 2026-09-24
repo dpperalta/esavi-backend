@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, InvestigationListFilters } from '../types';
 import {
     createInvestigationService,
@@ -47,7 +47,7 @@ const getInvestigations = async (req: Request, res: Response, next: NextFunction
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getInvestigationsService(listFilters(req), limit, offset);
+        const data = await getInvestigationsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigation.getSuccessPlural', req.lang),
@@ -69,7 +69,7 @@ const getAllInvestigations = async (req: Request, res: Response, next: NextFunct
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllInvestigationsService(listFilters(req), limit, offset);
+        const data = await getAllInvestigationsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigation.getSuccessPlural', req.lang),
@@ -93,7 +93,8 @@ const getInvestigationById = async (req: Request, res: Response, next: NextFunct
         const data = await getInvestigationByIdService(
             id.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -118,7 +119,8 @@ const getInvestigationByCaseId = async (req: Request, res: Response, next: NextF
         const data = await getInvestigationByCaseIdService(
             caseId.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
