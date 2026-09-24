@@ -1,7 +1,7 @@
 import { QueryTypes } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Notification, NotificationPregnancy, Patient, SystemConfig } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { assertCaseIsOpen } from './caseWorkflow.service';
@@ -12,6 +12,7 @@ import {
     PREGNANCY_FEMALE_SEX_ITEM_CONFIG_CODE,
     PREGNANCY_FEMALE_SEX_ITEM_CONFIG_SCOPE
 } from '../constants/notification.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The shape systemConfig stores a UUID under: valueType 'string' keeps it as a plain JSON string in
 // the jsonb column, so what comes back from the driver is a JavaScript string and not an object
@@ -309,7 +310,7 @@ const createNotificationPregnancyService = async (
     // Re-read so the response carries what the database wrote — createdAt and the sysDetails the
     // trigger sealed — which the create instance does not know
     const notificationPregnancy = await NotificationPregnancy.findByPk(created.pregnancyId);
-    return notificationPregnancy ? toNotificationPregnancyResponse(notificationPregnancy) : null;
+    return resolveAppDetailsAuthorsService(notificationPregnancy ? toNotificationPregnancyResponse(notificationPregnancy) : null, canViewAuditAuthors(authUser));
 }
 
 // The read every operation entered by pregnancyId shares. The parent include is mandatory and not
@@ -335,7 +336,8 @@ const findNotificationPregnancy = async (id: string, includeInactive: boolean = 
 const getNotificationPregnancyByIdService = async (
     id: string,
     lang: string,
-    canViewInactive: boolean = false
+    canViewInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const notificationPregnancy = await findNotificationPregnancy(id, canViewInactive);
     if( !notificationPregnancy ) {
@@ -345,7 +347,7 @@ const getNotificationPregnancyByIdService = async (
             'NOTIFPRG_003_NOT_FOUND'
         );
     }
-    return toNotificationPregnancyResponse(notificationPregnancy);
+    return resolveAppDetailsAuthorsService(toNotificationPregnancyResponse(notificationPregnancy), canViewAuthors);
 }
 
 // The inherited visibility applied to the entry by notificationId, where the parent is not the
@@ -384,7 +386,8 @@ const assertNotificationIsVisible = async (
 const getNotificationPregnancyByNotificationService = async (
     notificationId: string,
     lang: string,
-    canViewInactive: boolean = false
+    canViewInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '006', lang, canViewInactive);
 
@@ -398,7 +401,7 @@ const getNotificationPregnancyByNotificationService = async (
             'NOTIFPRG_006_NOT_FOUND'
         );
     }
-    return toNotificationPregnancyResponse(notificationPregnancy);
+    return resolveAppDetailsAuthorsService(toNotificationPregnancyResponse(notificationPregnancy), canViewAuthors);
 }
 
 // Update Notification Pregnancy Service
@@ -510,7 +513,7 @@ const updateNotificationPregnancyService = async (
     }
 
     const updated = await findNotificationPregnancy(id, true);
-    return updated ? toNotificationPregnancyResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toNotificationPregnancyResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Set Notification Pregnancy Activation Service

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, InvestigationVaccinationContextListFilters } from '../types';
 import {
     createInvestigationVaccinationContextService,
@@ -44,7 +44,7 @@ const getInvestigationVaccinationContexts = async (req: Request, res: Response, 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getInvestigationVaccinationContextsService(listFilters(req), limit, offset);
+        const data = await getInvestigationVaccinationContextsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationVaccinationContext.getSuccessPlural', req.lang),
@@ -66,7 +66,7 @@ const getAllInvestigationVaccinationContexts = async (req: Request, res: Respons
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllInvestigationVaccinationContextsService(listFilters(req), limit, offset);
+        const data = await getAllInvestigationVaccinationContextsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationVaccinationContext.getSuccessPlural', req.lang),
@@ -92,7 +92,8 @@ const getInvestigationVaccinationContextById = async (req: Request, res: Respons
         const data = await getInvestigationVaccinationContextByIdService(
             id.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -119,7 +120,8 @@ const getInvestigationVaccinationContextByCaseId = async (req: Request, res: Res
         const data = await getInvestigationVaccinationContextByCaseIdService(
             caseId.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createInvestigationDiagnosticService,
@@ -44,7 +44,8 @@ const getInvestigationDiagnosticsByInvestigation = async (req: Request, res: Res
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -73,7 +74,8 @@ const getAllInvestigationDiagnosticsByInvestigation = async (req: Request, res: 
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -95,7 +97,7 @@ const getAllInvestigationDiagnosticsByInvestigation = async (req: Request, res: 
 const getInvestigationDiagnosticById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getInvestigationDiagnosticByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getInvestigationDiagnosticByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationDiagnostic.getSuccess', req.lang),
@@ -123,7 +125,8 @@ const getInvestigationDiagnosticsByCaseId = async (req: Request, res: Response, 
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

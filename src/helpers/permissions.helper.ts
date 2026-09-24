@@ -40,6 +40,12 @@ const canViewDashboards = ( authUser?: AuthUser ): boolean => {
     return hasAnyRole(authUser, [SUPERADMIN, ADMIN, ANALYTICS]);
 }
 
+// See who authored each audit entry. Same threshold as /api/users: below it, an email in
+// appDetails would expose another user's PII
+const canViewAuditAuthors = ( authUser?: AuthUser ): boolean => {
+    return hasAnyRole(authUser, [SUPERADMIN, ADMIN]);
+}
+
 // Can delete locations
 const canDeleteLocations = ( authUser?: AuthUser ): boolean => {
     return hasAnyRole(authUser, [SUPERADMIN]);
@@ -50,6 +56,7 @@ export {
     canManageUsers,
     canImportGeographyData,
     canViewDashboards,
+    canViewAuditAuthors,
     canDeleteLocations,
     isSuperAdmin,
     isAdmin

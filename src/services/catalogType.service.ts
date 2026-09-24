@@ -1,11 +1,12 @@
 import { Op } from 'sequelize';
 import { CatalogType } from '../models/catalogType.model';
 import { CatalogItem } from '../models/catalogItem.model';
-import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, toCodeFromInput, toCodeFromName, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, toCodeFromInput, toCodeFromName, toTitleCase, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CatalogTypeListFilters, CreateCatalogTypeInput } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // varchar(100) of catalogType.code against varchar(200) of catalogType.name. A legal name can mint
 // an illegal code, and that has to end in a 400 and not in the 500 the column would raise
@@ -65,7 +66,7 @@ const createCatalogTypeService = async (data: CreateCatalogTypeInput, authUser: 
         sortOrder: data.sortOrder || 0,
         appDetails: [newEntry]
     });
-    return newCatalogType;
+    return resolveAppDetailsAuthorsService(newCatalogType, canViewAuditAuthors(authUser));
 }
 
 // Shared by both listings. name and code are the canonical parameters (SPEC F52), joined with
@@ -83,7 +84,7 @@ const buildCatalogTypeWhere = (filters: CatalogTypeListFilters): Record<string, 
 }
 
 // ESAVI-CATTYPE-002A - Get Catalog Types Service
-const getActiveCatalogTypesService = async (filters: CatalogTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveCatalogTypesService = async (filters: CatalogTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const catalogTypes = await CatalogType.findAndCountAll({
         where: {
             ...buildCatalogTypeWhere(filters),
@@ -95,11 +96,11 @@ const getActiveCatalogTypesService = async (filters: CatalogTypeListFilters = {}
         limit,
         offset
     });
-    return catalogTypes;
+    return resolveAppDetailsAuthorsService(catalogTypes, canViewAuthors);
 }
 
 // ESAVI-CATTYPE-002B - Get All Catalog Types Service (including inactive) - For SuperAdmin
-const getAllCatalogTypesService = async (filters: CatalogTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllCatalogTypesService = async (filters: CatalogTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const catalogTypes = await CatalogType.findAndCountAll({
         where: buildCatalogTypeWhere(filters),
         // sysDetails is internal and never exposed by the API
@@ -111,11 +112,11 @@ const getAllCatalogTypesService = async (filters: CatalogTypeListFilters = {}, l
         limit,
         offset
     });
-    return catalogTypes;
+    return resolveAppDetailsAuthorsService(catalogTypes, canViewAuthors);
 }
 
 // ESAVI-CATTYPE-003 - Get Catalog Type by ID Service
-const getCatalogTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
+const getCatalogTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false, canViewAuthors: boolean) => {
     const whereClause = isAdmin ? { catalogTypeId: id } : { catalogTypeId: id, isActive: true };
         const catalogType = await CatalogType.findOne({
             where: whereClause,
@@ -125,7 +126,7 @@ const getCatalogTypeByIdService = async (id: string, lang: string, isAdmin: bool
         if( !catalogType ) {
             throw new AppError(getMessage('catalogType.notFound', lang), 404, 'CATTYPE_003_NOT_FOUND');
         }
-        return catalogType;
+        return resolveAppDetailsAuthorsService(catalogType, canViewAuthors);
 }
 
 // ESAVI-CATTYPE-004 - Update Catalog Type Service - For SuperAdmin
@@ -179,7 +180,7 @@ const updateCatalogTypeService = async (id: string, data: Partial<CreateCatalogT
             ]
         }, {returning: true});
     }
-    return updatedCatalogType;
+    return resolveAppDetailsAuthorsService(updatedCatalogType, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-CATTYPE-005A / 005B - Setting Catalog Type Active/Inactive Service - For SuperAdmin

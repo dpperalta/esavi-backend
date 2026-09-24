@@ -1,5 +1,5 @@
 ﻿import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage, canViewInactive } from '../helpers';
+import { AppError, esaviLog, getMessage, canViewInactive, canViewAuditAuthors } from '../helpers';
 import { createGeoLocationService, generateGeoTemplateService, getAllGeoLocationsService, getActiveGeoLocationsService, getGeoLocationByIdService, updateGeoLocationService, setGeoLocationActivationService } from '../services/geoLocation.service';
 import { GenerateGeoTemplateInput, ImportGeoDataInput } from '../types';
 import { importGeoDataService } from '../services/geoImport.service';
@@ -36,8 +36,8 @@ const getGeoLocations = async(req: Request, res: Response, next: NextFunction): 
     const code = req.query.code ? (req.query.code as string).trim() : undefined;
     try {
         const data = canViewInactive(req.user)
-            ? await getAllGeoLocationsService( geoLevelId, parentId, name, code, limit,  offset )
-            : await getActiveGeoLocationsService( geoLevelId, parentId, name, code, limit,  offset );
+            ? await getAllGeoLocationsService( geoLevelId, parentId, name, code, limit,  offset, canViewAuditAuthors(req.user) )
+            : await getActiveGeoLocationsService( geoLevelId, parentId, name, code, limit,  offset, canViewAuditAuthors(req.user) );
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLocation.getSuccessPlural', req.lang),
@@ -58,7 +58,7 @@ const getGeoLocations = async(req: Request, res: Response, next: NextFunction): 
 const getGeoLocationById = async(req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const id = (req.params.id).toString().trim();
-        const data = await getGeoLocationByIdService(id, req.lang, canViewInactive(req.user));
+        const data = await getGeoLocationByIdService(id, req.lang, canViewInactive(req.user), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('geoLocation.getSuccess', req.lang),

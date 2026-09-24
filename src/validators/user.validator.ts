@@ -21,6 +21,13 @@ export const userListValidator = [
         .withMessage('Offset must be a non-negative integer')
 ];
 
+// 250 and not 200: it is the cap createUserValidator already puts on email and username, and a
+// shorter one would make the longest email the 001 accepts unreachable by search
+export const userSearchValidator = [
+    query('q').trim().notEmpty().withMessage('Search query is required')
+        .isLength({ max: 250 }).withMessage('Search query must be at most 250 characters long')
+];
+
 // displayName is calculated from firstName and lastName, and isActive and
 // requiresPasswordChange are governed by the system. They are rejected instead of ignored
 // so the client knows the field has no effect.

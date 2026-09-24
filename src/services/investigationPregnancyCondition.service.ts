@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm, Investigation, InvestigationMedicalHistory, InvestigationPregnancyCondition } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, canViewAuditAuthors } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
@@ -9,6 +9,7 @@ import { AppDetails, AuthUser, CreateInvestigationPregnancyConditionInput } from
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -407,7 +408,7 @@ const createInvestigationPregnancyConditionService = async (
     // Re-read so the response carries the resolved master term and the sortOrder the trigger
     // assigned, which the create instance does not know
     const condition = await findConditionWithRelations(createdId, true);
-    return condition ? toInvestigationPregnancyConditionResponse(condition) : null;
+    return resolveAppDetailsAuthorsService(condition ? toInvestigationPregnancyConditionResponse(condition) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Investigation Pregnancy Conditions By Investigation Service
@@ -429,7 +430,8 @@ const getInvestigationPregnancyConditionsByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await findValidMedicalHistory(investigationId, '002A', lang, canViewInactive);
 
@@ -442,10 +444,10 @@ const getInvestigationPregnancyConditionsByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: conditions.count,
         rows: conditions.rows.map(toInvestigationPregnancyConditionResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Investigation Pregnancy Conditions By Investigation Service - For Admin
@@ -465,7 +467,8 @@ const getAllInvestigationPregnancyConditionsByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await findValidMedicalHistory(investigationId, '002B', lang, canViewInactive);
 
@@ -479,10 +482,10 @@ const getAllInvestigationPregnancyConditionsByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: conditions.count,
         rows: conditions.rows.map(toInvestigationPregnancyConditionResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Investigation Pregnancy Condition By ID Service
@@ -504,7 +507,8 @@ const getAllInvestigationPregnancyConditionsByInvestigationService = async (
 const getInvestigationPregnancyConditionByIdService = async (
     id: string,
     lang: string,
-    canViewInactive: boolean = false
+    canViewInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const condition = await findConditionWithRelations(id, canViewInactive);
     if( !condition ) {
@@ -514,7 +518,7 @@ const getInvestigationPregnancyConditionByIdService = async (
             'INVPREG_003_NOT_FOUND'
         );
     }
-    return toInvestigationPregnancyConditionResponse(condition);
+    return resolveAppDetailsAuthorsService(toInvestigationPregnancyConditionResponse(condition), canViewAuthors);
 }
 
 // Update Investigation Pregnancy Condition Service
@@ -664,7 +668,7 @@ const updateInvestigationPregnancyConditionService = async (
     // Re-read so the response carries the resolved master term with its six fields, whether or not
     // anything was written
     const updated = await findConditionWithRelations(id, true);
-    return updated ? toInvestigationPregnancyConditionResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationPregnancyConditionResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-INVPREG-005B that is not a clean delegation, and the reason this entity

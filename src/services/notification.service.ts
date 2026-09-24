@@ -1,12 +1,13 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Notification, NonSevereNotification, NotificationDiluent, NotificationEvent, NotificationMedicalHistory, NotificationMedication, NotificationPregnancy, NotificationPregnancyComplication, NotificationVaccine, SevereNotification } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateNotificationInput, NotificationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { advanceCaseWorkflowStageService, assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Code of the catalogType that groups the outcomes. Without this check any active catalogItem of
 // the system would enter as an outcome and the death rule would never fire for the right one.
@@ -244,7 +245,7 @@ const createNotificationService = async (data: CreateNotificationInput, authUser
 
     // Re-read so the response carries the resolved case and outcome, not their ids
     const createdNotification = await findNotificationWithRelations(newNotification.notificationId, true);
-    return createdNotification ? toNotificationResponse(createdNotification) : null;
+    return resolveAppDetailsAuthorsService(createdNotification ? toNotificationResponse(createdNotification) : null, canViewAuditAuthors(authUser));
 }
 
 // The four filters are accumulated with AND, and each one is optional and by equality. A filter
@@ -270,16 +271,17 @@ const buildListWhere = (filters: NotificationListFilters = {}): WhereOptions => 
 const getNotificationsService = async (
     filters: NotificationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
-    return await Notification.findAndCountAll({
+    return resolveAppDetailsAuthorsService(await Notification.findAndCountAll({
         where: { ...buildListWhere(filters), isActive: true },
         attributes: LIST_ATTRIBUTES,
         include: [CASE_INCLUDE, OUTCOME_INCLUDE],
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get All Notifications Service - For Admin
@@ -287,26 +289,27 @@ const getNotificationsService = async (
 const getAllNotificationsService = async (
     filters: NotificationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
-    return await Notification.findAndCountAll({
+    return resolveAppDetailsAuthorsService(await Notification.findAndCountAll({
         where: buildListWhere(filters),
         attributes: LIST_ATTRIBUTES,
         include: [CASE_INCLUDE, OUTCOME_INCLUDE],
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get Notification By ID Service
 // Code: ESAVI-NOTIFCN-003
-const getNotificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getNotificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const notification = await findNotificationWithRelations(id, canViewInactive);
     if( !notification ) {
         throw new AppError(getMessage('notification.notFound', lang), 404, 'NOTIFCN_003_NOT_FOUND');
     }
-    return toNotificationResponse(notification);
+    return resolveAppDetailsAuthorsService(toNotificationResponse(notification), canViewAuthors);
 }
 
 // Get Notification By Case ID Service
@@ -316,14 +319,14 @@ const getNotificationByIdService = async (id: string, lang: string, canViewInact
 // record in a collection would force unwrapping a one-element array on every screen.
 // The two 404 are deliberately distinct: a case that does not exist is a broken link, a case
 // without notification is a pending task, and the client acts differently on each
-const getNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+const getNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     await assertCaseIsValid(caseId, '006', lang);
 
     const notification = await findNotificationByCaseId(caseId, canViewInactive);
     if( !notification ) {
         throw new AppError(getMessage('notification.notFound', lang), 404, 'NOTIFCN_006_NOT_FOUND');
     }
-    return toNotificationResponse(notification);
+    return resolveAppDetailsAuthorsService(toNotificationResponse(notification), canViewAuthors);
 }
 
 // The value of an outcome already stored in the row, read without the active and catalog filters
@@ -416,7 +419,7 @@ const updateNotificationService = async (
     // sysDetails.version bump that TRG_notification_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findNotificationWithRelations(id, true);
-        return unchanged ? toNotificationResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toNotificationResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
@@ -440,7 +443,7 @@ const updateNotificationService = async (
     });
 
     const updatedNotification = await findNotificationWithRelations(id, true);
-    return updatedNotification ? toNotificationResponse(updatedNotification) : null;
+    return resolveAppDetailsAuthorsService(updatedNotification ? toNotificationResponse(updatedNotification) : null, canViewAuditAuthors(authUser));
 }
 
 // The severe detail joins the lifecycle of its header, in the same transaction the activation

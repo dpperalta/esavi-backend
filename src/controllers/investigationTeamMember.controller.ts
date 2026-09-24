@@ -1,5 +1,5 @@
 ﻿import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import {
     createInvestigationTeamMemberService,
     getAllInvestigationTeamMembersByInvestigationService,
@@ -44,7 +44,7 @@ const getInvestigationTeamMembersByInvestigation = async (req: Request, res: Res
     const id = (req.params.id).toString().trim();
     const { limit, offset } = pagination(req);
     try {
-        const data = await getInvestigationTeamMembersByInvestigationService(id, req.lang, canViewInactive(req.user), limit, offset);
+        const data = await getInvestigationTeamMembersByInvestigationService(id, req.lang, canViewInactive(req.user), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationTeamMember.getSuccessPlural', req.lang),
@@ -66,7 +66,7 @@ const getAllInvestigationTeamMembersByInvestigation = async (req: Request, res: 
     const id = (req.params.id).toString().trim();
     const { limit, offset } = pagination(req);
     try {
-        const data = await getAllInvestigationTeamMembersByInvestigationService(id, req.lang, canViewInactive(req.user), limit, offset);
+        const data = await getAllInvestigationTeamMembersByInvestigationService(id, req.lang, canViewInactive(req.user), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationTeamMember.getSuccessPlural', req.lang),
@@ -87,7 +87,7 @@ const getAllInvestigationTeamMembersByInvestigation = async (req: Request, res: 
 const getInvestigationTeamMemberById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getInvestigationTeamMemberByIdService(id, req.lang, canViewInactive(req.user));
+        const data = await getInvestigationTeamMemberByIdService(id, req.lang, canViewInactive(req.user), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationTeamMember.getSuccess', req.lang),
@@ -109,7 +109,7 @@ const getInvestigationTeamMembersByCaseId = async (req: Request, res: Response, 
     const caseId = (req.params.caseId).toString().trim();
     const { limit, offset } = pagination(req);
     try {
-        const data = await getInvestigationTeamMembersByCaseIdService(caseId, req.lang, canViewInactive(req.user), limit, offset);
+        const data = await getInvestigationTeamMembersByCaseIdService(caseId, req.lang, canViewInactive(req.user), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationTeamMember.getSuccessPlural', req.lang),

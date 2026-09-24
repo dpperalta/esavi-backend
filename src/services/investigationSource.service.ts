@@ -1,11 +1,12 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationSource } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationSourceInput, InvestigationSourceListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The investigation travels in every response: it is what governs the visibility of the source,
 // and hiding it would leave the client unable to explain why a record it read yesterday now
@@ -249,7 +250,7 @@ const createInvestigationSourceService = async (
     // Re-read so the response carries the resolved investigation, its status and its case, not
     // just the raw identifier
     const created = await findInvestigationSourceWithRelations(data.investigationId, true);
-    return created ? toInvestigationSourceResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toInvestigationSourceResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // The order of the two listings. createdAt is the only chronological column every row carries, and
@@ -293,7 +294,8 @@ const listInclude = (filters: InvestigationSourceListFilters, includeInactive: b
 const getInvestigationSourcesService = async (
     filters: InvestigationSourceListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationSource.findAndCountAll({
         where: buildListWhere(filters),
@@ -306,7 +308,7 @@ const getInvestigationSourcesService = async (
     // The rows carry the same full shape as the 003: there is no reduced shape. The entity has ten
     // data columns and eight of them are the answer itself, so trimming them would leave a listing
     // with no content
-    return { count, rows: rows.map(toInvestigationSourceResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationSourceResponse) }, canViewAuthors);
 }
 
 // Get All Investigation Sources Service - For Admin
@@ -314,7 +316,8 @@ const getInvestigationSourcesService = async (
 const getAllInvestigationSourcesService = async (
     filters: InvestigationSourceListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationSource.findAndCountAll({
         where: buildListWhere(filters),
@@ -324,7 +327,7 @@ const getAllInvestigationSourcesService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toInvestigationSourceResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationSourceResponse) }, canViewAuthors);
 }
 
 // Get Investigation Source By ID Service
@@ -337,12 +340,12 @@ const getAllInvestigationSourcesService = async (
 // a USER that a source exists under an investigation it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // investigation, which is what makes it possible to consult it before purging it
-const getInvestigationSourceByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationSourceByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const investigationSource = await findInvestigationSourceWithRelations(id, includeInactive);
     if( !investigationSource ) {
         throw new AppError(getMessage('investigationSource.notFound', lang), 404, 'INVSRC_003_NOT_FOUND');
     }
-    return toInvestigationSourceResponse(investigationSource);
+    return resolveAppDetailsAuthorsService(toInvestigationSourceResponse(investigationSource), canViewAuthors);
 }
 
 // Get Investigation Source By Case ID Service
@@ -356,7 +359,7 @@ const getInvestigationSourceByIdService = async (id: string, lang: string, inclu
 // know which link of the chain broke — whether the case is not there, whether it has no visible
 // investigation, or whether the investigation has no sources recorded yet. Those are three
 // different actions on the user's side, and one generic message would make them indistinguishable
-const getInvestigationSourceByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationSourceByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -379,7 +382,7 @@ const getInvestigationSourceByCaseIdService = async (caseId: string, lang: strin
     if( !investigationSource ) {
         throw new AppError(getMessage('investigationSource.notFound', lang), 404, 'INVSRC_006_NOT_FOUND');
     }
-    return toInvestigationSourceResponse(investigationSource);
+    return resolveAppDetailsAuthorsService(toInvestigationSourceResponse(investigationSource), canViewAuthors);
 }
 
 // Update Investigation Source Service
@@ -463,7 +466,7 @@ const updateInvestigationSourceService = async (
     // sysDetails.version bump that TRG_investigationSource_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationSourceWithRelations(id, true);
-        return unchanged ? toInvestigationSourceResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationSourceResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
@@ -487,7 +490,7 @@ const updateInvestigationSourceService = async (
     });
 
     const updated = await findInvestigationSourceWithRelations(id, true);
-    return updated ? toInvestigationSourceResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationSourceResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Investigation Source Service - For SuperAdmin

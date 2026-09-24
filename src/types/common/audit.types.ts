@@ -19,3 +19,7 @@ export interface AppDetails {
     method: string;
     detail: string;
 }
+
+// The stored `user` is a userId; the response carries the author's email, or null when the
+// reader may not see it or the author does not resolve
+export type AppDetailsResponse = Omit<AppDetails, 'user'> & { user: string | null };

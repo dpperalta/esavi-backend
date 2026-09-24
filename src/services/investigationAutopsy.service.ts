@@ -1,11 +1,12 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, EsaviCase, Investigation, InvestigationAutopsy } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage, toTimeString } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage, toTimeString, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationAutopsyInput, InvestigationAutopsyListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The investigation travels in every response: it is what governs the visibility of the autopsy,
 // and hiding it would leave the client unable to explain why a record it read yesterday now
@@ -257,7 +258,7 @@ const createInvestigationAutopsyService = async (
     // Re-read so the response carries the resolved investigation, its status and its case, not
     // just the raw identifier
     const created = await findInvestigationAutopsyWithRelations(data.investigationId, true);
-    return created ? toInvestigationAutopsyResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toInvestigationAutopsyResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // The order of the two listings, and it departs from the createdAt DESC of F29 on purpose:
@@ -303,7 +304,8 @@ const listInclude = (filters: InvestigationAutopsyListFilters, includeInactive: 
 const getInvestigationAutopsiesService = async (
     filters: InvestigationAutopsyListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationAutopsy.findAndCountAll({
         where: buildListWhere(filters),
@@ -315,7 +317,7 @@ const getInvestigationAutopsiesService = async (
     });
     // The rows carry the same full shape as the 003: there is no reduced shape. The entity has nine
     // data columns and trimming them would leave a listing with no content
-    return { count, rows: rows.map(toInvestigationAutopsyResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationAutopsyResponse) }, canViewAuthors);
 }
 
 // Get All Investigation Autopsies Service - For Admin
@@ -323,7 +325,8 @@ const getInvestigationAutopsiesService = async (
 const getAllInvestigationAutopsiesService = async (
     filters: InvestigationAutopsyListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationAutopsy.findAndCountAll({
         where: buildListWhere(filters),
@@ -333,7 +336,7 @@ const getAllInvestigationAutopsiesService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toInvestigationAutopsyResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationAutopsyResponse) }, canViewAuthors);
 }
 
 // Get Investigation Autopsy By ID Service
@@ -346,12 +349,12 @@ const getAllInvestigationAutopsiesService = async (
 // a USER that an autopsy exists under an investigation it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // investigation, which is what makes it possible to consult it before purging it
-const getInvestigationAutopsyByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationAutopsyByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const investigationAutopsy = await findInvestigationAutopsyWithRelations(id, includeInactive);
     if( !investigationAutopsy ) {
         throw new AppError(getMessage('investigationAutopsy.notFound', lang), 404, 'INVAUT_003_NOT_FOUND');
     }
-    return toInvestigationAutopsyResponse(investigationAutopsy);
+    return resolveAppDetailsAuthorsService(toInvestigationAutopsyResponse(investigationAutopsy), canViewAuthors);
 }
 
 // Get Investigation Autopsy By Case ID Service
@@ -365,7 +368,7 @@ const getInvestigationAutopsyByIdService = async (id: string, lang: string, incl
 // know which link of the chain broke — whether the case is not there, whether it has no visible
 // investigation, or whether the investigation has no autopsy recorded yet. Those are three
 // different actions on the user's side, and one generic message would make them indistinguishable
-const getInvestigationAutopsyByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationAutopsyByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -388,7 +391,7 @@ const getInvestigationAutopsyByCaseIdService = async (caseId: string, lang: stri
     if( !investigationAutopsy ) {
         throw new AppError(getMessage('investigationAutopsy.notFound', lang), 404, 'INVAUT_006_NOT_FOUND');
     }
-    return toInvestigationAutopsyResponse(investigationAutopsy);
+    return resolveAppDetailsAuthorsService(toInvestigationAutopsyResponse(investigationAutopsy), canViewAuthors);
 }
 
 // Rules 2 and 3 in their update variant, evaluated over the RESULTING state and not over the body:
@@ -525,7 +528,7 @@ const updateInvestigationAutopsyService = async (
     // sysDetails.version bump that TRG_investigationAutopsy_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationAutopsyWithRelations(id, true);
-        return unchanged ? toInvestigationAutopsyResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationAutopsyResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
@@ -549,7 +552,7 @@ const updateInvestigationAutopsyService = async (
     });
 
     const updated = await findInvestigationAutopsyWithRelations(id, true);
-    return updated ? toInvestigationAutopsyResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationAutopsyResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Investigation Autopsy Service - For SuperAdmin

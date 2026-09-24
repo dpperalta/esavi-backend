@@ -1,5 +1,5 @@
 ﻿import { Request, Response, NextFunction } from 'express';
-import { AppError, esaviLog, getMessage, canViewInactive } from '../helpers';
+import { AppError, esaviLog, getMessage, canViewInactive, canViewAuditAuthors } from '../helpers';
 import { CatalogTypeListFilters } from '../types';
 import { createCatalogTypeService, getActiveCatalogTypesService, getAllCatalogTypesService, getCatalogTypeByIdService, setCatalogTypeActivationService, updateCatalogTypeService } from '../services/catalogType.service';
 
@@ -36,7 +36,7 @@ const getCatalogTypes = async (req: Request, res: Response, next: NextFunction):
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
         const filters = readListFilters(req.query);
-        const data = canViewInactive(req.user) ? await getAllCatalogTypesService(filters, limit, offset) : await getActiveCatalogTypesService(filters, limit, offset);
+        const data = canViewInactive(req.user) ? await getAllCatalogTypesService(filters, limit, offset, canViewAuditAuthors(req.user)) : await getActiveCatalogTypesService(filters, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogType.getSuccessPlural', req.lang),
@@ -57,7 +57,7 @@ const getCatalogTypes = async (req: Request, res: Response, next: NextFunction):
 const getCatalogTypeById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
-        const data = await getCatalogTypeByIdService(id.toString(), req.lang, canViewInactive(req.user));
+        const data = await getCatalogTypeByIdService(id.toString(), req.lang, canViewInactive(req.user), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('catalogType.getSuccess', req.lang),

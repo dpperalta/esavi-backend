@@ -736,6 +736,35 @@ appDetails: [ ...currentAppDetails, { ... } ]
 
 Sobrescribir el array en vez de extenderlo destruye la trazabilidad. Fallback de usuario: `'undefined'`, uniforme.
 
+#### Lectura — el autor sale como email, nunca como UUID
+
+Lo **guardado** en `appDetails[].user` es el `userId`. Lo **respondido** no lo es nunca ([SPEC F59](./functional/specs/59-appdetails-author-email.md)):
+
+| Quién pide | `appDetails[].user` en la respuesta |
+|---|---|
+| ADMIN, SUPERADMIN (`canViewAuditAuthors`) | el email descifrado del autor, o `null` si no resuelve (`'undefined'`, `'unknown'`, UUID sin fila, email nulo) |
+| USER, ANALYTICS | `null`, sin consulta |
+
+La regla: **toda función de servicio cuyo resultado un controlador pone en la respuesta** pasa su valor de retorno por `resolveAppDetailsAuthorsService` (`src/services/common/appDetailsAuthors.service.ts`), en el `return` y **después del `commit`** si hay transacción. Hace como mucho una consulta por respuesta, por PK, y devuelve datos planos, no instancias.
+
+De dónde sale el permiso, con el precedente de `canViewInactive`:
+
+- **Lecturas**: último parámetro **requerido** `canViewAuthors: boolean`; el controlador pasa `canViewAuditAuthors(req.user)`. Requerido para que olvidarlo no compile.
+- **Escrituras**: ya reciben `authUser` y evalúan `canViewAuditAuthors(authUser)` dentro. Su firma no cambia.
+
+```ts
+// Lectura
+const getEntityByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
+    // ...
+    return resolveAppDetailsAuthorsService(entity, canViewAuthors);
+}
+
+// Escritura
+return resolveAppDetailsAuthorsService(newEntity, canViewAuditAuthors(authUser));
+```
+
+Un llamador interno que reutilice una lectura y no necesite autores pasa `false`: no consulta. Quien lea la forma del resultado la declara con el parámetro de tipo (`resolveAppDetailsAuthorsService<{ count: number; rows: unknown[] }>(...)`). Nada reescribe `appDetails` en un middleware ni en un controlador.
+
 ### Borrado lógico y activación
 
 Nunca se implementa a mano: se delega en `setEntityActiveStatusService` (`src/services/common/entityActivation.service.ts`).
@@ -945,9 +974,10 @@ El validador de update **no** repite el de id: se componen en la ruta.
 
 ```ts
 import { Op } from 'sequelize';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, canViewAuditAuthors, getMessage, toConstantCase, toTitleCase } from '../helpers';
 import { Entity } from '../models';
 import { AuthUser, CreateEntityInput } from '../types';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 
 const DEFAULT_LIMIT = process.env.ESAVI_APP_DEFAULT_LIMIT ? parseInt(process.env.ESAVI_APP_DEFAULT_LIMIT) : 10;
@@ -962,7 +992,7 @@ const createEntityService = async (data: CreateEntityInput, authUser?: AuthUser,
     if( existing ) {
         throw new AppError(getMessage('entity.codeExists', lang, { code }), 409, 'ENTITY_001_CODE_EXISTS');
     }
-    return await Entity.create({
+    const entity = await Entity.create({
         code,
         name: toTitleCase(data.name.trim()),
         description: data.description ? data.description.trim() : null,
@@ -974,38 +1004,41 @@ const createEntityService = async (data: CreateEntityInput, authUser?: AuthUser,
             detail: 'Entity created by service'
         }]
     });
+    return resolveAppDetailsAuthorsService(entity, canViewAuditAuthors(authUser));
 }
 
 // Get Active Entities Service
 // Code: ESAVI-ENTITY-002A
-const getActiveEntitiesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
-    return await Entity.findAndCountAll({
+const getActiveEntitiesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
+    const entities = await Entity.findAndCountAll({
         where: { isActive: true },
         order: [['sortOrder', 'ASC'], ['name', 'ASC']],
         limit,
         offset
     });
+    return resolveAppDetailsAuthorsService(entities, canViewAuthors);
 }
 
 // Get All Entities Service - For Admin
 // Code: ESAVI-ENTITY-002B
-const getAllEntitiesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
-    return await Entity.findAndCountAll({
+const getAllEntitiesService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
+    const entities = await Entity.findAndCountAll({
         order: [['sortOrder', 'ASC'], ['name', 'ASC']],
         limit,
         offset
     });
+    return resolveAppDetailsAuthorsService(entities, canViewAuthors);
 }
 
 // Get Entity By ID Service
 // Code: ESAVI-ENTITY-003
-const getEntityByIdService = async (id: string, lang: string = 'en', canViewInactive: boolean = false) => {
+const getEntityByIdService = async (id: string, lang: string = 'en', canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const where = canViewInactive ? { entityId: id } : { entityId: id, isActive: true };
     const entity = await Entity.findOne({ where });
     if( !entity ) {
         throw new AppError(getMessage('entity.notFound', lang), 404, 'ENTITY_003_NOT_FOUND');
     }
-    return entity;
+    return resolveAppDetailsAuthorsService(entity, canViewAuthors);
 }
 
 // Update Entity Service
@@ -1035,10 +1068,10 @@ const updateEntityService = async (id: string, data: Partial<CreateEntityInput>,
     });
     // Nothing changed: no UPDATE, no updatedAt, no audit entry and no sysDetails event
     if( Object.keys(objectToUpdate).length === 0 ) {
-        return entity;
+        return resolveAppDetailsAuthorsService(entity, canViewAuditAuthors(authUser));
     }
     const currentAppDetails = Array.isArray(entity.appDetails) ? entity.appDetails : [];
-    return await entity.update({
+    const updated = await entity.update({
         ...objectToUpdate,
         updatedAt: new Date(),
         appDetails: [
@@ -1051,6 +1084,7 @@ const updateEntityService = async (id: string, data: Partial<CreateEntityInput>,
             }
         ]
     }, { returning: true });
+    return resolveAppDetailsAuthorsService(updated, canViewAuditAuthors(authUser));
 }
 
 // Set Entity Activation Service
@@ -1086,7 +1120,7 @@ export {
 
 ```ts
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewAuditAuthors, canViewInactive, esaviLog, getMessage } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createEntityService,
@@ -1123,7 +1157,7 @@ const getEntities = async (req: Request, res: Response, next: NextFunction): Pro
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getActiveEntitiesService(limit, offset);
+        const data = await getActiveEntitiesService(limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('entity.getSuccessPlural', req.lang),
@@ -1144,7 +1178,7 @@ const getEntities = async (req: Request, res: Response, next: NextFunction): Pro
 const getEntityById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const { id } = req.params;
     try {
-        const data = await getEntityByIdService(id.toString().trim(), req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getEntityByIdService(id.toString().trim(), req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('entity.getSuccess', req.lang),
@@ -1300,6 +1334,7 @@ La ruta base va en **kebab-case plural**: `/catalog-items`, `/geo-level-types`, 
 - [ ] El update es **diferencial y pasa por `buildDifferentialUpdate`**: solo viajan al `UPDATE` los campos cuyo valor normalizado difiere del guardado, y sin diferencias no hay escritura, ni entrada de auditoría, ni evento en `sysDetails`.
 - [ ] Si la escritura es sobre el contenido de un expediente (`esaviCase`, `notifier`, una cabecera de fase o un satélite de `notification` o `investigation`), el servicio invoca `assertCaseIsOpen` tras el 404 y antes de FKs, unicidad y diff, y la ruta figura en `CLOSED_GUARD_RULES`.
 - [ ] Hay transacción si se hace más de una escritura dependiente.
+- [ ] Toda función de servicio cuyo resultado va a la respuesta lo pasa por `resolveAppDetailsAuthorsService`, después del `commit`; las lecturas reciben `canViewAuthors` como último parámetro requerido y el controlador le pasa `canViewAuditAuthors(req.user)`.
 - [ ] Las claves i18n existen en `es.json`, `en.json` **y** `nl.json`, y todas las referenciadas desde el código existen.
 - [ ] No queda código comentado.
 - [ ] `npm run build` pasa.

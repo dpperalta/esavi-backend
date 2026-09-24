@@ -1,9 +1,9 @@
 # SPEC F59 — Autor de auditoría por email en las respuestas
 
-> **Estado:** Borrador
+> **Estado:** Implementado (aprobado e implementado el 2026-09-23, con la visibilidad por rol de §6)
 > **Depende de:** SPEC 01 (roles y superficie expuesta), SPEC 04 (contrato de respuesta), SPEC 06 (`AppDetails` tipado), SPEC 07 (tooling y tests), SPEC F04 (`appUser` — `decryptPii` / `toUserResponse`, y la ausencia de `005C` sobre usuarios), SPEC F08 (borrado físico `005C`), SPEC F12 (precedente de spec transversal y del directorio `tests/unit/`)
 > **Fecha:** 2026-09-12
-> **Objetivo:** Que ninguna respuesta de la API exponga un UUID en `appDetails[].user`: la lectura sustituye el `userId` por el email descifrado del autor, con **una** consulta por respuesta y sin cambiar nada de lo que se escribe.
+> **Objetivo:** Que ninguna respuesta de la API exponga un UUID en `appDetails[].user`: la lectura sustituye el `userId` por el email descifrado del autor cuando quien pide es ADMIN o SUPERADMIN, y por `null` en cualquier otro caso, con **como mucho una** consulta por respuesta y sin cambiar nada de lo que se escribe.
 
 ---
 
@@ -28,10 +28,11 @@ El consumidor recibe así un identificador interno que no puede mostrar sin una 
 **Dentro:**
 
 - **Funciones puras** en `src/helpers/appDetailsAuthors.helper.ts`, exportadas por el barrel: `toPlainResponse`, `collectAppDetailsUserIds` y `applyAppDetailsAuthors`.
-- **Un servicio común** en `src/services/common/appDetailsAuthors.service.ts`: `resolveAppDetailsAuthorsService(data)`. Reúne los `userId`, hace **una** consulta a `AppUser`, descifra y sustituye.
+- **Un servicio común** en `src/services/common/appDetailsAuthors.service.ts`: `resolveAppDetailsAuthorsService(data, canViewAuthors)`. Reúne los `userId`, hace **una** consulta a `AppUser`, descifra y sustituye. Con `canViewAuthors = false` no consulta y deja todo `user` en `null`.
+- **Un predicado** `canViewAuditAuthors(authUser)` en `src/helpers/permissions.helper.ts`: verdadero para ADMIN y SUPERADMIN.
 - **Un tipo de respuesta** `AppDetailsResponse` en `audit.types.ts`, donde `user` es `string | null`. `AppDetails` (el tipo de escritura) no cambia.
-- **Aplicación en los 44 servicios** que devuelven al controlador datos con `appDetails` (inventario en §3.4): lecturas `002A`/`002B`/`003`/`006`, y también las respuestas de `001`, `004` y `005A`/`005B`, que devuelven la fila con su historial.
-- **Visibilidad uniforme:** todo rol que tenga acceso al endpoint recibe el email. No depende del rol.
+- **Aplicación en los servicios** que devuelven al controlador datos con `appDetails` (inventario en §3.4): lecturas `002A`/`002B`/`003`/`006`, y también las respuestas de `001` y `004` que devuelven la fila con su historial.
+- **Visibilidad por rol:** ADMIN y SUPERADMIN reciben el email del autor; USER y ANALYTICS reciben `null`. Nadie recibe el UUID.
 - **Autor no resoluble → `null`.**
 - **Suite unitaria** `tests/unit/appDetailsAuthors.test.ts` y **suite de contrato** `tests/contract/appDetailsAuthors.test.ts`.
 - **Actualización de `references/CONVENTIONS.md`** §Auditoría y de su checklist §15.
@@ -42,7 +43,6 @@ El consumidor recibe así un identificador interno que no puede mostrar sin una 
 - **Cambiar lo que se escribe en `appDetails`.** El `userId` sigue siendo el valor guardado.
 - **Normalizar los literales `'undefined'` / `'unknown'` en escritura**, o migrar filas existentes. El resultado de este spec es el mismo con cualquiera de los dos literales. Unificar `catalogType.service.ts:57` a `'undefined'` es otra deuda.
 - **`sysDetails`** y su `auditTrail.actor`. No se exponen en ninguna respuesta.
-- **Restringir por rol la visibilidad del email.** Se evaluó y se decidió que no (§6).
 - **Añadir o quitar `appDetails` de una respuesta.** Si hoy un listado lo excluye (`toUserListRow`), lo sigue excluyendo. Si hoy lo incluye, lo sigue incluyendo.
 - **Logs.** `esaviLog` y el volcado del `005C` siguen escribiendo lo que escriben hoy.
 - **Una capa de serialización general** para todas las respuestas.
@@ -86,9 +86,9 @@ export const applyAppDetailsAuthors = (plain: unknown, authors: Map<string, stri
 ```ts
 // Resolves the author of every audit entry in a response to the author's email.
 // One query per call, whatever the number of rows or entries
-export const resolveAppDetailsAuthorsService = async <T>(data: T): Promise<unknown> => {
+export const resolveAppDetailsAuthorsService = async <T>(data: T, canViewAuthors: boolean): Promise<unknown> => {
     const plain = toPlainResponse(data);
-    const userIds = collectAppDetailsUserIds(plain);
+    const userIds = canViewAuthors ? collectAppDetailsUserIds(plain) : [];
     const authors = new Map<string, string>();
     if( userIds.length > 0 ){
         const users = await AppUser.findAll({
@@ -113,10 +113,18 @@ export const resolveAppDetailsAuthorsService = async <T>(data: T): Promise<unkno
 5. **Todo `user` se reescribe.** UUID resuelto → email descifrado. UUID sin fila, fila con `email` nulo, `'undefined'`, `'unknown'` o cualquier otro literal → `null`. Tras la llamada no queda ningún valor guardado en crudo.
 6. **Si no hay UUID, no hay consulta.** Una respuesta sin `appDetails`, o solo con literales, cuesta cero consultas.
 7. **Las fechas se conservan.** `toPlainResponse` usa `instance.get({ plain: true })` y deja los `Date` como `Date`. La serialización a cadena la hace `res.json`, como hoy.
+8. **Sin permiso, todo `null` y ninguna consulta.** Con `canViewAuthors = false` el mapa queda vacío y la regla 5 deja cada `user` en `null`. El UUID tampoco sale: ocultar el email no puede reabrir la exposición que este spec cierra. Para USER, «oculto» y «no resoluble» se responden igual, a propósito.
 
 ### 3.4 Dónde se llama — inventario por servicio
 
 **La regla:** cada función de servicio exportada que un controlador pone en `data` pasa su valor de retorno por `resolveAppDetailsAuthorsService` **justo antes del `return`** y **después del `commit`** si hay transacción. La consulta de autores nunca va dentro de la transacción de escritura.
+
+**De dónde sale `canViewAuthors`.** El resolver vive en el servicio porque el controlador llama a **un** servicio (`CONVENTIONS.md` §2). El permiso sigue el precedente de `canViewInactive`:
+
+- **Lecturas** (`002A`/`002B`/`003`/`006`…): no reciben `authUser`. Reciben un parámetro **requerido** `canViewAuthors: boolean`, que el controlador calcula con `canViewAuditAuthors(req.user)`. Requerido, como `lang` en el SPEC 08: olvidarlo es un error de compilación y no una fuga silenciosa.
+- **Escrituras** (`001`/`004` que devuelven la fila): ya reciben `authUser`, y calculan `canViewAuditAuthors(authUser)` dentro. Su firma no cambia.
+
+No es autorización: la ruta sigue decidiendo quién entra. El predicado decide cómo se presenta un campo, igual que `canViewInactive` decide qué filas se ven.
 
 No hay servicios de lectura que otros servicios reutilicen: ningún servicio hace `await get*Service(...)` sobre otro. Por eso resolver en el `return` no cambia lo que recibe ningún llamador interno. El paso 5 lo vuelve a comprobar antes de migrar.
 
@@ -141,14 +149,29 @@ No hay servicios de lectura que otros servicios reutilicen: ningún servicio hac
 
 **`user.service.ts`.** `toUserResponse` sigue descifrando la PII propia de la fila. `resolveAppDetailsAuthorsService` se aplica aparte, sobre el resultado, porque los autores del historial de un usuario son **otros** usuarios.
 
+#### Resultado del paso 5 (2026-09-23): el inventario real
+
+La tabla de familias de arriba es la del borrador. Al contrastarla con el código se cambió el criterio de selección: en vez de decidir función por función si su retorno lleva `appDetails`, la regla es **uniforme**. Se resuelve **toda función de servicio cuyo resultado un controlador pone en la respuesta** (`data`, o los nombres propios `createdLocation`/`updatedLocation` y `{ assignment, created }`). Una función que no devuelve `appDetails` paga un recorrido sin consultas, y a cambio la regla se puede comprobar con un script, sin revisar cada caso a mano.
+
+- **Alcance:** 256 funciones en 45 archivos. Son 161 lecturas, que reciben `canViewAuthors`, y 95 escrituras (o lecturas que ya recibían `authUser`, como `getEsaviCasesService` y `getOwnProfileService`), que evalúan `canViewAuditAuthors(authUser)`. Frente al borrador entran `meddra`, `whodrugProduct` y `resolveUserCoverageService`.
+- **`005A`/`005B` no entran.** `CONVENTIONS.md` §10 establece que las operaciones de estado no devuelven `data`, y ningún controlador de activación o `purge` la pone. El borrador los incluía por error.
+- **Sí había reutilización interna.** `readSystemConfigValue` (`src/helpers/appConfig.helper.ts`) llama a `getSystemConfigByCodeService` y solo lee `row.value`: le pasa `canViewAuthors = false`, que no consulta. `createCaseWorkflowService` y `advanceCaseWorkflowStageService` solo se usan dentro de otros servicios, así que quedan fuera.
+- **`auth`, `appSession`, `appPasswordReset`, las importaciones y los `purge`** quedan fuera por la misma regla: sus controladores no ponen filas en `data`.
+- **Transacciones:** las 32 funciones que resuelven con transacción lo hacen después del `commit`. La rama «sin cambios» de `updateSystemConfigService` no abre transacción. La resolución queda dentro del mismo `try` que el `commit`, como la relectura con `findOne` que ya existía después del commit, así que no añade un modo de fallo nuevo.
+- **Tipo de retorno.** El resolver devuelve `Promise<R>`, con `R = unknown` por defecto: los datos son planos y ya no son instancias. Los cinco servicios cuyo llamador lee la forma del resultado la declaran (`patient` 006/007, `{ assignment, created }`, `meddra`, `whodrugProduct`).
+- **`getActiveGeoLocationsService` / `getAllGeoLocationsService`** pasan sus cuatro filtros de `?:` a `: string | undefined`, porque un parámetro requerido no puede ir detrás de uno opcional (TS1016). El controlador ya los pasaba todos.
+- **`toPlainResponse` copia.** Ver §3.5.
+
+La migración se hizo con un codemod sobre la API del compilador de TypeScript. En cada función del inventario envuelve los `return` de la función y no los de sus callbacks, añade el parámetro a las lecturas y el argumento en los controladores. Las transacciones se revisaron a mano después.
+
 ### 3.5 Coste
 
 | Recurso | Por respuesta |
 |---|---|
-| Consultas | **0** si no hay UUID; **1** en cualquier otro caso: `SELECT "userId", "email" FROM "appUser" WHERE "userId" IN (...)` por PK |
+| Consultas | **0** si no hay UUID o si quien pide no es ADMIN; **1** en cualquier otro caso: `SELECT "userId", "email" FROM "appUser" WHERE "userId" IN (...)` por PK |
 | Tamaño del `IN` | número de **autores distintos** de la respuesta, no de filas ni de entradas. Con `MAX_LIMIT = 100` (`src/constants/pagination.constants.ts`) está acotado incluso en el peor caso |
 | CPU | un `createDecipheriv` por autor distinto, del orden de microsegundos, más un recorrido lineal del objeto respondido |
-| Memoria | ninguna copia extra: `toPlainResponse` sustituye a la conversión que `res.json` ya hacía, y la sustitución es en el sitio |
+| Memoria | una copia del objeto respondido. **Corregido al implementar el paso 3:** el borrador decía «ninguna copia extra», pero `get({ plain: true })` devuelve el propio `dataValues` de la instancia, y reescribir `appDetails` en el sitio reescribía la instancia. `toPlainResponse` copia objetos y arrays planos a cualquier profundidad; la suite unitaria lo fija |
 | Payload | un email ocupa más o menos lo mismo que un UUID de 36 caracteres; `null` ocupa menos |
 
 ### 3.6 Contrato HTTP y claves i18n
@@ -177,7 +200,7 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
 
    *Verificación:* `collectAppDetailsUserIds({ appDetails: [{ user: 'undefined' }] })` devuelve `[]`.
 
-4. **Servicio común.** `src/services/common/appDetailsAuthors.service.ts` con `resolveAppDetailsAuthorsService`, según §3.3 (reglas 4 y 6).
+4. **Servicio común y predicado.** `src/services/common/appDetailsAuthors.service.ts` con `resolveAppDetailsAuthorsService`, según §3.3 (reglas 4, 6 y 8). `canViewAuditAuthors` en `permissions.helper.ts`, verdadero para SUPERADMIN y ADMIN.
    *Verificación:* `npm run build` pasa.
 
 5. **Comprobación del inventario.** Antes de migrar, confirmar sobre el código tres cosas. Si alguna falla, se corrige §3.4 en este spec antes de seguir:
@@ -188,8 +211,9 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
    *Verificación:* §3.4 coincide con el código.
 
 6. **Entidad de referencia: `healthFacility`** y **suite de contrato** `tests/contract/appDetailsAuthors.test.ts`:
-   - `POST` como ADMIN; `GET /:id` como USER → `appDetails[0].user` es el email del usuario ADMIN del fixture, en claro;
-   - el listado da el mismo valor en `rows[*].appDetails[*].user`;
+   - `POST` como ADMIN; `GET /:id` como ADMIN → `appDetails[0].user` es el email del usuario ADMIN del fixture, en claro;
+   - `GET /:id` como USER sobre la misma fila → `appDetails[0].user` es `null`, y **ninguna** consulta sobre `"appUser"` además de la del `tokenValidation`;
+   - el listado como ADMIN da el email en `rows[*].appDetails[*].user`, y como USER `null`;
    - la respuesta del propio `POST` y la de un `PUT` con cambio real ya traen el email;
    - una fila con una entrada `'undefined'` insertada por SQL directo → `user: null` y 200, no 500;
    - **conteo de consultas:** con el `logging` de Sequelize interceptado durante la petición, un listado de N filas con varios autores ejecuta **exactamente una** consulta sobre `"appUser"` además de la del `tokenValidation`;
@@ -204,16 +228,16 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
    *Verificación:* `GET /api/users/:id` devuelve el email propio descifrado y los autores de `appDetails` como emails. `GET /api/users` sigue sin `appDetails`.
 
 9. **Paciente y caso** (6 archivos), incluidas las sub-entidades de `esaviCase` que viajan con `include`.
-   *Verificación:* `GET /api/esavi-cases/:id` como USER no contiene ningún UUID en ningún `appDetails[].user`, en ningún nivel.
+   *Verificación:* `GET /api/esavi-cases/:id` como USER y como ADMIN no contiene ningún UUID en ningún `appDetails[].user`, en ningún nivel.
 
 10. **Notificaciones e investigación** (23 archivos).
     *Verificación:* las suites de contrato de las dos familias pasan.
 
-11. **Barrido anti-UUID.** En `tests/contract/appDetailsAuthors.test.ts`, un recorrido recursivo `expectNoAuditUuids(body)` que falla si algún `appDetails[].user` casa con la expresión de UUID. Se aplica a un `003` y un `002A` por familia de §3.4, como USER cuando la ruta lo admite.
+11. **Barrido anti-UUID.** En `tests/contract/appDetailsAuthors.test.ts`, un recorrido recursivo `expectNoAuditUuids(body)` que falla si algún `appDetails[].user` casa con la expresión de UUID. Se aplica a un `003` y un `002A` por familia de §3.4, como ADMIN —el caso en que se consulta— y como USER cuando la ruta lo admite.
     *Verificación:* deshacer la llamada en cualquier servicio muestreado hace fallar su caso.
 
 12. **Documentación y cierre.**
-    - `references/CONVENTIONS.md` §Auditoría: nueva subsección **«Lectura»** con la regla de §3.4 (resolver antes del `return` y después del `commit`) y el significado de `null`.
+    - `references/CONVENTIONS.md` §Auditoría: nueva subsección **«Lectura»** con la regla de §3.4 (resolver antes del `return` y después del `commit`), el origen de `canViewAuthors` y el significado de `null`.
     - Línea nueva en el checklist §15: *«Toda función que devuelve filas con `appDetails` pasa su resultado por `resolveAppDetailsAuthorsService`»*.
     - `references/TECHNICAL_DEBT.md`: DEUDA-045 marcada ✅, con dos notas: el caso «usuario purgado» no existe, y la «decisión pendiente» se resolvió a `null`. Fila `F59 → 045` en el mapa de resolución.
 
@@ -226,18 +250,18 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
 **Comportamiento:**
 
 - [ ] Ninguna respuesta de la API contiene un UUID en `appDetails[].user`, en ningún nivel de anidamiento.
-- [ ] Un `appDetails[].user` cuyo `userId` existe en `appUser` con email se responde como ese email **descifrado**.
-- [ ] El mismo valor llega a todos los roles con acceso al endpoint: USER, ADMIN y SUPERADMIN ven lo mismo.
+- [ ] Para ADMIN y SUPERADMIN, un `appDetails[].user` cuyo `userId` existe en `appUser` con email se responde como ese email **descifrado**.
+- [ ] Para USER y ANALYTICS, todo `appDetails[].user` se responde como `null`, y la petición no ejecuta la consulta de resolución.
 - [ ] Un autor de un usuario **desactivado** se resuelve igual que el de uno activo.
 - [ ] `'undefined'`, `'unknown'`, un UUID sin fila y un usuario con `email` nulo se responden como `null`.
 - [ ] Un registro con una entrada `'undefined'` responde **200**, no 500.
-- [ ] Las respuestas de `001`, `004` y `005A`/`005B` que devuelven la fila traen ya los emails.
+- [ ] Las respuestas de `001` y `004` que devuelven la fila traen ya los emails cuando quien escribe es ADMIN.
 - [ ] El orden, la longitud, `createdAt`, `method` y `detail` de cada `appDetails` no cambian.
 
 **Coste:**
 
 - [ ] Un `002A` de N filas ejecuta **una** consulta sobre `"appUser"` para resolver autores, no N.
-- [ ] Una respuesta sin UUID en `appDetails` no ejecuta ninguna consulta de resolución.
+- [ ] Una respuesta sin UUID en `appDetails`, o pedida por USER o ANALYTICS, no ejecuta ninguna consulta de resolución.
 - [ ] La consulta de resolución nunca corre dentro de una transacción de escritura.
 
 **La escritura no cambia:**
@@ -250,7 +274,9 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
 
 - [ ] `src/helpers/appDetailsAuthors.helper.ts` existe, lo exporta el barrel y no importa ningún modelo.
 - [ ] `src/services/common/appDetailsAuthors.service.ts` existe y es el único sitio nuevo que consulta `AppUser` para esto.
-- [ ] `grep -rln "resolveAppDetailsAuthorsService" src/services/ | wc -l` devuelve **45**: los 44 servicios más su propia definición.
+- [ ] `grep -rln "resolveAppDetailsAuthorsService" src/services/ | wc -l` devuelve el número de servicios del inventario de §3.4, confirmado en el paso 5, más su propia definición.
+- [ ] `canViewAuditAuthors` existe en `permissions.helper.ts` y es el único criterio de visibilidad: ningún servicio decide el permiso con otro predicado.
+- [ ] `canViewAuthors` es un parámetro **requerido** en las lecturas: omitirlo no compila.
 - [ ] Ningún middleware ni controlador reescribe `appDetails`.
 - [ ] `AppDetails` (escritura) no cambia; `AppDetailsResponse` existe.
 
@@ -277,8 +303,11 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
 - **Sí: resolver en la lectura.** Lo guardado sigue siendo el `userId`: estable, sin PII y válido para todas las filas ya escritas. El email se deriva al responder.
 - **No: guardar el email al escribir.** Dejaría PII sin cifrar para siempre en un JSONB acumulativo de todas las tablas, supone unos 146 puntos de escritura y no arregla nada de lo ya escrito. Guardarlo cifrado obligaría igualmente a descifrar al leer, así que no ahorra nada.
 - **Sí: sustituir `user` en lugar de añadir un `userEmail` al lado.** El objetivo de DEUDA-045 es que la respuesta no exponga el UUID. Añadir un campo mantendría la exposición.
-- **Sí: email visible para todos los roles con acceso al endpoint.** Es decisión expresa del producto: el consumidor necesita saber quién hizo cada cambio en cualquier pantalla. Queda anotado que **amplía la exposición de PII**: hoy un USER no puede leer el email de otro usuario, porque `/api/users` es ADMIN. Ver §7.
-- **No: ocultar el autor a USER.** Obligaría a pasar `authUser` al servicio común y bifurcaría el contrato por rol, con dos formas de la misma respuesta.
+- **Sí: email visible solo para ADMIN y SUPERADMIN.** Decisión de producto del 2026-09-23, al aprobar el spec, que invierte la del borrador. Hoy un USER no puede leer el email de otro usuario, porque `/api/users` es ADMIN; darle el email por `appDetails` abriría esa PII por una puerta lateral. El umbral coincide con el de `/api/users`, así que la resolución no amplía lo que cada rol ya puede ver.
+- **No (borrador): email visible para todos los roles.** Se descartó por la ampliación de PII anterior. El argumento del borrador —que bifurca el contrato por rol— se acepta como coste: la **forma** de la respuesta no se bifurca, solo el valor, que ya es `string | null`.
+- **Sí: USER recibe `null`, no el UUID.** Devolverle el UUID cuando no puede ver el email reabriría la exposición que cierra DEUDA-045.
+- **Sí: el permiso llega como booleano, no como `authUser`.** Es el precedente de `canViewInactive`: el controlador evalúa el predicado sobre `req.user` y el servicio de lectura recibe el resultado. Las escrituras, que ya reciben `authUser`, lo evalúan dentro.
+- **No: resolver en el controlador.** Ahorraría tocar las firmas de los servicios, pero el controlador llama a **un** servicio (`CONVENTIONS.md` §2).
 - **Sí: `null` para lo no resoluble.** No expone nada, no añade claves i18n y deja al cliente decidir cómo pintarlo. Un literal traducido («Sistema») afirmaría un origen que el dato no garantiza, y devolver `'undefined'` es ruido.
 - **Sí: reconocer por el nombre de la clave `appDetails`, no por la forma de la entrada.** Evita reescribir otro JSONB que coincida por casualidad, que era la objeción al middleware.
 - **No: middleware sobre `res.json`.** Descartado en DEUDA-045 y se mantiene: sería la única pieza que transforma respuestas sin que el servicio lo declare, y no puede hacer una consulta por respuesta sin saltarse la separación controlador/servicio.
@@ -294,7 +323,8 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
 
 | Riesgo | Mitigación |
 |---|---|
-| **Exposición de PII ampliada:** un USER pasa a leer emails de otros usuarios, que hoy solo ve ADMIN | Decisión expresa (§6). Queda escrita en `CONVENTIONS.md` §Auditoría para que una revisión de seguridad la encuentre como decisión y no como fuga. Si se revierte, basta con dar un parámetro de rol al servicio común |
+| Un controlador pasa `canViewAuthors` a `true` a mano, o con el predicado equivocado, y un USER ve emails | Un solo predicado, `canViewAuditAuthors`, citado en `CONVENTIONS.md` §Auditoría. La suite de contrato fija el `null` para USER en la entidad de referencia y en el barrido del paso 11 |
+| Para USER, `null` no distingue «oculto» de «no resoluble» | Aceptado (§3.3, regla 8). El cliente no necesita distinguirlos: en ninguno de los dos casos puede mostrar un autor |
 | Un `'undefined'` llega al `IN` y la consulta falla con `22P02`: 500 en cualquier registro creado sin `authUser` | Regla 3 de §3.3, un caso unitario y un caso de contrato con la entrada insertada por SQL |
 | Un servicio nuevo, o uno olvidado, devuelve `appDetails` sin resolver y vuelve a exponer UUID | Línea en el checklist §15 y barrido anti-UUID del paso 11. El barrido es por muestreo, no exhaustivo: una ruta no muestreada puede escaparse. Queda anotado |
 | `toPlainResponse` cambia lo que un controlador recibe: de instancia a objeto plano | Los controladores solo pasan `data` a `res.json` y ningún servicio reutiliza la salida de otro (paso 5). Si algún controlador llama a un método de instancia, el `build` o su suite de contrato lo detectan en el paso de su familia |
@@ -308,7 +338,8 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
 
 | Respuesta | Antes | Después |
 |---|---|---|
-| `appDetails[].user` con autor existente | `"3f0c…-…"` (UUID) | `"ana@minsa.gob.ec"` |
+| `appDetails[].user` con autor existente, pedido por ADMIN/SUPERADMIN | `"3f0c…-…"` (UUID) | `"ana@minsa.gob.ec"` |
+| `appDetails[].user`, pedido por USER/ANALYTICS | `"3f0c…-…"` (UUID) | `null` |
 | `appDetails[].user` escrito sin `authUser` | `"undefined"` / `"unknown"` | `null` |
 | `appDetails[].user` de un usuario con `email` nulo | UUID | `null` |
 | Status codes | — | sin cambios |
@@ -323,7 +354,6 @@ Doce pasos. Cada uno se puede committear por separado y deja `npm run check` en 
 
 - Cambiar lo que se guarda en `appDetails` o migrar filas existentes.
 - Unificar el literal `'unknown'` de `catalogType.service.ts:57` con `'undefined'`.
-- Restringir por rol la visibilidad del email del autor.
 - Exponer o resolver `sysDetails.auditTrail`.
 - Excluir `appDetails` de listados donde hoy viaja.
 - Una capa de serialización general de respuestas.

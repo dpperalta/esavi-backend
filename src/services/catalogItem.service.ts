@@ -1,5 +1,5 @@
 import { CreationAttributes, Op, Transaction } from "sequelize";
-import { AppError, buildDifferentialUpdate, buildTextSearchConditions, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toConstantCase, toTitleCase } from "../helpers";
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, CatalogItemFileError, esaviLog, getMessage, parseCatalogItemsXlsxFile, toCodeFromInput, toCodeFromName, toConstantCase, toTitleCase, canViewAuditAuthors } from "../helpers";
 import { sequelize } from "../database/connection";
 import { CatalogItem, CatalogType } from "../models";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../types";
 import { setEntityActiveStatusService } from "./common/entityActivation.service";
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from "../constants/pagination.constants";
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // A configuration catalog is in the order of a couple of thousand items, which is two batches. The
 // size is the one the two importers before it already use: the batch is the unit of the transaction,
@@ -130,11 +131,11 @@ const createCatalogItemService = async (data: CreateCatalogItemInput, authUser: 
         sortOrder,
         appDetails: [newEntry]
     });
-    return createdItem;
+    return resolveAppDetailsAuthorsService(createdItem, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-CATITEM-002A - Get Catalog Items by Catalog Type Service
-const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     if ( !catalogTypeId ) {
         throw new AppError(getMessage('catalogType.idRequired', 'en'), 400, 'CATITEM_002A_CATTYPEID_REQUIRED');
     }
@@ -149,11 +150,11 @@ const getActiveCatalogItemsByTypeService = async (catalogTypeId: string, limit: 
         limit,
         offset
     });
-    return catalogItems;
+    return resolveAppDetailsAuthorsService(catalogItems, canViewAuthors);
 }
 
 // ESAVI-CATITEM-002B - Get All Catalog Items by Catalog Type Service (including inactive) - For SuperAdmin
-const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, isAdmin: boolean = false) => {
+const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, isAdmin: boolean = false, canViewAuthors: boolean) => {
     let whereClause = {};
     if( isAdmin && catalogTypeId ) {
         whereClause = { catalogTypeId };
@@ -171,7 +172,7 @@ const getAllCatalogItemsByTypeService = async (catalogTypeId: string = '', limit
         limit,
         offset
     });
-    return catalogItems;
+    return resolveAppDetailsAuthorsService(catalogItems, canViewAuthors);
 }
 
 // ESAVI-CATITEM-007 - Search Catalog Items by Name or Code Service
@@ -186,7 +187,8 @@ const searchCatalogItemsService = async (
     lang: string,
     includeInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const textConditions = [
         ...buildTextSearchConditions(filters.name, ['name']),
@@ -220,11 +222,11 @@ const searchCatalogItemsService = async (
         limit,
         offset
     });
-    return catalogItems;
+    return resolveAppDetailsAuthorsService(catalogItems, canViewAuthors);
 }
 
 // ESAVI-CATITEM-003 - Get Catalog Item by ID Service
-const getCatalogItemByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
+const getCatalogItemByIdService = async (id: string, lang: string, isAdmin: boolean = false, canViewAuthors: boolean) => {
     const whereClause = isAdmin ? { catalogItemId: id } : { catalogItemId: id, isActive: true };
     const catalogItem = await CatalogItem.findOne({
         where: whereClause,
@@ -234,7 +236,7 @@ const getCatalogItemByIdService = async (id: string, lang: string, isAdmin: bool
     if (!catalogItem) {
         throw new AppError(getMessage('catalogItem.notFound', lang), 404, 'CATITEM_003_NOT_FOUND');
     }
-    return catalogItem;
+    return resolveAppDetailsAuthorsService(catalogItem, canViewAuthors);
 }
 
 // ESAVI-CATITEM-004 - Update Catalog Item Service - For SuperAdmin
@@ -318,7 +320,7 @@ const updateCatalogItemService = async (id: string, data: Partial<CreateCatalogI
             ]
         }, {returning: true});
     }
-    return updatedCatalogItem;
+    return resolveAppDetailsAuthorsService(updatedCatalogItem, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-CATITEM-005A / 005B - Setting Catalog Item Active/Inactive Service - For SuperAdmin

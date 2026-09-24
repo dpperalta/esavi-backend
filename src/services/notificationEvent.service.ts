@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiagnosticTerm, EsaviCase, Notification, NotificationEvent } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, canViewAuditAuthors } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
@@ -9,6 +9,7 @@ import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNotificationEventInput } from '../types';
 import { TermSource } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot claim a term belongs to a licensed dictionary
@@ -350,7 +351,7 @@ const createNotificationEventService = async (
     // Re-read outside the transaction so the response carries the resolved term and the sortOrder
     // the trigger assigned, which the create instance does not know
     const created = await findNotificationEventWithRelations(createdId, true);
-    return created ? toNotificationEventResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toNotificationEventResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Notification Events By Notification Service
@@ -369,7 +370,8 @@ const getNotificationEventsByNotificationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '002A', lang, canViewInactive);
 
@@ -381,10 +383,10 @@ const getNotificationEventsByNotificationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationEvents.count,
         rows: notificationEvents.rows.map(toNotificationEventResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Notification Events By Notification Service - For Admin
@@ -400,7 +402,8 @@ const getAllNotificationEventsByNotificationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertNotificationIsVisible(notificationId, '002B', lang, canViewInactive);
 
@@ -413,10 +416,10 @@ const getAllNotificationEventsByNotificationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationEvents.count,
         rows: notificationEvents.rows.map(toNotificationEventResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Notification Event By ID Service
@@ -425,12 +428,12 @@ const getAllNotificationEventsByNotificationService = async (
 // and its notification must be active too, unless canViewInactive says otherwise — today
 // SUPERADMIN. The three failures answer the same 404 without distinguishing, because telling them
 // apart would confirm to a USER that an event exists under a notification it is not allowed to see
-const getNotificationEventByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getNotificationEventByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const notificationEvent = await findNotificationEventWithRelations(id, canViewInactive);
     if( !notificationEvent ) {
         throw new AppError(getMessage('notificationEvent.notFound', lang), 404, 'NOTIFEVT_003_NOT_FOUND');
     }
-    return toNotificationEventResponse(notificationEvent);
+    return resolveAppDetailsAuthorsService(toNotificationEventResponse(notificationEvent), canViewAuthors);
 }
 
 // Get Notification Events By Case ID Service
@@ -448,7 +451,8 @@ const getNotificationEventsByCaseIdService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
@@ -476,10 +480,10 @@ const getNotificationEventsByCaseIdService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationEvents.count,
         rows: notificationEvents.rows.map(toNotificationEventResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Update Notification Event Service
@@ -620,7 +624,7 @@ const updateNotificationEventService = async (
     }
 
     const updated = await findNotificationEventWithRelations(id, true);
-    return updated ? toNotificationEventResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toNotificationEventResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-NOTIFEVT-005B that is not a clean delegation, and the reason this entity

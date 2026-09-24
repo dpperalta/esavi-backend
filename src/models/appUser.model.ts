@@ -13,6 +13,7 @@ export class AppUser
         declare displayName: string;
         declare firstName?: string;
         declare lastName?: string
+        declare nameTokens?: CreationOptional<string[]>;
         declare phone? : string;
         declare requiresPasswordChange: boolean;
         declare isActive: boolean;
@@ -70,6 +71,12 @@ AppUser.init(
         lastName: {
             type: DataTypes.TEXT,
             allowNull: true,
+        },
+        // Encrypted-index tokens of firstName + lastName (SPEC F62 §3.2). Never exposed in a response
+        nameTokens: {
+            type: DataTypes.ARRAY(DataTypes.TEXT),
+            allowNull: false,
+            defaultValue: []
         },
         phone: {
             type: DataTypes.STRING(50),

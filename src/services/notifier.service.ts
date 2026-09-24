@@ -1,12 +1,13 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, Notifier } from '../models';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, normalizeName } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, normalizeName, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateNotifierInput, NotifierListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Code of the catalogType that groups the valid professions. Without this check any active
 // catalogItem of the system — a facility type, a sex — would enter as a profession and the
@@ -173,7 +174,7 @@ const createNotifierService = async (data: CreateNotifierInput, authUser: AuthUs
 
     // Re-read so the response carries the resolved case, profession and geoLocation, not their ids
     const createdNotifier = await findNotifierWithRelations(newNotifier.notifierId, true);
-    return createdNotifier ? toNotifierResponse(createdNotifier) : null;
+    return resolveAppDetailsAuthorsService(createdNotifier ? toNotifierResponse(createdNotifier) : null, canViewAuditAuthors(authUser));
 }
 
 // The three filters are accumulated with AND, and each one is optional. A filter pointing at a
@@ -198,7 +199,8 @@ const buildListWhere = (filters: NotifierListFilters = {}): WhereOptions => {
 const getNotifiersService = async (
     filters: NotifierListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await Notifier.findAndCountAll({
         where: { ...buildListWhere(filters), isActive: true },
@@ -208,7 +210,7 @@ const getNotifiersService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toNotifierListRow) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toNotifierListRow) }, canViewAuthors);
 }
 
 // Get All Notifiers Service - For Admin
@@ -216,7 +218,8 @@ const getNotifiersService = async (
 const getAllNotifiersService = async (
     filters: NotifierListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await Notifier.findAndCountAll({
         where: buildListWhere(filters),
@@ -226,17 +229,17 @@ const getAllNotifiersService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toNotifierListRow) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toNotifierListRow) }, canViewAuthors);
 }
 
 // Get Notifier By ID Service
 // Code: ESAVI-NOTIFIER-003
-const getNotifierByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getNotifierByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const notifier = await findNotifierWithRelations(id, canViewInactive);
     if( !notifier ) {
         throw new AppError(getMessage('notifier.notFound', lang), 404, 'NOTIFIER_003_NOT_FOUND');
     }
-    return toNotifierResponse(notifier);
+    return resolveAppDetailsAuthorsService(toNotifierResponse(notifier), canViewAuthors);
 }
 
 // Update Notifier Service
@@ -288,7 +291,7 @@ const updateNotifierService = async (id: string, data: Partial<CreateNotifierInp
     // stands, which is the state the client asked for
     if( Object.keys(changes).length === 0 ) {
         const unchanged = await findNotifierWithRelations(id, true);
-        return unchanged ? toNotifierResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toNotifierResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     const objectToUpdate: Record<string, unknown> = { ...changes };
@@ -320,7 +323,7 @@ const updateNotifierService = async (id: string, data: Partial<CreateNotifierInp
     });
 
     const updatedNotifier = await findNotifierWithRelations(id, true);
-    return updatedNotifier ? toNotifierResponse(updatedNotifier) : null;
+    return resolveAppDetailsAuthorsService(updatedNotifier ? toNotifierResponse(updatedNotifier) : null, canViewAuditAuthors(authUser));
 }
 
 // Setting Notifier Active/Inactive Service

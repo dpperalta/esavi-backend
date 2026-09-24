@@ -30,6 +30,7 @@ import {
     MeddraSearchRow,
     MeddraTermGroup
 } from '../types';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 /**
  * MedDRA term search of SPEC F55 §3.5.
@@ -306,7 +307,7 @@ const normalizeApiTerms = ( terms: MeddraApiTerm[], termGroup: MeddraTermGroup )
 }
 
 // ESAVI-MEDDRA-006 - Search MedDRA Terms Service
-const searchMeddraTermsService = async ( term: string, lang: string ): Promise<MeddraSearchResult> => {
+const searchMeddraTermsService = async ( term: string, lang: string, canViewAuthors: boolean ): Promise<MeddraSearchResult> => {
     // 2. The general switch. A deliberate shutdown, and the client has to be able to tell it apart
     // from a breakdown — hence a 503 and not an empty 200
     const isEnabled = await getAppConfigBoolean( MEDDRA_ENABLED_CODE, MEDDRA_SCOPE, lang );
@@ -329,7 +330,7 @@ const searchMeddraTermsService = async ( term: string, lang: string ): Promise<M
     const cached = readResultCache( cacheKey );
     if( cached ) {
         esaviLog( `[INFO]: ESAVI-MEDDRA-006 - MedDRA search served from cache (${ language }): ${ cached.count } row(s)`, 'info' );
-        return cached;
+        return resolveAppDetailsAuthorsService<MeddraSearchResult>(cached, canViewAuthors);
     }
 
     // 7
@@ -373,7 +374,7 @@ const searchMeddraTermsService = async ( term: string, lang: string ): Promise<M
     // 11. Only the operation code, the term and the number of rows are logged — never the resolved
     // configuration, which carries the credentials
     esaviLog( `[INFO]: ESAVI-MEDDRA-006 - MedDRA search for "${ searchTerm }" (${ language }): ${ result.count } row(s)`, 'info' );
-    return result;
+    return resolveAppDetailsAuthorsService<MeddraSearchResult>(result, canViewAuthors);
 }
 
 export {

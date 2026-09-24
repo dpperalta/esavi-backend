@@ -254,6 +254,7 @@ CREATE TABLE IF NOT EXISTS "appUser" (
   "displayName" text NOT NULL,
   "firstName" text,
   "lastName" text,
+  "nameTokens" text[] NOT NULL DEFAULT '{}',
   "phone" varchar(50),
   "requiresPasswordChange" boolean NOT NULL DEFAULT false,
   "isActive" boolean NOT NULL DEFAULT true,
@@ -267,6 +268,7 @@ CREATE TABLE IF NOT EXISTS "appUser" (
   CONSTRAINT "CK_appUser_authSource" CHECK ("passwordHash" IS NOT NULL OR "externalSubject" IS NOT NULL)
 );
 CREATE INDEX IF NOT EXISTS "IX_appUser_active" ON "appUser" ("isActive") WHERE "deletedAt" IS NULL;
+CREATE INDEX IF NOT EXISTS "IX_appUser_nameTokens" ON "appUser" USING gin ("nameTokens");
 
 CREATE TABLE IF NOT EXISTS "appRole" (
   "roleId" uuid PRIMARY KEY DEFAULT gen_random_uuid(),

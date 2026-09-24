@@ -1,5 +1,5 @@
 ﻿import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage, isAdmin } from "../helpers";
+import { AppError, canViewInactive, esaviLog, getMessage, isAdmin, canViewAuditAuthors } from "../helpers";
 import { AuthUser } from '../types';
 import {
     createHealthFacilityService,
@@ -38,7 +38,7 @@ const getHealthFacilitiesByLocation = async (req: Request, res: Response, next: 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getHealthFacilitiesByGeoLocationService(id, req.lang, limit, offset);
+        const data = await getHealthFacilitiesByGeoLocationService(id, req.lang, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('healthFacility.getSuccessPlural', req.lang),
@@ -61,7 +61,7 @@ const getAllHealthFacilitiesByLocation = async (req: Request, res: Response, nex
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllHealthFacilitiesByGeoLocationService(id, req.lang, limit, offset);
+        const data = await getAllHealthFacilitiesByGeoLocationService(id, req.lang, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('healthFacility.getSuccessPlural', req.lang),
@@ -82,7 +82,7 @@ const getAllHealthFacilitiesByLocation = async (req: Request, res: Response, nex
 const getHealthFacilityById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getHealthFacilityByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getHealthFacilityByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('healthFacility.getSuccess', req.lang),
@@ -175,7 +175,8 @@ const searchHealthFacilities = async (req: Request, res: Response, next: NextFun
             // side that sees inactive rows, and canViewInactive is SUPERADMIN only
             isAdmin(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, EsaviCaseListFilters } from '../types';
 import {
     createEsaviCaseService,
@@ -77,7 +77,7 @@ const getAllEsaviCases = async (req: Request, res: Response, next: NextFunction)
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllEsaviCasesService(listFilters(req), limit, offset);
+        const data = await getAllEsaviCasesService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('esaviCase.getSuccessPlural', req.lang),

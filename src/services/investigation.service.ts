@@ -1,7 +1,7 @@
 import { Transaction, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationPregnancyCondition, InvestigationSource, InvestigationTeamMember, InvestigationVaccinationContext, InvestigationVaccineAdministered, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, InvestigationDiagnostic, EvaluationInstitution } from '../models';
-import { AppError, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateInvestigationInput, InvestigationListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import {
@@ -14,6 +14,7 @@ import { advanceCaseWorkflowStageService, assertCaseIsOpen } from './caseWorkflo
 import { purgeEntityService } from './common/entityPurge.service';
 import { cascadeClearSatellite, cascadeSealSatellite } from './common/satelliteCascade.service';
 import { clinicalEvaluationLogSnapshot } from './investigationClinicalEvaluation.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 const CASE_INCLUDE = {
     model: EsaviCase,
@@ -307,7 +308,7 @@ const createInvestigationService = async (data: CreateInvestigationInput, authUs
 
     // Re-read so the response carries the five resolved relations, not their ids
     const createdInvestigation = await findInvestigationWithRelations(newInvestigation.investigationId, true);
-    return createdInvestigation ? toInvestigationResponse(createdInvestigation) : null;
+    return resolveAppDetailsAuthorsService(createdInvestigation ? toInvestigationResponse(createdInvestigation) : null, canViewAuditAuthors(authUser));
 }
 
 // The four filters are accumulated with AND and compared by equality, and each one is optional.
@@ -332,16 +333,17 @@ const buildListWhere = (filters: InvestigationListFilters = {}): WhereOptions =>
 const getInvestigationsService = async (
     filters: InvestigationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
-    return await Investigation.findAndCountAll({
+    return resolveAppDetailsAuthorsService(await Investigation.findAndCountAll({
         where: { ...buildListWhere(filters), isActive: true },
         attributes: LIST_ATTRIBUTES,
         include: DETAIL_INCLUDES,
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get All Investigations Service - For Admin
@@ -349,26 +351,27 @@ const getInvestigationsService = async (
 const getAllInvestigationsService = async (
     filters: InvestigationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
-    return await Investigation.findAndCountAll({
+    return resolveAppDetailsAuthorsService(await Investigation.findAndCountAll({
         where: buildListWhere(filters),
         attributes: LIST_ATTRIBUTES,
         include: DETAIL_INCLUDES,
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get Investigation By ID Service
 // Code: ESAVI-INVESTGN-003
-const getInvestigationByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const investigation = await findInvestigationWithRelations(id, includeInactive);
     if( !investigation ) {
         throw new AppError(getMessage('investigation.notFound', lang), 404, 'INVESTGN_003_NOT_FOUND');
     }
-    return toInvestigationResponse(investigation);
+    return resolveAppDetailsAuthorsService(toInvestigationResponse(investigation), canViewAuthors);
 }
 
 // Get Investigation By Case ID Service
@@ -378,14 +381,14 @@ const getInvestigationByIdService = async (id: string, lang: string, includeInac
 // a collection would force the client to unpack an array of one element.
 // The two 404 are distinct on purpose, and the difference matters to the client: one says the
 // case is not there, the other that the case has no visible investigation
-const getInvestigationByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     await assertCaseIsValid(caseId, '006', lang);
 
     const investigation = await findInvestigationByCaseId(caseId, includeInactive);
     if( !investigation ) {
         throw new AppError(getMessage('investigation.notFound', lang), 404, 'INVESTGN_006_NOT_FOUND');
     }
-    return toInvestigationResponse(investigation);
+    return resolveAppDetailsAuthorsService(toInvestigationResponse(investigation), canViewAuthors);
 }
 
 // Update Investigation Service
@@ -461,7 +464,7 @@ const updateInvestigationService = async (
     // Nothing changed: no UPDATE, no updatedAt, no appDetails entry and no sysDetails event
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationWithRelations(id, true);
-        return unchanged ? toInvestigationResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
@@ -484,7 +487,7 @@ const updateInvestigationService = async (
     });
 
     const updatedInvestigation = await findInvestigationWithRelations(id, true);
-    return updatedInvestigation ? toInvestigationResponse(updatedInvestigation) : null;
+    return resolveAppDetailsAuthorsService(updatedInvestigation ? toInvestigationResponse(updatedInvestigation) : null, canViewAuditAuthors(authUser));
 }
 
 // The first two of the fourteen satellites join the cascade of 005A. Neither investigationSource

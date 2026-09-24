@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, NotificationListFilters } from '../types';
 import { NotificationType } from '../constants/notification.constants';
 import {
@@ -52,7 +52,7 @@ const getNotifications = async (req: Request, res: Response, next: NextFunction)
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getNotificationsService(listFilters(req), limit, offset);
+        const data = await getNotificationsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('notification.getSuccessPlural', req.lang),
@@ -74,7 +74,7 @@ const getAllNotifications = async (req: Request, res: Response, next: NextFuncti
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllNotificationsService(listFilters(req), limit, offset);
+        const data = await getAllNotificationsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('notification.getSuccessPlural', req.lang),
@@ -98,7 +98,8 @@ const getNotificationById = async (req: Request, res: Response, next: NextFuncti
         const data = await getNotificationByIdService(
             id.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -123,7 +124,8 @@ const getNotificationByCaseId = async (req: Request, res: Response, next: NextFu
         const data = await getNotificationByCaseIdService(
             caseId.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

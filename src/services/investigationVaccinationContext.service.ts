@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationVaccinationContext } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -11,6 +11,7 @@ import {
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The investigation travels in every response: it is what governs the visibility of the vaccination
 // context, and hiding it would leave the client unable to explain why a record it read yesterday now
@@ -389,7 +390,7 @@ const createInvestigationVaccinationContextService = async (
     // Re-read so the response carries the resolved investigation, its status, its case and the two
     // catalog items, not just the raw identifiers
     const created = await findInvestigationVaccinationContextWithRelations(data.investigationId, true);
-    return created ? toInvestigationVaccinationContextResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toInvestigationVaccinationContextResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // The order of the two listings, as in F29, F32 and F34. This entity has no date of the domain that
@@ -442,7 +443,8 @@ const listInclude = (filters: InvestigationVaccinationContextListFilters, includ
 const getInvestigationVaccinationContextsService = async (
     filters: InvestigationVaccinationContextListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationVaccinationContext.findAndCountAll({
         where: buildListWhere(filters),
@@ -455,7 +457,7 @@ const getInvestigationVaccinationContextsService = async (
     // The rows carry the same full shape as the 003: there is no reduced shape. The entity has
     // eleven data columns and two small catalog objects, and trimming them would leave a listing
     // with no content
-    return { count, rows: rows.map(toInvestigationVaccinationContextResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationVaccinationContextResponse) }, canViewAuthors);
 }
 
 // Get All Investigation Vaccination Contexts Service - For Admin
@@ -463,7 +465,8 @@ const getInvestigationVaccinationContextsService = async (
 const getAllInvestigationVaccinationContextsService = async (
     filters: InvestigationVaccinationContextListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationVaccinationContext.findAndCountAll({
         where: buildListWhere(filters),
@@ -473,7 +476,7 @@ const getAllInvestigationVaccinationContextsService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toInvestigationVaccinationContextResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationVaccinationContextResponse) }, canViewAuthors);
 }
 
 // Get Investigation Vaccination Context By ID Service
@@ -486,12 +489,12 @@ const getAllInvestigationVaccinationContextsService = async (
 // USER that a context exists under an investigation it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // investigation, which is what makes it possible to consult it before purging it
-const getInvestigationVaccinationContextByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationVaccinationContextByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const context = await findInvestigationVaccinationContextWithRelations(id, includeInactive);
     if( !context ) {
         throw new AppError(getMessage('investigationVaccinationContext.notFound', lang), 404, 'INVVACTX_003_NOT_FOUND');
     }
-    return toInvestigationVaccinationContextResponse(context);
+    return resolveAppDetailsAuthorsService(toInvestigationVaccinationContextResponse(context), canViewAuthors);
 }
 
 // Get Investigation Vaccination Context By Case ID Service
@@ -504,7 +507,7 @@ const getInvestigationVaccinationContextByIdService = async (id: string, lang: s
 // THREE DISTINCT 404, and the difference matters to the client: "that case does not exist", "it has
 // no visible investigation" and "its investigation has no vaccination context yet" are three
 // different things to show on screen, and only the third one is fixed by creating a context
-const getInvestigationVaccinationContextByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationVaccinationContextByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -527,7 +530,7 @@ const getInvestigationVaccinationContextByCaseIdService = async (caseId: string,
     if( !context ) {
         throw new AppError(getMessage('investigationVaccinationContext.notFound', lang), 404, 'INVVACTX_006_NOT_FOUND');
     }
-    return toInvestigationVaccinationContextResponse(context);
+    return resolveAppDetailsAuthorsService(toInvestigationVaccinationContextResponse(context), canViewAuthors);
 }
 
 // Update Investigation Vaccination Context Service
@@ -633,7 +636,7 @@ const updateInvestigationVaccinationContextService = async (
     // write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationVaccinationContextWithRelations(id, true);
-        return unchanged ? toInvestigationVaccinationContextResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationVaccinationContextResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the generic
@@ -657,7 +660,7 @@ const updateInvestigationVaccinationContextService = async (
     });
 
     const updated = await findInvestigationVaccinationContextWithRelations(id, true);
-    return updated ? toInvestigationVaccinationContextResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationVaccinationContextResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Investigation Vaccination Context Service - For SuperAdmin

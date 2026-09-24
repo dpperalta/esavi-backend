@@ -78,7 +78,9 @@
         "samePassword": "Het nieuwe wachtwoord moet verschillen van het huidige",
         "alreadyActive": "De gebruiker met ID {{id}} is al actief",
         "alreadyInactive": "De gebruiker met ID {{id}} is al inactief",
-        "idRequired": "De gebruikers-ID is verplicht"
+        "idRequired": "De gebruikers-ID is verplicht",
+        "searchSuccess": "Gebruikerszoekopdracht succesvol uitgevoerd",
+        "searchQueryRequired": "De zoekopdracht moet ten minste één woord van de naam, het e-mailadres of de gebruikersnaam bevatten"
     },
     "role": {
         "notFound": "Een of meer rollen zijn niet gevonden. Controleer de rolnamen en probeer het opnieuw."

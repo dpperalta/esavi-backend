@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, InvestigationColdChainListFilters } from '../types';
 import {
     createInvestigationColdChainService,
@@ -45,7 +45,7 @@ const getInvestigationColdChains = async (req: Request, res: Response, next: Nex
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getInvestigationColdChainsService(listFilters(req), limit, offset);
+        const data = await getInvestigationColdChainsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationColdChain.getSuccessPlural', req.lang),
@@ -67,7 +67,7 @@ const getAllInvestigationColdChains = async (req: Request, res: Response, next: 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllInvestigationColdChainsService(listFilters(req), limit, offset);
+        const data = await getAllInvestigationColdChainsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('investigationColdChain.getSuccessPlural', req.lang),
@@ -93,7 +93,8 @@ const getInvestigationColdChainById = async (req: Request, res: Response, next: 
         const data = await getInvestigationColdChainByIdService(
             id.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -120,7 +121,8 @@ const getInvestigationColdChainByCaseId = async (req: Request, res: Response, ne
         const data = await getInvestigationColdChainByCaseIdService(
             caseId.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

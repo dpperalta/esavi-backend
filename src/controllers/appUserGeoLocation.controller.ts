@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createAppUserGeoLocationService,
@@ -49,7 +49,7 @@ const getAppUserGeoLocationsByUser = async (req: Request, res: Response, next: N
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAppUserGeoLocationsByUserService(userId, req.lang, current, limit, offset);
+        const data = await getAppUserGeoLocationsByUserService(userId, req.lang, current, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appUserGeoLocation.getSuccess', req.lang),
@@ -73,7 +73,7 @@ const getAllAppUserGeoLocationsByUser = async (req: Request, res: Response, next
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllAppUserGeoLocationsByUserService(userId, req.lang, current, limit, offset);
+        const data = await getAllAppUserGeoLocationsByUserService(userId, req.lang, current, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appUserGeoLocation.getSuccess', req.lang),
@@ -94,7 +94,7 @@ const getAllAppUserGeoLocationsByUser = async (req: Request, res: Response, next
 const getAppUserGeoLocationById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getAppUserGeoLocationByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getAppUserGeoLocationByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appUserGeoLocation.getSuccess', req.lang),
@@ -237,7 +237,7 @@ const bulkAssignGeoLocations = async (req: Request, res: Response, next: NextFun
 const getUserCoverage = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const userId = (req.params.userId).toString().trim();
     try {
-        const data = await resolveUserCoverageService(userId, req.lang);
+        const data = await resolveUserCoverageService(userId, req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appUserGeoLocation.coverageSuccess', req.lang),

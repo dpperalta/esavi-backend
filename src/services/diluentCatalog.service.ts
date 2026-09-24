@@ -1,10 +1,11 @@
 import { Op, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiluentCatalog } from '../models';
-import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, getMessage, toConstantCase, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateDiluentCatalogInput, DiluentCatalogListFilters } from '../types';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The two nullable text columns of the entity, trimmed on write and never normalized any further.
 // undefined and null both land as null on create: an absent field and an explicitly emptied one mean
@@ -72,11 +73,11 @@ const createDiluentCatalogService = async (data: CreateDiluentCatalogInput, auth
         isActive: data.isActive !== undefined ? data.isActive : true,
         appDetails: [newEntry]
     });
-    return stripSysDetails(newDiluentCatalog);
+    return resolveAppDetailsAuthorsService(stripSysDetails(newDiluentCatalog), canViewAuditAuthors(authUser));
 }
 
 // ESAVI-DILUENT-002A - Get Active Diluent Catalogs Service
-const getActiveDiluentCatalogsService = async (filters: DiluentCatalogListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveDiluentCatalogsService = async (filters: DiluentCatalogListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const diluentCatalogs = await DiluentCatalog.findAndCountAll({
         where: {
             ...buildDiluentCatalogWhere(filters),
@@ -88,11 +89,11 @@ const getActiveDiluentCatalogsService = async (filters: DiluentCatalogListFilter
         limit,
         offset
     });
-    return diluentCatalogs;
+    return resolveAppDetailsAuthorsService(diluentCatalogs, canViewAuthors);
 }
 
 // ESAVI-DILUENT-002B - Get All Diluent Catalogs Service (including inactive) - For Admin
-const getAllDiluentCatalogsService = async (filters: DiluentCatalogListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllDiluentCatalogsService = async (filters: DiluentCatalogListFilters, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     // The twin of 002A without isActive in the where, and with no filter of its own: the table has
     // no column that could serve as a facet, so there is nothing an admin listing could add
     const diluentCatalogs = await DiluentCatalog.findAndCountAll({
@@ -103,11 +104,11 @@ const getAllDiluentCatalogsService = async (filters: DiluentCatalogListFilters, 
         limit,
         offset
     });
-    return diluentCatalogs;
+    return resolveAppDetailsAuthorsService(diluentCatalogs, canViewAuthors);
 }
 
 // ESAVI-DILUENT-003 - Get Diluent Catalog by ID Service
-const getDiluentCatalogByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getDiluentCatalogByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const whereClause = includeInactive ? { diluentCatalogId: id } : { diluentCatalogId: id, isActive: true };
     // No includes: the entity has no associations at all, so there is nothing to join
     const diluentCatalog = await DiluentCatalog.findOne({
@@ -118,7 +119,7 @@ const getDiluentCatalogByIdService = async (id: string, lang: string, includeIna
     if (!diluentCatalog) {
         throw new AppError(getMessage('diluentCatalog.notFound', lang), 404, 'DILUENT_003_NOT_FOUND');
     }
-    return diluentCatalog;
+    return resolveAppDetailsAuthorsService(diluentCatalog, canViewAuthors);
 }
 
 // How every nullable text column enters `candidates`: null empties the column and undefined means
@@ -188,7 +189,7 @@ const updateDiluentCatalogService = async (id: string, data: Partial<CreateDilue
             ]
         }, { returning: true });
     }
-    return stripSysDetails(updatedDiluentCatalog);
+    return resolveAppDetailsAuthorsService(stripSysDetails(updatedDiluentCatalog), canViewAuditAuthors(authUser));
 }
 
 // ESAVI-DILUENT-005A / ESAVI-DILUENT-005B - Set Diluent Catalog Activation Service

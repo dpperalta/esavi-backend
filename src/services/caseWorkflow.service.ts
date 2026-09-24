@@ -1,11 +1,12 @@
 import { Op, Transaction, WhereOptions } from 'sequelize';
 
 import { CaseWorkflow, CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, Investigation, Notification } from '../models';
-import { AppError, esaviLog, getMessage } from '../helpers';
+import { AppError, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CaseWorkflowListFilters, CaseWorkflowStage, CreateCaseWorkflowInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { sequelize } from '../database/connection';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 /**
  * caseWorkflow — administrative progress of the case file (SPEC F44).
@@ -394,7 +395,8 @@ const getCaseWorkflowsService = async (
     filters: CaseWorkflowListFilters = {},
     limit: number = DEFAULT_LIMIT,
     offset: number = DEFAULT_OFFSET,
-    lang: string
+    lang: string,
+    canViewAuthors: boolean
 ) => {
     const statusItemId = await resolveStatusFilter(filters.statusCode, lang);
 
@@ -409,7 +411,7 @@ const getCaseWorkflowsService = async (
         distinct: true
     });
 
-    return { count, rows: rows.map(toCaseWorkflowResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toCaseWorkflowResponse) }, canViewAuthors);
 }
 
 // ESAVI-CASEFLOW-002B - Get All Case Workflows Service - For Admin
@@ -417,7 +419,8 @@ const getAllCaseWorkflowsService = async (
     filters: CaseWorkflowListFilters = {},
     limit: number = DEFAULT_LIMIT,
     offset: number = DEFAULT_OFFSET,
-    lang: string
+    lang: string,
+    canViewAuthors: boolean
 ) => {
     const statusItemId = await resolveStatusFilter(filters.statusCode, lang);
 
@@ -430,7 +433,7 @@ const getAllCaseWorkflowsService = async (
         distinct: true
     });
 
-    return { count, rows: rows.map(toCaseWorkflowResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toCaseWorkflowResponse) }, canViewAuthors);
 }
 
 // ESAVI-CASEFLOW-003 - Get Case Workflow By ID Service
@@ -442,7 +445,7 @@ const getAllCaseWorkflowsService = async (
  * record** — what 005A and 005B move — and has nothing to do with whether the case file is
  * closed, which is `status`.
  */
-const getCaseWorkflowByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getCaseWorkflowByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const where = canViewInactive ? { caseWorkflowId: id } : { caseWorkflowId: id, isActive: true };
 
     const workflow = await CaseWorkflow.findOne({
@@ -454,7 +457,7 @@ const getCaseWorkflowByIdService = async (id: string, lang: string, canViewInact
         throw new AppError(getMessage('caseWorkflow.notFound', lang), 404, 'CASEFLOW_003_NOT_FOUND');
     }
 
-    return toCaseWorkflowResponse(workflow);
+    return resolveAppDetailsAuthorsService(toCaseWorkflowResponse(workflow), canViewAuthors);
 }
 
 // ESAVI-CASEFLOW-006 - Get Case Workflow By Case ID Service
@@ -475,7 +478,7 @@ const getCaseWorkflowByIdService = async (id: string, lang: string, canViewInact
  * The lookup needs no LIMIT beyond findOne: UQ_caseWorkflow_case guarantees there is at most one
  * row per case.
  */
-const getCaseWorkflowByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+const getCaseWorkflowByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const where = canViewInactive ? { caseId } : { caseId, isActive: true };
 
     // The case lookup and the workflow lookup go together: the first one is what tells the two
@@ -493,7 +496,7 @@ const getCaseWorkflowByCaseIdService = async (caseId: string, lang: string, canV
         throw new AppError(getMessage('caseWorkflow.notFound', lang), 404, 'CASEFLOW_006_NOT_FOUND');
     }
 
-    return toCaseWorkflowResponse(workflow);
+    return resolveAppDetailsAuthorsService(toCaseWorkflowResponse(workflow), canViewAuthors);
 }
 
 /**
@@ -596,7 +599,7 @@ const completeCaseWorkflowStageService = async (
         });
 
         const updated = await findCaseWorkflowByCaseId(caseId);
-        return updated ? toCaseWorkflowResponse(updated) : null;
+        return resolveAppDetailsAuthorsService(updated ? toCaseWorkflowResponse(updated) : null, canViewAuditAuthors(authUser));
     } catch ( error ) {
         esaviLog(`[ERROR]: ESAVI-CASEFLOW-007 - Error completing stage ${ stage } of case ${ caseId }: ${ error }`, 'error');
         if ( error instanceof AppError ) {
@@ -729,7 +732,7 @@ const closeCaseWorkflowService = async (
         });
 
         const updated = await findCaseWorkflowByCaseId(caseId);
-        return updated ? toCaseWorkflowResponse(updated) : null;
+        return resolveAppDetailsAuthorsService(updated ? toCaseWorkflowResponse(updated) : null, canViewAuditAuthors(authUser));
     } catch ( error ) {
         esaviLog(`[ERROR]: ESAVI-CASEFLOW-008 - Error closing case ${ caseId }: ${ error }`, 'error');
         if ( error instanceof AppError ) {
@@ -773,7 +776,7 @@ const reopenCaseWorkflowService = async (
         });
 
         const updated = await findCaseWorkflowByCaseId(caseId);
-        return updated ? toCaseWorkflowResponse(updated) : null;
+        return resolveAppDetailsAuthorsService(updated ? toCaseWorkflowResponse(updated) : null, canViewAuditAuthors(authUser));
     } catch ( error ) {
         esaviLog(`[ERROR]: ESAVI-CASEFLOW-009 - Error reopening case ${ caseId }: ${ error }`, 'error');
         if ( error instanceof AppError ) {
@@ -821,7 +824,7 @@ const requestCaseWorkflowValidationService = async (
         });
 
         const updated = await findCaseWorkflowByCaseId(caseId);
-        return updated ? toCaseWorkflowResponse(updated) : null;
+        return resolveAppDetailsAuthorsService(updated ? toCaseWorkflowResponse(updated) : null, canViewAuditAuthors(authUser));
     } catch ( error ) {
         esaviLog(`[ERROR]: ESAVI-CASEFLOW-010 - Error requesting validation for case ${ caseId }: ${ error }`, 'error');
         if ( error instanceof AppError ) {
@@ -875,7 +878,7 @@ const resolveCaseWorkflowValidationService = async (
         });
 
         const updated = await findCaseWorkflowByCaseId(caseId);
-        return updated ? toCaseWorkflowResponse(updated) : null;
+        return resolveAppDetailsAuthorsService(updated ? toCaseWorkflowResponse(updated) : null, canViewAuditAuthors(authUser));
     } catch ( error ) {
         esaviLog(`[ERROR]: ESAVI-CASEFLOW-011 - Error resolving validation for case ${ caseId }: ${ error }`, 'error');
         if ( error instanceof AppError ) {

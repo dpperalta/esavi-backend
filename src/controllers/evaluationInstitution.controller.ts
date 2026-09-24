@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createEvaluationInstitutionService,
@@ -43,7 +43,8 @@ const getEvaluationInstitutionsByInvestigation = async (req: Request, res: Respo
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -72,7 +73,8 @@ const getAllEvaluationInstitutionsByInvestigation = async (req: Request, res: Re
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -97,7 +99,8 @@ const getEvaluationInstitutionById = async (req: Request, res: Response, next: N
         const data = await getEvaluationInstitutionByIdService(
             id,
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

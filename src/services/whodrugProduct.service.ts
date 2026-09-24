@@ -32,6 +32,7 @@ import {
     WHODRUG_SEARCH_COUNTRY_CODE,
     WHODRUG_SEARCH_EXCLUDED_ATC_CODE
 } from '../constants/whodrug.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // SPEC F56 — the raw mirror of the WHODrug standard. name and ingredient are independent filters,
 // not alternatives of a single search box: both narrow the result when both travel. ingredient
@@ -58,7 +59,7 @@ const buildWhodrugProductAdminWhere = (filters: WhodrugProductListFilters): Wher
 // This is the raw mirror, exactly as registered: vaccines included, no ATC exclusion and no
 // country filter. Inactive rows are returned too — 002B is the administration variant and the
 // route already gates it to ADMIN, which is what canViewInactive would otherwise decide
-const getAllWhodrugProductsService = async (filters: WhodrugProductListFilters) => {
+const getAllWhodrugProductsService = async (filters: WhodrugProductListFilters, canViewAuthors: boolean) => {
     const limit = filters.limit ?? DEFAULT_LIMIT;
     const offset = filters.offset ?? DEFAULT_OFFSET;
 
@@ -71,7 +72,7 @@ const getAllWhodrugProductsService = async (filters: WhodrugProductListFilters) 
         offset
     });
 
-    return whodrugProducts;
+    return resolveAppDetailsAuthorsService(whodrugProducts, canViewAuthors);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -506,7 +507,8 @@ interface WhodrugSearchRow {
 const searchWhodrugProductsService = async (
     term: string,
     limit: number,
-    lang: string
+    lang: string,
+    canViewAuthors: boolean
 ): Promise<{ term: string; count: number; rows: WhodrugSearchOption[] }> => {
     const policy = await resolveWhodrugSearchPolicy(lang);
     // The same normalization the 007 gave optionNameSearch at import time: lowercase, no
@@ -543,11 +545,11 @@ const searchWhodrugProductsService = async (
         throw new AppError(getMessage('whodrugProduct.searchFailed', lang), 500, 'WHODPROD_006_FETCH_FAILED', error);
     }
 
-    return {
+    return resolveAppDetailsAuthorsService<{ term: string; count: number; rows: WhodrugSearchOption[] }>({
         term,
         count: rows.length,
         rows: rows.map(row => ({ code: row.drugCode, name: row.optionName }))
-    };
+    }, canViewAuthors);
 }
 
 export {

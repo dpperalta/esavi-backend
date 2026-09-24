@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import {
     assignAppUserRoleService,
@@ -41,7 +41,7 @@ const getAppUserRolesByUser = async (req: Request, res: Response, next: NextFunc
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAppUserRolesByUserService(userId, req.lang, limit, offset);
+        const data = await getAppUserRolesByUserService(userId, req.lang, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appUserRole.getSuccess', req.lang),
@@ -64,7 +64,7 @@ const getAllAppUserRolesByUser = async (req: Request, res: Response, next: NextF
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllAppUserRolesByUserService(userId, req.lang, limit, offset);
+        const data = await getAllAppUserRolesByUserService(userId, req.lang, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appUserRole.getSuccess', req.lang),
@@ -85,7 +85,7 @@ const getAllAppUserRolesByUser = async (req: Request, res: Response, next: NextF
 const getAppUserRoleById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getAppUserRoleByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getAppUserRoleByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appUserRole.getSuccess', req.lang),
@@ -128,7 +128,7 @@ const getAppUserRolesByRole = async (req: Request, res: Response, next: NextFunc
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAppUserRolesByRoleService(roleId, req.lang, limit, offset);
+        const data = await getAppUserRolesByRoleService(roleId, req.lang, limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('appUserRole.getSuccess', req.lang),

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createNotificationPregnancyService,
@@ -35,7 +35,7 @@ const createNotificationPregnancy = async (req: Request, res: Response, next: Ne
 const getNotificationPregnancyById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const id = (req.params.id).toString().trim();
     try {
-        const data = await getNotificationPregnancyByIdService(id, req.lang, canViewInactive(req.user as AuthUser));
+        const data = await getNotificationPregnancyByIdService(id, req.lang, canViewInactive(req.user as AuthUser), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('notificationPregnancy.getSuccess', req.lang),
@@ -59,7 +59,8 @@ const getNotificationPregnancyByNotification = async (req: Request, res: Respons
         const data = await getNotificationPregnancyByNotificationService(
             notificationId,
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

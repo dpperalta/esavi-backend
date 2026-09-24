@@ -1,10 +1,11 @@
 import { Op } from 'sequelize';
-import { getMessage, AppError, buildDifferentialUpdate, buildGeoTemplateWorkbook, esaviLog, escapeLike } from '../helpers';
+import { getMessage, AppError, buildDifferentialUpdate, buildGeoTemplateWorkbook, esaviLog, escapeLike, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateGeoLocationInput, GenerateGeoTemplateInput } from '../types';
 import { CatalogItem, CatalogType, GeoLevelType, GeoLocation, HealthFacility } from '../models';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Code of the catalogType that groups the valid facility types, the same one healthFacility.service
 // reads: the template mirrors that catalog and the 006 resolves facilityTypeCode against it
@@ -146,7 +147,7 @@ const createGeoLocationService = async( data: CreateGeoLocationInput, authUser: 
         geoPolygon: data.geoPolygon ?? null,
         appDetails: [newEntry]
     });
-    return createdLocation;
+    return resolveAppDetailsAuthorsService(createdLocation, canViewAuditAuthors(authUser));
 }
 
 const buildTextWhereConditions = (name?: string, code?: string) => {
@@ -168,12 +169,13 @@ const buildTextWhereConditions = (name?: string, code?: string) => {
 
 // ESAVI-GEOLOC-002A - Get active Geographic Location service
 const getActiveGeoLocationsService = async (
-    geoLevelTypeId?: string,
-    parentGeoLocationId?: string,
-    name?: string,
-    code?: string,
+    geoLevelTypeId: string | undefined,
+    parentGeoLocationId: string | undefined,
+    name: string | undefined,
+    code: string | undefined,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const whereClause: any = { isActive: true };
     if( geoLevelTypeId ) {
@@ -194,17 +196,18 @@ const getActiveGeoLocationsService = async (
         limit,
         offset
     });
-    return geoLocations;
+    return resolveAppDetailsAuthorsService(geoLocations, canViewAuthors);
 }
 
 // ESAVI-GEOLOC-002B - Get all Geographic Location service (including inactive) - For SuperAdmin
 const getAllGeoLocationsService = async (
-    geoLevelTypeId?: string,
-    parentGeoLocationId?: string,
-    name?: string,
-    code?: string,
+    geoLevelTypeId: string | undefined,
+    parentGeoLocationId: string | undefined,
+    name: string | undefined,
+    code: string | undefined,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const whereClause: any = {};
     if( geoLevelTypeId ) {
@@ -225,11 +228,11 @@ const getAllGeoLocationsService = async (
         limit,
         offset
     });
-    return geoLocations;
+    return resolveAppDetailsAuthorsService(geoLocations, canViewAuthors);
 }
 
 // ESAVI-GEOLOC-003 - Get Geographic Location by ID service
-const getGeoLocationByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
+const getGeoLocationByIdService = async (id: string, lang: string, isAdmin: boolean = false, canViewAuthors: boolean) => {
     const whereClause = isAdmin ? { geoLocationId: id } : { geoLocationId: id, isActive: true };
     const geoLocation = await GeoLocation.findOne({
         where: whereClause,
@@ -256,7 +259,7 @@ const getGeoLocationByIdService = async (id: string, lang: string, isAdmin: bool
     if (!geoLocation) {
         throw new AppError(getMessage('geoLocation.notFound', lang), 404, 'GEOLOC_003_NOT_FOUND');
     }
-    return geoLocation;
+    return resolveAppDetailsAuthorsService(geoLocation, canViewAuthors);
 }
 
 // ESAVI-GEOLOC-004 - Update Geographic Location Service - For SuperAdmin
@@ -355,7 +358,7 @@ const updateGeoLocationService = async (id: string, data: Partial<CreateGeoLocat
             ]
         }, {returning: true});
     }
-    return updatedGeoLocation;
+    return resolveAppDetailsAuthorsService(updatedGeoLocation, canViewAuditAuthors(authUser));
 }
 
 // ESAVI-GEOLOC-005A / 005B - Setting Geographic Location Active/Inactive Service

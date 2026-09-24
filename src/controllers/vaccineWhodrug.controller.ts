@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { ImportVaccineWhodrugsInput, VaccineWhodrugListFilters, VaccineWhodrugTreeFilters } from '../types';
 import {
     createVaccineWhodrugService,
@@ -55,7 +55,7 @@ const getVaccineWhodrugs = async (req: Request, res: Response, next: NextFunctio
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getActiveVaccineWhodrugsService(readListFilters(req.query), limit, offset);
+        const data = await getActiveVaccineWhodrugsService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('vaccineWhodrug.getSuccessPlural', req.lang),
@@ -78,7 +78,7 @@ const getAllVaccineWhodrugs = async (req: Request, res: Response, next: NextFunc
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
         // The same five filters as the public listing: this variant adds none of its own
-        const data = await getAllVaccineWhodrugsService(readListFilters(req.query), limit, offset);
+        const data = await getAllVaccineWhodrugsService(readListFilters(req.query), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('vaccineWhodrug.getSuccessPlural', req.lang),
@@ -102,7 +102,7 @@ const getVaccineWhodrugById = async (req: Request, res: Response, next: NextFunc
         // canViewInactive is SUPERADMIN-only, so an ADMIN gets the same 404 as a USER even though
         // the 002B listing does show it inactive rows. The asymmetry is deliberate and is the same
         // one healthFacility and diagnosticTerm already have
-        const data = await getVaccineWhodrugByIdService(id, req.lang, canViewInactive(req.user));
+        const data = await getVaccineWhodrugByIdService(id, req.lang, canViewInactive(req.user), canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('vaccineWhodrug.getSuccess', req.lang),
@@ -237,7 +237,7 @@ const readTreeFilters = (query: Request['query']): VaccineWhodrugTreeFilters => 
 // Code: ESAVI-WHODRUG-006A
 const getWhodrugAbbreviations = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await getWhodrugAbbreviationsService(readTreeFilters(req.query), req.lang);
+        const data = await getWhodrugAbbreviationsService(readTreeFilters(req.query), req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
@@ -257,7 +257,7 @@ const getWhodrugAbbreviations = async (req: Request, res: Response, next: NextFu
 // Code: ESAVI-WHODRUG-006B
 const getWhodrugDrugNames = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await getWhodrugDrugNamesService(readTreeFilters(req.query), req.lang);
+        const data = await getWhodrugDrugNamesService(readTreeFilters(req.query), req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
@@ -277,7 +277,7 @@ const getWhodrugDrugNames = async (req: Request, res: Response, next: NextFuncti
 // Code: ESAVI-WHODRUG-006C
 const getWhodrugMaHolders = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await getWhodrugMaHoldersService(readTreeFilters(req.query), req.lang);
+        const data = await getWhodrugMaHoldersService(readTreeFilters(req.query), req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
@@ -297,7 +297,7 @@ const getWhodrugMaHolders = async (req: Request, res: Response, next: NextFuncti
 // Code: ESAVI-WHODRUG-006D
 const getWhodrugForms = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await getWhodrugFormsService(readTreeFilters(req.query), req.lang);
+        const data = await getWhodrugFormsService(readTreeFilters(req.query), req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),
@@ -317,7 +317,7 @@ const getWhodrugForms = async (req: Request, res: Response, next: NextFunction):
 // Code: ESAVI-WHODRUG-006E
 const getWhodrugStrengths = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const data = await getWhodrugStrengthsService(readTreeFilters(req.query), req.lang);
+        const data = await getWhodrugStrengthsService(readTreeFilters(req.query), req.lang, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('vaccineWhodrug.optionsSuccess', req.lang),

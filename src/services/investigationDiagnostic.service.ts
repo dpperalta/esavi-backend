@@ -1,7 +1,7 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, DiagnosticTerm, EsaviCase, Investigation, InvestigationDiagnostic } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage, toConstantCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, toConstantCase, canViewAuditAuthors } from '../helpers';
 import { resolveDiagnosticTermService } from './common/diagnosticTermResolution.service';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
@@ -10,6 +10,7 @@ import { TermSource } from '../constants/enums.constants';
 import { DIAGNOSTIC_TYPE_CATALOG_CODE } from '../constants/investigation.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The source that admits implicit creation, and the only one the resolver of F15 ever writes: a
 // client cannot coin a MedDRA or WHODrug term by typing one into a form
@@ -459,7 +460,7 @@ const createInvestigationDiagnosticService = async (
     // Re-read so the response carries the resolved master term, the diagnosticType item and the
     // sortOrder the trigger assigned, which the create instance does not know
     const diagnostic = await findDiagnosticWithRelations(createdId, true);
-    return diagnostic ? toInvestigationDiagnosticResponse(diagnostic) : null;
+    return resolveAppDetailsAuthorsService(diagnostic ? toInvestigationDiagnosticResponse(diagnostic) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Investigation Diagnostics By Investigation Service
@@ -475,7 +476,8 @@ const getInvestigationDiagnosticsByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertInvestigationIsVisible(investigationId, '002A', lang, canViewInactive);
 
@@ -488,10 +490,10 @@ const getInvestigationDiagnosticsByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: diagnostics.count,
         rows: diagnostics.rows.map(toInvestigationDiagnosticResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Investigation Diagnostics By Investigation Service - For Admin
@@ -514,7 +516,8 @@ const getAllInvestigationDiagnosticsByInvestigationService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertInvestigationIsVisible(investigationId, '002B', lang, canViewInactive);
 
@@ -528,10 +531,10 @@ const getAllInvestigationDiagnosticsByInvestigationService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: diagnostics.count,
         rows: diagnostics.rows.map(toInvestigationDiagnosticResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Investigation Diagnostic By ID Service
@@ -545,7 +548,8 @@ const getAllInvestigationDiagnosticsByInvestigationService = async (
 const getInvestigationDiagnosticByIdService = async (
     id: string,
     lang: string,
-    canViewInactive: boolean = false
+    canViewInactive: boolean = false,
+    canViewAuthors: boolean
 ) => {
     const diagnostic = await findDiagnosticWithRelations(id, canViewInactive);
     if( !diagnostic ) {
@@ -556,7 +560,7 @@ const getInvestigationDiagnosticByIdService = async (
         );
     }
 
-    return toInvestigationDiagnosticResponse(diagnostic);
+    return resolveAppDetailsAuthorsService(toInvestigationDiagnosticResponse(diagnostic), canViewAuthors);
 }
 
 // Get Investigation Diagnostics By Case ID Service
@@ -579,7 +583,8 @@ const getInvestigationDiagnosticsByCaseIdService = async (
     lang: string,
     includeInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
@@ -614,10 +619,10 @@ const getInvestigationDiagnosticsByCaseIdService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: diagnostics.count,
         rows: diagnostics.rows.map(toInvestigationDiagnosticResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Update Investigation Diagnostic Service
@@ -776,7 +781,7 @@ const updateInvestigationDiagnosticService = async (
     }
 
     const updated = await findDiagnosticWithRelations(id, true);
-    return updated ? toInvestigationDiagnosticResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationDiagnosticResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-INVDIAG-005B that is not a clean delegation, and the reason the whole

@@ -1,12 +1,13 @@
 import { InferAttributes, Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { DiluentCatalog, Notification, NotificationDiluent, NotificationVaccine } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, canViewAuditAuthors } from '../helpers';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateNotificationDiluentInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The columns the INSERT of ESAVI-NOTIFDIL-001 writes, listed one by one so sortOrder stays out of
 // it. Omitting the value is not enough: the column is allowNull: false and Sequelize runs its own
@@ -362,7 +363,7 @@ const createNotificationDiluentService = async (
     // Re-read so the response carries the resolved master entry and the sortOrder the trigger
     // assigned, which the create instance does not know
     const notificationDiluent = await findNotificationDiluentWithRelations(created.diluentId, true);
-    return notificationDiluent ? toNotificationDiluentResponse(notificationDiluent) : null;
+    return resolveAppDetailsAuthorsService(notificationDiluent ? toNotificationDiluentResponse(notificationDiluent) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Active Notification Diluents By Vaccine Service
@@ -383,7 +384,8 @@ const getNotificationDiluentsByVaccineService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertVaccineIsVisible(vaccineId, '002A', lang, canViewInactive);
 
@@ -395,10 +397,10 @@ const getNotificationDiluentsByVaccineService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationDiluents.count,
         rows: notificationDiluents.rows.map(toNotificationDiluentResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get All Notification Diluents By Vaccine Service - For Admin
@@ -414,7 +416,8 @@ const getAllNotificationDiluentsByVaccineService = async (
     lang: string,
     canViewInactive: boolean = false,
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     await assertVaccineIsVisible(vaccineId, '002B', lang, canViewInactive);
 
@@ -427,10 +430,10 @@ const getAllNotificationDiluentsByVaccineService = async (
         offset
     });
 
-    return {
+    return resolveAppDetailsAuthorsService({
         count: notificationDiluents.count,
         rows: notificationDiluents.rows.map(toNotificationDiluentResponse)
-    };
+    }, canViewAuthors);
 }
 
 // Get Notification Diluent By ID Service
@@ -444,12 +447,12 @@ const getAllNotificationDiluentsByVaccineService = async (
 // fails, so there is nothing to decide when two of them fail at once. The three failures answer the
 // same 404 without distinguishing, because telling them apart would confirm to a USER that a diluent
 // exists under a vaccine it is not allowed to see
-const getNotificationDiluentByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getNotificationDiluentByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const notificationDiluent = await findNotificationDiluentWithRelations(id, canViewInactive);
     if( !notificationDiluent ) {
         throw new AppError(getMessage('notificationDiluent.notFound', lang), 404, 'NOTIFDIL_003_NOT_FOUND');
     }
-    return toNotificationDiluentResponse(notificationDiluent);
+    return resolveAppDetailsAuthorsService(toNotificationDiluentResponse(notificationDiluent), canViewAuthors);
 }
 
 // Update Notification Diluent Service
@@ -567,7 +570,7 @@ const updateNotificationDiluentService = async (
     }
 
     const updated = await findNotificationDiluentWithRelations(id, true);
-    return updated ? toNotificationDiluentResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toNotificationDiluentResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // The one piece of ESAVI-NOTIFDIL-005B that is not a clean delegation, and the reason this entity

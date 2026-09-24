@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser, FinalClassificationListFilters } from '../types';
 import {
     createFinalClassificationService,
@@ -44,7 +44,7 @@ const getFinalClassifications = async (req: Request, res: Response, next: NextFu
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getFinalClassificationsService(listFilters(req), limit, offset);
+        const data = await getFinalClassificationsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('finalClassification.getSuccessPlural', req.lang),
@@ -68,7 +68,7 @@ const getAllFinalClassifications = async (req: Request, res: Response, next: Nex
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
     try {
-        const data = await getAllFinalClassificationsService(listFilters(req), limit, offset);
+        const data = await getAllFinalClassificationsService(listFilters(req), limit, offset, canViewAuditAuthors(req.user));
         return res.status(200).json({
             ok: true,
             message: getMessage('finalClassification.getSuccessPlural', req.lang),
@@ -94,7 +94,8 @@ const getFinalClassificationById = async (req: Request, res: Response, next: Nex
         const data = await getFinalClassificationByIdService(
             id.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -119,7 +120,8 @@ const getFinalClassificationByCaseId = async (req: Request, res: Response, next:
         const data = await getFinalClassificationByCaseIdService(
             caseId.toString().trim(),
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

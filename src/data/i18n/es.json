@@ -78,7 +78,9 @@
         "samePassword": "La nueva contraseña debe ser distinta de la actual",
         "alreadyActive": "El usuario con ID {{id}} ya está activo",
         "alreadyInactive": "El usuario con ID {{id}} ya está inactivo",
-        "idRequired": "El ID del usuario es obligatorio"
+        "idRequired": "El ID del usuario es obligatorio",
+        "searchSuccess": "Búsqueda de usuarios realizada exitosamente",
+        "searchQueryRequired": "El criterio de búsqueda debe contener al menos una palabra del nombre, el correo o el usuario"
     },
     "role": {
         "notFound": "Uno o más roles no han sido encontrados. Por favor, verifique los nombres de los roles e inténtelo de nuevo."

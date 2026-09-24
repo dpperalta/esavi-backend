@@ -3,12 +3,13 @@ import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { AppRole, AppUser, AppUserRole } from '../models';
 import { AppDetails, AuthUser, ChangePasswordInput, CreateUserInput, CreateUserServiceParams } from '../types';
-import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, esaviCrypt, esaviDecrypt, getMessage, toNameTokens, toTitleCase, canViewAuditAuthors } from '../helpers';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES } from '../constants/roles.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { revokeAllUserSessionsService } from './appSession.service';
 import { invalidateUserPasswordResetsService } from './appPasswordReset.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Encrypted columns. Normalized before encrypting: normalizing afterwards would produce a
 // different ciphertext for the same value and break the equality lookups the fixed IV allows
@@ -30,8 +31,8 @@ const ROLES_INCLUDE = {
     attributes: ['roleId', 'name', 'code', 'level']
 };
 
-// passwordHash and sysDetails never leave the service
-const LIST_EXCLUDE = { exclude: ['passwordHash', 'sysDetails'] };
+// passwordHash and sysDetails never leave the service. nameTokens governs search, not the response
+const LIST_EXCLUDE = { exclude: ['passwordHash', 'sysDetails', 'nameTokens'] };
 
 // A user list is read newest first. Alphabetical is impossible: the names are encrypted and
 // ORDER BY would sort by the ciphertext
@@ -130,6 +131,7 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
             lastName: esaviCrypt(normalizedLastName),
             email: esaviCrypt(normalizedEmail),
             displayName: esaviCrypt(`${normalizedFirstName} ${normalizedLastName}`),
+            nameTokens: toNameTokens(normalizedFirstName, normalizedLastName).map(esaviCrypt),
             phone: phone ?? undefined,
             passwordHash: passwordHash,
             requiresPasswordChange: true,
@@ -164,7 +166,7 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
             include: [ROLES_INCLUDE]
         });
 
-        return userWithRoles ? toUserResponse(userWithRoles) : null;
+        return resolveAppDetailsAuthorsService(userWithRoles ? toUserResponse(userWithRoles) : null, canViewAuditAuthors(authUser));
     } catch (error) {
         await transaction.rollback();
         throw error;
@@ -173,7 +175,7 @@ const createUserService = async ({ data, authUser, lang }: CreateUserServicePara
 
 // Get Active Users Service
 // Code: ESAVI-USER-002A
-const getUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     // distinct keeps the count on users, not on the rows the roles join multiplies
     const { count, rows } = await AppUser.findAndCountAll({
         where: { isActive: true },
@@ -184,12 +186,55 @@ const getUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = D
         limit,
         offset
     });
-    return { count, rows: rows.map(toUserListRow) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toUserListRow) }, canViewAuthors);
+}
+
+// Search Users Service
+// Code: ESAVI-USER-008
+// A single q is resolved through three branches in one Op.or: name tokens (conjunctive,
+// Op.contains over the GIN index), email equality and username equality — never a heuristic on
+// the shape of q, so a half-typed email still reaches the name branch (SPEC F62 §3.3)
+const searchUsersService = async (
+    q: string,
+    lang: string,
+    canViewInactive: boolean = false,
+    limit: number = DEFAULT_LIMIT,
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
+) => {
+    // Op.contains: [] is true for every row — an empty token set would turn this endpoint into a
+    // dump of the whole roster. toNameTokens(q) tokenizing to zero elements — a string made only
+    // of combining diacritical marks, for instance — must stop the query, not fall back to the
+    // email/username branches (SPEC F62 §3.4)
+    const tokens = toNameTokens(q);
+    if( tokens.length === 0 ) {
+        throw new AppError(getMessage('user.searchQueryRequired', lang), 400, 'USER_008_QUERY_REQUIRED');
+    }
+    const encryptedTokens = tokens.map(esaviCrypt);
+    const { count, rows } = await AppUser.findAndCountAll({
+        where: {
+            [Op.or]: [
+                { nameTokens: { [Op.contains]: encryptedTokens } },
+                { email: esaviCrypt(normalizeEmail(q)) },
+                { username: esaviCrypt(q.trim()) }
+            ],
+            ...( canViewInactive ? {} : { isActive: true } )
+        },
+        attributes: LIST_EXCLUDE,
+        include: [ROLES_INCLUDE],
+        distinct: true,
+        order: LIST_ORDER,
+        limit,
+        offset
+    });
+    // toUserResponse, not toUserListRow (SPEC F62 §3.5, §3.6): a search result is a single row
+    // read, not a page of the roster, so its audit trail travels like the 003's does
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toUserResponse) }, canViewAuthors);
 }
 
 // Get All Users Service - For Admin
 // Code: ESAVI-USER-002B
-const getAllUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllUsersService = async (limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const { count, rows } = await AppUser.findAndCountAll({
         attributes: LIST_EXCLUDE,
         include: [ROLES_INCLUDE],
@@ -198,7 +243,7 @@ const getAllUsersService = async (limit: number = DEFAULT_LIMIT, offset: number 
         limit,
         offset
     });
-    return { count, rows: rows.map(toUserListRow) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toUserListRow) }, canViewAuthors);
 }
 
 // The read 003 and 007 share. Each one raises its own 404 so the operation code stays
@@ -214,12 +259,12 @@ const findUserWithRelations = async (id: string, includeInactive: boolean = fals
 
 // Get User By ID Service
 // Code: ESAVI-USER-003
-const getUserByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getUserByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const user = await findUserWithRelations(id, canViewInactive);
     if( !user ) {
         throw new AppError(getMessage('user.notFound', lang), 404, 'USER_003_NOT_FOUND');
     }
-    return toUserResponse(user);
+    return resolveAppDetailsAuthorsService(toUserResponse(user), canViewAuthors);
 }
 
 // Get Own Profile Service
@@ -230,7 +275,7 @@ const getOwnProfileService = async (authUser: AuthUser | undefined, lang: string
     if( !user ) {
         throw new AppError(getMessage('user.notFound', lang), 404, 'USER_007_NOT_FOUND');
     }
-    return toUserResponse(user);
+    return resolveAppDetailsAuthorsService(toUserResponse(user), canViewAuditAuthors(authUser));
 }
 
 // Update User Service
@@ -280,6 +325,12 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
     // break the comparison in silence — everything would count as a change — with no test
     // telling it apart from a legitimate one. esaviCrypt is applied after the diff
     const stored = decryptPii(user.get({ plain: true }) as Record<string, unknown>);
+    // nameTokens is compared as a list of plain-text tokens, never ciphertext against
+    // ciphertext: each token was encrypted on its own, so the stored array is decrypted
+    // element by element before it reaches buildDifferentialUpdate
+    stored.nameTokens = Array.isArray(stored.nameTokens)
+        ? (stored.nameTokens as string[]).map((token) => esaviDecrypt(token))
+        : [];
     // displayName is never received: it is recomposed from the resulting first and last name,
     // over the stored value of whichever did not arrive. Derived, so it travels always and the
     // helper is the one that decides whether it changed
@@ -291,14 +342,17 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
         firstName: firstName ? nextFirstName : undefined,
         lastName: lastName ? nextLastName : undefined,
         phone: phone ? phone.trim() : undefined,
-        displayName: nextFirstName && nextLastName ? `${ nextFirstName } ${ nextLastName }` : undefined
+        displayName: nextFirstName && nextLastName ? `${ nextFirstName } ${ nextLastName }` : undefined,
+        // Derived, not conditioned by presence: it enters the diff on every update, and it is
+        // buildDifferentialUpdate — not this line — that decides whether it actually changed
+        nameTokens: toNameTokens(nextFirstName, nextLastName)
     });
 
     // Nothing changed: no UPDATE, no updatedAt and no audit entry. The record is returned as it
     // stands, which is the state the client asked for
     if( Object.keys(changes).length === 0 ) {
         const unchanged = await findUserWithRelations(id, true);
-        return unchanged ? toUserResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toUserResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     const objectToUpdate: Record<string, unknown> = { ...changes };
@@ -306,6 +360,9 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
         if( objectToUpdate[field] ) {
             objectToUpdate[field] = esaviCrypt(objectToUpdate[field] as string);
         }
+    }
+    if( 'nameTokens' in objectToUpdate ) {
+        objectToUpdate.nameTokens = (objectToUpdate.nameTokens as string[]).map((token) => esaviCrypt(token));
     }
 
     const newEntry: AppDetails = {
@@ -323,7 +380,7 @@ const updateUserService = async (id: string, data: Partial<CreateUserInput>, aut
         ]
     });
     const updatedUser = await findUserWithRelations(id, true);
-    return updatedUser ? toUserResponse(updatedUser) : null;
+    return resolveAppDetailsAuthorsService(updatedUser ? toUserResponse(updatedUser) : null, canViewAuditAuthors(authUser));
 }
 
 // Users who currently carry the SUPERADMIN role: the assignment is active and so is the user.
@@ -488,6 +545,7 @@ export {
     createUserService,
     getUsersService,
     getAllUsersService,
+    searchUsersService,
     getUserByIdService,
     getOwnProfileService,
     updateUserService,

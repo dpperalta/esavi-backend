@@ -46,7 +46,8 @@ const isUsableValue = ( value: unknown ): boolean => {
 // — a decryption failure, a dead connection — is a real problem and travels up untouched
 const readSystemConfigValue = async ( code: string, scope: string, lang: string ): Promise<unknown> => {
     try {
-        const row = await getSystemConfigByCodeService( code, scope, lang, false, true ) as Record<string, unknown>;
+        // Only the value is read: the audit authors are never needed, so they cost no query
+        const row = await getSystemConfigByCodeService( code, scope, lang, false, true, false ) as Record<string, unknown>;
         return row.value;
     } catch ( error ) {
         if( error instanceof AppError && error.statusCode === 404 ) {

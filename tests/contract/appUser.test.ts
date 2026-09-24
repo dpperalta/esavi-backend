@@ -128,7 +128,8 @@ describe('appUser contract', () => {
 
             expect(response.body.data.appDetails).toHaveLength(1);
             expect(response.body.data.appDetails[0]).toEqual(
-                expect.objectContaining({ method: 'ESAVI-USER-001', user: getTestUser('ADMIN').userId })
+                // The stored userId is answered as the author's email (SPEC F59)
+                expect.objectContaining({ method: 'ESAVI-USER-001', user: getTestUser('ADMIN').email })
             );
         });
 
@@ -628,6 +629,135 @@ describe('appUser contract', () => {
                 expect(response.status).toBe(400);
             }
         );
+
+    });
+
+    describe('search — ESAVI-USER-008 (SPEC F62)', () => {
+
+        const firstTok = 'Diego';
+        const lastTok = `SearchPerez${ suffix }`;
+        let subject: { userId: string, email: string };
+        let subjectUsername: string;
+
+        const searchUsers = ( q: string, role: TestRole = 'ADMIN', extra: Record<string, string> = {} ) =>
+            request(app).get('/api/users/search').query({ q, ...extra }).set(authHeader(role));
+
+        beforeAll(async () => {
+            subjectUsername = `search.user.${ suffix }`;
+            subject = await createUserFixture('search.subject', {
+                firstName: firstTok,
+                lastName: lastTok,
+                username: subjectUsername
+            });
+        });
+
+        it('finds by a name token, case-insensitively', async () => {
+            for( const q of [lastTok, lastTok.toLowerCase(), lastTok.toUpperCase()] ) {
+                const response = await searchUsers(q);
+                expect(response.status).toBe(200);
+                expect(response.body.data.rows.map((row: { userId: string }) => row.userId)).toContain(subject.userId);
+            }
+        });
+
+        it('is conjunctive: both tokens together match, a wrong second token does not', async () => {
+            const both = await searchUsers(`${ firstTok } ${ lastTok }`);
+            expect(both.body.data.rows.map((row: { userId: string }) => row.userId)).toContain(subject.userId);
+
+            const wrong = await searchUsers(`${ firstTok } NoSuchToken${ suffix }`);
+            expect(wrong.status).toBe(200);
+            expect(wrong.body.data.count).toBe(0);
+        });
+
+        it('finds by the full email, with or without case', async () => {
+            const response = await searchUsers(subject.email.toUpperCase());
+            expect(response.status).toBe(200);
+            expect(response.body.data.rows.map((row: { userId: string }) => row.userId)).toContain(subject.userId);
+        });
+
+        it('finds by the exact username, but not in a different case — the limitation SPEC F62 §7 R2 declares', async () => {
+            const exact = await searchUsers(subjectUsername);
+            expect(exact.body.data.rows.map((row: { userId: string }) => row.userId)).toContain(subject.userId);
+
+            const differentCase = await searchUsers(subjectUsername.toUpperCase());
+            expect(differentCase.body.data.rows.map((row: { userId: string }) => row.userId)).not.toContain(subject.userId);
+        });
+
+        it('a query that matches nothing responds 200 with an empty page, never 404', async () => {
+            const response = await searchUsers(`NoSuchUser${ suffix }XYZ`);
+            expect(response.status).toBe(200);
+            expect(response.body.data).toEqual({ count: 0, rows: [] });
+        });
+
+        it('rejects a missing, empty or whitespace-only q with the standard 400', async () => {
+            expect((await request(app).get('/api/users/search').set(authHeader('ADMIN'))).status).toBe(400);
+            expect((await searchUsers('')).status).toBe(400);
+            expect((await searchUsers('   ')).status).toBe(400);
+        });
+
+        it('rejects a q made only of combining diacritical marks with USER_008_QUERY_REQUIRED, not a roster dump', async () => {
+            const response = await searchUsers('́̈');
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe('USER_008_QUERY_REQUIRED');
+        });
+
+        it('limit above 100 is rejected, and pagination over several matches is correct', async () => {
+            const groupToken = `SearchGroup${ suffix }`;
+            await Promise.all([1, 2, 3].map((n) =>
+                createUserFixture(`search.group.${ n }`, { firstName: `Member${ n }`, lastName: groupToken })
+            ));
+
+            const over = await searchUsers(groupToken, 'ADMIN', { limit: '101' });
+            expect(over.status).toBe(400);
+
+            const paged = await searchUsers(groupToken, 'ADMIN', { limit: '2' });
+            expect(paged.status).toBe(200);
+            expect(paged.body.data.count).toBe(3);
+            expect(paged.body.data.rows).toHaveLength(2);
+        });
+
+        it('rejects USER with 403; ADMIN and SUPERADMIN reach it', async () => {
+            expect((await searchUsers(lastTok, 'USER')).status).toBe(403);
+            expect((await searchUsers(lastTok, 'ADMIN')).status).toBe(200);
+            expect((await searchUsers(lastTok, 'SUPERADMIN')).status).toBe(200);
+        });
+
+        // canViewInactive is SUPERADMIN only in this codebase (permissions.helper.ts), the same
+        // gate 003 and 002B already use — an ADMIN does not see the inactive row here either
+        it('a SUPERADMIN sees a matching inactive row, and no query param can hide it', async () => {
+            await request(app).delete(`/api/users/${ subject.userId }`).set(authHeader('ADMIN'));
+
+            const asAdmin = await searchUsers(lastTok, 'ADMIN', { includeInactive: 'false' });
+            expect(asAdmin.body.data.rows.map((row: { userId: string }) => row.userId)).not.toContain(subject.userId);
+
+            const asSuperAdmin = await searchUsers(lastTok, 'SUPERADMIN', { includeInactive: 'false' });
+            expect(asSuperAdmin.status).toBe(200);
+            expect(asSuperAdmin.body.data.rows.map((row: { userId: string }) => row.userId)).toContain(subject.userId);
+        });
+
+        it('rows carry the five decrypted PII columns and never passwordHash or sysDetails', async () => {
+            const response = await searchUsers(lastTok, 'SUPERADMIN');
+            const row = response.body.data.rows.find((entry: { userId: string }) => entry.userId === subject.userId);
+
+            expect(row).toBeDefined();
+            expect(row.email).toBe(subject.email);
+            expect(row.username).toBe(subjectUsername);
+            expect(row).not.toHaveProperty('passwordHash');
+            expect(row).not.toHaveProperty('sysDetails');
+            expect(row).not.toHaveProperty('nameTokens');
+        });
+
+        it('does not write: searching repeatedly leaves updatedAt, appDetails and sysDetails untouched', async () => {
+            const before = await AppUser.findByPk(subject.userId);
+
+            for( let i = 0; i < 10; i++ ) {
+                await searchUsers(lastTok, 'ADMIN');
+            }
+
+            const after = await AppUser.findByPk(subject.userId);
+            expect(after!.getDataValue('updatedAt')).toEqual(before!.getDataValue('updatedAt'));
+            expect(after!.getDataValue('appDetails')).toEqual(before!.getDataValue('appDetails'));
+            expect(after!.getDataValue('sysDetails')).toEqual(before!.getDataValue('sysDetails'));
+        });
 
     });
 

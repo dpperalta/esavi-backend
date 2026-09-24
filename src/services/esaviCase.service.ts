@@ -1,7 +1,7 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { Classification, EsaviCase, FinalClassification, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
-import { AppError, buildDifferentialUpdate, buildTextSearchConditions, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase } from '../helpers';
+import { AppError, buildDifferentialUpdate, buildTextSearchConditions, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
@@ -9,6 +9,7 @@ import { recalculateClassificationAgesService } from './common/ageRecalculation.
 import { cascadeSealSatellite } from './common/satelliteCascade.service';
 import { assertCaseIsOpen, createCaseWorkflowService } from './caseWorkflow.service';
 import { resolveGeoSubtreeIds, resolveUserGeoScopeIds } from './common/geoScope.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The case code is not atomic by construction: two simultaneous inserts on the same facility and
 // date read the same MAX. The UNIQUE constraint is the authority, and the service just recomputes
@@ -281,7 +282,7 @@ const createEsaviCaseService = async (data: CreateEsaviCaseInput, authUser: Auth
     // runs after the commit, outside the transaction, and the HTTP contract of the 001 does not
     // change: the response carries no workflow data
     const createdEsaviCase = newEsaviCase ? await findEsaviCaseWithRelations(newEsaviCase.caseId, true) : null;
-    return createdEsaviCase ? toEsaviCaseResponse(createdEsaviCase) : null;
+    return resolveAppDetailsAuthorsService(createdEsaviCase ? toEsaviCaseResponse(createdEsaviCase) : null, canViewAuditAuthors(authUser));
 }
 
 // The condition of one date column: its exact value, or its range with both ends inclusive.
@@ -383,7 +384,7 @@ const getEsaviCasesService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toEsaviCaseListRow) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toEsaviCaseListRow) }, canViewAuditAuthors(authUser));
 }
 
 // Get All ESAVI Cases Service - For Admin
@@ -391,7 +392,8 @@ const getEsaviCasesService = async (
 const getAllEsaviCasesService = async (
     filters: EsaviCaseListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const facilityInclude = await resolveListFacilityInclude(filters);
     const { count, rows } = await EsaviCase.findAndCountAll({
@@ -402,7 +404,7 @@ const getAllEsaviCasesService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toEsaviCaseListRow) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toEsaviCaseListRow) }, canViewAuthors);
 }
 
 // The ownership guard of SPEC F49, shared by 003 and 004: a case whose facility geoLocation is
@@ -426,7 +428,7 @@ const getEsaviCaseByIdService = async (id: string, lang: string, canViewInactive
         throw new AppError(getMessage('esaviCase.notFound', lang), 404, 'CASE_003_NOT_FOUND');
     }
     await assertFacilityGeoLocationInScope(esaviCase.healthFacility?.geoLocationId, authUser, '003', lang);
-    return toEsaviCaseResponse(esaviCase);
+    return resolveAppDetailsAuthorsService(toEsaviCaseResponse(esaviCase), canViewAuditAuthors(authUser));
 }
 
 // Update ESAVI Case Service
@@ -539,7 +541,7 @@ const updateEsaviCaseService = async (id: string, data: Partial<CreateEsaviCaseI
     // Read outside the transaction, once it is committed: the response is the same whether or not
     // anything changed, so both paths converge here
     const updatedEsaviCase = await findEsaviCaseWithRelations(id, true);
-    return updatedEsaviCase ? toEsaviCaseResponse(updatedEsaviCase) : null;
+    return resolveAppDetailsAuthorsService(updatedEsaviCase ? toEsaviCaseResponse(updatedEsaviCase) : null, canViewAuditAuthors(authUser));
 }
 
 // Deactivating a case drags its active notifiers along, inside the same transaction. The

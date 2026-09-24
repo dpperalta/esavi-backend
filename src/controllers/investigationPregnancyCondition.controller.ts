@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, canViewInactive, esaviLog, getMessage } from '../helpers';
+import { AppError, canViewInactive, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import { AuthUser } from '../types';
 import {
     createInvestigationPregnancyConditionService,
@@ -43,7 +43,8 @@ const getInvestigationPregnancyConditionsByInvestigation = async (req: Request, 
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -72,7 +73,8 @@ const getAllInvestigationPregnancyConditionsByInvestigation = async (req: Reques
             req.lang,
             canViewInactive(req.user as AuthUser),
             limit,
-            offset
+            offset,
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,
@@ -97,7 +99,8 @@ const getInvestigationPregnancyConditionById = async (req: Request, res: Respons
         const data = await getInvestigationPregnancyConditionByIdService(
             id,
             req.lang,
-            canViewInactive(req.user as AuthUser)
+            canViewInactive(req.user as AuthUser),
+            canViewAuditAuthors(req.user)
         );
         return res.status(200).json({
             ok: true,

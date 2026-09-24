@@ -1,10 +1,11 @@
 import { sequelize } from '../database/connection';
 import { EsaviCase, Notification, SevereNotification } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, getMessage, canViewAuditAuthors } from '../helpers';
 import { purgeEntityService } from './common/entityPurge.service';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { AppDetails, AuthUser, CreateSevereNotificationInput } from '../types';
 import { NotificationType } from '../constants/notification.constants';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Only a SEVERE header admits a severe detail. A NON_SEVERE one never can, which is why the
 // mismatch is a 409 against the state of another row and not a 400 about a malformed body
@@ -198,7 +199,7 @@ const createSevereNotificationService = async (
 
     // Re-read so the response carries the resolved header and its case, not just the shared id
     const created = await findSevereNotificationWithRelations(data.notificationId, true);
-    return created ? toSevereNotificationResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toSevereNotificationResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // Get Severe Notification By ID Service
@@ -209,12 +210,12 @@ const createSevereNotificationService = async (
 // that a detail exists under a notification it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // header, which is what makes it possible to consult it before purging it
-const getSevereNotificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getSevereNotificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const severeNotification = await findSevereNotificationWithRelations(id, canViewInactive);
     if( !severeNotification ) {
         throw new AppError(getMessage('severeNotification.notFound', lang), 404, 'SEVNOT_003_NOT_FOUND');
     }
-    return toSevereNotificationResponse(severeNotification);
+    return resolveAppDetailsAuthorsService(toSevereNotificationResponse(severeNotification), canViewAuthors);
 }
 
 // Get Severe Notification By Case ID Service
@@ -226,7 +227,7 @@ const getSevereNotificationByIdService = async (id: string, lang: string, canVie
 // The three 404 are deliberately distinct, and the asymmetry with 003 is intentional: there the
 // client already holds the primary key of the detail, here it enters through a caseId and needs
 // to know which link of the chain broke
-const getSevereNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+const getSevereNotificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -249,7 +250,7 @@ const getSevereNotificationByCaseIdService = async (caseId: string, lang: string
     if( !severeNotification ) {
         throw new AppError(getMessage('severeNotification.notFound', lang), 404, 'SEVNOT_006_NOT_FOUND');
     }
-    return toSevereNotificationResponse(severeNotification);
+    return resolveAppDetailsAuthorsService(toSevereNotificationResponse(severeNotification), canViewAuthors);
 }
 
 // Update Severe Notification Service
@@ -318,7 +319,7 @@ const updateSevereNotificationService = async (
     // Nothing changed: no UPDATE, no updatedAt and no audit entry. It also spares the row the
     // sysDetails.version bump that TRG_severeNotification_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
-        return toSevereNotificationResponse(severeNotification);
+        return resolveAppDetailsAuthorsService(toSevereNotificationResponse(severeNotification), canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
@@ -342,7 +343,7 @@ const updateSevereNotificationService = async (
     });
 
     const updated = await findSevereNotificationWithRelations(id, true);
-    return updated ? toSevereNotificationResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toSevereNotificationResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Severe Notification Service - For SuperAdmin

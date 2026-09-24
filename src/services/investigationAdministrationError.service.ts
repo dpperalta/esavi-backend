@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { EsaviCase, Investigation, InvestigationAdministrationError } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -11,6 +11,7 @@ import {
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The investigation travels in every response, narrowed to three fields: what the client needs is to
 // know which case the row hangs from and whether its parent is alive. Returning the whole
@@ -323,7 +324,7 @@ export const createInvestigationAdministrationErrorService = async (
 
     // Re-read so the response carries the resolved investigation, not just the raw identifier
     const created = await findInvestigationAdministrationErrorWithRelations(data.investigationId, true);
-    return created ? toInvestigationAdministrationErrorResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toInvestigationAdministrationErrorResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // The order of the two listings, as in F29, F32, F34, F36 and F38. This entity has no date of the
@@ -375,7 +376,8 @@ const listInclude = (filters: InvestigationAdministrationErrorListFilters, inclu
 export const getInvestigationAdministrationErrorsService = async (
     filters: InvestigationAdministrationErrorListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationAdministrationError.findAndCountAll({
         where: buildListWhere(filters),
@@ -389,7 +391,7 @@ export const getInvestigationAdministrationErrorsService = async (
     // rows — twenty six data columns per element — which is exactly why the default pagination is
     // not relaxed here. A filter whose UUID matches nothing returns 200 with { count: 0, rows: [] }
     // and never a 404 — an empty listing is an answer, not a missing resource
-    return { count, rows: rows.map(toInvestigationAdministrationErrorResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationAdministrationErrorResponse) }, canViewAuthors);
 }
 
 // Get All Investigation Administration Errors Service - For Admin
@@ -397,7 +399,8 @@ export const getInvestigationAdministrationErrorsService = async (
 export const getAllInvestigationAdministrationErrorsService = async (
     filters: InvestigationAdministrationErrorListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationAdministrationError.findAndCountAll({
         where: buildListWhere(filters),
@@ -407,7 +410,7 @@ export const getAllInvestigationAdministrationErrorsService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toInvestigationAdministrationErrorResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationAdministrationErrorResponse) }, canViewAuthors);
 }
 
 // Get Investigation Administration Error By ID Service
@@ -420,12 +423,12 @@ export const getAllInvestigationAdministrationErrorsService = async (
 // USER that an administration error exists under an investigation it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // investigation, which is what makes it possible to consult it before purging it
-export const getInvestigationAdministrationErrorByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+export const getInvestigationAdministrationErrorByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const administrationError = await findInvestigationAdministrationErrorWithRelations(id, includeInactive);
     if( !administrationError ) {
         throw new AppError(getMessage('investigationAdministrationError.notFound', lang), 404, 'INVADMER_003_NOT_FOUND');
     }
-    return toInvestigationAdministrationErrorResponse(administrationError);
+    return resolveAppDetailsAuthorsService(toInvestigationAdministrationErrorResponse(administrationError), canViewAuthors);
 }
 
 // Get Investigation Administration Error By Case ID Service
@@ -438,7 +441,7 @@ export const getInvestigationAdministrationErrorByIdService = async (id: string,
 // THREE DISTINCT 404, and the difference matters to the client: "that case does not exist", "it has
 // no visible investigation" and "its investigation has no administration error yet" are three
 // different things to show on screen, and only the third one is fixed by creating one
-export const getInvestigationAdministrationErrorByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+export const getInvestigationAdministrationErrorByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -464,7 +467,7 @@ export const getInvestigationAdministrationErrorByCaseIdService = async (caseId:
     if( !administrationError ) {
         throw new AppError(getMessage('investigationAdministrationError.notFound', lang), 404, 'INVADMER_006_NOT_FOUND');
     }
-    return toInvestigationAdministrationErrorResponse(administrationError);
+    return resolveAppDetailsAuthorsService(toInvestigationAdministrationErrorResponse(administrationError), canViewAuthors);
 }
 
 // The same read as findInvestigationAdministrationErrorWithRelations without narrowing the
@@ -631,7 +634,7 @@ export const updateInvestigationAdministrationErrorService = async (
     // write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationAdministrationErrorWithRelations(id, true);
-        return unchanged ? toInvestigationAdministrationErrorResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationAdministrationErrorResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the generic
@@ -655,7 +658,7 @@ export const updateInvestigationAdministrationErrorService = async (
     });
 
     const updated = await findInvestigationAdministrationErrorWithRelations(id, true);
-    return updated ? toInvestigationAdministrationErrorResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationAdministrationErrorResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Investigation Administration Error Service - For SuperAdmin

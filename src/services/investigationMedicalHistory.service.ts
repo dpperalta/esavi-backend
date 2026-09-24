@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, Investigation, InvestigationMedicalHistory, InvestigationPregnancyCondition } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -12,6 +12,7 @@ import { AnswerOption } from '../constants/enums.constants';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The four catalog codes are local constants of this service, with the pattern of
 // notificationPregnancyComplication.service.ts:23. They do not go to
@@ -345,7 +346,7 @@ const createInvestigationMedicalHistoryService = async (
     // Re-read so the response carries the resolved investigation, its status, its case and the four
     // catalogs, not just the raw identifiers
     const created = await findInvestigationMedicalHistoryWithRelations(data.investigationId, true);
-    return created ? toInvestigationMedicalHistoryResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toInvestigationMedicalHistoryResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // The order of the two listings, as in F29 and unlike F30. This entity has no date of the domain
@@ -396,7 +397,8 @@ const listInclude = (filters: InvestigationMedicalHistoryListFilters, includeIna
 const getInvestigationMedicalHistoriesService = async (
     filters: InvestigationMedicalHistoryListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationMedicalHistory.findAndCountAll({
         where: buildListWhere(filters),
@@ -408,7 +410,7 @@ const getInvestigationMedicalHistoriesService = async (
     });
     // The rows carry the same full shape as the 003: there is no reduced shape. The entity has
     // fifteen data columns and trimming them would leave a listing with no content
-    return { count, rows: rows.map(toInvestigationMedicalHistoryResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationMedicalHistoryResponse) }, canViewAuthors);
 }
 
 // Get All Investigation Medical Histories Service - For Admin
@@ -416,7 +418,8 @@ const getInvestigationMedicalHistoriesService = async (
 const getAllInvestigationMedicalHistoriesService = async (
     filters: InvestigationMedicalHistoryListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationMedicalHistory.findAndCountAll({
         where: buildListWhere(filters),
@@ -426,7 +429,7 @@ const getAllInvestigationMedicalHistoriesService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toInvestigationMedicalHistoryResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationMedicalHistoryResponse) }, canViewAuthors);
 }
 
 // Get Investigation Medical History By ID Service
@@ -439,12 +442,12 @@ const getAllInvestigationMedicalHistoriesService = async (
 // USER that a medical history exists under an investigation it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // investigation, which is what makes it possible to consult it before purging it
-const getInvestigationMedicalHistoryByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationMedicalHistoryByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const history = await findInvestigationMedicalHistoryWithRelations(id, includeInactive);
     if( !history ) {
         throw new AppError(getMessage('investigationMedicalHistory.notFound', lang), 404, 'INVMEDH_003_NOT_FOUND');
     }
-    return toInvestigationMedicalHistoryResponse(history);
+    return resolveAppDetailsAuthorsService(toInvestigationMedicalHistoryResponse(history), canViewAuthors);
 }
 
 // Get Investigation Medical History By Case ID Service
@@ -458,7 +461,7 @@ const getInvestigationMedicalHistoryByIdService = async (id: string, lang: strin
 // which link of the chain broke — whether the case is not there, whether it has no visible
 // investigation, or whether the anamnesis has not been recorded yet. Those are three different
 // actions on the user's side, and one generic message would make them indistinguishable
-const getInvestigationMedicalHistoryByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+const getInvestigationMedicalHistoryByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -481,7 +484,7 @@ const getInvestigationMedicalHistoryByCaseIdService = async (caseId: string, lan
     if( !history ) {
         throw new AppError(getMessage('investigationMedicalHistory.notFound', lang), 404, 'INVMEDH_006_NOT_FOUND');
     }
-    return toInvestigationMedicalHistoryResponse(history);
+    return resolveAppDetailsAuthorsService(toInvestigationMedicalHistoryResponse(history), canViewAuthors);
 }
 
 // Update Investigation Medical History Service
@@ -607,7 +610,7 @@ const updateInvestigationMedicalHistoryService = async (
     // sysDetails.version bump that TRG_investigationMedicalHistory_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationMedicalHistoryWithRelations(id, true);
-        return unchanged ? toInvestigationMedicalHistoryResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationMedicalHistoryResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the generic
@@ -631,7 +634,7 @@ const updateInvestigationMedicalHistoryService = async (
     });
 
     const updated = await findInvestigationMedicalHistoryWithRelations(id, true);
-    return updated ? toInvestigationMedicalHistoryResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationMedicalHistoryResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Investigation Medical History Service - For SuperAdmin

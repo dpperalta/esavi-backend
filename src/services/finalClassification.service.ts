@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType, EsaviCase, FinalClassification } from '../models';
-import { AppError, buildDifferentialUpdate, getMessage } from '../helpers';
+import { AppError, buildDifferentialUpdate, getMessage, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -12,6 +12,7 @@ import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { advanceCaseWorkflowStageService, assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // Code of the catalogType that groups the three precedence values, seeded with three items of
 // code and value 1, 2 and 3. Without this check any active catalogItem of the system would enter
@@ -323,7 +324,7 @@ const createFinalClassificationService = async (
         newFinalClassification.finalClassificationId,
         true
     );
-    return createdFinalClassification ? toFinalClassificationResponse(createdFinalClassification) : null;
+    return resolveAppDetailsAuthorsService(createdFinalClassification ? toFinalClassificationResponse(createdFinalClassification) : null, canViewAuditAuthors(authUser));
 }
 
 // The single filter of the listing, by equality. A filter pointing at a caseId that does not
@@ -350,16 +351,17 @@ const buildListWhere = (filters: FinalClassificationListFilters = {}): WhereOpti
 const getFinalClassificationsService = async (
     filters: FinalClassificationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
-    return await FinalClassification.findAndCountAll({
+    return resolveAppDetailsAuthorsService(await FinalClassification.findAndCountAll({
         where: { ...buildListWhere(filters), isActive: true },
         attributes: DETAIL_EXCLUDE,
         include: DETAIL_INCLUDE,
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get All Final Classifications Service - For Admin
@@ -367,16 +369,17 @@ const getFinalClassificationsService = async (
 const getAllFinalClassificationsService = async (
     filters: FinalClassificationListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
-    return await FinalClassification.findAndCountAll({
+    return resolveAppDetailsAuthorsService(await FinalClassification.findAndCountAll({
         where: buildListWhere(filters),
         attributes: DETAIL_EXCLUDE,
         include: DETAIL_INCLUDE,
         order: LIST_ORDER,
         limit,
         offset
-    });
+    }), canViewAuthors);
 }
 
 // Get Final Classification By ID Service
@@ -384,12 +387,12 @@ const getAllFinalClassificationsService = async (
 // The :id is the finalClassificationId and not the caseId — unlike the ten satellites of
 // investigation, where the two were the same value. An inactive row answers 404 for USER and
 // ADMIN, and 200 for SUPERADMIN through canViewInactive
-const getFinalClassificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false) => {
+const getFinalClassificationByIdService = async (id: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     const finalClassification = await findFinalClassificationWithRelations(id, canViewInactive);
     if( !finalClassification ) {
         throw new AppError(getMessage('finalClassification.notFound', lang), 404, 'FINCLASS_003_NOT_FOUND');
     }
-    return toFinalClassificationResponse(finalClassification);
+    return resolveAppDetailsAuthorsService(toFinalClassificationResponse(finalClassification), canViewAuthors);
 }
 
 // Get Final Classification By Case ID Service
@@ -400,14 +403,14 @@ const getFinalClassificationByIdService = async (id: string, lang: string, canVi
 // one-element array on every screen.
 // The two 404 are deliberately distinct: a case that does not exist is a broken link, a case
 // without a final classification is a pending verdict, and the client acts differently on each
-const getFinalClassificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false) => {
+const getFinalClassificationByCaseIdService = async (caseId: string, lang: string, canViewInactive: boolean = false, canViewAuthors: boolean) => {
     await assertCaseIsValid(caseId, '006', lang);
 
     const finalClassification = await findFinalClassificationByCaseId(caseId, canViewInactive);
     if( !finalClassification ) {
         throw new AppError(getMessage('finalClassification.notFound', lang), 404, 'FINCLASS_006_NOT_FOUND');
     }
-    return toFinalClassificationResponse(finalClassification);
+    return resolveAppDetailsAuthorsService(toFinalClassificationResponse(finalClassification), canViewAuthors);
 }
 
 // The state the row would be left in once block D has had its say. With D active the ten forbidden
@@ -498,7 +501,7 @@ const updateFinalClassificationService = async (
     // Nothing changed: no UPDATE, no updatedAt and no audit entry
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findFinalClassificationWithRelations(id, true);
-        return unchanged ? toFinalClassificationResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toFinalClassificationResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the
@@ -521,7 +524,7 @@ const updateFinalClassificationService = async (
     });
 
     const updatedFinalClassification = await findFinalClassificationWithRelations(id, true);
-    return updatedFinalClassification ? toFinalClassificationResponse(updatedFinalClassification) : null;
+    return resolveAppDetailsAuthorsService(updatedFinalClassification ? toFinalClassificationResponse(updatedFinalClassification) : null, canViewAuditAuthors(authUser));
 }
 
 // Setting Final Classification Active/Inactive Service

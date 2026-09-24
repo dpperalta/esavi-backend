@@ -8,6 +8,8 @@ import { AppDetails, AuthUser, CreateGeoLevelTypeInput, GeoLevelTypeListFilters 
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { sequelize } from '../database/connection';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { canViewAuditAuthors } from '../helpers';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // ESAVI-GEOTYPE-001 - Create Geographic Level Type Service
 const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser: AuthUser | undefined, lang: string) => {
@@ -33,7 +35,7 @@ const createGeoLevelTypeService = async (data: CreateGeoLevelTypeInput, authUser
         sortOrder: data.sortOrder,
         appDetails: [newEntry]
     });
-    return newGeoLevelType;
+    return resolveAppDetailsAuthorsService(newGeoLevelType, canViewAuditAuthors(authUser));
 }
 
 // Shared by both listings. name and code are the canonical parameters (SPEC F52), joined with
@@ -51,7 +53,7 @@ const buildGeoLevelTypeWhere = (filters: GeoLevelTypeListFilters): Record<string
 }
 
 // ESAVI-GEOTYPE-002A - Get Active Geographic Level Types Service
-const getActiveGeoLevelTypesService = async (filters: GeoLevelTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getActiveGeoLevelTypesService = async (filters: GeoLevelTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const geoLevelTypes = await GeoLevelType.findAndCountAll({
         where: {
             ...buildGeoLevelTypeWhere(filters),
@@ -63,11 +65,11 @@ const getActiveGeoLevelTypesService = async (filters: GeoLevelTypeListFilters = 
         limit,
         offset
     });
-    return geoLevelTypes;
+    return resolveAppDetailsAuthorsService(geoLevelTypes, canViewAuthors);
 }
 
 // ESAVI-GEOTYPE-002B - Get All Geographic Level Types Service (including inactive) - For SuperAdmin
-const getAllGeoLevelTypesService = async (filters: GeoLevelTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET) => {
+const getAllGeoLevelTypesService = async (filters: GeoLevelTypeListFilters = {}, limit: number = DEFAULT_LIMIT, offset: number = DEFAULT_OFFSET, canViewAuthors: boolean) => {
     const geoLevelTypes = await GeoLevelType.findAndCountAll({
         where: buildGeoLevelTypeWhere(filters),
         // sysDetails is internal and never exposed by the API
@@ -79,11 +81,11 @@ const getAllGeoLevelTypesService = async (filters: GeoLevelTypeListFilters = {},
         limit,
         offset
     });
-    return geoLevelTypes;
+    return resolveAppDetailsAuthorsService(geoLevelTypes, canViewAuthors);
 }
 
 // ESAVI-GEOTYPE-003 - Get Geographic Level Type by ID Service
-const getGeoLevelTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false) => {
+const getGeoLevelTypeByIdService = async (id: string, lang: string, isAdmin: boolean = false, canViewAuthors: boolean) => {
     const whereClause = isAdmin ? { geoLevelTypeId: id } : { geoLevelTypeId: id, isActive: true };
     const geoLevelType = await GeoLevelType.findOne({
         where: whereClause,
@@ -93,7 +95,7 @@ const getGeoLevelTypeByIdService = async (id: string, lang: string, isAdmin: boo
     if( !geoLevelType ) {
         throw new AppError(getMessage('geoLevelType.notFound', lang), 404, 'GEOTYPE_003_NOT_FOUND');
     }
-    return geoLevelType;
+    return resolveAppDetailsAuthorsService(geoLevelType, canViewAuthors);
 }
 
 // ESAVI-GEOTYPE-004 - Update Geographic Level Type Service - For SuperAdmin
@@ -144,7 +146,7 @@ const updateGeoLevelTypeService = async (id: string, data: Partial<CreateGeoLeve
         }, {returning: true});
     }
 
-    return updatedGeoLevelType;
+    return resolveAppDetailsAuthorsService(updatedGeoLevelType, canViewAuditAuthors(authUser));
 };
 
 // ESAVI-GEOTYPE-005A / 005B - Setting Geographic Level Type Active/Inactive Service - For SuperAdmin

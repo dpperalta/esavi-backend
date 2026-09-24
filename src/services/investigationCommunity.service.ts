@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { EsaviCase, Investigation, InvestigationCommunity } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -11,6 +11,7 @@ import {
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The investigation travels in every response, narrowed to three fields: what the client needs is to
 // know which case the row hangs from and whether its parent is alive. Returning the whole
@@ -267,7 +268,7 @@ export const createInvestigationCommunityService = async (
 
     // Re-read so the response carries the resolved investigation, not just the raw identifier
     const created = await findInvestigationCommunityWithRelations(data.investigationId, true);
-    return created ? toInvestigationCommunityResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toInvestigationCommunityResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // The order of the two listings, as in F29, F32, F34, F36, F38 and F39. This entity has no date of
@@ -318,7 +319,8 @@ const listInclude = (filters: InvestigationCommunityListFilters, includeInactive
 export const getInvestigationCommunitiesService = async (
     filters: InvestigationCommunityListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationCommunity.findAndCountAll({
         where: buildListWhere(filters),
@@ -333,7 +335,7 @@ export const getInvestigationCommunitiesService = async (
     // coordinates, which is what F28 took care to keep in its own listing, travel here anyway.
     // A filter whose UUID matches nothing returns 200 with { count: 0, rows: [] } and never a 404 —
     // an empty listing is an answer, not a missing resource
-    return { count, rows: rows.map(toInvestigationCommunityResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationCommunityResponse) }, canViewAuthors);
 }
 
 // Get All Investigation Communities Service - For Admin
@@ -341,7 +343,8 @@ export const getInvestigationCommunitiesService = async (
 export const getAllInvestigationCommunitiesService = async (
     filters: InvestigationCommunityListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationCommunity.findAndCountAll({
         where: buildListWhere(filters),
@@ -351,7 +354,7 @@ export const getAllInvestigationCommunitiesService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toInvestigationCommunityResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationCommunityResponse) }, canViewAuthors);
 }
 
 // Get Investigation Community By ID Service
@@ -364,12 +367,12 @@ export const getAllInvestigationCommunitiesService = async (
 // USER that a community record exists under an investigation it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // investigation, which is what makes it possible to consult it before purging it
-export const getInvestigationCommunityByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+export const getInvestigationCommunityByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const community = await findInvestigationCommunityWithRelations(id, includeInactive);
     if( !community ) {
         throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_003_NOT_FOUND');
     }
-    return toInvestigationCommunityResponse(community);
+    return resolveAppDetailsAuthorsService(toInvestigationCommunityResponse(community), canViewAuthors);
 }
 
 // Get Investigation Community By Case ID Service
@@ -382,7 +385,7 @@ export const getInvestigationCommunityByIdService = async (id: string, lang: str
 // THREE DISTINCT 404, and the difference matters to the client: "that case does not exist", "it has
 // no visible investigation" and "its investigation has no community record yet" are three different
 // things to show on screen, and only the third one is fixed by creating one
-export const getInvestigationCommunityByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+export const getInvestigationCommunityByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -405,7 +408,7 @@ export const getInvestigationCommunityByCaseIdService = async (caseId: string, l
     if( !community ) {
         throw new AppError(getMessage('investigationCommunity.notFound', lang), 404, 'INVCOMM_006_NOT_FOUND');
     }
-    return toInvestigationCommunityResponse(community);
+    return resolveAppDetailsAuthorsService(toInvestigationCommunityResponse(community), canViewAuthors);
 }
 
 // The same read as findInvestigationCommunityWithRelations without narrowing the attributes of the
@@ -524,7 +527,7 @@ export const updateInvestigationCommunityService = async (
     // sysDetails.version bump that TRG_investigationCommunity_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationCommunityWithRelations(id, true);
-        return unchanged ? toInvestigationCommunityResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationCommunityResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the generic
@@ -548,7 +551,7 @@ export const updateInvestigationCommunityService = async (
     });
 
     const updated = await findInvestigationCommunityWithRelations(id, true);
-    return updated ? toInvestigationCommunityResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationCommunityResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Investigation Community Service - For SuperAdmin

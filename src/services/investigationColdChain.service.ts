@@ -1,7 +1,7 @@
 import { WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { EsaviCase, Investigation, InvestigationColdChain } from '../models';
-import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage } from '../helpers';
+import { AppError, assertRowIsSealed, buildDifferentialUpdate, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
 import {
     AppDetails,
     AuthUser,
@@ -11,6 +11,7 @@ import {
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 // The investigation travels in every response, narrowed to three fields: what the client needs is to
 // know which case the row hangs from and whether its parent is alive. Returning the whole
@@ -348,7 +349,7 @@ export const createInvestigationColdChainService = async (
 
     // Re-read so the response carries the resolved investigation, not just the raw identifier
     const created = await findInvestigationColdChainWithRelations(data.investigationId, true);
-    return created ? toInvestigationColdChainResponse(created) : null;
+    return resolveAppDetailsAuthorsService(created ? toInvestigationColdChainResponse(created) : null, canViewAuditAuthors(authUser));
 }
 
 // The order of the two listings, as in F29, F32, F34 and F36. This entity has no date of the domain
@@ -397,7 +398,8 @@ const listInclude = (filters: InvestigationColdChainListFilters, includeInactive
 export const getInvestigationColdChainsService = async (
     filters: InvestigationColdChainListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationColdChain.findAndCountAll({
         where: buildListWhere(filters),
@@ -410,7 +412,7 @@ export const getInvestigationColdChainsService = async (
     // The rows carry the same full shape as the 003: there is no reduced shape. A filter whose UUID
     // matches nothing returns 200 with { count: 0, rows: [] } and never a 404 — an empty listing is
     // an answer, not a missing resource
-    return { count, rows: rows.map(toInvestigationColdChainResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationColdChainResponse) }, canViewAuthors);
 }
 
 // Get All Investigation Cold Chains Service - For Admin
@@ -418,7 +420,8 @@ export const getInvestigationColdChainsService = async (
 export const getAllInvestigationColdChainsService = async (
     filters: InvestigationColdChainListFilters = {},
     limit: number = DEFAULT_LIMIT,
-    offset: number = DEFAULT_OFFSET
+    offset: number = DEFAULT_OFFSET,
+    canViewAuthors: boolean
 ) => {
     const { count, rows } = await InvestigationColdChain.findAndCountAll({
         where: buildListWhere(filters),
@@ -428,7 +431,7 @@ export const getAllInvestigationColdChainsService = async (
         limit,
         offset
     });
-    return { count, rows: rows.map(toInvestigationColdChainResponse) };
+    return resolveAppDetailsAuthorsService({ count, rows: rows.map(toInvestigationColdChainResponse) }, canViewAuthors);
 }
 
 // Get Investigation Cold Chain By ID Service
@@ -441,12 +444,12 @@ export const getAllInvestigationColdChainsService = async (
 // USER that a cold chain exists under an investigation it is not allowed to see.
 // The own deletedAt filters nothing: a dragged row is still readable by whoever can see its
 // investigation, which is what makes it possible to consult it before purging it
-export const getInvestigationColdChainByIdService = async (id: string, lang: string, includeInactive: boolean = false) => {
+export const getInvestigationColdChainByIdService = async (id: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const coldChain = await findInvestigationColdChainWithRelations(id, includeInactive);
     if( !coldChain ) {
         throw new AppError(getMessage('investigationColdChain.notFound', lang), 404, 'INVCOLD_003_NOT_FOUND');
     }
-    return toInvestigationColdChainResponse(coldChain);
+    return resolveAppDetailsAuthorsService(toInvestigationColdChainResponse(coldChain), canViewAuthors);
 }
 
 // Get Investigation Cold Chain By Case ID Service
@@ -459,7 +462,7 @@ export const getInvestigationColdChainByIdService = async (id: string, lang: str
 // THREE DISTINCT 404, and the difference matters to the client: "that case does not exist", "it has
 // no visible investigation" and "its investigation has no cold chain yet" are three different things
 // to show on screen, and only the third one is fixed by creating a cold chain
-export const getInvestigationColdChainByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false) => {
+export const getInvestigationColdChainByCaseIdService = async (caseId: string, lang: string, includeInactive: boolean = false, canViewAuthors: boolean) => {
     const esaviCase = await EsaviCase.findOne({
         where: { caseId, isActive: true },
         attributes: ['caseId']
@@ -482,7 +485,7 @@ export const getInvestigationColdChainByCaseIdService = async (caseId: string, l
     if( !coldChain ) {
         throw new AppError(getMessage('investigationColdChain.notFound', lang), 404, 'INVCOLD_006_NOT_FOUND');
     }
-    return toInvestigationColdChainResponse(coldChain);
+    return resolveAppDetailsAuthorsService(toInvestigationColdChainResponse(coldChain), canViewAuthors);
 }
 
 // Update Investigation Cold Chain Service
@@ -599,7 +602,7 @@ export const updateInvestigationColdChainService = async (
     // sysDetails.version bump that TRG_investigationColdChain_setSysDetails fires on every write
     if( Object.keys(objectToUpdate).length === 0 ) {
         const unchanged = await findInvestigationColdChainWithRelations(id, true);
-        return unchanged ? toInvestigationColdChainResponse(unchanged) : null;
+        return resolveAppDetailsAuthorsService(unchanged ? toInvestigationColdChainResponse(unchanged) : null, canViewAuditAuthors(authUser));
     }
 
     // Written by hand so the service does not depend on a trigger for a column it owns: the generic
@@ -623,7 +626,7 @@ export const updateInvestigationColdChainService = async (
     });
 
     const updated = await findInvestigationColdChainWithRelations(id, true);
-    return updated ? toInvestigationColdChainResponse(updated) : null;
+    return resolveAppDetailsAuthorsService(updated ? toInvestigationColdChainResponse(updated) : null, canViewAuditAuthors(authUser));
 }
 
 // Purging Investigation Cold Chain Service - For SuperAdmin

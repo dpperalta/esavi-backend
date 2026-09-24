@@ -125,6 +125,7 @@ export const ROUTE_RULES: RouteRule[] = [
     { method: 'post',   path: '/api/users',                        minRole: 'ADMIN',      code: 'ESAVI-USER-001' },
     { method: 'get',    path: '/api/users',                        minRole: 'ADMIN',      code: 'ESAVI-USER-002A' },
     { method: 'get',    path: '/api/users/admin',                  minRole: 'ADMIN',      code: 'ESAVI-USER-002B' },
+    { method: 'get',    path: '/api/users/search?q=x',             minRole: 'ADMIN',      code: 'ESAVI-USER-008' },
     { method: 'get',    path: '/api/users/me',                     minRole: 'USER',       code: 'ESAVI-USER-007' },
     { method: 'patch',  path: '/api/users/me/password',            minRole: 'USER',       code: 'ESAVI-USER-006' },
     { method: 'get',    path: `/api/users/${ UUID }`,              minRole: 'ADMIN',      code: 'ESAVI-USER-003' },
