@@ -20,6 +20,7 @@ import {
 } from '../helpers/refreshToken.helper';
 import {
     createAppSessionService,
+    purgeExpiredUserSessionsService,
     revokeAllUserSessionsService,
     revokeAppSessionService
 } from './appSession.service';
@@ -105,6 +106,12 @@ const loginService = async({ email, password }: LoginInput, lang: string, meta: 
         ipAddress: toInetOrNull( meta.ipAddress ),
         userAgent: toUserAgentOrNull( meta.userAgent )
     }, lang);
+
+    try {
+        await purgeExpiredUserSessionsService( user.getDataValue('userId'), lang );
+    } catch ( error ) {
+        esaviLog('ESAVI-AUTH-001 - Session purge failed, login continues: ' + error, 'error');
+    }
 
     return {
         token,

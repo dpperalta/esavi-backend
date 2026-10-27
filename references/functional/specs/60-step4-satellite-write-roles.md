@@ -1,6 +1,6 @@
 # SPEC F60 — Escrituras de los satélites del paso 4 en USER
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (roles), SPEC 05 (códigos de operación), SPEC F16 (`notificationEvent`), SPEC F21 (`notificationMedication`), SPEC F22 (`notificationVaccine`), SPEC F24 (`notificationDiluent`), SPEC F25 (`notificationPregnancy`), SPEC F27 (`notificationPregnancyComplication`), SPEC F57 (`notificationMedicalHistory`), SPEC F31 y SPEC F58 (precedente del `005B` en ADMIN)
 > **Fecha:** 2026-09-21
 > **Objetivo:** Que quien crea un satélite del paso 4 pueda también corregirlo y retirarlo, y que quien supervisa pueda deshacer esa retirada, alineando el paso 4 con el paso 5.

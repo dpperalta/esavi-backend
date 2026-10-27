@@ -1540,7 +1540,7 @@ BEGIN
     'catalogType', 'catalogItem', 'geoLevelType', 'geoLocation', 'healthFacility',
     'diagnosticTerm', 'vaccineWhodrug', 'diluentCatalog', 'patient', 'esaviCase',
     'appUser', 'appRole', 'appPermission', 'appUserRole', 'appRolePermission',
-    'appSession', 'systemConfig', 'systemConfigHistory', 'caseWorkflow'
+    'systemConfig', 'systemConfigHistory', 'caseWorkflow'
   ] LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', 'TRG_' || t || '_preventPhysicalDelete', t);
     EXECUTE format('CREATE TRIGGER %I BEFORE DELETE ON %I FOR EACH ROW EXECUTE FUNCTION "preventPhysicalDelete"()', 'TRG_' || t || '_preventPhysicalDelete', t);

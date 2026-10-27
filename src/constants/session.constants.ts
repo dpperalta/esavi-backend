@@ -86,3 +86,6 @@ export const SESSION_REVOKE_REASONS = [
 ] as const;
 
 export type SessionRevokeReason = ( typeof SESSION_REVOKE_REASONS )[number];
+
+export const SESSION_RETENTION_DAYS_CODE = 'ESAVI_SESSION_RETENTION_DAYS';
+export const SESSION_CONFIG_SCOPE = 'AUTH';
