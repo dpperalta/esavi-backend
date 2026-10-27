@@ -426,6 +426,195 @@ describe('auth contract — SPEC F42', () => {
 });
 
 
+describe('session purge contract — SPEC F63', () => {
+
+    const purgeEmail = 'purge.contract@test.local';
+    const otherEmail = 'purge.other@test.local';
+    const password = 'PurgeContract123!';
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    let purgeUserId = '';
+    let otherUserId = '';
+
+    const login = ( email: string ) =>
+        request(app).post('/api/auth/login').send({ email, password });
+
+    const refresh = ( refreshToken: string ) =>
+        request(app).post('/api/auth/refresh').send({ refreshToken });
+
+    const logout = ( refreshToken: string ) =>
+        request(app).post('/api/auth/logout').send({ refreshToken });
+
+    const daysAgo = ( days: number ) => new Date(Date.now() - days * oneDayMs);
+
+    const seedSession = async (
+        userId: string,
+        startedAt: Date,
+        expiresAt: Date | null,
+        revokedAt: Date | null
+    ): Promise<string> => {
+        const session = await AppSession.create({
+            userId,
+            refreshTokenHash: 'f'.repeat(64),
+            startedAt,
+            expiresAt,
+            revokedAt,
+            revokedReason: revokedAt ? 'LOGOUT' : null,
+            appDetails: []
+        });
+        return session.sessionId;
+    };
+
+    const exists = async ( sessionId: string ) => ( await AppSession.findByPk(sessionId) ) !== null;
+
+    const setRetention = ( value: unknown ) =>
+        SystemConfig.update(
+            { value },
+            { where: { code: 'ESAVI_SESSION_RETENTION_DAYS', scope: 'AUTH' }, silent: true }
+        );
+
+    const createUser = async ( email: string ): Promise<string> => {
+        const [user] = await AppUser.findOrCreate({
+            where: { email: esaviCrypt(email) },
+            defaults: {
+                username: esaviCrypt(email),
+                email: esaviCrypt(email),
+                passwordHash: await bcrypt.hash(password, 10),
+                displayName: esaviCrypt('Purge Contract'),
+                requiresPasswordChange: false,
+                isActive: true
+            }
+        });
+        return user.getDataValue('userId');
+    };
+
+    beforeAll(async () => {
+        purgeUserId = await createUser(purgeEmail);
+        otherUserId = await createUser(otherEmail);
+    });
+
+    beforeEach(async () => {
+        delete process.env.ESAVI_SESSION_RETENTION_DAYS;
+        await setRetention(90);
+        await AppSession.destroy({ where: { userId: [purgeUserId, otherUserId] } });
+    });
+
+    afterAll(async () => {
+        await setRetention(90);
+    });
+
+    describe('login purges the sessions past the retention window', () => {
+
+        it('deletes the rows revoked more than 90 days ago', async () => {
+            const old = await seedSession(purgeUserId, daysAgo(120), new Date(Date.now() + oneDayMs), daysAgo(100));
+
+            expect((await login(purgeEmail)).status).toBe(200);
+            expect(await exists(old)).toBe(false);
+        });
+
+        it('deletes the rows never revoked that expired more than 90 days ago', async () => {
+            const old = await seedSession(purgeUserId, daysAgo(200), daysAgo(199), null);
+
+            expect((await login(purgeEmail)).status).toBe(200);
+            expect(await exists(old)).toBe(false);
+        });
+
+        it('keeps the rows revoked or expired inside the window', async () => {
+            const revoked = await seedSession(purgeUserId, daysAgo(20), new Date(Date.now() + oneDayMs), daysAgo(10));
+            const expired = await seedSession(purgeUserId, daysAgo(11), daysAgo(10), null);
+
+            expect((await login(purgeEmail)).status).toBe(200);
+            expect(await exists(revoked)).toBe(true);
+            expect(await exists(expired)).toBe(true);
+        });
+
+        it('keeps the live sessions, including the one the login just opened', async () => {
+            const live = await seedSession(purgeUserId, daysAgo(1), new Date(Date.now() + oneDayMs), null);
+
+            const response = await login(purgeEmail);
+            const opened = response.body.data.refreshToken.split('.')[0];
+
+            expect(response.status).toBe(200);
+            expect(await exists(live)).toBe(true);
+            expect(await exists(opened)).toBe(true);
+        });
+
+        it('keeps every row of another user, however old', async () => {
+            const foreign = await seedSession(otherUserId, daysAgo(200), daysAgo(199), daysAgo(199));
+
+            expect((await login(purgeEmail)).status).toBe(200);
+            expect(await exists(foreign)).toBe(true);
+        });
+
+        it('never deletes a row with a null expiresAt that was never revoked', async () => {
+            const open = await seedSession(purgeUserId, daysAgo(400), null, null);
+
+            expect((await login(purgeEmail)).status).toBe(200);
+            expect(await exists(open)).toBe(true);
+        });
+
+        it('answers 401 AUTH_002_INVALID_REFRESH_TOKEN to the token of a purged session', async () => {
+            const first = await login(purgeEmail);
+            const refreshToken = first.body.data.refreshToken;
+            await logout(refreshToken);
+            await AppSession.update(
+                { revokedAt: daysAgo(100) },
+                { where: { sessionId: refreshToken.split('.')[0] } }
+            );
+
+            expect((await login(purgeEmail)).status).toBe(200);
+
+            const response = await refresh(refreshToken);
+            expect(response.status).toBe(401);
+            expect(response.body.code).toBe('AUTH_002_INVALID_REFRESH_TOKEN');
+        });
+    });
+
+    describe('the purge never breaks the login', () => {
+
+        it('deletes nothing when the retention is neither in systemConfig nor in the environment', async () => {
+            const old = await seedSession(purgeUserId, daysAgo(200), daysAgo(199), null);
+            await setRetention('');
+
+            expect((await login(purgeEmail)).status).toBe(200);
+            expect(await exists(old)).toBe(true);
+        });
+
+        it('deletes nothing when the retention is 0', async () => {
+            const old = await seedSession(purgeUserId, daysAgo(200), daysAgo(199), null);
+            await setRetention(0);
+
+            expect((await login(purgeEmail)).status).toBe(200);
+            expect(await exists(old)).toBe(true);
+        });
+
+        it('deletes nothing when the retention is not a number', async () => {
+            const old = await seedSession(purgeUserId, daysAgo(200), daysAgo(199), null);
+            await setRetention('ninety');
+
+            expect((await login(purgeEmail)).status).toBe(200);
+            expect(await exists(old)).toBe(true);
+        });
+
+        it('answers the same login when the purge throws', async () => {
+            const purgeSpy = jest
+                .spyOn(sessionService, 'purgeExpiredUserSessionsService')
+                .mockRejectedValueOnce(new Error('forced failure'));
+
+            const response = await login(purgeEmail);
+            purgeSpy.mockRestore();
+
+            expect(response.status).toBe(200);
+            expect(response.body.ok).toBe(true);
+            expect(response.body.data).toHaveProperty('token');
+            expect(response.body.data).toHaveProperty('refreshToken');
+            expect(response.body.data).toHaveProperty('expiresAt');
+            expect(response.body.data).toHaveProperty('user.userId', purgeUserId);
+        });
+    });
+});
+
+
 /**
  * SPEC F43 — self-service password reset.
  *

@@ -1,6 +1,6 @@
 # SPEC F62 — Búsqueda de usuarios por nombre, correo o usuario
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 03 (paridad i18n), SPEC 05 (códigos de operación), SPEC 08 (`lang` en servicios), SPEC F04 (`appUser`, CRUD y cifrado PII), SPEC F12 (update diferencial), SPEC F47 (modelo de tokens cifrados de nombre, implementado), SPEC F45 (búsqueda de paciente por nombre)
 > **Fecha:** 2026-09-22
 > **Objetivo:** Permitir que un ADMIN localice a un usuario tecleando una palabra de su nombre, su correo completo o su nombre de usuario, sin romper el cifrado determinista que protege las cinco columnas PII de `appUser`.

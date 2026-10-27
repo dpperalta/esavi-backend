@@ -1,7 +1,8 @@
-import { Transaction } from 'sequelize';
+import { Op, Transaction } from 'sequelize';
 
 import { AppSession } from '../models';
 import { AppError, esaviLog, getMessage } from '../helpers';
+import { getAppConfigNumber } from '../helpers/appConfig.helper';
 import { jwtGenerate } from '../helpers/jwt.helper';
 import {
     composeRefreshToken,
@@ -9,7 +10,14 @@ import {
     hashRefreshSecret
 } from '../helpers/refreshToken.helper';
 import { AppDetails, CreateAppSessionInput, SessionTokenPair } from '../types';
-import { REFRESH_TOKEN_EXPIRES_IN_MS, SessionRevokeReason } from '../constants/session.constants';
+import {
+    REFRESH_TOKEN_EXPIRES_IN_MS,
+    SESSION_CONFIG_SCOPE,
+    SESSION_RETENTION_DAYS_CODE,
+    SessionRevokeReason
+} from '../constants/session.constants';
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 /**
  * appSession persistence (SPEC F42 §3.4).
@@ -177,8 +185,49 @@ const revokeAllUserSessionsService = async (
     }
 }
 
+// ESAVI-SESSION-008 - Purge Expired User Sessions Service
+const purgeExpiredUserSessionsService = async (
+    userId: string,
+    lang: string
+): Promise<number> => {
+    let retentionDays: number;
+    try {
+        retentionDays = await getAppConfigNumber( SESSION_RETENTION_DAYS_CODE, SESSION_CONFIG_SCOPE, lang );
+    } catch ( error ) {
+        esaviLog(`[WARN]: ESAVI-SESSION-008 - Session retention not configured, purge skipped for user ${ userId }: ${ error }`, 'warn');
+        return 0;
+    }
+
+    if ( !Number.isInteger( retentionDays ) || retentionDays < 1 ) {
+        esaviLog(`[WARN]: ESAVI-SESSION-008 - Invalid session retention ${ retentionDays }, purge skipped for user ${ userId }`, 'warn');
+        return 0;
+    }
+
+    try {
+        const cutoff = new Date( Date.now() - retentionDays * DAY_IN_MS );
+        const purged = await AppSession.destroy({
+            where: {
+                userId,
+                [Op.or]: [
+                    { revokedAt: { [Op.lt]: cutoff } },
+                    { expiresAt: { [Op.lt]: cutoff } }
+                ]
+            }
+        });
+
+        if ( purged > 0 ) {
+            esaviLog(`ESAVI-SESSION-008 - Purged ${ purged } session(s) of user ${ userId } older than ${ retentionDays } days`, 'info');
+        }
+        return purged;
+    } catch ( error ) {
+        esaviLog(`[ERROR]: ESAVI-SESSION-008 - Error purging sessions for user ${ userId }: ${ error }`, 'error');
+        throw new AppError(`Session purge failed for user ${ userId }`, 500, 'SESSION_008_PURGE_FAILED', error);
+    }
+}
+
 export {
     createAppSessionService,
     revokeAppSessionService,
-    revokeAllUserSessionsService
+    revokeAllUserSessionsService,
+    purgeExpiredUserSessionsService
 }

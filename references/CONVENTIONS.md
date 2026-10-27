@@ -204,6 +204,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | systemConfig | `008` | siembra idempotente de las configuraciones iniciales desde el catálogo declarativo — solo-alta, transacción todo o nada. `POST /sync`, SUPERADMIN |
 | appSession | `006` | revocar una sesión — escribe `revokedAt` y `revokedReason` sobre la fila si estaba vigente. **Sin ruta HTTP:** servicio interno que `auth` invoca desde `ESAVI-AUTH-002` y `-003` |
 | appSession | `007` | revocar todas las sesiones de un usuario — mismo filtro por `userId`, se apoya en `IX_appSession_active`. **Sin ruta HTTP:** lo invocan `ESAVI-AUTH-004` y `ESAVI-USER-006` |
+| appSession | `008` | purgar las sesiones de un usuario revocadas o caducadas hace más de `ESAVI_SESSION_RETENTION_DAYS` días — borrado físico por retención, no un `005C`. **Sin ruta HTTP:** lo invoca `ESAVI-AUTH-001` en modo best-effort (SPEC F63) |
 | auth | `006` | solicitar el restablecimiento de la contraseña — público, sin `tokenValidation`. Responde siempre 200, exista o no la cuenta. `POST /forgot-password` |
 | auth | `007` | consumir el token de restablecimiento y escribir la contraseña nueva — público. `POST /reset-password` |
 | appPasswordReset | `001` | abrir una solicitud de restablecimiento. **Sin ruta HTTP:** servicio interno que `ESAVI-AUTH-006` invoca dentro de su transacción |
@@ -215,7 +216,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | geoLocation | `006` | importación masiva de geografía y establecimientos desde `.xlsx` — SUPERADMIN, `POST /import` |
 | geoLocation | `007` | generación de la plantilla `.xlsx` con catálogos incrustados — ADMIN, `GET /import/template` |
 
-`appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4).
+`appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4). El `008` sigue el mismo razonamiento: purgar por retención no es un `005C`, porque no lo pide un cliente sobre una fila concreta, sino que lo decide la antigüedad de la fila (SPEC F63 §3.4).
 
 `auth` salta el `005`: en el canon esa cifra significa siempre borrado o activación, y reciclarla para un restablecimiento haría que buscar `ESAVI-AUTH-005` en el log devolviera algo que no es ninguna de las tres. `appPasswordReset` toma `006` y `007` por la misma razón que `appSession` — resolver e invalidar no son ninguna de las siete canónicas, y la tabla no tiene `isActive`. Una solicitud de restablecimiento no se reactiva — se pide otra (SPEC F43 §3.4).
 
@@ -297,7 +298,9 @@ El sufijo va también en el código del `AppError`: `CATTYPE_005_NOT_FOUND` no d
 
 **Regla de disponibilidad.** Una entidad expone `005C` **si y solo si** su tabla **no** figura en el bucle `preventPhysicalDelete` de `esaviapp.sql:1361-1375`. La regla es objetiva y se verifica contra el DDL, no se decide por entidad. En las 18 tablas protegidas el endpoint **no se declara**: el trigger rechazaría el `DELETE` en la base y el cliente recibiría un 500 por una operación que la norma nunca debió ofrecer.
 
-Protegidas, y por tanto **sin** `005C` — `catalogType`, `catalogItem`, `geoLevelType`, `geoLocation`, `healthFacility`, `diagnosticTerm`, `vaccineWhodrug`, `diluentCatalog`, `patient`, `esaviCase`, `appUser`, `appRole`, `appPermission`, `appUserRole`, `appRolePermission`, `appSession`, `systemConfig`, `systemConfigHistory`.
+Protegidas, y por tanto **sin** `005C` — `catalogType`, `catalogItem`, `geoLevelType`, `geoLocation`, `healthFacility`, `diagnosticTerm`, `vaccineWhodrug`, `diluentCatalog`, `patient`, `esaviCase`, `appUser`, `appRole`, `appPermission`, `appUserRole`, `appRolePermission`, `systemConfig`, `systemConfigHistory`.
+
+**Excepción declarada: `appSession`.** Salió del bucle `preventPhysicalDelete` con el SPEC F63 y, aun así, **no** expone `005C` ni ninguna otra superficie HTTP. La única operación que la borra es la purga interna `ESAVI-SESSION-008`, que invoca `ESAVI-AUTH-001` y que decide qué borrar con una regla de retención, no con una petición de un cliente sobre una fila concreta. Es la única tabla fuera del bucle a la que no se aplica la regla de disponibilidad, y el checklist de §15 no debe marcar esa ausencia.
 
 Habilitadas, y por tanto **con** `005C` — las 27 restantes:
 

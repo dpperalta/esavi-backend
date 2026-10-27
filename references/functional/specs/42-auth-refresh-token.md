@@ -78,13 +78,16 @@ con el uso sin renunciar a un tope absoluto.
   comparan en el `refresh`.
 - **Límite de sesiones concurrentes.** Ilimitadas. No hay `MAX_SESSIONS`.
 - **Purga de sesiones caducadas.** Las filas expiradas o revocadas se quedan en la tabla. El
-  trabajo programado de limpieza no existe y no se crea aquí.
+  trabajo programado de limpieza no existe y no se crea aquí. *Resuelto después por el
+  [SPEC F63](./63-appsession-retention-purge.md): purga por usuario en el login, con ventana de
+  retención.*
 - **Rate limiting sobre `/api/auth/refresh` y `/api/auth/login`.** No hay infraestructura de
   limitación en el repositorio; introducirla es transversal.
 - **`appPermission` y `appRolePermission`.** Siguen sin modelo. La autorización continúa siendo
   por nivel de rol.
 - **Borrado físico (`005C`) y activación (`005A`/`005B`) de `appSession`.** La tabla no tiene
-  `isActive` y está en la lista de protegidas de `CONVENTIONS.md:270`.
+  `isActive` y está en la lista de protegidas de `CONVENTIONS.md:270`. *El SPEC F63 la sacó del
+  bucle `preventPhysicalDelete` para su purga interna; sigue sin `005C`.*
 
 ---
 
@@ -597,7 +600,9 @@ filas existentes —rotar, revocar una, revocar todas— son escrituras con inte
 - **No:** límite de sesiones concurrentes. Un usuario con móvil y escritorio abiertos es el caso
   normal, y `logout-all` ya permite cortar todo.
 - **No:** purga de sesiones caducadas. Requiere un trabajo programado, que no existe en el
-  repositorio. Las filas revocadas son además la traza de auditoría del mecanismo.
+  repositorio. Las filas revocadas son además la traza de auditoría del mecanismo. *Lo resuelve
+  el [SPEC F63](./63-appsession-retention-purge.md) sin trabajo programado y conservando esa traza
+  durante la ventana de retención.*
 - **No:** rate limiting sobre `/login` y `/refresh`. Es una capa transversal que afectaría a toda
   la API, no una regla de este dominio.
 
@@ -610,7 +615,7 @@ filas existentes —rotar, revocar una, revocar todas— son escrituras con inte
 | El cliente web no implementa la renovación y `JWT_EXPIRES_IN=1h` acorta las sesiones de 8h a 1h de golpe | El paso 8 del plan es el único que cambia comportamiento observable. Los pasos 1 a 7 pueden desplegarse antes, y el 8 se coordina con el frontend. Si hiciera falta, `JWT_EXPIRES_IN` puede quedarse en `8h` sin tocar código |
 | Dos peticiones concurrentes del cliente con el mismo refresh token —dos pestañas, o un reintento de red— disparan la detección de reutilización y cierran todas las sesiones del usuario | Es el falso positivo característico de la rotación. El cliente debe serializar la renovación: un solo `refresh` en vuelo, y las peticiones en espera reintentan con el token nuevo. Queda declarado como requisito para el cliente web, no como excepción del servidor |
 | Un `refresh` que revoca por reutilización escribe sobre todas las sesiones del usuario en el camino de una petición no autenticada | El filtro es por `userId` de una fila ya localizada por PK y se apoya en `IX_appSession_active`. Un atacante no puede provocarlo contra un usuario arbitrario: necesita un refresh token válido de esa persona |
-| `appSession` crece sin límite: cada login deja una fila que nadie borra | Asumido en este spec. Una fila por sesión es un volumen pequeño frente a las tablas de casos, y las filas revocadas son traza de auditoría. La purga se aborda cuando el volumen lo justifique |
+| `appSession` crece sin límite: cada login deja una fila que nadie borra | Asumido en este spec. Una fila por sesión es un volumen pequeño frente a las tablas de casos, y las filas revocadas son traza de auditoría. La purga se aborda cuando el volumen lo justifique. *Mitigado por el [SPEC F63](./63-appsession-retention-purge.md).* |
 | El reloj de la aplicación y el de Postgres divergen: `startedAt` lo pone la base con `current_timestamp` y el tope absoluto se calcula en Node | Las dos marcas se comparan siempre contra el mismo origen dentro de una operación. Una divergencia de segundos no afecta a un tope de 30 días; una de horas ya rompería el `CHECK` del DDL antes |
 
 ---
@@ -644,7 +649,8 @@ Ningún otro endpoint del repositorio cambia.
 - Refresh token en cookie `httpOnly`.
 - Validación de `ipAddress` y `userAgent` en la renovación.
 - Límite de sesiones concurrentes por usuario.
-- Purga programada de sesiones caducadas o revocadas.
+- Purga programada de sesiones caducadas o revocadas (la purga por usuario en el login llegó con el
+  [SPEC F63](./63-appsession-retention-purge.md)).
 - Rate limiting sobre `/api/auth/login` y `/api/auth/refresh`.
 - `appPermission` y `appRolePermission`: la autorización sigue siendo por nivel de rol.
 - Recuperación de contraseña por correo, bloqueo por intentos fallidos y autenticación externa

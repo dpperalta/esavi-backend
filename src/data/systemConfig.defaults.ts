@@ -184,6 +184,16 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfigDefault[] = [
         isEditable: true
     },
     {
+        code: 'ESAVI_SESSION_RETENTION_DAYS',
+        name: 'Retención de sesiones cerradas',
+        description: 'Días que se conserva una sesión revocada o caducada antes de que el login de su usuario la borre. Es la ventana de auditoría de los cierres de sesión, incluida la detección de reutilización. Un valor menor que 1 desactiva la purga.',
+        value: 90,
+        valueType: 'number',
+        scope: 'AUTH',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
         code: 'ESAVI_MEDDRA_ENABLED',
         name: 'Búsqueda de términos MedDRA habilitada',
         description: 'Interruptor general de ESAVI-MEDDRA-006. Con el valor en false el endpoint responde 503 sin salir a la red. Se siembra apagado a propósito: un despliegue recién sincronizado no debe empezar a llamar a un API licenciado por haber corrido el sync.',
