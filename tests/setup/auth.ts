@@ -15,7 +15,7 @@ interface TestUser {
     role: TestRole;
 }
 
-const TEST_ROLES: TestRole[] = ['SUPERADMIN', 'ADMIN', 'USER', 'ANALYTICS'];
+const TEST_ROLES: TestRole[] = ['SUPERADMIN', 'ADMIN', 'EVALUATOR', 'INVESTIGATOR', 'NOTIFIER', 'USER', 'ANALYTICS'];
 const TEST_PASSWORD = 'TestPassword123!';
 
 const testUsers = new Map<TestRole, TestUser>();

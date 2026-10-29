@@ -1,6 +1,9 @@
 export const ROLES = {
     SUPERADMIN: 'SUPERADMIN',
     ADMIN: 'ADMIN',
+    EVALUATOR: 'EVALUATOR',
+    INVESTIGATOR: 'INVESTIGATOR',
+    NOTIFIER: 'NOTIFIER',
     USER: 'USER',
     ANALYTICS: 'ANALYTICS',
 } as const;
@@ -8,6 +11,9 @@ export const ROLES = {
 export const ROLE_LEVELS: Readonly<Record<string, number>> = {
     [ROLES.SUPERADMIN]: 100,
     [ROLES.ADMIN]: 50,
-    [ROLES.USER]: 25,
+    [ROLES.EVALUATOR]: 40,
+    [ROLES.INVESTIGATOR]: 30,
+    [ROLES.NOTIFIER]: 25,
+    [ROLES.USER]: 20,
     [ROLES.ANALYTICS]: 10,
 };

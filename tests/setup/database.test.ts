@@ -42,24 +42,28 @@ describe('test database setup', () => {
         expect(Number(tables[0].count)).toBeGreaterThan(30);
     });
 
-    // Scoped to the four canonical names rather than the whole table: since SPEC F03 gave
+    // Scoped to the seven canonical names rather than the whole table: since SPEC F03 gave
     // appRole a CRUD, the contract suites create roles of their own that survive the run
-    it('seeded the four canonical roles', async () => {
+    it('seeded the seven canonical roles', async () => {
+        const canonical = [
+            ROLES.SUPERADMIN,
+            ROLES.ADMIN,
+            ROLES.EVALUATOR,
+            ROLES.INVESTIGATOR,
+            ROLES.NOTIFIER,
+            ROLES.USER,
+            ROLES.ANALYTICS
+        ];
         const roles = await sequelize.query<{ name: string; level: number }>(
             `SELECT "name", "level" FROM "appRole" WHERE "name" IN (:names) ORDER BY "level" DESC`,
             {
-                replacements: { names: [ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.USER, ROLES.ANALYTICS] },
+                replacements: { names: canonical },
                 type: QueryTypes.SELECT
             }
         );
 
-        expect(roles.map(role => role.name)).toEqual([
-            ROLES.SUPERADMIN,
-            ROLES.ADMIN,
-            ROLES.USER,
-            ROLES.ANALYTICS
-        ]);
-        expect(roles.map(role => role.level)).toEqual([100, 50, 25, 10]);
+        expect(roles.map(role => role.name)).toEqual(canonical);
+        expect(roles.map(role => role.level)).toEqual([100, 50, 40, 30, 25, 20, 10]);
     });
 
 });

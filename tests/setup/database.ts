@@ -116,15 +116,18 @@ const loadSchema = async (): Promise<void> => {
 }
 
 /**
- * Seeds the four canonical roles. `validateUserRole` resolves a user's level by
+ * Seeds the seven canonical roles. `validateUserRole` resolves a user's level by
  * uppercasing `appRole.name` and looking it up in `ROLE_LEVELS`, so `name` has
  * to match the constant exactly.
  */
 const seedRoles = async (): Promise<void> => {
     const roles = [
-        { code: ROLES.SUPERADMIN, name: ROLES.SUPERADMIN, description: 'Test superadmin role' },
-        { code: ROLES.ADMIN,      name: ROLES.ADMIN,      description: 'Test admin role' },
-        { code: ROLES.USER,       name: ROLES.USER,       description: 'Test user role' },
+        { code: ROLES.SUPERADMIN,   name: ROLES.SUPERADMIN,   description: 'Test superadmin role' },
+        { code: ROLES.ADMIN,        name: ROLES.ADMIN,        description: 'Test admin role' },
+        { code: ROLES.EVALUATOR,    name: ROLES.EVALUATOR,    description: 'Test evaluator role' },
+        { code: ROLES.INVESTIGATOR, name: ROLES.INVESTIGATOR, description: 'Test investigator role' },
+        { code: ROLES.NOTIFIER,     name: ROLES.NOTIFIER,     description: 'Test notifier role' },
+        { code: ROLES.USER,         name: ROLES.USER,         description: 'Test user role' },
         { code: ROLES.ANALYTICS,  name: ROLES.ANALYTICS,  description: 'Test analytics role' }
     ];
 
