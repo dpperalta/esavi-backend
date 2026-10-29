@@ -1567,7 +1567,7 @@ describe('esaviCase contract', () => {
         const createInvestigation = async ( caseId: string ): Promise<string> => {
             const response = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             return response.body.data.investigationId;
         };
@@ -1998,10 +1998,10 @@ describe('esaviCase contract', () => {
         const createSourceChain = async ( caseId: string ): Promise<string> => {
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, history: true });
             return investigationId;
         };
@@ -2074,7 +2074,7 @@ describe('esaviCase contract', () => {
             const caseId = withoutSource.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2112,10 +2112,10 @@ describe('esaviCase contract', () => {
         const createAutopsyChain = async ( caseId: string ): Promise<string> => {
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
             return investigationId;
         };
@@ -2185,7 +2185,7 @@ describe('esaviCase contract', () => {
             const caseId = withoutAutopsy.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2211,12 +2211,12 @@ describe('esaviCase contract', () => {
             const caseId = created.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2245,10 +2245,10 @@ describe('esaviCase contract', () => {
         const createMedicalHistoryChain = async ( caseId: string ): Promise<string> => {
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
             return investigationId;
         };
@@ -2302,7 +2302,7 @@ describe('esaviCase contract', () => {
             const caseId = withoutHistory.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2314,14 +2314,14 @@ describe('esaviCase contract', () => {
             const caseId = created.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2352,10 +2352,10 @@ describe('esaviCase contract', () => {
         const createClinicalEvaluationChain = async ( caseId: string ): Promise<string> => {
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER'))
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
             return investigationId;
         };
@@ -2406,7 +2406,7 @@ describe('esaviCase contract', () => {
             const caseId = withoutEvaluation.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2418,17 +2418,17 @@ describe('esaviCase contract', () => {
             const caseId = created.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
 
-            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER'))
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2457,10 +2457,10 @@ describe('esaviCase contract', () => {
         const createVaccinationContextChain = async ( caseId: string ): Promise<string> => {
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER'))
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
             return investigationId;
         };
@@ -2511,7 +2511,7 @@ describe('esaviCase contract', () => {
             const caseId = withoutContext.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2523,19 +2523,19 @@ describe('esaviCase contract', () => {
             const caseId = created.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
 
-            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER'))
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER'))
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2569,10 +2569,10 @@ describe('esaviCase contract', () => {
         const createColdChainChain = async ( caseId: string ): Promise<string> => {
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-cold-chains').set(authHeader('USER'))
+            await request(app).post('/api/investigation-cold-chains').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
             return investigationId;
         };
@@ -2623,7 +2623,7 @@ describe('esaviCase contract', () => {
             const caseId = withoutColdChain.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2635,21 +2635,21 @@ describe('esaviCase contract', () => {
             const caseId = created.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
 
-            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER'))
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER'))
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-cold-chains').set(authHeader('USER'))
+            await request(app).post('/api/investigation-cold-chains').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2684,10 +2684,10 @@ describe('esaviCase contract', () => {
         const createAdministrationErrorChain = async ( caseId: string ): Promise<string> => {
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-administration-errors').set(authHeader('USER'))
+            await request(app).post('/api/investigation-administration-errors').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
             return investigationId;
         };
@@ -2738,7 +2738,7 @@ describe('esaviCase contract', () => {
             const caseId = withoutAdministrationError.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2750,23 +2750,23 @@ describe('esaviCase contract', () => {
             const caseId = created.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
 
-            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER'))
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER'))
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-cold-chains').set(authHeader('USER'))
+            await request(app).post('/api/investigation-cold-chains').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-administration-errors').set(authHeader('USER'))
+            await request(app).post('/api/investigation-administration-errors').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2800,10 +2800,10 @@ describe('esaviCase contract', () => {
         const createCommunityChain = async ( caseId: string ): Promise<string> => {
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
-            await request(app).post('/api/investigation-communities').set(authHeader('USER'))
+            await request(app).post('/api/investigation-communities').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
             return investigationId;
         };
@@ -2854,7 +2854,7 @@ describe('esaviCase contract', () => {
             const caseId = withoutCommunity.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);
@@ -2866,25 +2866,25 @@ describe('esaviCase contract', () => {
             const caseId = created.body.data.caseId;
             const investigation = await request(app)
                 .post('/api/investigations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ caseId });
             const investigationId = investigation.body.data.investigationId;
 
-            await request(app).post('/api/investigation-sources').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER'))
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER'))
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER'))
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-cold-chains').set(authHeader('USER'))
+            await request(app).post('/api/investigation-cold-chains').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-administration-errors').set(authHeader('USER'))
+            await request(app).post('/api/investigation-administration-errors').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
-            await request(app).post('/api/investigation-communities').set(authHeader('USER'))
+            await request(app).post('/api/investigation-communities').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId });
 
             expect(( await deleteCase(caseId) ).status).toBe(200);

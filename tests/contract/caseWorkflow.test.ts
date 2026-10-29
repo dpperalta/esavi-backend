@@ -105,7 +105,7 @@ describe('caseWorkflow contract', () => {
             .send({ caseId, notificationType: 'SEVERE', esaviDescription: `Event ${ suffix }`, requestInvestigation });
 
     const investigate = async ( caseId: string ) =>
-        request(app).post('/api/investigations').set(await authHeader('USER')).send({ caseId });
+        request(app).post('/api/investigations').set(await authHeader('INVESTIGATOR')).send({ caseId });
 
     const finalClassify = async ( caseId: string ) =>
         request(app).post('/api/final-classifications').set(await authHeader('USER')).send({ caseId });

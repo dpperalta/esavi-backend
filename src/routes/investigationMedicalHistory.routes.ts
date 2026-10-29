@@ -18,16 +18,16 @@ import {
     updateInvestigationMedicalHistoryValidator
 } from '../validators';
 
-const { ADMIN, SUPERADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Investigation Medical History
 // Code: ESAVI-INVMEDH-001
-// USER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
+// INVESTIGATOR and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
 // F13, F14, F28, F29, F30 and F31 already fixed: the detail is captured in the same operational
 // flow as the case, and splitting it across two roles would break the form in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationMedicalHistoryValidator, validateFields, createInvestigationMedicalHistory);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationMedicalHistoryValidator, validateFields, createInvestigationMedicalHistory);
 
 // Get Investigation Medical Histories
 // Code: ESAVI-INVMEDH-002A
@@ -63,8 +63,8 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationMedi
 
 // Update Investigation Medical History
 // Code: ESAVI-INVMEDH-004
-// USER for the same reason as 001: completing the anamnesis is part of the same operational flow.
+// INVESTIGATOR for the same reason as 001: completing the anamnesis is part of the same operational flow.
 // It is the main operation of the entity — the row is opened with one field and filled in over time
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationMedicalHistoryIdValidator, ...updateInvestigationMedicalHistoryValidator, validateFields, updateInvestigationMedicalHistory);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationMedicalHistoryIdValidator, ...updateInvestigationMedicalHistoryValidator, validateFields, updateInvestigationMedicalHistory);
 
 export default router;

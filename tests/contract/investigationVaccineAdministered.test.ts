@@ -101,11 +101,11 @@ describe('investigationVaccineAdministered contract', () => {
 
     // --- request helpers ----------------------------------------------------------------------
 
-    const post = (body: object, role: TestRole = 'USER') =>
+    const post = (body: object, role: TestRole = 'INVESTIGATOR') =>
         request(app).post(basePath).set(authHeader(role)).send(body);
     const get = (id: string, role: TestRole = 'USER') =>
         request(app).get(`${ basePath }/${ id }`).set(authHeader(role));
-    const put = (id: string, body: object, role: TestRole = 'USER') =>
+    const put = (id: string, body: object, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(body);
     const del = (id: string, role: TestRole = 'ADMIN') =>
         request(app).delete(`${ basePath }/${ id }`).set(authHeader(role));
@@ -472,7 +472,7 @@ describe('investigationVaccineAdministered contract', () => {
                 path: basePath,
                 id,
                 model: InvestigationVaccineAdministered,
-                role: 'USER',
+                role: 'INVESTIGATOR',
                 // Assigned by the database and governed by 005A/005B: a real form does not resend them
                 strip: ['vaccineAdministeredId', 'investigationId', 'sortOrder', 'isActive', 'createdAt', 'updatedAt', 'deletedAt', 'appDetails', 'vaccineWhodrug']
             });
@@ -631,12 +631,12 @@ describe('investigationVaccineAdministered contract', () => {
             expect((await del(id)).status).toBe(200);
         });
 
-        it('keeps an ANALYTICS out and admits a USER', async () => {
+        it('keeps a NOTIFIER out and admits an INVESTIGATOR', async () => {
             const investigationId = await createInvestigation();
             const whodrugId = await createWhodrug();
             const id = (await post({ investigationId, vaccineWhodrugId: whodrugId })).body.data.vaccineAdministeredId;
-            expect((await del(id, 'ANALYTICS')).status).toBe(403);
-            expect((await del(id, 'USER')).status).toBe(200);
+            expect((await del(id, 'NOTIFIER')).status).toBe(403);
+            expect((await del(id, 'INVESTIGATOR')).status).toBe(200);
         });
     });
 

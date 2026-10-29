@@ -88,7 +88,7 @@ describe('investigationPregnancyCondition contract', () => {
         return investigationId;
     };
 
-    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post(path).set(authHeader(role)).send(payload);
 
     const getById = (id: string, role: TestRole = 'USER') =>
@@ -100,7 +100,7 @@ describe('investigationPregnancyCondition contract', () => {
     const listAdmin = (investigationId: string, query: string = '', role: TestRole = 'ADMIN') =>
         request(app).get(`${ path }/admin/investigation/${ investigationId }${ query }`).set(authHeader(role));
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`${ path }/${ id }`).set(authHeader(role)).send(payload);
 
     const remove = (id: string, role: TestRole = 'ADMIN') =>
@@ -247,7 +247,7 @@ describe('investigationPregnancyCondition contract', () => {
             await retireInvestigation(retired);
 
             for( const investigationId of [unknownUuid, orphan, sealed, retired] ) {
-                for( const role of ['USER', 'SUPERADMIN'] as TestRole[] ) {
+                for( const role of ['INVESTIGATOR', 'SUPERADMIN'] as TestRole[] ) {
                     const res = await create({ investigationId, conditionName: 'Anemia' }, role);
                     expect(res.status).toBe(404);
                     expect(res.body.code).toBe('INVPREG_001_MEDICAL_HISTORY_NOT_FOUND');
@@ -495,7 +495,7 @@ describe('investigationPregnancyCondition contract', () => {
         it('resending the whole GET response writes nothing, divergent conditionRaw included', async () => {
             const [plain] = await seed();
             await expectPutOfGetResponseWritesNothing({
-                path, id: plain, model: InvestigationPregnancyCondition, role: 'USER'
+                path, id: plain, model: InvestigationPregnancyCondition, role: 'INVESTIGATOR'
             });
 
             // The trap the formula of incomingName covers: a row whose conditionRaw differs from the
@@ -506,7 +506,7 @@ describe('investigationPregnancyCondition contract', () => {
             expect((await getById(id)).body.data.conditionRaw).toBe('Pre-eclampsia leve');
 
             await expectPutOfGetResponseWritesNothing({
-                path, id, model: InvestigationPregnancyCondition, role: 'USER'
+                path, id, model: InvestigationPregnancyCondition, role: 'INVESTIGATOR'
             });
 
             // And the same sending back by hand the effective name the GET displayed
@@ -632,7 +632,7 @@ describe('investigationPregnancyCondition contract', () => {
             await retireInvestigation(retiredInvestigation);
 
             for( const id of [sealedId, retiredId] ) {
-                for( const role of ['USER', 'ADMIN'] as TestRole[] ) {
+                for( const role of ['INVESTIGATOR', 'ADMIN'] as TestRole[] ) {
                     const res = await update(id, { notes: 'x' }, role);
                     expect(res.status).toBe(404);
                     expect(res.body.code).toBe('INVPREG_004_NOT_FOUND');
@@ -743,11 +743,11 @@ describe('investigationPregnancyCondition contract', () => {
             expect((await activate(retiredId)).status).toBe(200);
         });
 
-        it('the minimum roles are USER on 005A and ADMIN on 005B, and an unknown id answers 404', async () => {
+        it('the minimum roles are INVESTIGATOR on 005A and ADMIN on 005B, and an unknown id answers 404', async () => {
             const [id] = await seed();
 
-            expect((await remove(id, 'ANALYTICS')).status).toBe(403);
-            expect((await remove(id, 'USER')).status).toBe(200);
+            expect((await remove(id, 'NOTIFIER')).status).toBe(403);
+            expect((await remove(id, 'INVESTIGATOR')).status).toBe(200);
             expect((await activate(id, 'USER')).status).toBe(403);
             expect((await activate(id, 'ADMIN')).status).toBe(200);
 

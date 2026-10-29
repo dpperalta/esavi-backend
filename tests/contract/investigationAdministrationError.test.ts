@@ -92,7 +92,7 @@ describe('investigationAdministrationError contract', () => {
     const createInvestigationFixture = async (isActive: boolean = true): Promise<string> =>
         await createInvestigationForCase(await createCaseFixture(), isActive);
 
-    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post(basePath).set(authHeader(role)).send(payload);
 
     // The empty create of this entity: { investigationId } is the whole minimum. Mints an
@@ -119,7 +119,7 @@ describe('investigationAdministrationError contract', () => {
     const purge = (id: string, role: TestRole = 'SUPERADMIN') =>
         request(app).delete(`${ basePath }/purge/${ id }`).set(authHeader(role));
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(payload);
 
     const readRow = async (id: string) =>
@@ -683,7 +683,7 @@ describe('investigationAdministrationError contract', () => {
                 path: basePath,
                 id: investigationId,
                 model: InvestigationAdministrationError,
-                role: 'USER',
+                role: 'INVESTIGATOR',
                 strip: ['investigationId', 'investigation', 'createdAt', 'updatedAt', 'deletedAt', 'appDetails']
             });
         });
@@ -747,11 +747,11 @@ describe('investigationAdministrationError contract', () => {
             expect(res.body.code).toBe('INVADMER_004_NOT_FOUND');
         });
 
-        it('a row of a retired investigation: 404 for USER and ADMIN, 200 for SUPERADMIN', async () => {
+        it('a row of a retired investigation: 404 for INVESTIGATOR and ADMIN, 200 for SUPERADMIN', async () => {
             const investigationId = await seed();
             await retireInvestigation(investigationId);
 
-            expect((await update(investigationId, { notes: 'x' }, 'USER')).status).toBe(404);
+            expect((await update(investigationId, { notes: 'x' }, 'INVESTIGATOR')).status).toBe(404);
             expect((await update(investigationId, { notes: 'x' }, 'ADMIN')).status).toBe(404);
             expect((await update(investigationId, { notes: 'x' }, 'SUPERADMIN')).status).toBe(200);
         });

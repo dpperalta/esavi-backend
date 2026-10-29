@@ -119,11 +119,11 @@ describe('investigationDiagnostic contract', () => {
 
     // --- request helpers ----------------------------------------------------------------------
 
-    const post = (body: object, role: TestRole = 'USER') =>
+    const post = (body: object, role: TestRole = 'INVESTIGATOR') =>
         request(app).post(basePath).set(authHeader(role)).send(body);
     const get = (id: string, role: TestRole = 'USER') =>
         request(app).get(`${ basePath }/${ id }`).set(authHeader(role));
-    const put = (id: string, body: object, role: TestRole = 'USER') =>
+    const put = (id: string, body: object, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(body);
     const del = (id: string, role: TestRole = 'ADMIN') =>
         request(app).delete(`${ basePath }/${ id }`).set(authHeader(role));
@@ -312,7 +312,7 @@ describe('investigationDiagnostic contract', () => {
         it('404s a missing or inactive investigation, also for a SUPERADMIN', async () => {
             const inactive = await createInvestigation(false);
 
-            for( const role of ['USER', 'SUPERADMIN'] as TestRole[] ) {
+            for( const role of ['INVESTIGATOR', 'SUPERADMIN'] as TestRole[] ) {
                 const missing = await post({ investigationId: missingUuid, diagnosticName: 'A' }, role);
                 expect(missing.status).toBe(404);
                 expect(missing.body.code).toBe('INVDIAG_001_INVESTIGATION_NOT_FOUND');
@@ -629,7 +629,7 @@ describe('investigationDiagnostic contract', () => {
                 path: basePath,
                 id,
                 model: InvestigationDiagnostic,
-                role: 'USER'
+                role: 'INVESTIGATOR'
             });
         });
 
@@ -765,7 +765,7 @@ describe('investigationDiagnostic contract', () => {
             const id = (await post({ investigationId, diagnosticName: 'Oculto' })).body.data.diagnosticId;
             await Investigation.update({ isActive: false }, { where: { investigationId } });
 
-            expect((await put(id, { notes: 'x' }, 'USER')).status).toBe(404);
+            expect((await put(id, { notes: 'x' }, 'INVESTIGATOR')).status).toBe(404);
             expect((await put(id, { notes: 'x' }, 'ADMIN')).status).toBe(404);
             expect((await put(id, { notes: 'x' }, 'SUPERADMIN')).status).toBe(200);
         });
@@ -816,12 +816,12 @@ describe('investigationDiagnostic contract', () => {
             expect((await Investigation.findByPk(investigationId))!.getDataValue('updatedAt')).toEqual(parentBefore);
         });
 
-        it('is USER and 404s a missing id', async () => {
+        it('is INVESTIGATOR and 404s a missing id', async () => {
             const investigationId = await createInvestigation();
             const id = (await post({ investigationId, diagnosticName: 'Rol' })).body.data.diagnosticId;
 
-            expect((await del(id, 'ANALYTICS')).status).toBe(403);
-            expect((await del(id, 'USER')).status).toBe(200);
+            expect((await del(id, 'NOTIFIER')).status).toBe(403);
+            expect((await del(id, 'INVESTIGATOR')).status).toBe(200);
             expect((await del(missingUuid)).body.code).toBe('INVDIAG_005A_NOT_FOUND');
         });
     });

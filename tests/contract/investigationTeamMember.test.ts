@@ -76,7 +76,7 @@ describe('investigationTeamMember contract', () => {
         return investigation.getDataValue('investigationId');
     };
 
-    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post('/api/investigation-team-members').set(authHeader(role)).send(payload);
 
     const readRow = async (id: string) => await InvestigationTeamMember.findByPk(id, { paranoid: false });
@@ -93,7 +93,7 @@ describe('investigationTeamMember contract', () => {
     const retireInvestigation = (investigationId: string) =>
         Investigation.update({ isActive: false }, { where: { investigationId } });
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`/api/investigation-team-members/${ id }`).set(authHeader(role)).send(payload);
 
     const activate = (id: string, role: TestRole = 'ADMIN') =>
@@ -700,7 +700,7 @@ describe('investigationTeamMember contract', () => {
                 path: '/api/investigation-team-members',
                 id,
                 model: InvestigationTeamMember,
-                role: 'USER'
+                role: 'INVESTIGATOR'
             });
         });
 
@@ -808,7 +808,7 @@ describe('investigationTeamMember contract', () => {
         });
 
         it.each([
-            ['USER' as TestRole, 404],
+            ['INVESTIGATOR' as TestRole, 404],
             ['SUPERADMIN' as TestRole, 200]
         ])('a member of a retired investigation answers %s -> %i', async (role, status) => {
             const investigationId = await createInvestigationFixture();
@@ -901,12 +901,12 @@ describe('investigationTeamMember contract', () => {
             expect(res.body.code).toBe('INVTEAM_005A_NOT_FOUND');
         });
 
-        it('rejects an ANALYTICS with 403 and admits a USER', async () => {
+        it('rejects a NOTIFIER with 403 and admits an INVESTIGATOR', async () => {
             const investigationId = await createInvestigationFixture();
             const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
 
-            expect((await remove(data.investigationTeamMemberId, 'ANALYTICS')).status).toBe(403);
-            expect((await remove(data.investigationTeamMemberId, 'USER')).status).toBe(200);
+            expect((await remove(data.investigationTeamMemberId, 'NOTIFIER')).status).toBe(403);
+            expect((await remove(data.investigationTeamMemberId, 'INVESTIGATOR')).status).toBe(200);
         });
 
         // The seal frees the sortOrder from the partial unique index, which is correct and

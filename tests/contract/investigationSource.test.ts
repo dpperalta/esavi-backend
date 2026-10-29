@@ -72,7 +72,7 @@ describe('investigationSource contract', () => {
         (await Investigation.create({ caseId, statusItemId: statusZeroItemId, isActive }))
             .getDataValue('investigationId');
 
-    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post('/api/investigation-sources').set(authHeader(role)).send(payload);
 
     // Mints an investigation and its source in one go, and hands back the shared id
@@ -95,7 +95,7 @@ describe('investigationSource contract', () => {
     const listAdmin = (query: string = '', role: TestRole = 'ADMIN') =>
         request(app).get(`/api/investigation-sources/admin${ query }`).set(authHeader(role));
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`/api/investigation-sources/${ id }`).set(authHeader(role)).send(payload);
 
     const purge = (id: string, role: TestRole = 'SUPERADMIN') =>
@@ -433,7 +433,7 @@ describe('investigationSource contract', () => {
                 path: '/api/investigation-sources',
                 id,
                 model: InvestigationSource,
-                role: 'USER',
+                role: 'INVESTIGATOR',
                 strip: ['investigation']
             });
         });
@@ -527,7 +527,7 @@ describe('investigationSource contract', () => {
             const id = await seedSource();
             await Investigation.update({ isActive: false }, { where: { investigationId: id } });
 
-            expect((await update(id, { notes: 'x' }, 'USER')).status).toBe(404);
+            expect((await update(id, { notes: 'x' }, 'INVESTIGATOR')).status).toBe(404);
             expect((await update(id, { notes: 'x' }, 'ADMIN')).status).toBe(404);
             expect((await update(id, { notes: 'y' }, 'SUPERADMIN')).status).toBe(200);
         });

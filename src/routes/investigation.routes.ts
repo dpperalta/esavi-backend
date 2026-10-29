@@ -20,15 +20,15 @@ import {
     updateInvestigationValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Investigation
 // Code: ESAVI-INVESTGN-001
-// USER and not ADMIN, departing from the canonical matrix: the investigation is captured in the
+// INVESTIGATOR and not ADMIN, departing from the canonical matrix: the investigation is captured in the
 // same operational flow as the case, and with create in ADMIN the flow would break in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationValidator, validateFields, createInvestigation);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationValidator, validateFields, createInvestigation);
 
 // Get Investigations
 // Code: ESAVI-INVESTGN-002A
@@ -59,13 +59,13 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationIdVa
 
 // Update Investigation
 // Code: ESAVI-INVESTGN-004
-// USER for the same reason as 001: completing the investigation is part of the same clinical flow
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationIdValidator, ...updateInvestigationValidator, validateFields, updateInvestigation);
+// INVESTIGATOR for the same reason as 001: completing the investigation is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationIdValidator, ...updateInvestigationValidator, validateFields, updateInvestigation);
 
 // Soft delete Investigation
 // Code: ESAVI-INVESTGN-005A
-// USER and not ADMIN, departing from the canonical matrix for the same reason as 001 and 004:
+// INVESTIGATOR and not ADMIN, departing from the canonical matrix for the same reason as 001 and 004:
 // retracting an investigation is part of the same clinical flow that creates and completes it
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationIdValidator, validateFields, deleteInvestigation);
+router.delete('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationIdValidator, validateFields, deleteInvestigation);
 
 export default router;

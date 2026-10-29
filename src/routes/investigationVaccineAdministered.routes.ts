@@ -21,7 +21,7 @@ import {
     updateInvestigationVaccineAdministeredValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
@@ -31,10 +31,10 @@ const router = Router();
 
 // Create Investigation Vaccine Administered
 // Code: ESAVI-INVVACAD-001
-// USER and not ADMIN, following F28 to F36 and the specs before them: the administered vaccine is
+// INVESTIGATOR and not ADMIN, following F28 to F36 and the specs before them: the administered vaccine is
 // captured in the same operational flow as the case, and splitting the investigation form between
 // two roles would break the capture in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationVaccineAdministeredValidator, validateFields, createInvestigationVaccineAdministered);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationVaccineAdministeredValidator, validateFields, createInvestigationVaccineAdministered);
 
 // Get All Investigation Vaccines Administered By Investigation - For Admin
 // Code: ESAVI-INVVACAD-002B
@@ -75,12 +75,12 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationVacc
 
 // Update Investigation Vaccine Administered
 // Code: ESAVI-INVVACAD-004
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredIdValidator, ...updateInvestigationVaccineAdministeredValidator, validateFields, updateInvestigationVaccineAdministered);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationVaccineAdministeredIdValidator, ...updateInvestigationVaccineAdministeredValidator, validateFields, updateInvestigationVaccineAdministered);
 
 // Delete Investigation Vaccine Administered - Soft delete
 // Code: ESAVI-INVVACAD-005A
-// USER and not ADMIN, following the same reason as 004: it is part of the same clinical flow that
+// INVESTIGATOR and not ADMIN, following the same reason as 004: it is part of the same clinical flow that
 // captures and updates the vaccine administered record
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationVaccineAdministeredIdValidator, validateFields, deleteInvestigationVaccineAdministered);
+router.delete('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationVaccineAdministeredIdValidator, validateFields, deleteInvestigationVaccineAdministered);
 
 export default router;

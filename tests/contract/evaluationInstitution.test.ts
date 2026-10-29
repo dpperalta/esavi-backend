@@ -95,7 +95,7 @@ describe('evaluationInstitution contract', () => {
         return investigationId;
     };
 
-    const create = (payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).post(basePath).set(authHeader(role)).send(payload);
 
     it('201 with sortOrder 1 then 2, and the INSERT leaves sortOrder to the trigger', async () => {
@@ -190,7 +190,7 @@ describe('evaluationInstitution contract', () => {
             ['sealed evaluation', await createEvaluation(true, true)],
             ['inactive investigation', await createEvaluation(false, false)]
         ] as [string, string][]) {
-            for (const role of ['USER', 'SUPERADMIN'] as TestRole[]) {
+            for (const role of ['INVESTIGATOR', 'SUPERADMIN'] as TestRole[]) {
                 const res = await create({ investigationId, institutionName: 'X' }, role);
                 expect([label, res.status, res.body.code])
                     .toEqual([label, 404, 'EVALINST_001_CLINICAL_EVALUATION_NOT_FOUND']);
@@ -459,7 +459,7 @@ describe('evaluationInstitution contract', () => {
 
     // ---- step 9: the 004, the differential update block of SPEC F12 ----
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(payload);
 
     const seedFull = async (): Promise<{ id: string, investigationId: string, facilityId: string, typeItemId: string }> => {
@@ -492,7 +492,7 @@ describe('evaluationInstitution contract', () => {
             path: basePath,
             id,
             model: EvaluationInstitution,
-            role: 'USER'
+            role: 'INVESTIGATOR'
         });
     });
 
@@ -664,7 +664,7 @@ describe('evaluationInstitution contract', () => {
 
         const { id } = await seedFull();
         await EvaluationInstitution.update({ isActive: false }, { where: { evaluationInstitutionId: id } });
-        const res = await update(id, { notes: 'x' }, 'USER');
+        const res = await update(id, { notes: 'x' }, 'INVESTIGATOR');
         expect(res.status).toBe(404);
         expect(res.body.code).toBe('EVALINST_004_NOT_FOUND');
         expect((await update(id, { notes: 'x' }, 'SUPERADMIN')).status).toBe(200);
@@ -714,10 +714,10 @@ describe('evaluationInstitution contract', () => {
         expect(third.body.data.sortOrder).toBe(2);
     });
 
-    it('005A on an unknown id is 404, and an ANALYTICS gets 403', async () => {
+    it('005A on an unknown id is 404, and a NOTIFIER gets 403', async () => {
         expect((await remove('00000000-0000-4000-8000-000000000000')).status).toBe(404);
         const { id } = await seedFull();
-        expect((await remove(id, 'ANALYTICS')).status).toBe(403);
+        expect((await remove(id, 'NOTIFIER')).status).toBe(403);
     });
     // ---- step 11: the 005B, with the sortOrder collision ----
 
@@ -1056,15 +1056,15 @@ describe('evaluationInstitution contract', () => {
         const created = await create({ investigationId, institutionName: 'Roles' });
         const id = created.body.data.evaluationInstitutionId;
 
-        // ANALYTICS is below USER, so it is rejected everywhere
-        expect((await create({ investigationId, institutionName: 'X' }, 'ANALYTICS')).status).toBe(403);
+        // ANALYTICS is below USER, so the reads reject it; NOTIFIER is below INVESTIGATOR, so the writes do
+        expect((await create({ investigationId, institutionName: 'X' }, 'NOTIFIER')).status).toBe(403);
         expect((await list(investigationId, '', 'ANALYTICS')).status).toBe(403);
         expect((await getById(id, 'ANALYTICS')).status).toBe(403);
-        expect((await remove(id, 'ANALYTICS')).status).toBe(403);
+        expect((await remove(id, 'NOTIFIER')).status).toBe(403);
 
         // 002B and 005B need ADMIN
         expect((await listAdmin(investigationId, '', 'USER')).status).toBe(403);
-        expect((await remove(id, 'USER')).status).toBe(200);
+        expect((await remove(id, 'INVESTIGATOR')).status).toBe(200);
         expect((await activate(id, 'USER')).status).toBe(403);
 
         // 005C needs SUPERADMIN

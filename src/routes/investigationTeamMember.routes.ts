@@ -20,16 +20,16 @@ import {
     updateInvestigationTeamMemberValidator
 } from '../validators';
 
-const { ADMIN, SUPERADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Investigation Team Member
 // Code: ESAVI-INVTEAM-001
-// USER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
+// INVESTIGATOR and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
 // F13, F14, F28, F29 and F30 already fixed: the detail is captured in the same operational flow as
 // the case, and splitting it across two roles would break the form in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationTeamMemberValidator, validateFields, createInvestigationTeamMember);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationTeamMemberValidator, validateFields, createInvestigationTeamMember);
 
 // Get All Investigation Team Members By Investigation - For Admin
 // Code: ESAVI-INVTEAM-002B
@@ -74,17 +74,17 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationTeam
 
 // Update Investigation Team Member
 // Code: ESAVI-INVTEAM-004
-// USER for the same reason as 001: correcting the record of who investigated is part of the same
+// INVESTIGATOR for the same reason as 001: correcting the record of who investigated is part of the same
 // operational flow. Differential — SPEC F12 — so a PUT that resends an unchanged form writes nothing
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationTeamMemberIdValidator, ...updateInvestigationTeamMemberValidator, validateFields, updateInvestigationTeamMember);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationTeamMemberIdValidator, ...updateInvestigationTeamMemberValidator, validateFields, updateInvestigationTeamMember);
 
 // Delete Investigation Team Member - Logical delete, for User
 // Code: ESAVI-INVTEAM-005A
 // Declared after the literal paths. It is the first satellite of investigation with a 005A,
 // because it is the first with an isActive of its own: retiring a person from the investigating
 // team is a fact of the domain, and no cascade from investigation or from esaviCase writes it.
-// USER and not ADMIN, following the same reason as 001 and 004: it is part of the same clinical
+// INVESTIGATOR and not ADMIN, following the same reason as 001 and 004: it is part of the same clinical
 // flow that captures and updates the team
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationTeamMemberIdValidator, validateFields, deleteInvestigationTeamMember);
+router.delete('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationTeamMemberIdValidator, validateFields, deleteInvestigationTeamMember);
 
 export default router;

@@ -249,7 +249,7 @@ describe('appDetails authors contract', () => {
                 caseId: caseRow.getDataValue('caseId'),
                 statusItemId: statusZero!.getDataValue('catalogItemId')
             })).getDataValue('investigationId');
-            teamMemberId = (await post('/api/investigation-team-members', { investigationId, fullName: 'Sweep Member' }, 'USER')).body.data.investigationTeamMemberId;
+            teamMemberId = (await post('/api/investigation-team-members', { investigationId, fullName: 'Sweep Member' }, 'INVESTIGATOR')).body.data.investigationTeamMemberId;
 
             for( const id of [ catalogTypeId, geoLevelTypeId, roleId, patientId, teamMemberId ] ) {
                 expect(id).toEqual(expect.stringMatching(uuidPattern));

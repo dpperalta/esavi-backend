@@ -18,16 +18,16 @@ import {
     updateInvestigationColdChainValidator
 } from '../validators';
 
-const { ADMIN, SUPERADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Investigation Cold Chain
 // Code: ESAVI-INVCOLD-001
-// USER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
+// INVESTIGATOR and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
 // F13, F14 and F28 to F37 already fixed: the detail is captured in the same operational flow as the
 // case, and splitting it across two roles would break the form in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationColdChainValidator, validateFields, createInvestigationColdChain);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationColdChainValidator, validateFields, createInvestigationColdChain);
 
 // Get Investigation Cold Chains
 // Code: ESAVI-INVCOLD-002A
@@ -63,8 +63,8 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationCold
 
 // Update Investigation Cold Chain
 // Code: ESAVI-INVCOLD-004
-// USER for the same reason as 001: completing the cold chain is part of the same operational flow.
+// INVESTIGATOR for the same reason as 001: completing the cold chain is part of the same operational flow.
 // It is the main operation of the entity — the row is opened with one field and filled in over time
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationColdChainIdValidator, ...updateInvestigationColdChainValidator, validateFields, updateInvestigationColdChain);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationColdChainIdValidator, ...updateInvestigationColdChainValidator, validateFields, updateInvestigationColdChain);
 
 export default router;

@@ -92,7 +92,7 @@ describe('investigationMedicalHistory contract', () => {
     const createInvestigationFixture = async (isActive: boolean = true): Promise<string> =>
         await createInvestigationForCase(await createCaseFixture(), isActive);
 
-    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post(path).set(authHeader(role)).send(payload);
 
     // The empty create of this entity, and the difference with F30: { investigationId } is
@@ -116,7 +116,7 @@ describe('investigationMedicalHistory contract', () => {
     const listAdmin = (query: string = '', role: TestRole = 'ADMIN') =>
         request(app).get(`${ path }/admin${ query }`).set(authHeader(role));
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`${ path }/${ id }`).set(authHeader(role)).send(payload);
 
     const purge = (id: string, role: TestRole = 'SUPERADMIN') =>
@@ -604,7 +604,7 @@ describe('investigationMedicalHistory contract', () => {
                 gestationMethodItemId, deliveryItemId, wasBreastfed: 'YES', notes: 'nota'
             });
             await expectPutOfGetResponseWritesNothing({
-                path, id, model: InvestigationMedicalHistory, role: 'USER'
+                path, id, model: InvestigationMedicalHistory, role: 'INVESTIGATOR'
             });
         });
 
@@ -707,11 +707,11 @@ describe('investigationMedicalHistory contract', () => {
             expect(res.body.code).toBe('INVMEDH_004_DELIVERY_NOT_FOUND');
         });
 
-        it('answers 404 for USER and ADMIN when the investigation is inactive, and 200 for SUPERADMIN', async () => {
+        it('answers 404 for INVESTIGATOR and ADMIN when the investigation is inactive, and 200 for SUPERADMIN', async () => {
             const id = await seed();
             await retireInvestigation(id);
 
-            expect((await update(id, { notes: 'a' }, 'USER')).status).toBe(404);
+            expect((await update(id, { notes: 'a' }, 'INVESTIGATOR')).status).toBe(404);
             expect((await update(id, { notes: 'b' }, 'ADMIN')).status).toBe(404);
             expect((await update(id, { notes: 'c' }, 'SUPERADMIN')).status).toBe(200);
         });
