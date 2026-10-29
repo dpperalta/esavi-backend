@@ -1647,7 +1647,7 @@ describe('esaviCase contract', () => {
         const createFinalClassification = async ( caseId: string ): Promise<string> => {
             const response = await request(app)
                 .post('/api/final-classifications')
-                .set(authHeader('USER'))
+                .set(authHeader('EVALUATOR'))
                 .send({ caseId });
             return response.body.data.finalClassificationId;
         };

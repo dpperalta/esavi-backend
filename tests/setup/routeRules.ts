@@ -702,14 +702,14 @@ export const ROUTE_RULES: RouteRule[] = [
     // 001 and 004 in USER, the same deviation from the canonical matrix as F05 to F40: the verdict
     // is captured in the same operational flow as the case. 005C exists because finalClassification
     // is outside the preventPhysicalDelete loop of esaviapp.sql:1372-1386
-    { method: 'post',   path: '/api/final-classifications',                     minRole: 'USER',       code: 'ESAVI-FINCLASS-001' },
+    { method: 'post',   path: '/api/final-classifications',                     minRole: 'EVALUATOR',  code: 'ESAVI-FINCLASS-001' },
     { method: 'get',    path: '/api/final-classifications',                     minRole: 'USER',       code: 'ESAVI-FINCLASS-002A' },
     { method: 'get',    path: '/api/final-classifications/admin',               minRole: 'ADMIN',      code: 'ESAVI-FINCLASS-002B' },
     { method: 'patch',  path: `/api/final-classifications/activate/${ UUID }`,  minRole: 'SUPERADMIN', code: 'ESAVI-FINCLASS-005B' },
     { method: 'delete', path: `/api/final-classifications/purge/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-FINCLASS-005C' },
     { method: 'get',    path: `/api/final-classifications/case/${ UUID }`,      minRole: 'USER',       code: 'ESAVI-FINCLASS-006' },
     { method: 'get',    path: `/api/final-classifications/${ UUID }`,           minRole: 'USER',       code: 'ESAVI-FINCLASS-003' },
-    { method: 'put',    path: `/api/final-classifications/${ UUID }`,           minRole: 'USER',       code: 'ESAVI-FINCLASS-004' },
+    { method: 'put',    path: `/api/final-classifications/${ UUID }`,           minRole: 'EVALUATOR',  code: 'ESAVI-FINCLASS-004' },
     { method: 'delete', path: `/api/final-classifications/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-FINCLASS-005A' },
 
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first

@@ -108,7 +108,7 @@ describe('caseWorkflow contract', () => {
         request(app).post('/api/investigations').set(await authHeader('INVESTIGATOR')).send({ caseId });
 
     const finalClassify = async ( caseId: string ) =>
-        request(app).post('/api/final-classifications').set(await authHeader('USER')).send({ caseId });
+        request(app).post('/api/final-classifications').set(await authHeader('EVALUATOR')).send({ caseId });
 
     // The transitions
     const getByCase = async ( caseId: string, role = 'USER' ) =>
