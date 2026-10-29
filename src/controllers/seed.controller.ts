@@ -5,6 +5,7 @@ import { AppRole } from '../models/appRole.model';
 import { esaviLog } from '../helpers/esaviLogs.helper';
 import { AppUser, AppUserRole } from '../models';
 import { esaviCrypt } from '../helpers/crypto.helper';
+import { ROLES, ROLE_LEVELS } from '../constants/roles.constants';
 
 // Execute admin seed to create a superadmin role and user
 // Code: ESAVI-SEED-001
@@ -88,8 +89,8 @@ const executeAdminSeed = async (req: Request, res: Response): Promise<Response> 
                     code: 'USER',
                     name: process.env.ESAVI_USER || 'USER',
                     description: 'Default role for regular users',
-                    isSystemRole: false,
-                    level: 25,
+                    isSystemRole: true,
+                    level: ROLE_LEVELS[ROLES.USER],
                     appDetails: [{
                         'createdAt': new Date(),
                         'user': 'seedScript',
@@ -99,6 +100,30 @@ const executeAdminSeed = async (req: Request, res: Response): Promise<Response> 
                     }]
                 }
             });
+            const stageRoles = [
+                { code: ROLES.NOTIFIER,     description: 'Case notification (steps 1-4)' },
+                { code: ROLES.INVESTIGATOR, description: 'Case notification and investigation (steps 1-5)' },
+                { code: ROLES.EVALUATOR,    description: 'Full case path, final classification, close and reopen' }
+            ];
+            for( const stageRole of stageRoles ) {
+                await AppRole.findOrCreate({
+                    where: { code: stageRole.code },
+                    defaults: {
+                        code: stageRole.code,
+                        name: stageRole.code,
+                        description: stageRole.description,
+                        isSystemRole: true,
+                        level: ROLE_LEVELS[stageRole.code],
+                        appDetails: [{
+                            'createdAt': new Date(),
+                            'user': 'seedScript',
+                            'method': 'ESAVI-SEED-001',
+                            'ipAddress': ip,
+                            'detail': 'Role created by seed script'
+                        }]
+                    }
+                });
+            }
         }
     } catch (error) {
         esaviLog(`[SEED ERROR]: ${ error instanceof Error ? error.message : 'Unknown error' }`, 'error',);
