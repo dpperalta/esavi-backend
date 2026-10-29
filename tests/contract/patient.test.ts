@@ -28,7 +28,7 @@ describe('patient contract', () => {
     // errors on purpose, so the log is expected output rather than a signal
     let consoleError: jest.SpyInstance;
 
-    const createPatient = async ( payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const createPatient = async ( payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app)
             .post('/api/patients')
             .set(authHeader(role))
@@ -52,7 +52,7 @@ describe('patient contract', () => {
     const updatePatient = async ( id: string, payload: Record<string, unknown> ) =>
         request(app)
             .put(`/api/patients/${ id }`)
-            .set(authHeader('USER'))
+            .set(authHeader('NOTIFIER'))
             .send(payload);
 
     const createGeoLocationFixture = async ( label: string, isActive: boolean ): Promise<string> => {
@@ -911,7 +911,7 @@ describe('patient contract', () => {
         const classify = ( caseId: string ) =>
             request(app)
                 .post('/api/classifications')
-                .set(authHeader('USER'))
+                .set(authHeader('NOTIFIER'))
                 .send({ caseId, isSeriousEvent: false });
 
         const readClassification = ( caseId: string ) =>

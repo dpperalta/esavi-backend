@@ -38,7 +38,7 @@ describe('notifier contract', () => {
 
     let caseCounter = 0;
 
-    const createNotifier = ( payload: Record<string, unknown> = {}, role: TestRole = 'USER' ) =>
+    const createNotifier = ( payload: Record<string, unknown> = {}, role: TestRole = 'NOTIFIER' ) =>
         request(app)
             .post('/api/notifiers')
             .set(authHeader(role))
@@ -53,7 +53,7 @@ describe('notifier contract', () => {
     const listAdminNotifiers = ( query: string = '', role: TestRole = 'ADMIN' ) =>
         request(app).get(`/api/notifiers/admin${ query }`).set(authHeader(role));
 
-    const updateNotifier = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const updateNotifier = ( id: string, payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).put(`/api/notifiers/${ id }`).set(authHeader(role)).send(payload);
 
     const deleteNotifier = ( id: string, role: TestRole = 'ADMIN' ) =>
@@ -262,11 +262,11 @@ describe('notifier contract', () => {
         });
 
         it('answers 400 without caseId, without firstName or without lastName', async () => {
-            const noCase = await request(app).post('/api/notifiers').set(authHeader('USER'))
+            const noCase = await request(app).post('/api/notifiers').set(authHeader('NOTIFIER'))
                 .send({ firstName: 'Ana', lastName: 'Perez' });
-            const noFirstName = await request(app).post('/api/notifiers').set(authHeader('USER'))
+            const noFirstName = await request(app).post('/api/notifiers').set(authHeader('NOTIFIER'))
                 .send({ caseId, lastName: 'Perez' });
-            const noLastName = await request(app).post('/api/notifiers').set(authHeader('USER'))
+            const noLastName = await request(app).post('/api/notifiers').set(authHeader('NOTIFIER'))
                 .send({ caseId, firstName: 'Ana' });
 
             expect(noCase.status).toBe(400);

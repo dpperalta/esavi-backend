@@ -19,7 +19,7 @@ import {
     updateNotificationDiluentValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
@@ -29,7 +29,7 @@ const router = Router();
 
 // Create Notification Diluent
 // Code: ESAVI-NOTIFDIL-001
-router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationDiluentValidator, validateFields, createNotificationDiluent);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createNotificationDiluentValidator, validateFields, createNotificationDiluent);
 
 // Get All Notification Diluents By Vaccine - For Admin
 // Code: ESAVI-NOTIFDIL-002B
@@ -50,7 +50,7 @@ router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...no
 
 // Activate Notification Diluent - For Admin
 // Code: ESAVI-NOTIFDIL-005B
-// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a NOTIFIER's
 // retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
 router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationDiluentIdValidator, validateFields, activateNotificationDiluent);
@@ -63,14 +63,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationDilue
 
 // Update Notification Diluent
 // Code: ESAVI-NOTIFDIL-004
-// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// NOTIFIER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
 // corrects and retires it. Retiring is a logical delete, reversible with 005B
-router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationDiluentIdValidator, ...updateNotificationDiluentValidator, validateFields, updateNotificationDiluent);
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationDiluentIdValidator, ...updateNotificationDiluentValidator, validateFields, updateNotificationDiluent);
 
 // Delete Notification Diluent - Soft delete
 // Code: ESAVI-NOTIFDIL-005A
-// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// NOTIFIER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
 // corrects and retires it. Retiring is a logical delete, reversible with 005B
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationDiluentIdValidator, validateFields, deleteNotificationDiluent);
+router.delete('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationDiluentIdValidator, validateFields, deleteNotificationDiluent);
 
 export default router;

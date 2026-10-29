@@ -226,7 +226,7 @@ describe('appDetails authors contract', () => {
                 lastNames: 'authors',
                 birthDate: '1990-01-01',
                 documentNumber: `SW${ suffix }`
-            }, 'USER');
+            }, 'NOTIFIER');
             patientId = patient.body.data.patientId;
 
             const facility = await HealthFacility.create({ localCode: `SW${ suffix }`, name: `Sweep ${ suffix }` });

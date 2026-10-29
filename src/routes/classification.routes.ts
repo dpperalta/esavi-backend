@@ -20,15 +20,15 @@ import {
     updateClassificationValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
 // Create Classification
 // Code: ESAVI-CLASSIF-001
-// USER and not ADMIN, departing from the canonical matrix: classifying is captured in the same
+// NOTIFIER and not ADMIN, departing from the canonical matrix: classifying is captured in the same
 // operational flow as the case, and with create in ADMIN the flow would break in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createClassificationValidator, validateFields, createClassification);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createClassificationValidator, validateFields, createClassification);
 
 // Get Classifications
 // Code: ESAVI-CLASSIF-002A
@@ -59,8 +59,8 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...classificationIdV
 
 // Update Classification
 // Code: ESAVI-CLASSIF-004
-// USER for the same reason as 001: correcting the classification is part of the same clinical flow
-router.put('/:id', tokenValidation, validateUserRole(USER), ...classificationIdValidator, ...updateClassificationValidator, validateFields, updateClassification);
+// NOTIFIER for the same reason as 001: correcting the classification is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...classificationIdValidator, ...updateClassificationValidator, validateFields, updateClassification);
 
 // Soft delete Classification
 // Code: ESAVI-CLASSIF-005A

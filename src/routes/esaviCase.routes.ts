@@ -12,16 +12,16 @@ import {
 } from '../controllers/esaviCase.controller';
 import { createEsaviCaseValidator, esaviCaseIdValidator, esaviCaseListValidator, updateEsaviCaseValidator } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
 // Create ESAVI Case
 // Code: ESAVI-CASE-001
-// USER and not ADMIN, departing from the canonical matrix: whoever opens an ESAVI case is the
+// NOTIFIER and not ADMIN, departing from the canonical matrix: whoever opens an ESAVI case is the
 // operational staff who has just registered the patient, and with create in ADMIN the flow
 // would break in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createEsaviCaseValidator, validateFields, createEsaviCase);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createEsaviCaseValidator, validateFields, createEsaviCase);
 
 // Get ESAVI Cases
 // Code: ESAVI-CASE-002A
@@ -42,8 +42,8 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...esaviCaseIdValida
 
 // Update ESAVI Case
 // Code: ESAVI-CASE-004
-// USER for the same reason as 001: correcting the case is part of reporting the ESAVI
-router.put('/:id', tokenValidation, validateUserRole(USER), ...esaviCaseIdValidator, ...updateEsaviCaseValidator, validateFields, updateEsaviCase);
+// NOTIFIER for the same reason as 001: correcting the case is part of reporting the ESAVI
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...esaviCaseIdValidator, ...updateEsaviCaseValidator, validateFields, updateEsaviCase);
 
 // Soft delete ESAVI Case
 // Code: ESAVI-CASE-005A

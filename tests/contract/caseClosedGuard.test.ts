@@ -152,13 +152,17 @@ const CLOSED_GUARD_RULES: ClosedGuardRule[] = [
     { method: 'patch',  path: `/api/final-classifications/activate/${ UUID }`, code: 'ESAVI-FINCLASS-005B' }
 ];
 
-// The role that reaches each operation: 004 is USER, the retirement is ADMIN and the return
-// SUPERADMIN, as ROUTE_RULES declares
+// The role that reaches each operation: 001 and 004 take the stage role ROUTE_RULES declares for
+// their code (SPEC F64), the retirement is ADMIN and the return SUPERADMIN
 const ROLE_BY_OP: Record<string, TestRole> = {
-    '001': 'USER',
-    '004': 'USER',
     '005A': 'ADMIN',
     '005B': 'SUPERADMIN'
+};
+
+const minRoleOf = ( code: string ): TestRole => {
+    const rule = ROUTE_RULES.find(candidate => candidate.code === code);
+    if( !rule ) throw new Error(`${ code } is not in ROUTE_RULES`);
+    return rule.minRole;
 };
 
 interface Prepared {
@@ -542,7 +546,7 @@ const FAMILIES: Record<string, Family> = {
 
 const roleOf = ( rule: ClosedGuardRule ): TestRole => {
     const [ , prefix, op ] = rule.code.split('-');
-    return FAMILIES[prefix].roles?.[op] ?? ROLE_BY_OP[op];
+    return FAMILIES[prefix].roles?.[op] ?? ROLE_BY_OP[op] ?? minRoleOf(rule.code);
 };
 
 // What a request that succeeds answers: a 001 creates
@@ -855,7 +859,7 @@ describe('case closed guard contract', () => {
 
             const response = await request(app)
                 .post(family.basePath)
-                .set(authHeader('USER'))
+                .set(authHeader(minRoleOf(`ESAVI-${ key }-001`)))
                 .send(family.createBody!(caseId));
 
             expect(response.status).toBe(409);

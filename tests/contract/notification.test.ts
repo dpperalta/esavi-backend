@@ -96,7 +96,7 @@ describe('notification contract', () => {
         return date.toISOString().slice(0, 10);
     };
 
-    const createNotification = ( payload: Record<string, unknown> = {}, role: TestRole = 'USER' ) =>
+    const createNotification = ( payload: Record<string, unknown> = {}, role: TestRole = 'NOTIFIER' ) =>
         request(app)
             .post('/api/notifications')
             .set(authHeader(role))
@@ -114,7 +114,7 @@ describe('notification contract', () => {
     const listAdminNotifications = ( query: string = '', role: TestRole = 'ADMIN' ) =>
         request(app).get(`/api/notifications/admin${ query }`).set(authHeader(role));
 
-    const updateNotification = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const updateNotification = ( id: string, payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).put(`/api/notifications/${ id }`).set(authHeader(role)).send(payload);
 
     const deleteNotification = ( id: string, role: TestRole = 'ADMIN' ) =>
@@ -238,7 +238,7 @@ describe('notification contract', () => {
 
             const missing = await request(app)
                 .post('/api/notifications')
-                .set(authHeader('USER'))
+                .set(authHeader('NOTIFIER'))
                 .send({ caseId, notificationType: 'NON_SEVERE' });
             const blank = await createNotification({ caseId, esaviDescription: '   ' });
 
@@ -264,7 +264,7 @@ describe('notification contract', () => {
 
             const response = await request(app)
                 .post('/api/notifications')
-                .set(authHeader('USER'))
+                .set(authHeader('NOTIFIER'))
                 .send({ caseId, esaviDescription: 'No type' });
 
             expect(response.status).toBe(400);
@@ -911,7 +911,7 @@ describe('notification contract', () => {
         // which does not admit one
         const notifyWithSevereDetail = async (): Promise<string> => {
             const { id } = await notifyNewCase({ notificationType: 'SEVERE' });
-            await request(app).post('/api/severe-notifications').set(authHeader('USER'))
+            await request(app).post('/api/severe-notifications').set(authHeader('NOTIFIER'))
                 .send({ notificationId: id });
             return id;
         };
@@ -1017,7 +1017,7 @@ describe('notification contract', () => {
         // The default type of the fixture is NON_SEVERE, which is the one that admits this detail
         const notifyWithNonSevereDetail = async (): Promise<string> => {
             const { id } = await notifyNewCase({ notificationType: 'NON_SEVERE' });
-            await request(app).post('/api/non-severe-notifications').set(authHeader('USER'))
+            await request(app).post('/api/non-severe-notifications').set(authHeader('NOTIFIER'))
                 .send({ notificationId: id });
             return id;
         };
@@ -1083,7 +1083,7 @@ describe('notification contract', () => {
 
         it('a SEVERE notification does not touch the non severe branch at all', async () => {
             const { id } = await notifyNewCase({ notificationType: 'SEVERE' });
-            await request(app).post('/api/severe-notifications').set(authHeader('USER'))
+            await request(app).post('/api/severe-notifications').set(authHeader('NOTIFIER'))
                 .send({ notificationId: id });
 
             // The branch that does not apply finds zero rows, which is not an error

@@ -89,7 +89,7 @@ describe('notificationVaccine contract', () => {
         const caseId = await createCaseFixture(eventDate);
         const created = await request(app)
             .post('/api/notifications')
-            .set(authHeader('USER'))
+            .set(authHeader('NOTIFIER'))
             .send({ caseId, notificationType: 'NON_SEVERE', esaviDescription: 'Fever after the dose' });
         return { notificationId: created.body.data.notificationId, caseId };
     };

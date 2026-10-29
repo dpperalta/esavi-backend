@@ -97,11 +97,11 @@ describe('caseWorkflow contract', () => {
     // from a bare isSeriousEvent: SPEC F09 derives the flag from the criteria and rejects a true
     // with nothing behind it
     const classify = async ( caseId: string, serious = false ) =>
-        request(app).post('/api/classifications').set(await authHeader('USER'))
+        request(app).post('/api/classifications').set(await authHeader('NOTIFIER'))
             .send(serious ? { caseId, causedHospitalization: true } : { caseId, isSeriousEvent: false });
 
     const notify = async ( caseId: string, requestInvestigation = false ) =>
-        request(app).post('/api/notifications').set(await authHeader('USER'))
+        request(app).post('/api/notifications').set(await authHeader('NOTIFIER'))
             .send({ caseId, notificationType: 'SEVERE', esaviDescription: `Event ${ suffix }`, requestInvestigation });
 
     const investigate = async ( caseId: string ) =>
@@ -116,7 +116,7 @@ describe('caseWorkflow contract', () => {
 
     const completeStage = async ( caseId: string, stage: string ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/complete-stage`)
-            .set(await authHeader('USER')).send({ stage });
+            .set(await authHeader('NOTIFIER')).send({ stage });
 
     const close = async ( caseId: string, role = 'USER' ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/close`).set(await authHeader(role as never));
@@ -125,7 +125,7 @@ describe('caseWorkflow contract', () => {
         request(app).patch(`/api/case-workflows/case/${ caseId }/reopen`).set(await authHeader(role as never));
 
     const requestValidation = async ( caseId: string ) =>
-        request(app).patch(`/api/case-workflows/case/${ caseId }/request-validation`).set(await authHeader('USER'));
+        request(app).patch(`/api/case-workflows/case/${ caseId }/request-validation`).set(await authHeader('NOTIFIER'));
 
     const resolveValidation = async ( caseId: string ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/resolve-validation`).set(await authHeader('USER'));
@@ -393,7 +393,7 @@ describe('caseWorkflow contract', () => {
             expect((await completeStage(caseId, 'FOO')).status).toBe(400);
             expect((await request(app)
                 .patch(`/api/case-workflows/case/${ caseId }/complete-stage`)
-                .set(await authHeader('USER')).send({})).status).toBe(400);
+                .set(await authHeader('NOTIFIER')).send({})).status).toBe(400);
         });
 
         it('seals endedAt and leaves statusItemId untouched', async () => {
@@ -729,7 +729,7 @@ describe('caseWorkflow contract', () => {
             // The only field that travels in a body of this entity is `stage` in 007
             const res = await request(app)
                 .patch(`/api/case-workflows/case/${ caseId }/complete-stage`)
-                .set(await authHeader('USER'))
+                .set(await authHeader('NOTIFIER'))
                 .send({
                     stage: 'CLASSIFICATION',
                     closedAt: '2020-01-01T00:00:00.000Z',

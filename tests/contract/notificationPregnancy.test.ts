@@ -138,7 +138,7 @@ describe('notificationPregnancy contract', () => {
         // SPEC F44: the case fixture is built on the model, so it needs its workflow row —
         // without it every POST of a stage answers 404 CASEFLOW_012_NOT_FOUND
         await seedCaseWorkflow(esaviCase.getDataValue('caseId'));
-        const created = await request(app).post('/api/notifications').set(authHeader('USER')).send({
+        const created = await request(app).post('/api/notifications').set(authHeader('NOTIFIER')).send({
             caseId: esaviCase.getDataValue('caseId'),
             notificationType,
             esaviDescription: 'Fever after the dose'
@@ -146,7 +146,7 @@ describe('notificationPregnancy contract', () => {
         return { notificationId: created.body.data.notificationId, patientId: patient.getDataValue('patientId') };
     };
 
-    const createPregnancy = ( payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const createPregnancy = ( payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).post('/api/notification-pregnancies').set(authHeader(role)).send(payload);
 
     const getPregnancy = ( id: string, role: TestRole = 'USER' ) =>
@@ -155,7 +155,7 @@ describe('notificationPregnancy contract', () => {
     const getByNotification = ( notificationId: string, role: TestRole = 'USER' ) =>
         request(app).get(`/api/notification-pregnancies/notification/${ notificationId }`).set(authHeader(role));
 
-    const updatePregnancy = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const updatePregnancy = ( id: string, payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).put(`/api/notification-pregnancies/${ id }`).set(authHeader(role)).send(payload);
 
     const deletePregnancy = ( id: string, role: TestRole = 'ADMIN' ) =>
@@ -744,7 +744,7 @@ describe('notificationPregnancy contract', () => {
                 path: '/api/notification-pregnancies',
                 id: pregnancyId,
                 model: NotificationPregnancy,
-                role: 'USER'
+                role: 'NOTIFIER'
             });
         });
 

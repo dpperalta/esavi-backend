@@ -21,7 +21,7 @@ import {
     completeCaseWorkflowStageValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
@@ -57,7 +57,7 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...caseWork
 // Complete Case Workflow Stage
 // Code: ESAVI-CASEFLOW-007
 // Seals the end of one stage. It does NOT move the status — that is what 012 does
-router.patch('/case/:caseId/complete-stage', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, ...completeCaseWorkflowStageValidator, validateFields, completeCaseWorkflowStage);
+router.patch('/case/:caseId/complete-stage', tokenValidation, validateUserRole(NOTIFIER), ...caseWorkflowCaseIdValidator, ...completeCaseWorkflowStageValidator, validateFields, completeCaseWorkflowStage);
 
 // Close Case Workflow
 // Code: ESAVI-CASEFLOW-008
@@ -74,7 +74,7 @@ router.patch('/case/:caseId/reopen', tokenValidation, validateUserRole(ADMIN), .
 // Request Case Workflow Validation
 // Code: ESAVI-CASEFLOW-010
 // Saves the current status in previousStatusItemId and moves to PENDING_VALIDATION
-router.patch('/case/:caseId/request-validation', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, requestCaseWorkflowValidation);
+router.patch('/case/:caseId/request-validation', tokenValidation, validateUserRole(NOTIFIER), ...caseWorkflowCaseIdValidator, validateFields, requestCaseWorkflowValidation);
 
 // Resolve Case Workflow Validation
 // Code: ESAVI-CASEFLOW-011

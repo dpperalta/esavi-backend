@@ -21,7 +21,7 @@ import {
     updateNotificationVaccineValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
@@ -31,7 +31,7 @@ const router = Router();
 
 // Create Notification Vaccine
 // Code: ESAVI-NOTIFVAC-001
-router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationVaccineValidator, validateFields, createNotificationVaccine);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createNotificationVaccineValidator, validateFields, createNotificationVaccine);
 
 // Get Notification Vaccines by Case
 // Code: ESAVI-NOTIFVAC-006
@@ -59,7 +59,7 @@ router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...no
 
 // Activate Notification Vaccine - For Admin
 // Code: ESAVI-NOTIFVAC-005B
-// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a NOTIFIER's
 // retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
 router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationVaccineIdValidator, validateFields, activateNotificationVaccine);
@@ -72,14 +72,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationVacci
 
 // Update Notification Vaccine
 // Code: ESAVI-NOTIFVAC-004
-// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// NOTIFIER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
 // corrects and retires it. Retiring is a logical delete, reversible with 005B
-router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineIdValidator, ...updateNotificationVaccineValidator, validateFields, updateNotificationVaccine);
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationVaccineIdValidator, ...updateNotificationVaccineValidator, validateFields, updateNotificationVaccine);
 
 // Delete Notification Vaccine - Soft delete
 // Code: ESAVI-NOTIFVAC-005A
-// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// NOTIFIER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
 // corrects and retires it. Retiring is a logical delete, reversible with 005B
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationVaccineIdValidator, validateFields, deleteNotificationVaccine);
+router.delete('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationVaccineIdValidator, validateFields, deleteNotificationVaccine);
 
 export default router;
