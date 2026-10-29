@@ -156,7 +156,7 @@ describe('evaluationInstitution contract', () => {
         const type = await CatalogType.findOne({ where: { code: 'evaluationInstitutionType' } });
         expect(type).not.toBeNull();
         const items = await CatalogItem.findAll({ where: { catalogTypeId: type!.getDataValue('catalogTypeId') } });
-        expect(items).toHaveLength(5);
+        expect(items).toHaveLength(2);
         const facilityId = await createFacility();
         const res = await create({
             investigationId,
@@ -376,7 +376,7 @@ describe('evaluationInstitution contract', () => {
     it('003 returns the exact shape of §3.7, with the two masters nested', async () => {
         const investigationId = await createEvaluation();
         const type = await CatalogType.findOne({ where: { code: 'evaluationInstitutionType' } });
-        const item = await CatalogItem.findOne({ where: { catalogTypeId: type!.getDataValue('catalogTypeId'), code: 'HOSPITAL' } });
+        const item = await CatalogItem.findOne({ where: { catalogTypeId: type!.getDataValue('catalogTypeId'), code: 'THE_SAME' } });
         const facilityId = await createFacility();
         const created = await create({
             investigationId,
@@ -465,7 +465,7 @@ describe('evaluationInstitution contract', () => {
     const seedFull = async (): Promise<{ id: string, investigationId: string, facilityId: string, typeItemId: string }> => {
         const investigationId = await createEvaluation();
         const type = await CatalogType.findOne({ where: { code: 'evaluationInstitutionType' } });
-        const item = await CatalogItem.findOne({ where: { catalogTypeId: type!.getDataValue('catalogTypeId'), code: 'HOSPITAL' } });
+        const item = await CatalogItem.findOne({ where: { catalogTypeId: type!.getDataValue('catalogTypeId'), code: 'THE_SAME' } });
         const facilityId = await createFacility();
         const res = await create({
             investigationId,
@@ -714,10 +714,10 @@ describe('evaluationInstitution contract', () => {
         expect(third.body.data.sortOrder).toBe(2);
     });
 
-    it('005A on an unknown id is 404, and a USER gets 403', async () => {
+    it('005A on an unknown id is 404, and an ANALYTICS gets 403', async () => {
         expect((await remove('00000000-0000-4000-8000-000000000000')).status).toBe(404);
         const { id } = await seedFull();
-        expect((await remove(id, 'USER')).status).toBe(403);
+        expect((await remove(id, 'ANALYTICS')).status).toBe(403);
     });
     // ---- step 11: the 005B, with the sortOrder collision ----
 
@@ -1060,10 +1060,11 @@ describe('evaluationInstitution contract', () => {
         expect((await create({ investigationId, institutionName: 'X' }, 'ANALYTICS')).status).toBe(403);
         expect((await list(investigationId, '', 'ANALYTICS')).status).toBe(403);
         expect((await getById(id, 'ANALYTICS')).status).toBe(403);
+        expect((await remove(id, 'ANALYTICS')).status).toBe(403);
 
-        // 002B, 005A and 005B need ADMIN
+        // 002B and 005B need ADMIN
         expect((await listAdmin(investigationId, '', 'USER')).status).toBe(403);
-        expect((await remove(id, 'USER')).status).toBe(403);
+        expect((await remove(id, 'USER')).status).toBe(200);
         expect((await activate(id, 'USER')).status).toBe(403);
 
         // 005C needs SUPERADMIN

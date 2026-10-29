@@ -631,11 +631,12 @@ describe('investigationVaccineAdministered contract', () => {
             expect((await del(id)).status).toBe(200);
         });
 
-        it('keeps a USER out', async () => {
+        it('keeps an ANALYTICS out and admits a USER', async () => {
             const investigationId = await createInvestigation();
             const whodrugId = await createWhodrug();
             const id = (await post({ investigationId, vaccineWhodrugId: whodrugId })).body.data.vaccineAdministeredId;
-            expect((await del(id, 'USER')).status).toBe(403);
+            expect((await del(id, 'ANALYTICS')).status).toBe(403);
+            expect((await del(id, 'USER')).status).toBe(200);
         });
     });
 

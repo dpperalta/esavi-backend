@@ -743,11 +743,11 @@ describe('investigationPregnancyCondition contract', () => {
             expect((await activate(retiredId)).status).toBe(200);
         });
 
-        it('the minimum roles are ADMIN on both, and an unknown id answers 404', async () => {
+        it('the minimum roles are USER on 005A and ADMIN on 005B, and an unknown id answers 404', async () => {
             const [id] = await seed();
 
-            expect((await remove(id, 'USER')).status).toBe(403);
-            expect((await remove(id, 'ADMIN')).status).toBe(200);
+            expect((await remove(id, 'ANALYTICS')).status).toBe(403);
+            expect((await remove(id, 'USER')).status).toBe(200);
             expect((await activate(id, 'USER')).status).toBe(403);
             expect((await activate(id, 'ADMIN')).status).toBe(200);
 

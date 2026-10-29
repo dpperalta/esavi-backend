@@ -816,12 +816,12 @@ describe('investigationDiagnostic contract', () => {
             expect((await Investigation.findByPk(investigationId))!.getDataValue('updatedAt')).toEqual(parentBefore);
         });
 
-        it('is ADMIN and 404s a missing id', async () => {
+        it('is USER and 404s a missing id', async () => {
             const investigationId = await createInvestigation();
             const id = (await post({ investigationId, diagnosticName: 'Rol' })).body.data.diagnosticId;
 
-            expect((await del(id, 'USER')).status).toBe(403);
-            expect((await del(id, 'ADMIN')).status).toBe(200);
+            expect((await del(id, 'ANALYTICS')).status).toBe(403);
+            expect((await del(id, 'USER')).status).toBe(200);
             expect((await del(missingUuid)).body.code).toBe('INVDIAG_005A_NOT_FOUND');
         });
     });

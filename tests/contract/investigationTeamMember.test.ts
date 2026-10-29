@@ -901,13 +901,12 @@ describe('investigationTeamMember contract', () => {
             expect(res.body.code).toBe('INVTEAM_005A_NOT_FOUND');
         });
 
-        it('rejects a USER with 403', async () => {
+        it('rejects an ANALYTICS with 403 and admits a USER', async () => {
             const investigationId = await createInvestigationFixture();
             const { data } = (await create({ investigationId, fullName: 'Ana Pérez' })).body;
 
-            const res = await remove(data.investigationTeamMemberId, 'USER');
-
-            expect(res.status).toBe(403);
+            expect((await remove(data.investigationTeamMemberId, 'ANALYTICS')).status).toBe(403);
+            expect((await remove(data.investigationTeamMemberId, 'USER')).status).toBe(200);
         });
 
         // The seal frees the sortOrder from the partial unique index, which is correct and
