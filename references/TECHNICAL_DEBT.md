@@ -50,7 +50,7 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-028](#deuda-028) | 🟡 | ✅ `AuthUser` y `Express.Request['user']` divergen |
 | [DEUDA-029](#deuda-029) | 🟡 | ✅ Barrels de `types/` con dos estilos |
 | [DEUDA-030](#deuda-030) | 🟡 | ✅ Sin tests ni linter |
-| [DEUDA-031](#deuda-031) | 🔴 | `roles.constants.ts` lee variables de entorno que no existen |
+| [DEUDA-031](#deuda-031) | 🔴 | ✅ `roles.constants.ts` lee variables de entorno que no existen |
 | [DEUDA-032](#deuda-032) | 🟠 | ✅ Los middlewares construyen respuestas de error a mano |
 | [DEUDA-033](#deuda-033) | 🟠 | `tokenValidation` deja `email` y `displayName` cifrados en `req.user` |
 | [DEUDA-034](#deuda-034) | 🟠 | Reasignar `parentGeoLocationId` puede crear un ciclo |
@@ -576,7 +576,7 @@ Además `tokenValidation` puebla `roles` con `{ name, level }`, mientras `UserRo
 ---
 
 <a id="deuda-031"></a>
-## DEUDA-031 🔴 `roles.constants.ts` lee variables de entorno que no existen
+## DEUDA-031 🔴 ✅ `roles.constants.ts` lee variables de entorno que no existen
 
 **Archivo**: `src/constants/roles.constants.ts:2-5`
 
@@ -585,6 +585,8 @@ Lee `ROLE_SUPERADMIN`, `ROLE_ADMIN`, `ROLE_USER` y `ROLE_ANALYTICS`. Ninguna est
 Hoy funciona porque los cuatro caen a su valor por defecto. Pero si alguien define `ROLE_SUPERADMIN='SUPERADMIN_ROLE'` creyendo que es la variable buena, `ROLE_LEVELS` se indexa con esa cadena, deja de coincidir con el `name` que la BD devuelve, y `validateUserRole` calcula nivel 0 para todos: **403 en toda la API**.
 
 **Aceptación**: un solo juego de nombres de variable, presente en `.env.example` y en los dos `.env.*`, o los defaults como única fuente y las variables eliminadas del código.
+
+**Saldada el 2026-10-29** por el [SPEC F64](./functional/specs/64-case-stage-roles.md), paso 1, por la segunda vía de la «Aceptación»: los cuatro `ROLES.*` de `src/constants/roles.constants.ts` son literales y el archivo ya no lee `process.env`. No se crea ninguna variable `ROLE_*`: un nombre de rol es un identificador del código, igual que un código `ESAVI-*`.
 
 ---
 
