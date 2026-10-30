@@ -5,6 +5,41 @@
 > **Fecha:** 2026-10-29
 > **Objetivo:** Que el recorrido del caso admita tres roles anidados (NOTIFIER, que solo notifica; INVESTIGATOR, que además investiga; y EVALUATOR, que además clasifica al final, cierra y reabre) sobre un `USER` que baja a rol de consulta sin escritura, dentro de la escalera numérica actual y sin quitar nada a ningún usuario existente.
 
+> **Nota de implementación (2026-10-30)** — rama `spec-64-case-stage-roles`. El plan se implementó tal como está escrito. Estas son las diferencias entre el texto y lo que se encontró al implementarlo; mandan sobre el cuerpo cuando lo contradicen.
+>
+> **Erratas del texto**
+>
+> - **`classification` sube a `NOTIFIER`, no se queda en `USER`.** §3.4.3 («Pertenece a la notificación y se queda en `USER`») y §6, bloque «Matriz» («`classification` (inicial, paso 3) en `USER`»), arrastran la primera versión del spec. Lo correcto es lo que dicen §3.4.1 y §8.1: `ESAVI-CLASSIF-001` y `-004` en `NOTIFIER`.
+> - **La semilla es `POST`, no `GET`.** La verificación del paso 4 dice `GET /api/seed/admin?enable=<SEED_ACTION>`. La ruta es `POST` (`seed.routes.ts:9`).
+> - **Hay dos cálculos de nivel sin fallback, no uno.** §3.1 nombra `requesterLevel` de `appRole.service.ts:31`. `user.service.ts:23` tiene la misma fórmula sin fallback a la constante, y tampoco se tocó. Ninguno de los dos es la fórmula de `validateUserRole`, así que el criterio «no hay una tercera copia de la fórmula en `src/`» se cumple.
+>
+> **Cambios que el plan no nombraba**
+>
+> - **Paso 1 — tipo de `ROLE_LEVELS`.** Con las claves en literales, `ROLE_LEVELS` dejó de admitir índices `string` y `roleValidation.middleware.ts` no compilaba. Pasa a declararse como `Readonly<Record<string, number>>`, sin `as const`. Ningún valor cambia.
+> - **Paso 4 — una BD vacía no se puede simular borrando roles.** En la BD de test, `appRole` no se puede borrar con `DELETE` mientras tenga asignaciones en `appUserRole`. La verificación apartó las filas renombrando su `code` y su `name`.
+> - **Paso 5 — usuarios con territorio.** `createScopedTestUser` (`tests/setup/auth.ts`) creaba siempre un `USER`, que ya no escribe. Gana un tercer parámetro `role`, con `USER` por defecto. `esaviCase.test.ts` añade escritores `NOTIFIER` con el mismo territorio que sus lectores, y el usuario con territorio de `classification.test.ts`, que solo escribe, pasa a `NOTIFIER`.
+> - **Paso 5 — `caseClosedGuard.test.ts`.** El rol del `001` y el `004` deja de estar fijo en `USER` en `ROLE_BY_OP` y se lee de `ROUTE_RULES` (`minRoleOf`). Así la suite siguió sola los pasos 6 y 7. El `005A` y el `005B` siguen en `ROLE_BY_OP`.
+> - **Pasos 5 a 7 — tests de límite.** Los tests de contrato que comprobaban «`ANALYTICS` → 403, `USER` → 2xx» en una escritura comprueban ahora el rol inmediatamente inferior al de la etapa frente al rol de la etapa: `USER`/`NOTIFIER`, `NOTIFIER`/`INVESTIGATOR` o `INVESTIGATOR`/`EVALUATOR`.
+> - **Paso 9 — helper de test.** `completeStage` de `caseWorkflow.test.ts` acepta un `role`, con `NOTIFIER` por defecto.
+> - **Paso 11 — `appDetails` que no es un array.** En la BD de test, el `appDetails` de la fila `USER` no es un array, porque `seedRoles` no rellena esa columna. El script lo normaliza con `Array.isArray` antes de añadir su entrada.
+>
+> **Antes del paso 2**
+>
+> - **22 fallos que ya estaban en `main`.** El commit `d151805` bajó a `USER` los `005A` de `investigation`, `evaluationInstitution` y cuatro satélites, y redujo el catálogo `evaluationInstitutionType` de 5 items (`HOSPITAL`…) a 2 (`THE_SAME`, `DIFFERENT`). Solo actualizó `roles.test.ts`. Las suites de contrato de esas cinco entidades se corrigieron en un commit aparte, previo al paso 3. El paso 6 volvió a cambiar esas mismas aserciones.
+>
+> **Verificación**
+>
+> - El paso 11 se verificó contra la BD de test, no contra la de desarrollo:
+>   - primera ejecución: `created: 32` y `USER level: 25 → 20`;
+>   - segunda ejecución: `created: 0, skipped: 32`, sin tocar la fila `USER`;
+>   - con un fallo forzado en la parte 1, la fila `USER` siguió en 25 y no quedó ninguna asignación viva;
+>   - la reversión de §3.3 funciona;
+>   - un usuario migrado recibe ≠ 403 en `POST /api/final-classifications`, `close` y `reopen`, y un `USER` nuevo recibe 403 en `POST /api/patients` y 200 en `GET /api/esavi-cases`.
+>
+>   **Queda pendiente ejecutarlo en cada entorno ya sembrado**, en el orden de §7.
+> - ESLint ignora `scripts/` y `tsconfig.json` solo incluye `src`, así que `npm run check` no revisa el script de migración.
+> - **Un test intermitente que no tiene relación con este spec.** `esaviCase.test.ts`, «bounds a range by both ends inclusively, and by each end alone», falló algunas veces en el filtro `?eventDateTo=2026-02-15` (devuelve `[]`). La suite sola siempre pasó. Merece una entrada en `TECHNICAL_DEBT.md`.
+
 ---
 
 ## 1. Por qué existe este spec
