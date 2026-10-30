@@ -754,10 +754,10 @@ export const ROUTE_RULES: RouteRule[] = [
     { method: 'patch',  path: `/api/case-workflows/activate/${ UUID }`,                  minRole: 'SUPERADMIN', code: 'ESAVI-CASEFLOW-005B' },
     { method: 'get',    path: `/api/case-workflows/case/${ UUID }`,                      minRole: 'USER',       code: 'ESAVI-CASEFLOW-006' },
     { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/complete-stage`,       minRole: 'NOTIFIER',   code: 'ESAVI-CASEFLOW-007' },
-    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/close`,                minRole: 'USER',       code: 'ESAVI-CASEFLOW-008' },
-    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/reopen`,               minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-009' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/close`,                minRole: 'EVALUATOR',  code: 'ESAVI-CASEFLOW-008' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/reopen`,               minRole: 'EVALUATOR',  code: 'ESAVI-CASEFLOW-009' },
     { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/request-validation`,   minRole: 'NOTIFIER',   code: 'ESAVI-CASEFLOW-010' },
-    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/resolve-validation`,   minRole: 'USER',       code: 'ESAVI-CASEFLOW-011' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/resolve-validation`,   minRole: 'EVALUATOR',  code: 'ESAVI-CASEFLOW-011' },
     { method: 'get',    path: `/api/case-workflows/${ UUID }`,                           minRole: 'USER',       code: 'ESAVI-CASEFLOW-003' },
     { method: 'delete', path: `/api/case-workflows/${ UUID }`,                           minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-005A' },
 

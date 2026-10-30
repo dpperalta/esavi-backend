@@ -118,17 +118,17 @@ describe('caseWorkflow contract', () => {
         request(app).patch(`/api/case-workflows/case/${ caseId }/complete-stage`)
             .set(await authHeader('NOTIFIER')).send({ stage });
 
-    const close = async ( caseId: string, role = 'USER' ) =>
+    const close = async ( caseId: string, role = 'EVALUATOR' ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/close`).set(await authHeader(role as never));
 
-    const reopen = async ( caseId: string, role = 'ADMIN' ) =>
+    const reopen = async ( caseId: string, role = 'EVALUATOR' ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/reopen`).set(await authHeader(role as never));
 
     const requestValidation = async ( caseId: string ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/request-validation`).set(await authHeader('NOTIFIER'));
 
     const resolveValidation = async ( caseId: string ) =>
-        request(app).patch(`/api/case-workflows/case/${ caseId }/resolve-validation`).set(await authHeader('USER'));
+        request(app).patch(`/api/case-workflows/case/${ caseId }/resolve-validation`).set(await authHeader('EVALUATOR'));
 
     /** A case that satisfies the two always-required preconditions of 008. */
     const createClosableCase = async (): Promise<string> => {
@@ -523,7 +523,7 @@ describe('caseWorkflow contract', () => {
 
     describe('ESAVI-CASEFLOW-009 — reopen', () => {
 
-        it('needs ADMIN and refuses a case that is not closed', async () => {
+        it('needs EVALUATOR and refuses a case that is not closed', async () => {
             const openCase = await createCaseFixture();
             const notClosed = await reopen(openCase);
             expect(notClosed.status).toBe(409);
@@ -531,8 +531,8 @@ describe('caseWorkflow contract', () => {
 
             const caseId = await createClosableCase();
             await close(caseId);
-            expect((await reopen(caseId, 'USER')).status).toBe(403);
-            expect((await reopen(caseId, 'ADMIN')).status).toBe(200);
+            expect((await reopen(caseId, 'INVESTIGATOR')).status).toBe(403);
+            expect((await reopen(caseId, 'EVALUATOR')).status).toBe(200);
         });
 
         it('after close-reopen-close-reopen, reopenCount is 2 and closedAt is the second close', async () => {

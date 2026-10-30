@@ -21,7 +21,7 @@ import {
     completeCaseWorkflowStageValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
+const { SUPERADMIN, ADMIN, EVALUATOR, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
@@ -63,13 +63,13 @@ router.patch('/case/:caseId/complete-stage', tokenValidation, validateUserRole(N
 // Code: ESAVI-CASEFLOW-008
 // Verifies the four stage preconditions, seals closedAt and moves the status to CLOSED. This is
 // how a case file is finished; 005A only retires the workflow RECORD from view
-router.patch('/case/:caseId/close', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, closeCaseWorkflow);
+router.patch('/case/:caseId/close', tokenValidation, validateUserRole(EVALUATOR), ...caseWorkflowCaseIdValidator, validateFields, closeCaseWorkflow);
 
 // Reopen Case Workflow
 // Code: ESAVI-CASEFLOW-009
-// ADMIN. Increments reopenCount and stamps lastReopenedAt; closedAt is NOT cleared. REOPENED is
+// EVALUATOR. Increments reopenCount and stamps lastReopenedAt; closedAt is NOT cleared. REOPENED is
 // transitory — the next call to 012 takes the file out of it
-router.patch('/case/:caseId/reopen', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowCaseIdValidator, validateFields, reopenCaseWorkflow);
+router.patch('/case/:caseId/reopen', tokenValidation, validateUserRole(EVALUATOR), ...caseWorkflowCaseIdValidator, validateFields, reopenCaseWorkflow);
 
 // Request Case Workflow Validation
 // Code: ESAVI-CASEFLOW-010
@@ -80,7 +80,7 @@ router.patch('/case/:caseId/request-validation', tokenValidation, validateUserRo
 // Code: ESAVI-CASEFLOW-011
 // Restores previousStatusItemId and clears it. Entering and leaving are two facts, two codes
 // and two audit entries — never one endpoint that toggles
-router.patch('/case/:caseId/resolve-validation', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, resolveCaseWorkflowValidation);
+router.patch('/case/:caseId/resolve-validation', tokenValidation, validateUserRole(EVALUATOR), ...caseWorkflowCaseIdValidator, validateFields, resolveCaseWorkflowValidation);
 
 // Get Case Workflow by ID
 // Code: ESAVI-CASEFLOW-003
