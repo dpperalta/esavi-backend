@@ -456,8 +456,15 @@ const { SUPERADMIN, ADMIN, USER } = ROLES;
 |---|---|
 | `SUPERADMIN` | 100 |
 | `ADMIN` | 50 |
-| `USER` | 25 |
+| `EVALUATOR` | 40 |
+| `INVESTIGATOR` | 30 |
+| `NOTIFIER` | 25 |
+| `USER` | 20 |
 | `ANALYTICS` | 10 |
+
+Los siete nombres son literales del código, no variables de entorno ([SPEC F64](./functional/specs/64-case-stage-roles.md)). No hay dos roles con el mismo nivel, y los huecos entre niveles son deliberados: un rol futuro cabe en la cadena sin renumerar los existentes. `USER` (20) es el umbral de lectura y `NOTIFIER` (25) el de escritura del expediente.
+
+El nivel del usuario sale de `appRole.level`, y `ROLE_LEVELS` solo se usa si esa columna es nula. Lo calcula `getUserRoleLevel` (`src/helpers/roleLevel.helper.ts`), el único sitio donde vive esa fórmula. Los roles cuyo nivel está atado a un literal de ruta se siembran con `isSystemRole: true`, para que `ESAVI-APPROLE-004` y `005A` no puedan moverlos.
 
 `validateUserRole(X)` significa **"nivel ≥ nivel(X)"**, no "es X". `validateUserRole(USER)` admite también a ADMIN y SUPERADMIN — es el comportamiento deseado y en eso se apoya toda la matriz.
 
@@ -465,6 +472,13 @@ Dos consecuencias que son regla:
 
 1. **Nunca se pasa más de un rol.** `validateUserRole` aplica `Math.max` sobre los niveles requeridos, así que `validateUserRole(SUPERADMIN, ADMIN)` exige 100, no 50 — lo contrario de lo que aparenta. Se declara siempre el nivel **mínimo** que se quiere admitir, y uno solo.
 2. **La ruta es el único punto de autorización.** Prohibido repetir el chequeo con `isSuperAdmin()` u otro predicado dentro del controlador: hoy provoca que un ADMIN pase el middleware y reciba un 403 del controlador después. Si una regla no se expresa por nivel (p. ej. "solo el dueño del registro"), va en el **servicio**, no en el controlador.
+
+   **Excepción declarada — el guard por etapa de `ESAVI-CASEFLOW-007`.** `complete-stage` es una sola ruta para las cuatro etapas, y la etapa viaja en el body, donde el middleware no la ve. La ruta exige `NOTIFIER` y el servicio, antes de cargar el expediente, compara el nivel del usuario con el de la etapa (`STAGE_MIN_ROLE`) y responde 403 `CASEFLOW_007_STAGE_FORBIDDEN`. Es la única autorización fuera de la ruta que este documento admite, y solo porque cumple tres condiciones:
+   - la ruta ya autorizó el nivel mínimo;
+   - el dato que decide solo existe en el body;
+   - el guard usa el mismo helper (`getUserRoleLevel`) y la misma escala (`ROLE_LEVELS`) que el middleware.
+
+   Un predicado por nombre de rol (`isAdmin`, …) no sirve para esto. Una autorización nueva fuera de la ruta necesita su propio spec y las mismas tres condiciones.
 
 ### Matriz canónica
 
@@ -479,18 +493,39 @@ Dos consecuencias que son regla:
 | activate (`005B`) | `SUPERADMIN` |
 | borrado físico (`005C`) | `SUPERADMIN` |
 
-**Excepción declarada — el expediente clínico se escribe como `USER`.** Quien notifica e investiga es el USER, así que las entidades que componen el expediente se apartan de la matriz canónica:
+**Excepción declarada — el expediente clínico se escribe con el rol de su etapa.** Quien notifica, investiga o evalúa registra el dato, así que las entidades que componen el expediente se apartan de la matriz canónica:
 
 | Entidades | `001` | `004` | `005A` | `005B` | `002B` | `005C` |
 |---|---|---|---|---|---|---|
-| Satélites de `notification` y de `investigation`, a cualquier profundidad | `USER` | `USER` | `USER` | `ADMIN` | `ADMIN` | `SUPERADMIN` |
-| Cabeceras del expediente: `patient`, `esaviCase`, `notifier`, `classification`, `notification`, `investigation`, `finalClassification` | `USER` | `USER` | por entidad, ver `ROUTE_RULES` | `SUPERADMIN` | `ADMIN` | `SUPERADMIN` |
+| Satélites de `notification`, a cualquier profundidad | `NOTIFIER` | `NOTIFIER` | `NOTIFIER` | `ADMIN` | `ADMIN` | `SUPERADMIN` |
+| Satélites de `investigation`, a cualquier profundidad, incluido `evaluationInstitution` | `INVESTIGATOR` | `INVESTIGATOR` | `INVESTIGATOR` | `ADMIN` | `ADMIN` | `SUPERADMIN` |
+| Cabeceras de la notificación: `patient`, `esaviCase`, `notifier`, `classification`, `notification` | `NOTIFIER` | `NOTIFIER` | por entidad, ver `ROUTE_RULES` | `SUPERADMIN` | `ADMIN` | `SUPERADMIN` |
+| Cabecera de la investigación: `investigation` | `INVESTIGATOR` | `INVESTIGATOR` | `INVESTIGATOR` | `SUPERADMIN` | `ADMIN` | `SUPERADMIN` |
+| Cabecera de la clasificación final: `finalClassification` | `EVALUATOR` | `EVALUATOR` | `ADMIN` | `SUPERADMIN` | `ADMIN` | `SUPERADMIN` |
 
-Una entidad expone solo las operaciones que su tabla admite: las de una sola fila por padre, sin `isActive`, no tienen `005A` ni `005B`, y las tablas protegidas por `preventPhysicalDelete` no tienen `005C` (§6). Las celdas de la tabla son el rol mínimo **cuando la operación existe**.
+Una entidad expone solo las operaciones que su tabla admite: las de una sola fila por padre, sin `isActive`, no tienen `005A` ni `005B`, y las tablas protegidas por `preventPhysicalDelete` no tienen `005C` (§6). Las celdas de la tabla son el rol mínimo **cuando la operación existe**. Las lecturas (`002A`, `003`, `006`…) de todas estas entidades siguen en `USER`.
 
-- **La razón.** Quien registra un dato clínico lo corrige y lo retira; retirar es borrado lógico, reversible con `005B`. Deshacer la retirada de un USER es supervisión del caso y va en `ADMIN`. Destruir va en `SUPERADMIN`.
-- **El límite.** La excepción cubre las entidades de la tabla y ninguna más. Un spec nuevo que cuelgue de `notification` o de `investigation` la hereda sin tener que justificarla. Un spec fuera de ese árbol sigue la matriz canónica.
-- **Lo que la tabla no esconde.** El `005A` de las cabeceras no es uniforme —`notifier` e `investigation` lo tienen en `USER`; `esaviCase`, `patient`, `classification`, `notification` y `finalClassification`, en `ADMIN`—. Está declarado como «por entidad» y no como regla; `ROUTE_RULES` es la fuente de la verdad.
+- **La razón.** Quien registra un dato clínico lo corrige y lo retira; retirar es borrado lógico, reversible con `005B`. Deshacer la retirada es supervisión del caso y va en `ADMIN`. Destruir va en `SUPERADMIN`.
+- **El límite.** La excepción cubre las entidades de la tabla y ninguna más. Un spec fuera de ese árbol sigue la matriz canónica.
+- **Lo que la tabla no esconde.** El `005A` de las cabeceras de la notificación no es uniforme —`notifier` lo tiene en `NOTIFIER`; `esaviCase`, `patient`, `classification` y `notification`, en `ADMIN`—. Está declarado como «por entidad» y no como regla; `ROUTE_RULES` es la fuente de la verdad.
+
+### Roles por etapa del recorrido del caso
+
+Desde el [SPEC F64](./functional/specs/64-case-stage-roles.md), el expediente tiene tres roles de escritura **anidados**: `USER` ⊂ `NOTIFIER` ⊂ `INVESTIGATOR` ⊂ `EVALUATOR` ⊂ `ADMIN`. Cada uno puede todo lo del anterior y algo más, y por eso caben en la escalera numérica sin cambiar `validateUserRole`.
+
+| Familia | Rol mínimo |
+|---|---|
+| Toda lectura del caso y toda ruta fuera del caso (catálogos, geografía, MedDRA, WHODrug, `logout-all`…) | `USER` |
+| Escrituras de los pasos 1 a 4 (paciente, caso, notificador, clasificación inicial, notificación y sus satélites), `CASEFLOW-007` y `CASEFLOW-010` | `NOTIFIER` |
+| Escrituras del paso 5 (investigación y sus satélites, incluido `evaluationInstitution`) | `INVESTIGATOR` |
+| Escrituras del paso 6 (`finalClassification`), `CASEFLOW-008` (`close`), `-009` (`reopen`) y `-011` (`resolve-validation`) | `EVALUATOR` |
+| Supervisión y destrucción: `002B`, `005B`, `005C`, los `005A` que ya estaban en `ADMIN` y `caseWorkflow` `002B`/`005A`/`005B` | sin cambio |
+
+- **`USER` es un rol de consulta.** Lee todo lo de su territorio (SPEC F49), pero no escribe en el expediente. Es el rol de un usuario dado de alta que todavía no registra.
+- **`classification` es la clasificación inicial** (paso 3) y pertenece a la notificación. Solo `finalClassification` (paso 6) es del evaluador.
+- **`ADMIN` y `SUPERADMIN` hacen todo lo anterior por la escalera** (50 y 100 ≥ 40). Ningún servicio tiene una rama «si es admin» para el recorrido; si la tuviera, sería una segunda vía de autorización.
+- **Regla de herencia.** Un satélite nuevo de `investigation` nace en `INVESTIGATOR`; uno de `notification`, en `NOTIFIER`. Una etapa nueva del workflow entra en `STAGE_MIN_ROLE` el mismo día que entra en `CaseWorkflowStage`: el mapa es total y una etapa no puede quedar sin umbral.
+- **El límite del modelo.** Los roles son anidados porque la escalera solo expresa cadenas. Un rol no anidado —por ejemplo, un evaluador que no notifica— no cabe aquí: exige permisos por etapa (`appPermission` / `appRolePermission`, hoy sin modelo) y es otro modelo de autorización, con su propio spec.
 
 Los predicados de `src/helpers/permissions.helper.ts` (`canViewInactive`, `isAdmin`, …) **no autorizan**: modulan comportamiento dentro de un endpoint ya autorizado — típicamente si se ven o no los registros inactivos:
 
