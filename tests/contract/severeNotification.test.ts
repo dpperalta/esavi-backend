@@ -73,12 +73,12 @@ describe('severeNotification contract', () => {
         const caseId = await createCaseFixture();
         const created = await request(app)
             .post('/api/notifications')
-            .set(authHeader('USER'))
+            .set(authHeader('NOTIFIER'))
             .send({ caseId, notificationType, esaviDescription: 'Fever after the dose' });
         return { notificationId: created.body.data.notificationId, caseId };
     };
 
-    const createDetail = ( payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const createDetail = ( payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).post('/api/severe-notifications').set(authHeader(role)).send(payload);
 
     const getDetail = ( id: string, role: TestRole = 'USER' ) =>
@@ -87,7 +87,7 @@ describe('severeNotification contract', () => {
     const getDetailByCase = ( caseId: string, role: TestRole = 'USER' ) =>
         request(app).get(`/api/severe-notifications/case/${ caseId }`).set(authHeader(role));
 
-    const updateDetail = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const updateDetail = ( id: string, payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).put(`/api/severe-notifications/${ id }`).set(authHeader(role)).send(payload);
 
     const purgeDetail = ( id: string, role: TestRole = 'SUPERADMIN' ) =>
@@ -503,7 +503,7 @@ describe('severeNotification contract', () => {
                 path: '/api/severe-notifications',
                 id: notificationId,
                 model: SevereNotification,
-                role: 'USER'
+                role: 'NOTIFIER'
             });
         });
 

@@ -18,16 +18,16 @@ import {
     updateInvestigationSourceValidator
 } from '../validators';
 
-const { ADMIN, SUPERADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Investigation Source
 // Code: ESAVI-INVSRC-001
-// USER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
+// INVESTIGATOR and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
 // F13, F14 and F28 already fixed: the detail is captured in the same operational flow as the case,
 // and splitting it across two roles would break the form in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationSourceValidator, validateFields, createInvestigationSource);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationSourceValidator, validateFields, createInvestigationSource);
 
 // Get Investigation Sources
 // Code: ESAVI-INVSRC-002A
@@ -63,8 +63,8 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationSour
 
 // Update Investigation Source
 // Code: ESAVI-INVSRC-004
-// USER for the same reason as 001: correcting the source is part of the same operational flow.
+// INVESTIGATOR for the same reason as 001: correcting the source is part of the same operational flow.
 // It is the main operation of the entity — the row is opened empty and filled in over time
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationSourceIdValidator, ...updateInvestigationSourceValidator, validateFields, updateInvestigationSource);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationSourceIdValidator, ...updateInvestigationSourceValidator, validateFields, updateInvestigationSource);
 
 export default router;

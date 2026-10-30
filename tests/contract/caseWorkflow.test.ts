@@ -2,6 +2,7 @@ import request from 'supertest';
 import { app } from '../../src/app';
 import { CaseWorkflow, CatalogItem, CatalogType, EsaviCase, HealthFacility, Patient } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
+import { getMessage } from '../../src/helpers';
 import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 
@@ -97,38 +98,38 @@ describe('caseWorkflow contract', () => {
     // from a bare isSeriousEvent: SPEC F09 derives the flag from the criteria and rejects a true
     // with nothing behind it
     const classify = async ( caseId: string, serious = false ) =>
-        request(app).post('/api/classifications').set(await authHeader('USER'))
+        request(app).post('/api/classifications').set(await authHeader('NOTIFIER'))
             .send(serious ? { caseId, causedHospitalization: true } : { caseId, isSeriousEvent: false });
 
     const notify = async ( caseId: string, requestInvestigation = false ) =>
-        request(app).post('/api/notifications').set(await authHeader('USER'))
+        request(app).post('/api/notifications').set(await authHeader('NOTIFIER'))
             .send({ caseId, notificationType: 'SEVERE', esaviDescription: `Event ${ suffix }`, requestInvestigation });
 
     const investigate = async ( caseId: string ) =>
-        request(app).post('/api/investigations').set(await authHeader('USER')).send({ caseId });
+        request(app).post('/api/investigations').set(await authHeader('INVESTIGATOR')).send({ caseId });
 
     const finalClassify = async ( caseId: string ) =>
-        request(app).post('/api/final-classifications').set(await authHeader('USER')).send({ caseId });
+        request(app).post('/api/final-classifications').set(await authHeader('EVALUATOR')).send({ caseId });
 
     // The transitions
     const getByCase = async ( caseId: string, role = 'USER' ) =>
         request(app).get(`/api/case-workflows/case/${ caseId }`).set(await authHeader(role as never));
 
-    const completeStage = async ( caseId: string, stage: string ) =>
+    const completeStage = async ( caseId: string, stage: string, role = 'NOTIFIER' ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/complete-stage`)
-            .set(await authHeader('USER')).send({ stage });
+            .set(await authHeader(role as never)).send({ stage });
 
-    const close = async ( caseId: string, role = 'USER' ) =>
+    const close = async ( caseId: string, role = 'EVALUATOR' ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/close`).set(await authHeader(role as never));
 
-    const reopen = async ( caseId: string, role = 'ADMIN' ) =>
+    const reopen = async ( caseId: string, role = 'EVALUATOR' ) =>
         request(app).patch(`/api/case-workflows/case/${ caseId }/reopen`).set(await authHeader(role as never));
 
     const requestValidation = async ( caseId: string ) =>
-        request(app).patch(`/api/case-workflows/case/${ caseId }/request-validation`).set(await authHeader('USER'));
+        request(app).patch(`/api/case-workflows/case/${ caseId }/request-validation`).set(await authHeader('NOTIFIER'));
 
     const resolveValidation = async ( caseId: string ) =>
-        request(app).patch(`/api/case-workflows/case/${ caseId }/resolve-validation`).set(await authHeader('USER'));
+        request(app).patch(`/api/case-workflows/case/${ caseId }/resolve-validation`).set(await authHeader('EVALUATOR'));
 
     /** A case that satisfies the two always-required preconditions of 008. */
     const createClosableCase = async (): Promise<string> => {
@@ -393,7 +394,7 @@ describe('caseWorkflow contract', () => {
             expect((await completeStage(caseId, 'FOO')).status).toBe(400);
             expect((await request(app)
                 .patch(`/api/case-workflows/case/${ caseId }/complete-stage`)
-                .set(await authHeader('USER')).send({})).status).toBe(400);
+                .set(await authHeader('NOTIFIER')).send({})).status).toBe(400);
         });
 
         it('seals endedAt and leaves statusItemId untouched', async () => {
@@ -426,6 +427,45 @@ describe('caseWorkflow contract', () => {
             const overClosed = await completeStage(closedCase, 'NOTIFICATION');
             expect(overClosed.status).toBe(409);
             expect(overClosed.body.code).toBe('CASEFLOW_007_CASE_CLOSED');
+        });
+
+        describe('the stage guard of SPEC F64', () => {
+
+            it.each([
+                ['INVESTIGATION', 'NOTIFIER', 'INVESTIGATOR'],
+                ['FINAL_CLASSIFICATION', 'INVESTIGATOR', 'EVALUATOR']
+            ])('%s answers 403 CASEFLOW_007_STAGE_FORBIDDEN to %s and lets %s through', async ( stage, below, minimum ) => {
+                const caseId = await createCaseFixture();
+
+                const rejected = await completeStage(caseId, stage, below);
+                expect(rejected.status).toBe(403);
+                expect(rejected.body.ok).toBe(false);
+                expect(rejected.body.code).toBe('CASEFLOW_007_STAGE_FORBIDDEN');
+                expect(rejected.body.message).toBe(getMessage('caseWorkflow.stageForbidden', 'es', { stage }));
+
+                expect((await completeStage(caseId, stage, minimum)).status).not.toBe(403);
+            });
+
+            it.each(['CLASSIFICATION', 'NOTIFICATION'])('%s lets a NOTIFIER through', async stage => {
+                const caseId = await createCaseFixture();
+                expect((await completeStage(caseId, stage, 'NOTIFIER')).status).not.toBe(403);
+            });
+
+            it.each(['CLASSIFICATION', 'NOTIFICATION', 'INVESTIGATION', 'FINAL_CLASSIFICATION'])(
+                '%s is refused to a USER by the route, before the guard', async stage => {
+                    const res = await completeStage(missingUuid, stage, 'USER');
+                    expect(res.status).toBe(403);
+                    expect(res.body.code).toBe('AUTH_ROLE_FORBIDDEN');
+                }
+            );
+
+            it('runs before the case is loaded: 403 over a case that does not exist, 404 once the role reaches', async () => {
+                const forbidden = await completeStage(missingUuid, 'INVESTIGATION', 'NOTIFIER');
+                expect(forbidden.status).toBe(403);
+                expect(forbidden.body.code).toBe('CASEFLOW_007_STAGE_FORBIDDEN');
+
+                expect((await completeStage(missingUuid, 'INVESTIGATION', 'INVESTIGATOR')).status).toBe(404);
+            });
         });
     });
 
@@ -523,7 +563,7 @@ describe('caseWorkflow contract', () => {
 
     describe('ESAVI-CASEFLOW-009 — reopen', () => {
 
-        it('needs ADMIN and refuses a case that is not closed', async () => {
+        it('needs EVALUATOR and refuses a case that is not closed', async () => {
             const openCase = await createCaseFixture();
             const notClosed = await reopen(openCase);
             expect(notClosed.status).toBe(409);
@@ -531,8 +571,8 @@ describe('caseWorkflow contract', () => {
 
             const caseId = await createClosableCase();
             await close(caseId);
-            expect((await reopen(caseId, 'USER')).status).toBe(403);
-            expect((await reopen(caseId, 'ADMIN')).status).toBe(200);
+            expect((await reopen(caseId, 'INVESTIGATOR')).status).toBe(403);
+            expect((await reopen(caseId, 'EVALUATOR')).status).toBe(200);
         });
 
         it('after close-reopen-close-reopen, reopenCount is 2 and closedAt is the second close', async () => {
@@ -729,7 +769,7 @@ describe('caseWorkflow contract', () => {
             // The only field that travels in a body of this entity is `stage` in 007
             const res = await request(app)
                 .patch(`/api/case-workflows/case/${ caseId }/complete-stage`)
-                .set(await authHeader('USER'))
+                .set(await authHeader('NOTIFIER'))
                 .send({
                     stage: 'CLASSIFICATION',
                     closedAt: '2020-01-01T00:00:00.000Z',

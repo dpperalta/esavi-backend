@@ -18,16 +18,16 @@ import {
     updateInvestigationCommunityValidator
 } from '../validators';
 
-const { ADMIN, SUPERADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Investigation Community
 // Code: ESAVI-INVCOMM-001
-// USER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
+// INVESTIGATOR and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
 // F13, F14 and F28 to F39 already fixed: the detail is captured in the same operational flow as the
 // case, and splitting it across two roles would break the form in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationCommunityValidator, validateFields, createInvestigationCommunity);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationCommunityValidator, validateFields, createInvestigationCommunity);
 
 // Get Investigation Communities
 // Code: ESAVI-INVCOMM-002A
@@ -63,9 +63,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationComm
 
 // Update Investigation Community
 // Code: ESAVI-INVCOMM-004
-// USER for the same reason as 001: completing the community record is part of the same operational
+// INVESTIGATOR for the same reason as 001: completing the community record is part of the same operational
 // flow. It is the main operation of the entity — the row is opened with one field and filled in over
 // time
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationCommunityIdValidator, ...updateInvestigationCommunityValidator, validateFields, updateInvestigationCommunity);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationCommunityIdValidator, ...updateInvestigationCommunityValidator, validateFields, updateInvestigationCommunity);
 
 export default router;

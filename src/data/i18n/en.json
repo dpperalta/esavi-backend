@@ -1055,6 +1055,8 @@
         "notPending": "The case is not pending validation",
         "previousStatusMissing": "The case is pending validation but does not keep its previous status. Please contact the system administrator.",
         "stageNotStarted": "The {{stage}} stage has not started yet, so it cannot be completed",
+
+        "stageForbidden": "Your role does not allow completing the {{stage}} stage",
         "stageAlreadyCompleted": "The {{stage}} stage is already completed",
         "classificationRequired": "The case cannot be closed without a classification",
         "notificationRequired": "The case cannot be closed without a notification",

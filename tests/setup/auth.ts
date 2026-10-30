@@ -15,7 +15,7 @@ interface TestUser {
     role: TestRole;
 }
 
-const TEST_ROLES: TestRole[] = ['SUPERADMIN', 'ADMIN', 'USER', 'ANALYTICS'];
+const TEST_ROLES: TestRole[] = ['SUPERADMIN', 'ADMIN', 'EVALUATOR', 'INVESTIGATOR', 'NOTIFIER', 'USER', 'ANALYTICS'];
 const TEST_PASSWORD = 'TestPassword123!';
 
 const testUsers = new Map<TestRole, TestUser>();
@@ -77,7 +77,7 @@ const createTestUser = async ( role: TestRole ): Promise<TestUser> => {
 }
 
 /**
- * Creates the four users once and memoizes them. Tokens are minted directly
+ * Creates the seven users once and memoizes them. Tokens are minted directly
  * instead of going through `POST /auth/login`, so a regression in the login
  * endpoint fails only its own test rather than the whole suite.
  */
@@ -106,7 +106,7 @@ const getTestUser = ( role: TestRole ): TestUser => {
 const scopedTestUsers = new Map<string, TestUser>();
 
 /**
- * Creates a USER-role user separate from the one `seedTestUsers` shares across every
+ * Creates a user of the given role (USER by default) separate from the one `seedTestUsers` shares across every
  * test file, and assigns it a geoLocationId in `appUserGeoLocation` — SPEC F49's
  * territorial scope. Kept apart from the shared default USER so a test file can give
  * it real territory without touching the account other files' suites (notably
@@ -118,15 +118,15 @@ const scopedTestUsers = new Map<string, TestUser>();
  * `geoLocationId` null creates the user without any appUserGeoLocation row — SPEC F49's
  * empty scope, on a user nobody else's suite can have already touched.
  */
-const createScopedTestUser = async ( key: string, geoLocationId: string | null ): Promise<TestUser> => {
+const createScopedTestUser = async ( key: string, geoLocationId: string | null, role: TestRole = 'USER' ): Promise<TestUser> => {
     if( scopedTestUsers.has(key) ) return scopedTestUsers.get(key) as TestUser;
 
     const email = `scoped-${ key }@test.local`;
     const displayName = `Scoped ${ key }`;
 
-    const appRole = await AppRole.findOne({ where: { code: ROLES.USER } });
+    const appRole = await AppRole.findOne({ where: { code: ROLES[role] } });
     if( !appRole ) {
-        throw new Error('The role "USER" is not seeded. tests/setup/database.ts must run before issuing tokens.');
+        throw new Error(`The role "${ ROLES[role] }" is not seeded. tests/setup/database.ts must run before issuing tokens.`);
     }
 
     const [user] = await AppUser.findOrCreate({
@@ -157,7 +157,7 @@ const createScopedTestUser = async ( key: string, geoLocationId: string | null )
 
     const token = await jwtGenerate({ userId }) as string;
 
-    const scopedUser: TestUser = { userId, email, password: TEST_PASSWORD, token, role: 'USER' };
+    const scopedUser: TestUser = { userId, email, password: TEST_PASSWORD, token, role };
     scopedTestUsers.set(key, scopedUser);
     return scopedUser;
 }

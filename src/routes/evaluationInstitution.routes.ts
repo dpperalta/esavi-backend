@@ -19,7 +19,7 @@ import {
     updateEvaluationInstitutionValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
@@ -29,10 +29,10 @@ const router = Router();
 
 // Create Evaluation Institution
 // Code: ESAVI-EVALINST-001
-// USER and not ADMIN, following the parent F34 and the specs before it: the institution is captured
+// INVESTIGATOR and not ADMIN, following the parent F34 and the specs before it: the institution is captured
 // in the same operational flow as the case, and splitting the clinical evaluation form between two
 // roles would break the capture in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createEvaluationInstitutionValidator, validateFields, createEvaluationInstitution);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createEvaluationInstitutionValidator, validateFields, createEvaluationInstitution);
 
 // Get All Evaluation Institutions By Investigation - For Admin
 // Code: ESAVI-EVALINST-002B
@@ -67,12 +67,12 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitu
 
 // Update Evaluation Institution
 // Code: ESAVI-EVALINST-004
-router.put('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionIdValidator, ...updateEvaluationInstitutionValidator, validateFields, updateEvaluationInstitution);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...evaluationInstitutionIdValidator, ...updateEvaluationInstitutionValidator, validateFields, updateEvaluationInstitution);
 
 // Delete Evaluation Institution - Soft delete
 // Code: ESAVI-EVALINST-005A
-// USER and not ADMIN, following the same reason as 001: retracting an institution is part of the
+// INVESTIGATOR and not ADMIN, following the same reason as 001: retracting an institution is part of the
 // same clinical evaluation flow that creates and updates it
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...evaluationInstitutionIdValidator, validateFields, deleteEvaluationInstitution);
+router.delete('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...evaluationInstitutionIdValidator, validateFields, deleteEvaluationInstitution);
 
 export default router;

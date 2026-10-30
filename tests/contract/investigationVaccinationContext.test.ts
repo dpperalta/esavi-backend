@@ -88,7 +88,7 @@ describe('investigationVaccinationContext contract', () => {
     const createInvestigationFixture = async (isActive: boolean = true): Promise<string> =>
         await createInvestigationForCase(await createCaseFixture(), isActive);
 
-    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post(basePath).set(authHeader(role)).send(payload);
 
     // The empty create of this entity: { investigationId } is the whole minimum. Mints an
@@ -115,7 +115,7 @@ describe('investigationVaccinationContext contract', () => {
     const purge = (id: string, role: TestRole = 'SUPERADMIN') =>
         request(app).delete(`${ basePath }/purge/${ id }`).set(authHeader(role));
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(payload);
 
     const readRow = async (id: string) => await InvestigationVaccinationContext.findByPk(id, { paranoid: false });
@@ -785,7 +785,7 @@ describe('investigationVaccinationContext contract', () => {
                 path: basePath,
                 id: investigationId,
                 model: InvestigationVaccinationContext,
-                role: 'USER',
+                role: 'INVESTIGATOR',
                 // The response carries the resolved relations, which the update validator does not
                 // declare; a real form does not send them back either
                 strip: ['investigation', 'moment', 'multidoseMoment', 'appDetails', 'createdAt', 'updatedAt', 'deletedAt']
@@ -836,11 +836,11 @@ describe('investigationVaccinationContext contract', () => {
             expect(res.body.code).toBe('INVVACTX_004_NOT_FOUND');
         });
 
-        it('a row whose investigation is inactive returns 404 for USER and ADMIN and 200 for SUPERADMIN', async () => {
+        it('a row whose investigation is inactive returns 404 for INVESTIGATOR and ADMIN and 200 for SUPERADMIN', async () => {
             const investigationId = await seed();
             await retireInvestigation(investigationId);
 
-            expect((await update(investigationId, { notes: 'x' }, 'USER')).status).toBe(404);
+            expect((await update(investigationId, { notes: 'x' }, 'INVESTIGATOR')).status).toBe(404);
             expect((await update(investigationId, { notes: 'y' }, 'ADMIN')).status).toBe(404);
             expect((await update(investigationId, { notes: 'z' }, 'SUPERADMIN')).status).toBe(200);
         });

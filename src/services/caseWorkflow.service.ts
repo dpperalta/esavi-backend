@@ -1,9 +1,10 @@
 import { Op, Transaction, WhereOptions } from 'sequelize';
 
 import { CaseWorkflow, CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, Investigation, Notification } from '../models';
-import { AppError, esaviLog, getMessage, canViewAuditAuthors } from '../helpers';
+import { AppError, esaviLog, getMessage, canViewAuditAuthors, getUserRoleLevel } from '../helpers';
 import { AppDetails, AuthUser, CaseWorkflowListFilters, CaseWorkflowStage, CreateCaseWorkflowInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { ROLES, ROLE_LEVELS } from '../constants/roles.constants';
 import { sequelize } from '../database/connection';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
@@ -63,6 +64,13 @@ const STAGE_STATUS: Record<CaseWorkflowStage, string> = {
     NOTIFICATION: STATUS.IN_NOTIFICATION,
     INVESTIGATION: STATUS.IN_INVESTIGATION,
     FINAL_CLASSIFICATION: STATUS.IN_FINAL_CLASSIFICATION
+};
+
+const STAGE_MIN_ROLE: Record<CaseWorkflowStage, string> = {
+    CLASSIFICATION: ROLES.NOTIFIER,
+    NOTIFICATION: ROLES.NOTIFIER,
+    INVESTIGATION: ROLES.INVESTIGATOR,
+    FINAL_CLASSIFICATION: ROLES.EVALUATOR
 };
 
 const startedAtField = (stage: CaseWorkflowStage): string => `${ STAGE_FIELD[stage] }StartedAt`;
@@ -568,6 +576,14 @@ const completeCaseWorkflowStageService = async (
     lang: string
 ) => {
     try {
+        if( getUserRoleLevel(authUser) < ROLE_LEVELS[STAGE_MIN_ROLE[stage]] ) {
+            throw new AppError(
+                getMessage('caseWorkflow.stageForbidden', lang, { stage }),
+                403,
+                'CASEFLOW_007_STAGE_FORBIDDEN'
+            );
+        }
+
         const workflow = await findWorkflowForTransition(caseId, '007', lang);
 
         if( workflow.status?.code === STATUS.CLOSED ) {

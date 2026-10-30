@@ -20,15 +20,15 @@ import {
     updateFinalClassificationValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, EVALUATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Final Classification
 // Code: ESAVI-FINCLASS-001
-// USER and not ADMIN, departing from the canonical matrix: the causality verdict is captured in
+// EVALUATOR and not ADMIN, departing from the canonical matrix: the causality verdict is captured in
 // the same operational flow as the case, and with create in ADMIN the flow would break in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createFinalClassificationValidator, validateFields, createFinalClassification);
+router.post('/', tokenValidation, validateUserRole(EVALUATOR), ...createFinalClassificationValidator, validateFields, createFinalClassification);
 
 // Get Final Classifications
 // Code: ESAVI-FINCLASS-002A
@@ -63,8 +63,8 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...finalClassificati
 
 // Update Final Classification
 // Code: ESAVI-FINCLASS-004
-// USER for the same reason as 001: correcting the verdict is part of the same clinical flow
-router.put('/:id', tokenValidation, validateUserRole(USER), ...finalClassificationIdValidator, ...updateFinalClassificationValidator, validateFields, updateFinalClassification);
+// EVALUATOR for the same reason as 001: correcting the verdict is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(EVALUATOR), ...finalClassificationIdValidator, ...updateFinalClassificationValidator, validateFields, updateFinalClassification);
 
 // Soft delete Final Classification
 // Code: ESAVI-FINCLASS-005A

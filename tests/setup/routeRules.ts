@@ -135,23 +135,23 @@ export const ROUTE_RULES: RouteRule[] = [
 
     // patient — 001 and 004 sit at USER on purpose (SPEC F05 §3.4): whoever reports an
     // ESAVI is operational staff and needs to register the patient who does not exist yet
-    { method: 'post',   path: '/api/patients',                          minRole: 'USER',       code: 'ESAVI-PATIENT-001' },
+    { method: 'post',   path: '/api/patients',                          minRole: 'NOTIFIER',   code: 'ESAVI-PATIENT-001' },
     { method: 'get',    path: '/api/patients',                          minRole: 'USER',       code: 'ESAVI-PATIENT-002A' },
     { method: 'get',    path: '/api/patients/admin',                    minRole: 'ADMIN',      code: 'ESAVI-PATIENT-002B' },
     { method: 'get',    path: `/api/patients/search/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PATIENT-006' },
     { method: 'get',    path: '/api/patients/search-by-name?name=A',    minRole: 'USER',       code: 'ESAVI-PATIENT-007' },
     { method: 'get',    path: `/api/patients/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-PATIENT-003' },
-    { method: 'put',    path: `/api/patients/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-PATIENT-004' },
+    { method: 'put',    path: `/api/patients/${ UUID }`,                minRole: 'NOTIFIER',   code: 'ESAVI-PATIENT-004' },
     { method: 'delete', path: `/api/patients/${ UUID }`,                minRole: 'ADMIN',      code: 'ESAVI-PATIENT-005A' },
     { method: 'patch',  path: `/api/patients/activate/${ UUID }`,       minRole: 'SUPERADMIN', code: 'ESAVI-PATIENT-005B' },
 
     // esaviCase — 001 and 004 sit at USER for the same reason as patient (SPEC F06 §3.4):
     // whoever opens a case is the operational staff who has just registered the patient
-    { method: 'post',   path: '/api/esavi-cases',                       minRole: 'USER',       code: 'ESAVI-CASE-001' },
+    { method: 'post',   path: '/api/esavi-cases',                       minRole: 'NOTIFIER',   code: 'ESAVI-CASE-001' },
     { method: 'get',    path: '/api/esavi-cases',                       minRole: 'USER',       code: 'ESAVI-CASE-002A' },
     { method: 'get',    path: '/api/esavi-cases/admin',                 minRole: 'ADMIN',      code: 'ESAVI-CASE-002B' },
     { method: 'get',    path: `/api/esavi-cases/${ UUID }`,             minRole: 'USER',       code: 'ESAVI-CASE-003' },
-    { method: 'put',    path: `/api/esavi-cases/${ UUID }`,             minRole: 'USER',       code: 'ESAVI-CASE-004' },
+    { method: 'put',    path: `/api/esavi-cases/${ UUID }`,             minRole: 'NOTIFIER',   code: 'ESAVI-CASE-004' },
     { method: 'delete', path: `/api/esavi-cases/${ UUID }`,             minRole: 'ADMIN',      code: 'ESAVI-CASE-005A' },
     { method: 'patch',  path: `/api/esavi-cases/activate/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-CASE-005B' },
 
@@ -159,12 +159,12 @@ export const ROUTE_RULES: RouteRule[] = [
     // the notifier is captured in the same operational flow as the case, and retiring one badly
     // captured belongs to that flow too. 005C exists because notifier is outside the
     // preventPhysicalDelete loop of esaviapp.sql:1354-1360
-    { method: 'post',   path: '/api/notifiers',                          minRole: 'USER',       code: 'ESAVI-NOTIFIER-001' },
+    { method: 'post',   path: '/api/notifiers',                          minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFIER-001' },
     { method: 'get',    path: '/api/notifiers',                          minRole: 'USER',       code: 'ESAVI-NOTIFIER-002A' },
     { method: 'get',    path: '/api/notifiers/admin',                    minRole: 'ADMIN',      code: 'ESAVI-NOTIFIER-002B' },
     { method: 'get',    path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-003' },
-    { method: 'put',    path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-004' },
-    { method: 'delete', path: `/api/notifiers/${ UUID }`,                minRole: 'USER',       code: 'ESAVI-NOTIFIER-005A' },
+    { method: 'put',    path: `/api/notifiers/${ UUID }`,                minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFIER-004' },
+    { method: 'delete', path: `/api/notifiers/${ UUID }`,                minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFIER-005A' },
     { method: 'patch',  path: `/api/notifiers/activate/${ UUID }`,       minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005B' },
     { method: 'delete', path: `/api/notifiers/purge/${ UUID }`,          minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFIER-005C' },
 
@@ -173,12 +173,12 @@ export const ROUTE_RULES: RouteRule[] = [
     // classification of a case by its caseId, the real query of the domain, and is the only
     // non-canonical operation of the entity. 005C exists because classification is outside the
     // preventPhysicalDelete loop of esaviapp.sql:1354-1360
-    { method: 'post',   path: '/api/classifications',                    minRole: 'USER',       code: 'ESAVI-CLASSIF-001' },
+    { method: 'post',   path: '/api/classifications',                    minRole: 'NOTIFIER',   code: 'ESAVI-CLASSIF-001' },
     { method: 'get',    path: '/api/classifications',                    minRole: 'USER',       code: 'ESAVI-CLASSIF-002A' },
     { method: 'get',    path: '/api/classifications/admin',              minRole: 'ADMIN',      code: 'ESAVI-CLASSIF-002B' },
     { method: 'get',    path: `/api/classifications/case/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-CLASSIF-006' },
     { method: 'get',    path: `/api/classifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-CLASSIF-003' },
-    { method: 'put',    path: `/api/classifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-CLASSIF-004' },
+    { method: 'put',    path: `/api/classifications/${ UUID }`,          minRole: 'NOTIFIER',   code: 'ESAVI-CLASSIF-004' },
     { method: 'delete', path: `/api/classifications/${ UUID }`,          minRole: 'ADMIN',      code: 'ESAVI-CLASSIF-005A' },
     { method: 'patch',  path: `/api/classifications/activate/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-CLASSIF-005B' },
     { method: 'delete', path: `/api/classifications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-CLASSIF-005C' },
@@ -189,12 +189,12 @@ export const ROUTE_RULES: RouteRule[] = [
     // non-canonical operation of the entity. 005C exists because notification is outside the
     // preventPhysicalDelete loop of esaviapp.sql:1363-1366. The abbreviation is NOTIFCN and not
     // NOTIF, which would be a prefix of NOTIFIER and mix both entities in every grep
-    { method: 'post',   path: '/api/notifications',                      minRole: 'USER',       code: 'ESAVI-NOTIFCN-001' },
+    { method: 'post',   path: '/api/notifications',                      minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFCN-001' },
     { method: 'get',    path: '/api/notifications',                      minRole: 'USER',       code: 'ESAVI-NOTIFCN-002A' },
     { method: 'get',    path: '/api/notifications/admin',                minRole: 'ADMIN',      code: 'ESAVI-NOTIFCN-002B' },
     { method: 'get',    path: `/api/notifications/case/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFCN-006' },
     { method: 'get',    path: `/api/notifications/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFCN-003' },
-    { method: 'put',    path: `/api/notifications/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFCN-004' },
+    { method: 'put',    path: `/api/notifications/${ UUID }`,            minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFCN-004' },
     { method: 'delete', path: `/api/notifications/${ UUID }`,            minRole: 'ADMIN',      code: 'ESAVI-NOTIFCN-005A' },
     { method: 'patch',  path: `/api/notifications/activate/${ UUID }`,   minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFCN-005B' },
     { method: 'delete', path: `/api/notifications/purge/${ UUID }`,      minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFCN-005C' },
@@ -206,22 +206,22 @@ export const ROUTE_RULES: RouteRule[] = [
     // isActive the two halves of the dual listing would return exactly the same rows. 001, 003,
     // 004 and 006 stay in USER for the same reason as the notification itself, the clinical detail
     // being captured in the same operational flow, and 005C stays in SUPERADMIN as §6 requires
-    { method: 'post',   path: '/api/severe-notifications',                    minRole: 'USER',       code: 'ESAVI-SEVNOT-001' },
+    { method: 'post',   path: '/api/severe-notifications',                    minRole: 'NOTIFIER',   code: 'ESAVI-SEVNOT-001' },
     { method: 'get',    path: `/api/severe-notifications/case/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-SEVNOT-006' },
     { method: 'delete', path: `/api/severe-notifications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-SEVNOT-005C' },
     { method: 'get',    path: `/api/severe-notifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-SEVNOT-003' },
-    { method: 'put',    path: `/api/severe-notifications/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-SEVNOT-004' },
+    { method: 'put',    path: `/api/severe-notifications/${ UUID }`,          minRole: 'NOTIFIER',   code: 'ESAVI-SEVNOT-004' },
 
     // nonSevereNotification — the same five operations and the same absences, for the same reason
     // (SPEC F14 §3.4). It is the second entity of the repository without an isActive column and
     // the second with none in ADMIN: the only canonical operation that would land there, 005A,
     // does not exist here either. The roles are identical to those of its severe sibling because
     // the detail is captured in the same operational flow as the notification
-    { method: 'post',   path: '/api/non-severe-notifications',                 minRole: 'USER',       code: 'ESAVI-NSEVNOT-001' },
+    { method: 'post',   path: '/api/non-severe-notifications',                 minRole: 'NOTIFIER',   code: 'ESAVI-NSEVNOT-001' },
     { method: 'get',    path: `/api/non-severe-notifications/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-NSEVNOT-006' },
     { method: 'delete', path: `/api/non-severe-notifications/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-NSEVNOT-005C' },
     { method: 'get',    path: `/api/non-severe-notifications/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NSEVNOT-003' },
-    { method: 'put',    path: `/api/non-severe-notifications/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NSEVNOT-004' },
+    { method: 'put',    path: `/api/non-severe-notifications/${ UUID }`,       minRole: 'NOTIFIER',   code: 'ESAVI-NSEVNOT-004' },
 
     // diagnosticTerm — the seven canonical operations, with the canonical role matrix and no
     // deviation (SPEC F15 §3.4). No 005C: the table sits inside the preventPhysicalDelete loop of
@@ -249,15 +249,15 @@ export const ROUTE_RULES: RouteRule[] = [
     // because the USER is the one who notifies, and whoever records the row corrects and retires it
     // (CONVENTIONS.md §9, declared exception to the canonical matrix; SPEC F60). The 005B is ADMIN and
     // the 002B stays ADMIN
-    { method: 'post',   path: '/api/notification-events',                              minRole: 'USER',       code: 'ESAVI-NOTIFEVT-001' },
+    { method: 'post',   path: '/api/notification-events',                              minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFEVT-001' },
     { method: 'get',    path: `/api/notification-events/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFEVT-006' },
     { method: 'get',    path: `/api/notification-events/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-002B' },
     { method: 'get',    path: `/api/notification-events/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFEVT-002A' },
     { method: 'delete', path: `/api/notification-events/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFEVT-005C' },
     { method: 'patch',  path: `/api/notification-events/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-NOTIFEVT-005B' },
     { method: 'get',    path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-003' },
-    { method: 'put',    path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-004' },
-    { method: 'delete', path: `/api/notification-events/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFEVT-005A' },
+    { method: 'put',    path: `/api/notification-events/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFEVT-004' },
+    { method: 'delete', path: `/api/notification-events/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFEVT-005A' },
 
     // notificationMedication (SPEC F21) — the fourth satellite of notification and the second one to
     // many, so it repeats the surface of notificationEvent without variation: eight canonical
@@ -266,15 +266,15 @@ export const ROUTE_RULES: RouteRule[] = [
     // ESAVI-NOTIFMED-006 does have a row here, for the same reason the 006 of NOTIFEVT does: it is a
     // read with an HTTP route of its own. The two listings are entered by the foreign key and never
     // by /
-    { method: 'post',   path: '/api/notification-medications',                              minRole: 'USER',       code: 'ESAVI-NOTIFMED-001' },
+    { method: 'post',   path: '/api/notification-medications',                              minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFMED-001' },
     { method: 'get',    path: `/api/notification-medications/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFMED-006' },
     { method: 'get',    path: `/api/notification-medications/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-002B' },
     { method: 'get',    path: `/api/notification-medications/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFMED-002A' },
     { method: 'delete', path: `/api/notification-medications/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFMED-005C' },
     { method: 'patch',  path: `/api/notification-medications/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-NOTIFMED-005B' },
     { method: 'get',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-003' },
-    { method: 'put',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-004' },
-    { method: 'delete', path: `/api/notification-medications/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFMED-005A' },
+    { method: 'put',    path: `/api/notification-medications/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFMED-004' },
+    { method: 'delete', path: `/api/notification-medications/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFMED-005A' },
 
     // vaccineWhodrug (SPEC F18) — the seven canonical operations, with the canonical role matrix
     // and no deviation (§3.4). No 005C: the table sits inside the preventPhysicalDelete loop of
@@ -311,15 +311,15 @@ export const ROUTE_RULES: RouteRule[] = [
     // ESAVI-NOTIFVAC-006 does have a row here, for the same reason the 006 of NOTIFEVT and NOTIFMED
     // do: it is a read with an HTTP route of its own. The two listings are entered by the foreign
     // key and never by /
-    { method: 'post',   path: '/api/notification-vaccines',                              minRole: 'USER',       code: 'ESAVI-NOTIFVAC-001' },
+    { method: 'post',   path: '/api/notification-vaccines',                              minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFVAC-001' },
     { method: 'get',    path: `/api/notification-vaccines/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-NOTIFVAC-006' },
     { method: 'get',    path: `/api/notification-vaccines/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-002B' },
     { method: 'get',    path: `/api/notification-vaccines/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-NOTIFVAC-002A' },
     { method: 'delete', path: `/api/notification-vaccines/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFVAC-005C' },
     { method: 'patch',  path: `/api/notification-vaccines/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-NOTIFVAC-005B' },
     { method: 'get',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-003' },
-    { method: 'put',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-004' },
-    { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFVAC-005A' },
+    { method: 'put',    path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFVAC-004' },
+    { method: 'delete', path: `/api/notification-vaccines/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFVAC-005A' },
 
     // diluentCatalog (SPEC F23) — the third and last of the flat clinical catalogs, so it repeats the
     // seven rows of DIAGTERM and WHODRUG with the canonical role matrix and no deviation (§3.4).
@@ -343,14 +343,14 @@ export const ROUTE_RULES: RouteRule[] = [
     // them, so this is the first of the family that adds no row to the non-canonical table.
     // The 005C exists because the table is outside the preventPhysicalDelete loop of
     // esaviapp.sql:1361-1375. The two listings are entered by the foreign key and never by /
-    { method: 'post',   path: '/api/notification-diluents',                              minRole: 'USER',       code: 'ESAVI-NOTIFDIL-001' },
+    { method: 'post',   path: '/api/notification-diluents',                              minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFDIL-001' },
     { method: 'get',    path: `/api/notification-diluents/admin/vaccine/${ UUID }`,      minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-002B' },
     { method: 'get',    path: `/api/notification-diluents/vaccine/${ UUID }`,            minRole: 'USER',       code: 'ESAVI-NOTIFDIL-002A' },
     { method: 'delete', path: `/api/notification-diluents/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFDIL-005C' },
     { method: 'patch',  path: `/api/notification-diluents/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-NOTIFDIL-005B' },
     { method: 'get',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-003' },
-    { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-004' },
-    { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-NOTIFDIL-005A' },
+    { method: 'put',    path: `/api/notification-diluents/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFDIL-004' },
+    { method: 'delete', path: `/api/notification-diluents/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFDIL-005A' },
 
     // notificationPregnancy (SPEC F25) — the seventh satellite of notification, and a shape none of
     // the six before it had: one to one *and* with its own state. severeNotification and
@@ -364,13 +364,13 @@ export const ROUTE_RULES: RouteRule[] = [
     // pregnancy section is captured in the same operational flow as the notification.
     // The 005C exists because the table is outside the preventPhysicalDelete loop of
     // esaviapp.sql:1361-1375, and purging drags notificationPregnancyComplication with it
-    { method: 'post',   path: '/api/notification-pregnancies',                            minRole: 'USER',       code: 'ESAVI-NOTIFPRG-001' },
+    { method: 'post',   path: '/api/notification-pregnancies',                            minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFPRG-001' },
     { method: 'get',    path: `/api/notification-pregnancies/notification/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-NOTIFPRG-006' },
     { method: 'delete', path: `/api/notification-pregnancies/purge/${ UUID }`,            minRole: 'SUPERADMIN', code: 'ESAVI-NOTIFPRG-005C' },
     { method: 'patch',  path: `/api/notification-pregnancies/activate/${ UUID }`,         minRole: 'ADMIN',      code: 'ESAVI-NOTIFPRG-005B' },
     { method: 'get',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-003' },
-    { method: 'put',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-004' },
-    { method: 'delete', path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'USER',       code: 'ESAVI-NOTIFPRG-005A' },
+    { method: 'put',    path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFPRG-004' },
+    { method: 'delete', path: `/api/notification-pregnancies/${ UUID }`,                  minRole: 'NOTIFIER',   code: 'ESAVI-NOTIFPRG-005A' },
 
     // notificationPregnancyComplication (SPEC F27) — the eighth and last satellite of notification,
     // and a granddaughter like notificationDiluent but of a different shape: the first hop is one to
@@ -383,14 +383,14 @@ export const ROUTE_RULES: RouteRule[] = [
     // would break the capture in half.
     // The 005C exists because the table is outside the preventPhysicalDelete loop, and it drags
     // nothing: the table is a leaf of the graph
-    { method: 'post',   path: '/api/notification-pregnancy-complications',                 minRole: 'USER',       code: 'ESAVI-PREGCOMP-001' },
+    { method: 'post',   path: '/api/notification-pregnancy-complications',                 minRole: 'NOTIFIER',   code: 'ESAVI-PREGCOMP-001' },
     { method: 'get',    path: `/api/notification-pregnancy-complications/admin/pregnancy/${ UUID }`, minRole: 'ADMIN', code: 'ESAVI-PREGCOMP-002B' },
     { method: 'get',    path: `/api/notification-pregnancy-complications/pregnancy/${ UUID }`,       minRole: 'USER',  code: 'ESAVI-PREGCOMP-002A' },
     { method: 'delete', path: `/api/notification-pregnancy-complications/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-PREGCOMP-005C' },
     { method: 'patch',  path: `/api/notification-pregnancy-complications/activate/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-PREGCOMP-005B' },
     { method: 'get',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-003' },
-    { method: 'put',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-004' },
-    { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'USER',       code: 'ESAVI-PREGCOMP-005A' },
+    { method: 'put',    path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'NOTIFIER',   code: 'ESAVI-PREGCOMP-004' },
+    { method: 'delete', path: `/api/notification-pregnancy-complications/${ UUID }`,         minRole: 'NOTIFIER',   code: 'ESAVI-PREGCOMP-005A' },
 
     // notificationMedicalHistory (SPEC F57) — the relevant medical antecedents of the notified
     // patient, and the first table this repository added to the DDL. Sixth satellite of notification
@@ -400,15 +400,15 @@ export const ROUTE_RULES: RouteRule[] = [
     // loop on purpose.
     // The 004 and the 005A are USER and the 005B is ADMIN, under the clinical file exception of
     // CONVENTIONS.md §9 (SPEC F60): whoever records the antecedent is whoever corrects and retires it
-    { method: 'post',   path: '/api/notification-medical-histories',                              minRole: 'USER',       code: 'ESAVI-MEDHIST-001' },
+    { method: 'post',   path: '/api/notification-medical-histories',                              minRole: 'NOTIFIER',   code: 'ESAVI-MEDHIST-001' },
     { method: 'get',    path: `/api/notification-medical-histories/case/${ UUID }`,               minRole: 'USER',       code: 'ESAVI-MEDHIST-006' },
     { method: 'get',    path: `/api/notification-medical-histories/admin/notification/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-MEDHIST-002B' },
     { method: 'get',    path: `/api/notification-medical-histories/notification/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-MEDHIST-002A' },
     { method: 'delete', path: `/api/notification-medical-histories/purge/${ UUID }`,              minRole: 'SUPERADMIN', code: 'ESAVI-MEDHIST-005C' },
     { method: 'patch',  path: `/api/notification-medical-histories/activate/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-MEDHIST-005B' },
     { method: 'get',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-003' },
-    { method: 'put',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-004' },
-    { method: 'delete', path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'USER',       code: 'ESAVI-MEDHIST-005A' },
+    { method: 'put',    path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-MEDHIST-004' },
+    { method: 'delete', path: `/api/notification-medical-histories/${ UUID }`,                    minRole: 'NOTIFIER',   code: 'ESAVI-MEDHIST-005A' },
 
     // investigation (SPEC F28) — the root of the investigation block and the fourth satellite of
     // esaviCase, one to one with it through UQ_investigation_case. Seven canonical operations plus
@@ -417,13 +417,13 @@ export const ROUTE_RULES: RouteRule[] = [
     // 001 and 004 deviate from the canonical matrix and stay in USER, the same deviation as F05,
     // F06, F07, F09 and F10 and for the same reason: the investigation is captured in the same
     // operational flow as the case. Its fourteen satellite tables are out of scope of F28
-    { method: 'post',   path: '/api/investigations',                    minRole: 'USER',       code: 'ESAVI-INVESTGN-001' },
+    { method: 'post',   path: '/api/investigations',                    minRole: 'INVESTIGATOR', code: 'ESAVI-INVESTGN-001' },
     { method: 'get',    path: '/api/investigations',                    minRole: 'USER',       code: 'ESAVI-INVESTGN-002A' },
     { method: 'get',    path: '/api/investigations/admin',              minRole: 'ADMIN',      code: 'ESAVI-INVESTGN-002B' },
     { method: 'get',    path: `/api/investigations/case/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-INVESTGN-006' },
     { method: 'get',    path: `/api/investigations/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-INVESTGN-003' },
-    { method: 'put',    path: `/api/investigations/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-INVESTGN-004' },
-    { method: 'delete', path: `/api/investigations/${ UUID }`,          minRole: 'USER',      code: 'ESAVI-INVESTGN-005A' },
+    { method: 'put',    path: `/api/investigations/${ UUID }`,          minRole: 'INVESTIGATOR', code: 'ESAVI-INVESTGN-004' },
+    { method: 'delete', path: `/api/investigations/${ UUID }`,          minRole: 'INVESTIGATOR', code: 'ESAVI-INVESTGN-005A' },
     { method: 'patch',  path: `/api/investigations/activate/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVESTGN-005B' },
     { method: 'delete', path: `/api/investigations/purge/${ UUID }`,    minRole: 'SUPERADMIN', code: 'ESAVI-INVESTGN-005C' },
 
@@ -434,12 +434,12 @@ export const ROUTE_RULES: RouteRule[] = [
     // its two elder sisters gave up, since the visibility is inherited from investigation.isActive
     // and the two variants therefore return different rows. 001 and 004 stay on USER, the same
     // deviation as above and for the same reason
-    { method: 'post',   path: '/api/investigation-sources',                 minRole: 'USER',       code: 'ESAVI-INVSRC-001' },
+    { method: 'post',   path: '/api/investigation-sources',                 minRole: 'INVESTIGATOR', code: 'ESAVI-INVSRC-001' },
     { method: 'get',    path: '/api/investigation-sources',                 minRole: 'USER',       code: 'ESAVI-INVSRC-002A' },
     { method: 'get',    path: '/api/investigation-sources/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVSRC-002B' },
     { method: 'get',    path: `/api/investigation-sources/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVSRC-006' },
     { method: 'get',    path: `/api/investigation-sources/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVSRC-003' },
-    { method: 'put',    path: `/api/investigation-sources/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVSRC-004' },
+    { method: 'put',    path: `/api/investigation-sources/${ UUID }`,       minRole: 'INVESTIGATOR', code: 'ESAVI-INVSRC-004' },
     { method: 'delete', path: `/api/investigation-sources/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVSRC-005C' },
 
     // investigationAutopsy (SPEC F30) — the second of the fourteen satellites of investigation, and
@@ -449,12 +449,12 @@ export const ROUTE_RULES: RouteRule[] = [
     // 003, 004 and 005C is the investigationId — the primary key of the row is the foreign key to
     // its investigation — so the 003 is already the access by investigation and the 006 exists to
     // walk case -> investigation -> autopsy, one to one on both hops
-    { method: 'post',   path: '/api/investigation-autopsies',                 minRole: 'USER',       code: 'ESAVI-INVAUT-001' },
+    { method: 'post',   path: '/api/investigation-autopsies',                 minRole: 'INVESTIGATOR', code: 'ESAVI-INVAUT-001' },
     { method: 'get',    path: '/api/investigation-autopsies',                 minRole: 'USER',       code: 'ESAVI-INVAUT-002A' },
     { method: 'get',    path: '/api/investigation-autopsies/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVAUT-002B' },
     { method: 'get',    path: `/api/investigation-autopsies/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVAUT-006' },
     { method: 'get',    path: `/api/investigation-autopsies/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVAUT-003' },
-    { method: 'put',    path: `/api/investigation-autopsies/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVAUT-004' },
+    { method: 'put',    path: `/api/investigation-autopsies/${ UUID }`,       minRole: 'INVESTIGATOR', code: 'ESAVI-INVAUT-004' },
     { method: 'delete', path: `/api/investigation-autopsies/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVAUT-005C' },
 
     // investigationTeamMember (SPEC F31) — who investigated the case, the third satellite of
@@ -473,15 +473,15 @@ export const ROUTE_RULES: RouteRule[] = [
     // operational flow as the case. And 005B on ADMIN and not SUPERADMIN, following F27: the
     // activation of this entity is not the trivial delegation the matrix assumes but an operation
     // carrying a sortOrder reassignment in a transaction
-    { method: 'post',   path: '/api/investigation-team-members',                                  minRole: 'USER',       code: 'ESAVI-INVTEAM-001' },
+    { method: 'post',   path: '/api/investigation-team-members',                                  minRole: 'INVESTIGATOR', code: 'ESAVI-INVTEAM-001' },
     { method: 'get',    path: `/api/investigation-team-members/admin/investigation/${ UUID }`,    minRole: 'ADMIN',      code: 'ESAVI-INVTEAM-002B' },
     { method: 'get',    path: `/api/investigation-team-members/investigation/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-INVTEAM-002A' },
     { method: 'get',    path: `/api/investigation-team-members/case/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVTEAM-006' },
     { method: 'delete', path: `/api/investigation-team-members/purge/${ UUID }`,                  minRole: 'SUPERADMIN', code: 'ESAVI-INVTEAM-005C' },
     { method: 'patch',  path: `/api/investigation-team-members/activate/${ UUID }`,               minRole: 'ADMIN',      code: 'ESAVI-INVTEAM-005B' },
     { method: 'get',    path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVTEAM-003' },
-    { method: 'put',    path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVTEAM-004' },
-    { method: 'delete', path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'USER',      code: 'ESAVI-INVTEAM-005A' },
+    { method: 'put',    path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'INVESTIGATOR', code: 'ESAVI-INVTEAM-004' },
+    { method: 'delete', path: `/api/investigation-team-members/${ UUID }`,                        minRole: 'INVESTIGATOR', code: 'ESAVI-INVTEAM-005A' },
 
     // investigationMedicalHistory (SPEC F32) — the fourth of the fourteen satellites of
     // investigation, and the third one without an isActive column of its own. SEVEN operations and
@@ -491,13 +491,13 @@ export const ROUTE_RULES: RouteRule[] = [
     // TWO ROWS DEVIATE from the canonical matrix, and they are the same deviation as F05, F06, F07,
     // F09, F10, F13, F14, F28, F29, F30 and F31: 001 and 004 on USER, because the anamnesis is
     // captured in the same operational flow as the case
-    { method: 'post',   path: '/api/investigation-medical-histories',                 minRole: 'USER',       code: 'ESAVI-INVMEDH-001' },
+    { method: 'post',   path: '/api/investigation-medical-histories',                 minRole: 'INVESTIGATOR', code: 'ESAVI-INVMEDH-001' },
     { method: 'get',    path: '/api/investigation-medical-histories',                 minRole: 'USER',       code: 'ESAVI-INVMEDH-002A' },
     { method: 'get',    path: '/api/investigation-medical-histories/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVMEDH-002B' },
     { method: 'delete', path: `/api/investigation-medical-histories/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVMEDH-005C' },
     { method: 'get',    path: `/api/investigation-medical-histories/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVMEDH-006' },
     { method: 'get',    path: `/api/investigation-medical-histories/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVMEDH-003' },
-    { method: 'put',    path: `/api/investigation-medical-histories/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVMEDH-004' },
+    { method: 'put',    path: `/api/investigation-medical-histories/${ UUID }`,       minRole: 'INVESTIGATOR', code: 'ESAVI-INVMEDH-004' },
 
     // investigationPregnancyCondition (SPEC F33) — the FIRST GRANDDAUGHTER of the investigation
     // block: its foreign key points at investigationMedicalHistory and not at investigation, even
@@ -509,14 +509,14 @@ export const ROUTE_RULES: RouteRule[] = [
     // captured in the same operational flow as the case. And 005B on ADMIN and not SUPERADMIN,
     // following F27 and F31: the activation carries a sortOrder reassignment inside a transaction,
     // so it is case administration and not the trivial delegation the matrix assumes
-    { method: 'post',   path: '/api/investigation-pregnancy-conditions',                                  minRole: 'USER',       code: 'ESAVI-INVPREG-001' },
+    { method: 'post',   path: '/api/investigation-pregnancy-conditions',                                  minRole: 'INVESTIGATOR', code: 'ESAVI-INVPREG-001' },
     { method: 'get',    path: `/api/investigation-pregnancy-conditions/admin/investigation/${ UUID }`,    minRole: 'ADMIN',      code: 'ESAVI-INVPREG-002B' },
     { method: 'get',    path: `/api/investigation-pregnancy-conditions/investigation/${ UUID }`,          minRole: 'USER',       code: 'ESAVI-INVPREG-002A' },
     { method: 'delete', path: `/api/investigation-pregnancy-conditions/purge/${ UUID }`,                  minRole: 'SUPERADMIN', code: 'ESAVI-INVPREG-005C' },
     { method: 'patch',  path: `/api/investigation-pregnancy-conditions/activate/${ UUID }`,               minRole: 'ADMIN',      code: 'ESAVI-INVPREG-005B' },
     { method: 'get',    path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVPREG-003' },
-    { method: 'put',    path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'USER',       code: 'ESAVI-INVPREG-004' },
-    { method: 'delete', path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'USER',      code: 'ESAVI-INVPREG-005A' },
+    { method: 'put',    path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'INVESTIGATOR', code: 'ESAVI-INVPREG-004' },
+    { method: 'delete', path: `/api/investigation-pregnancy-conditions/${ UUID }`,                        minRole: 'INVESTIGATOR', code: 'ESAVI-INVPREG-005A' },
 
     // investigationClinicalEvaluation (SPEC F34) — the fifth of the fourteen satellites of
     // investigation, and the fourth one without an isActive column of its own. SEVEN operations and
@@ -529,13 +529,13 @@ export const ROUTE_RULES: RouteRule[] = [
     // The encrypted clinicalDetailsPersonName does NOT raise any minimum: what protects the column
     // is the encryption at rest, not a stricter role — a USER completing the form has to be able to
     // write the name it just collected
-    { method: 'post',   path: '/api/investigation-clinical-evaluations',                 minRole: 'USER',       code: 'ESAVI-INVCLIEV-001' },
+    { method: 'post',   path: '/api/investigation-clinical-evaluations',                 minRole: 'INVESTIGATOR', code: 'ESAVI-INVCLIEV-001' },
     { method: 'get',    path: '/api/investigation-clinical-evaluations',                 minRole: 'USER',       code: 'ESAVI-INVCLIEV-002A' },
     { method: 'get',    path: '/api/investigation-clinical-evaluations/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVCLIEV-002B' },
     { method: 'delete', path: `/api/investigation-clinical-evaluations/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVCLIEV-005C' },
     { method: 'get',    path: `/api/investigation-clinical-evaluations/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVCLIEV-006' },
     { method: 'get',    path: `/api/investigation-clinical-evaluations/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCLIEV-003' },
-    { method: 'put',    path: `/api/investigation-clinical-evaluations/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCLIEV-004' },
+    { method: 'put',    path: `/api/investigation-clinical-evaluations/${ UUID }`,       minRole: 'INVESTIGATOR', code: 'ESAVI-INVCLIEV-004' },
 
     // evaluationInstitution (SPEC F35) — the second granddaughter of the investigation block and the
     // first one hanging from the clinical evaluation. EIGHT operations and no 006: the entry is by
@@ -551,14 +551,14 @@ export const ROUTE_RULES: RouteRule[] = [
     // The encrypted personName and personContact do NOT raise any minimum: what protects the columns
     // is the encryption at rest, not a stricter role — a USER completing the form has to be able to
     // write the contact it just collected
-    { method: 'post',   path: '/api/evaluation-institutions',                                minRole: 'USER',       code: 'ESAVI-EVALINST-001' },
+    { method: 'post',   path: '/api/evaluation-institutions',                                minRole: 'INVESTIGATOR', code: 'ESAVI-EVALINST-001' },
     { method: 'get',    path: `/api/evaluation-institutions/admin/investigation/${ UUID }`,  minRole: 'ADMIN',      code: 'ESAVI-EVALINST-002B' },
     { method: 'get',    path: `/api/evaluation-institutions/investigation/${ UUID }`,        minRole: 'USER',       code: 'ESAVI-EVALINST-002A' },
     { method: 'delete', path: `/api/evaluation-institutions/purge/${ UUID }`,                minRole: 'SUPERADMIN', code: 'ESAVI-EVALINST-005C' },
     { method: 'patch',  path: `/api/evaluation-institutions/activate/${ UUID }`,             minRole: 'ADMIN',      code: 'ESAVI-EVALINST-005B' },
     { method: 'get',    path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'USER',       code: 'ESAVI-EVALINST-003' },
-    { method: 'put',    path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'USER',       code: 'ESAVI-EVALINST-004' },
-    { method: 'delete', path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'USER',      code: 'ESAVI-EVALINST-005A' },
+    { method: 'put',    path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'INVESTIGATOR', code: 'ESAVI-EVALINST-004' },
+    { method: 'delete', path: `/api/evaluation-institutions/${ UUID }`,                      minRole: 'INVESTIGATOR', code: 'ESAVI-EVALINST-005A' },
 
     // investigationVaccinationContext (SPEC F36) - the sixth satellite of investigation with a spec
     // of its own: the context of the vaccination session in which the investigated dose was
@@ -570,13 +570,13 @@ export const ROUTE_RULES: RouteRule[] = [
     // operational flow as the case.
     // Nothing here is encrypted: the eleven data columns are operational data of a session, with no
     // person's name among them, so no row raises its minimum for that reason
-    { method: 'post',   path: '/api/investigation-vaccination-contexts',                 minRole: 'USER',       code: 'ESAVI-INVVACTX-001' },
+    { method: 'post',   path: '/api/investigation-vaccination-contexts',                 minRole: 'INVESTIGATOR', code: 'ESAVI-INVVACTX-001' },
     { method: 'get',    path: '/api/investigation-vaccination-contexts',                 minRole: 'USER',       code: 'ESAVI-INVVACTX-002A' },
     { method: 'get',    path: '/api/investigation-vaccination-contexts/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVVACTX-002B' },
     { method: 'delete', path: `/api/investigation-vaccination-contexts/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVVACTX-005C' },
     { method: 'get',    path: `/api/investigation-vaccination-contexts/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVVACTX-006' },
     { method: 'get',    path: `/api/investigation-vaccination-contexts/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVVACTX-003' },
-    { method: 'put',    path: `/api/investigation-vaccination-contexts/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVVACTX-004' },
+    { method: 'put',    path: `/api/investigation-vaccination-contexts/${ UUID }`,       minRole: 'INVESTIGATOR', code: 'ESAVI-INVVACTX-004' },
 
     // investigationVaccineAdministered (SPEC F37) - the seventh satellite of investigation with a
     // spec of its own, and the SECOND of them that is a COLLECTION and not a one to one: the vaccines
@@ -593,15 +593,15 @@ export const ROUTE_RULES: RouteRule[] = [
     // the same operational flow as the case.
     // Nothing here is encrypted: a foreign key to a dictionary, an integer and a note, with no
     // person's name among them, so no row raises its minimum for that reason
-    { method: 'post',   path: '/api/investigation-vaccines-administered',                             minRole: 'USER',       code: 'ESAVI-INVVACAD-001' },
+    { method: 'post',   path: '/api/investigation-vaccines-administered',                             minRole: 'INVESTIGATOR', code: 'ESAVI-INVVACAD-001' },
     { method: 'get',    path: `/api/investigation-vaccines-administered/admin/investigation/${ UUID }`, minRole: 'ADMIN',      code: 'ESAVI-INVVACAD-002B' },
     { method: 'get',    path: `/api/investigation-vaccines-administered/investigation/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-INVVACAD-002A' },
     { method: 'get',    path: `/api/investigation-vaccines-administered/case/${ UUID }`,              minRole: 'USER',       code: 'ESAVI-INVVACAD-006' },
     { method: 'delete', path: `/api/investigation-vaccines-administered/purge/${ UUID }`,             minRole: 'SUPERADMIN', code: 'ESAVI-INVVACAD-005C' },
     { method: 'patch',  path: `/api/investigation-vaccines-administered/activate/${ UUID }`,          minRole: 'ADMIN',      code: 'ESAVI-INVVACAD-005B' },
     { method: 'get',    path: `/api/investigation-vaccines-administered/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVVACAD-003' },
-    { method: 'put',    path: `/api/investigation-vaccines-administered/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVVACAD-004' },
-    { method: 'delete', path: `/api/investigation-vaccines-administered/${ UUID }`,                   minRole: 'USER',      code: 'ESAVI-INVVACAD-005A' },
+    { method: 'put',    path: `/api/investigation-vaccines-administered/${ UUID }`,                   minRole: 'INVESTIGATOR', code: 'ESAVI-INVVACAD-004' },
+    { method: 'delete', path: `/api/investigation-vaccines-administered/${ UUID }`,                   minRole: 'INVESTIGATOR', code: 'ESAVI-INVVACAD-005A' },
 
     // investigationColdChain (SPEC F38) - the eighth satellite of investigation with a spec of its
     // own, and the seventh with the exact shape of F36: the primary key IS the foreign key, so the
@@ -617,13 +617,13 @@ export const ROUTE_RULES: RouteRule[] = [
     // operational flow as the case.
     // Nothing here is encrypted: ten answers, four free texts and a note, with no person's name
     // among them, so no row raises its minimum for that reason
-    { method: 'post',   path: '/api/investigation-cold-chains',                 minRole: 'USER',       code: 'ESAVI-INVCOLD-001' },
+    { method: 'post',   path: '/api/investigation-cold-chains',                 minRole: 'INVESTIGATOR', code: 'ESAVI-INVCOLD-001' },
     { method: 'get',    path: '/api/investigation-cold-chains',                 minRole: 'USER',       code: 'ESAVI-INVCOLD-002A' },
     { method: 'get',    path: '/api/investigation-cold-chains/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVCOLD-002B' },
     { method: 'delete', path: `/api/investigation-cold-chains/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVCOLD-005C' },
     { method: 'get',    path: `/api/investigation-cold-chains/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVCOLD-006' },
     { method: 'get',    path: `/api/investigation-cold-chains/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOLD-003' },
-    { method: 'put',    path: `/api/investigation-cold-chains/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOLD-004' },
+    { method: 'put',    path: `/api/investigation-cold-chains/${ UUID }`,       minRole: 'INVESTIGATOR', code: 'ESAVI-INVCOLD-004' },
 
     // investigationAdministrationError (SPEC F39) — what went wrong in the act of administering the
     // vaccine: which syringes it was applied with, how the vial was reconstituted and the six
@@ -634,13 +634,13 @@ export const ROUTE_RULES: RouteRule[] = [
     // operational flow as the case.
     // Nothing here is encrypted: sixteen answers and ten free texts, with no person's name among
     // them, so no row raises its minimum for that reason
-    { method: 'post',   path: '/api/investigation-administration-errors',                 minRole: 'USER',       code: 'ESAVI-INVADMER-001' },
+    { method: 'post',   path: '/api/investigation-administration-errors',                 minRole: 'INVESTIGATOR', code: 'ESAVI-INVADMER-001' },
     { method: 'get',    path: '/api/investigation-administration-errors',                 minRole: 'USER',       code: 'ESAVI-INVADMER-002A' },
     { method: 'get',    path: '/api/investigation-administration-errors/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVADMER-002B' },
     { method: 'delete', path: `/api/investigation-administration-errors/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVADMER-005C' },
     { method: 'get',    path: `/api/investigation-administration-errors/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVADMER-006' },
     { method: 'get',    path: `/api/investigation-administration-errors/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVADMER-003' },
-    { method: 'put',    path: `/api/investigation-administration-errors/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVADMER-004' },
+    { method: 'put',    path: `/api/investigation-administration-errors/${ UUID }`,       minRole: 'INVESTIGATOR', code: 'ESAVI-INVADMER-004' },
 
     // investigationCommunity (SPEC F40) — where the patient lives and whether the community reported
     // other similar events. Tenth satellite of investigation with a spec of its own, and the same
@@ -655,13 +655,13 @@ export const ROUTE_RULES: RouteRule[] = [
     // encrypting them would mean changing the DDL. The exposure is a risk left open, not a role
     // decision, and hiding the reads behind ADMIN would break the operational flow without making
     // the stored value any safer
-    { method: 'post',   path: '/api/investigation-communities',                 minRole: 'USER',       code: 'ESAVI-INVCOMM-001' },
+    { method: 'post',   path: '/api/investigation-communities',                 minRole: 'INVESTIGATOR', code: 'ESAVI-INVCOMM-001' },
     { method: 'get',    path: '/api/investigation-communities',                 minRole: 'USER',       code: 'ESAVI-INVCOMM-002A' },
     { method: 'get',    path: '/api/investigation-communities/admin',           minRole: 'ADMIN',      code: 'ESAVI-INVCOMM-002B' },
     { method: 'delete', path: `/api/investigation-communities/purge/${ UUID }`, minRole: 'SUPERADMIN', code: 'ESAVI-INVCOMM-005C' },
     { method: 'get',    path: `/api/investigation-communities/case/${ UUID }`,  minRole: 'USER',       code: 'ESAVI-INVCOMM-006' },
     { method: 'get',    path: `/api/investigation-communities/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOMM-003' },
-    { method: 'put',    path: `/api/investigation-communities/${ UUID }`,       minRole: 'USER',       code: 'ESAVI-INVCOMM-004' },
+    { method: 'put',    path: `/api/investigation-communities/${ UUID }`,       minRole: 'INVESTIGATOR', code: 'ESAVI-INVCOMM-004' },
 
     // investigationDiagnostic (SPEC F58) — the final diagnoses the investigated patient leaves the
     // investigation with, and the SECOND TABLE this repository adds to the DDL after F57, the first
@@ -683,15 +683,15 @@ export const ROUTE_RULES: RouteRule[] = [
     // preventPhysicalDelete loop of esaviapp.sql.
     // Nothing here is encrypted: two foreign keys to catalogs, a date and two free texts, with no
     // person's name among them, so no row raises its minimum for that reason
-    { method: 'post',   path: '/api/investigation-diagnostics',                             minRole: 'USER',       code: 'ESAVI-INVDIAG-001' },
+    { method: 'post',   path: '/api/investigation-diagnostics',                             minRole: 'INVESTIGATOR', code: 'ESAVI-INVDIAG-001' },
     { method: 'get',    path: `/api/investigation-diagnostics/case/${ UUID }`,              minRole: 'USER',       code: 'ESAVI-INVDIAG-006' },
     { method: 'get',    path: `/api/investigation-diagnostics/admin/investigation/${ UUID }`, minRole: 'ADMIN',    code: 'ESAVI-INVDIAG-002B' },
     { method: 'get',    path: `/api/investigation-diagnostics/investigation/${ UUID }`,     minRole: 'USER',       code: 'ESAVI-INVDIAG-002A' },
     { method: 'delete', path: `/api/investigation-diagnostics/purge/${ UUID }`,             minRole: 'SUPERADMIN', code: 'ESAVI-INVDIAG-005C' },
     { method: 'patch',  path: `/api/investigation-diagnostics/activate/${ UUID }`,          minRole: 'ADMIN',      code: 'ESAVI-INVDIAG-005B' },
     { method: 'get',    path: `/api/investigation-diagnostics/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVDIAG-003' },
-    { method: 'put',    path: `/api/investigation-diagnostics/${ UUID }`,                   minRole: 'USER',       code: 'ESAVI-INVDIAG-004' },
-    { method: 'delete', path: `/api/investigation-diagnostics/${ UUID }`,                   minRole: 'USER',      code: 'ESAVI-INVDIAG-005A' },
+    { method: 'put',    path: `/api/investigation-diagnostics/${ UUID }`,                   minRole: 'INVESTIGATOR', code: 'ESAVI-INVDIAG-004' },
+    { method: 'delete', path: `/api/investigation-diagnostics/${ UUID }`,                   minRole: 'INVESTIGATOR', code: 'ESAVI-INVDIAG-005A' },
 
     // finalClassification (SPEC F41) — the causality verdict of the WHO/PAHO algorithm, and the
     // fifth and last satellite of esaviCase to get a spec. NINE ROWS, and it is the first entity
@@ -702,14 +702,14 @@ export const ROUTE_RULES: RouteRule[] = [
     // 001 and 004 in USER, the same deviation from the canonical matrix as F05 to F40: the verdict
     // is captured in the same operational flow as the case. 005C exists because finalClassification
     // is outside the preventPhysicalDelete loop of esaviapp.sql:1372-1386
-    { method: 'post',   path: '/api/final-classifications',                     minRole: 'USER',       code: 'ESAVI-FINCLASS-001' },
+    { method: 'post',   path: '/api/final-classifications',                     minRole: 'EVALUATOR',  code: 'ESAVI-FINCLASS-001' },
     { method: 'get',    path: '/api/final-classifications',                     minRole: 'USER',       code: 'ESAVI-FINCLASS-002A' },
     { method: 'get',    path: '/api/final-classifications/admin',               minRole: 'ADMIN',      code: 'ESAVI-FINCLASS-002B' },
     { method: 'patch',  path: `/api/final-classifications/activate/${ UUID }`,  minRole: 'SUPERADMIN', code: 'ESAVI-FINCLASS-005B' },
     { method: 'delete', path: `/api/final-classifications/purge/${ UUID }`,     minRole: 'SUPERADMIN', code: 'ESAVI-FINCLASS-005C' },
     { method: 'get',    path: `/api/final-classifications/case/${ UUID }`,      minRole: 'USER',       code: 'ESAVI-FINCLASS-006' },
     { method: 'get',    path: `/api/final-classifications/${ UUID }`,           minRole: 'USER',       code: 'ESAVI-FINCLASS-003' },
-    { method: 'put',    path: `/api/final-classifications/${ UUID }`,           minRole: 'USER',       code: 'ESAVI-FINCLASS-004' },
+    { method: 'put',    path: `/api/final-classifications/${ UUID }`,           minRole: 'EVALUATOR',  code: 'ESAVI-FINCLASS-004' },
     { method: 'delete', path: `/api/final-classifications/${ UUID }`,           minRole: 'ADMIN',      code: 'ESAVI-FINCLASS-005A' },
 
     // systemConfig (SPEC F26) — the store of the application behaviour parameters, and the first
@@ -753,11 +753,11 @@ export const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: '/api/case-workflows/admin',                               minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-002B' },
     { method: 'patch',  path: `/api/case-workflows/activate/${ UUID }`,                  minRole: 'SUPERADMIN', code: 'ESAVI-CASEFLOW-005B' },
     { method: 'get',    path: `/api/case-workflows/case/${ UUID }`,                      minRole: 'USER',       code: 'ESAVI-CASEFLOW-006' },
-    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/complete-stage`,       minRole: 'USER',       code: 'ESAVI-CASEFLOW-007' },
-    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/close`,                minRole: 'USER',       code: 'ESAVI-CASEFLOW-008' },
-    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/reopen`,               minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-009' },
-    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/request-validation`,   minRole: 'USER',       code: 'ESAVI-CASEFLOW-010' },
-    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/resolve-validation`,   minRole: 'USER',       code: 'ESAVI-CASEFLOW-011' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/complete-stage`,       minRole: 'NOTIFIER',   code: 'ESAVI-CASEFLOW-007' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/close`,                minRole: 'EVALUATOR',  code: 'ESAVI-CASEFLOW-008' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/reopen`,               minRole: 'EVALUATOR',  code: 'ESAVI-CASEFLOW-009' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/request-validation`,   minRole: 'NOTIFIER',   code: 'ESAVI-CASEFLOW-010' },
+    { method: 'patch',  path: `/api/case-workflows/case/${ UUID }/resolve-validation`,   minRole: 'EVALUATOR',  code: 'ESAVI-CASEFLOW-011' },
     { method: 'get',    path: `/api/case-workflows/${ UUID }`,                           minRole: 'USER',       code: 'ESAVI-CASEFLOW-003' },
     { method: 'delete', path: `/api/case-workflows/${ UUID }`,                           minRole: 'ADMIN',      code: 'ESAVI-CASEFLOW-005A' },
 

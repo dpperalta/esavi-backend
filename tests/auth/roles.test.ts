@@ -4,7 +4,7 @@ import { ROLE_LEVELS, ROLES } from '../../src/constants/roles.constants';
 import { closeTestDatabase } from '../setup/database';
 import { seedTestUsers, authHeader } from '../setup/auth';
 import type { TestRole } from '../setup/auth';
-import { ROUTE_RULES } from '../setup/routeRules';
+import { ROUTE_RULES, UUID } from '../setup/routeRules';
 
 /**
  * The role one step below the given one, by numeric level. Returns undefined
@@ -50,6 +50,28 @@ describe('role matrix', () => {
             const response = await request(app)[method](path).set(authHeader(minRole));
 
             expect(response.status).not.toBe(403);
+        });
+
+    });
+
+    // SPEC F64 — ADMIN and SUPERADMIN close, reopen, resolve and complete any stage through the
+    // ladder alone: 50 and 100 >= 40, with no "is admin" branch in the service
+    describe('ADMIN keeps close and reopen', () => {
+
+        const caseRoute = `/api/case-workflows/case/${ UUID }`;
+        const operations: [string, string, Record<string, string> | undefined][] = [
+            ['ESAVI-CASEFLOW-008', `${ caseRoute }/close`, undefined],
+            ['ESAVI-CASEFLOW-009', `${ caseRoute }/reopen`, undefined],
+            ['ESAVI-CASEFLOW-011', `${ caseRoute }/resolve-validation`, undefined],
+            ['ESAVI-CASEFLOW-007 FINAL_CLASSIFICATION', `${ caseRoute }/complete-stage`, { stage: 'FINAL_CLASSIFICATION' }]
+        ];
+
+        describe.each(['ADMIN', 'SUPERADMIN'] as TestRole[])('%s', role => {
+            it.each(operations)('is not rejected with 403 on %s', async ( _code, path, body ) => {
+                const response = await request(app).patch(path).set(authHeader(role)).send(body ?? {});
+
+                expect(response.status).not.toBe(403);
+            });
         });
 
     });

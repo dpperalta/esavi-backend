@@ -137,20 +137,20 @@ describe('notificationPregnancyComplication contract', () => {
         // SPEC F44: the case fixture is built on the model, so it needs its workflow row —
         // without it every POST of a stage answers 404 CASEFLOW_012_NOT_FOUND
         await seedCaseWorkflow(esaviCase.getDataValue('caseId'));
-        const notification = await request(app).post('/api/notifications').set(authHeader('USER')).send({
+        const notification = await request(app).post('/api/notifications').set(authHeader('NOTIFIER')).send({
             caseId: esaviCase.getDataValue('caseId'),
             notificationType: 'NON_SEVERE',
             esaviDescription: 'Fever after the dose'
         });
         const notificationId = notification.body.data.notificationId;
-        const pregnancy = await request(app).post('/api/notification-pregnancies').set(authHeader('USER')).send({
+        const pregnancy = await request(app).post('/api/notification-pregnancies').set(authHeader('NOTIFIER')).send({
             notificationId,
             wasPregnantAtVaccination: 'YES'
         });
         return { pregnancyId: pregnancy.body.data.pregnancyId, notificationId };
     };
 
-    const createComplication = ( payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const createComplication = ( payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).post(basePath).set(authHeader(role)).send(payload);
 
     const getComplication = ( id: string, role: TestRole = 'USER' ) =>
@@ -162,7 +162,7 @@ describe('notificationPregnancyComplication contract', () => {
     const listAll = ( pregnancyId: string, role: TestRole = 'ADMIN', qs: string = '' ) =>
         request(app).get(`${ basePath }/admin/pregnancy/${ pregnancyId }${ qs }`).set(authHeader(role));
 
-    const updateComplication = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const updateComplication = ( id: string, payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(payload);
 
     const deleteComplication = ( id: string, role: TestRole = 'ADMIN' ) =>
@@ -322,7 +322,7 @@ describe('notificationPregnancyComplication contract', () => {
         it('creating over a pregnancy that says hasComplications NO answers 201 and leaves the parent alone', async () => {
             const { pregnancyId } = await notifyNewPregnancy();
             await request(app).put(`/api/notification-pregnancies/${ pregnancyId }`)
-                .set(authHeader('USER')).send({ hasComplications: 'NO' });
+                .set(authHeader('NOTIFIER')).send({ hasComplications: 'NO' });
 
             const parentBefore = await NotificationPregnancy.findByPk(pregnancyId);
             const versionBefore = ( parentBefore!.getDataValue('sysDetails') as { version?: number } | null )?.version;
@@ -605,7 +605,7 @@ describe('notificationPregnancyComplication contract', () => {
                 path: basePath,
                 id: complicationId,
                 model: NotificationPregnancyComplication,
-                role: 'USER',
+                role: 'NOTIFIER',
                 strip: ['diagnosticTermId', 'complicationRawName', 'sortOrder', 'diagnosticTerm', 'complicationType']
             });
         });
@@ -773,11 +773,11 @@ describe('notificationPregnancyComplication contract', () => {
             expect(again.body.code).toBe('PREGCOMP_005A_ALREADY_INACTIVE');
         });
 
-        it('rejects an ANALYTICS and lets a USER retire it', async () => {
+        it('rejects a USER and lets a NOTIFIER retire it', async () => {
             const { complicationId } = await newComplication();
 
-            expect(( await deleteComplication(complicationId, 'ANALYTICS') ).status).toBe(403);
-            expect(( await deleteComplication(complicationId, 'USER') ).status).toBe(200);
+            expect(( await deleteComplication(complicationId, 'USER') ).status).toBe(403);
+            expect(( await deleteComplication(complicationId, 'NOTIFIER') ).status).toBe(200);
         });
 
         it('frees the sortOrder for the next complication', async () => {

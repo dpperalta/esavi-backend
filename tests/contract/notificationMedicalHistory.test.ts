@@ -89,12 +89,12 @@ describe('notificationMedicalHistory contract', () => {
         const caseId = await newCase();
         const created = await request(app)
             .post('/api/notifications')
-            .set(authHeader('USER'))
+            .set(authHeader('NOTIFIER'))
             .send({ caseId, notificationType, esaviDescription: 'Fever after the dose' });
         return { notificationId: created.body.data.notificationId, caseId };
     };
 
-    const create = ( payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const create = ( payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).post(basePath).set(authHeader(role)).send(payload);
 
     const getById = ( id: string, role: TestRole = 'USER' ) =>
@@ -109,7 +109,7 @@ describe('notificationMedicalHistory contract', () => {
     const listByCase = ( caseId: string, role: TestRole = 'USER', query: string = '' ) =>
         request(app).get(`${ basePath }/case/${ caseId }${ query }`).set(authHeader(role));
 
-    const update = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const update = ( id: string, payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(payload);
 
     const remove = ( id: string, role: TestRole = 'ADMIN' ) =>
@@ -241,14 +241,14 @@ describe('notificationMedicalHistory contract', () => {
 
     it('notificacion inexistente o inactiva: 404, tambien como SUPERADMIN', async () => {
         const unknown = '00000000-0000-4000-8000-000000000000';
-        for (const role of ['USER', 'SUPERADMIN'] as TestRole[]) {
+        for (const role of ['NOTIFIER', 'SUPERADMIN'] as TestRole[]) {
             const r = await create({ notificationId: unknown, historyName: 'Asma' }, role);
             expect(r.status).toBe(404);
             expect(r.body.code).toBe('MEDHIST_001_NOTIFICATION_NOT_FOUND');
         }
         const { notificationId } = await notifyNewCase();
         await request(app).delete(`/api/notifications/${ notificationId }`).set(authHeader('ADMIN'));
-        for (const role of ['USER', 'SUPERADMIN'] as TestRole[]) {
+        for (const role of ['NOTIFIER', 'SUPERADMIN'] as TestRole[]) {
             const r = await create({ notificationId, historyName: 'Asma' }, role);
             expect(r.status).toBe(404);
             expect(r.body.code).toBe('MEDHIST_001_NOTIFICATION_NOT_FOUND');
@@ -316,7 +316,7 @@ describe('notificationMedicalHistory contract', () => {
             reportDate: new Date().toISOString().slice(0, 10), eventDate: '2024-05-04'
         });
         await seedCaseWorkflow(esaviCase.getDataValue('caseId'));
-        const created = await request(app).post('/api/notifications').set(authHeader('USER'))
+        const created = await request(app).post('/api/notifications').set(authHeader('NOTIFIER'))
             .send({ caseId: esaviCase.getDataValue('caseId'), notificationType: 'SEVERE', esaviDescription: 'Serious' });
         const r = await create({ notificationId: created.body.data.notificationId, historyName: 'Asma' });
         expect(r.status).toBe(201);
@@ -672,7 +672,7 @@ describe('notificationMedicalHistory contract', () => {
             path: basePath,
             id: created.body.data.medicalHistoryId,
             model: NotificationMedicalHistory,
-            role: 'USER'
+            role: 'NOTIFIER'
         });
     });
 
@@ -694,7 +694,7 @@ describe('notificationMedicalHistory contract', () => {
             path: basePath,
             id: created.body.data.medicalHistoryId,
             model: NotificationMedicalHistory,
-            role: 'USER'
+            role: 'NOTIFIER'
         });
 
         // and the divergence survived
@@ -857,23 +857,23 @@ describe('notificationMedicalHistory contract', () => {
         expect(r.body.code).toBe('MEDHIST_004_NOT_FOUND');
     });
 
-    it('la visibilidad heredada se aplica: 404 USER y ADMIN, 200 SUPERADMIN', async () => {
+    it('la visibilidad heredada se aplica: 404 NOTIFIER y ADMIN, 200 SUPERADMIN', async () => {
         const { notificationId } = await notifyNewCase();
         const created = await create({ notificationId, historyName: 'Asma' });
         const id = created.body.data.medicalHistoryId;
         await request(app).delete(`/api/notifications/${ notificationId }`).set(authHeader('ADMIN'));
 
-        expect((await update(id, { notes: 'x' }, 'USER')).status).toBe(404);
+        expect((await update(id, { notes: 'x' }, 'NOTIFIER')).status).toBe(404);
         expect((await update(id, { notes: 'x' }, 'ADMIN')).status).toBe(404);
         expect((await update(id, { notes: 'x' }, 'SUPERADMIN')).status).toBe(200);
     });
 
-    it('el rol minimo del 004 es USER — la desviacion declarada de la matriz', async () => {
+    it('el rol minimo del 004 es NOTIFIER — la desviacion declarada de la matriz', async () => {
         const { notificationId } = await notifyNewCase();
         const created = await create({ notificationId, historyName: 'Asma' });
         const id = created.body.data.medicalHistoryId;
-        expect((await update(id, { notes: 'desde USER' }, 'USER')).status).toBe(200);
-        expect((await update(id, { notes: 'x' }, 'ANALYTICS')).status).toBe(403);
+        expect((await update(id, { notes: 'desde NOTIFIER' }, 'NOTIFIER')).status).toBe(200);
+        expect((await update(id, { notes: 'x' }, 'USER')).status).toBe(403);
     });
 
     it('cambiar historyName sobre una fila con termino re-resuelve y actualiza historyRaw', async () => {
@@ -975,13 +975,13 @@ describe('notificationMedicalHistory contract', () => {
         expect(r.body.code).toBe('MEDHIST_005A_NOT_FOUND');
     });
 
-    it('el rol minimo es USER: un ANALYTICS recibe 403', async () => {
+    it('el rol minimo es NOTIFIER: un USER recibe 403', async () => {
         const { notificationId } = await notifyNewCase();
         const created = await create({ notificationId, historyName: 'Asma' });
         const id = created.body.data.medicalHistoryId;
 
-        expect((await remove(id, 'ANALYTICS')).status).toBe(403);
-        expect((await remove(id, 'USER')).status).toBe(200);
+        expect((await remove(id, 'USER')).status).toBe(403);
+        expect((await remove(id, 'NOTIFIER')).status).toBe(200);
     });
 
     it('la fila retirada desaparece del 002A y del 006 pero sigue en el 002B', async () => {
@@ -1329,7 +1329,7 @@ describe('notificationMedicalHistory contract', () => {
         const { notificationId, caseId } = await notifyNewCase();
 
         // 001
-        const created = await request(app).post(basePath).set(authHeader('USER'))
+        const created = await request(app).post(basePath).set(authHeader('NOTIFIER'))
             .send({ notificationId, historyName: 'Asma' });
         expect(created.status).toBe(201);
         const id = created.body.data.medicalHistoryId;
@@ -1358,7 +1358,7 @@ describe('notificationMedicalHistory contract', () => {
         expect(byId.body.data.count).toBeUndefined();
 
         // 004 — USER, not ADMIN
-        const updated = await request(app).put(`${ basePath }/${ id }`).set(authHeader('USER')).send({ notes: 'x' });
+        const updated = await request(app).put(`${ basePath }/${ id }`).set(authHeader('NOTIFIER')).send({ notes: 'x' });
         expect(updated.status).toBe(200);
 
         // 005C over an active row reaches the purge guard, not the 005A

@@ -21,7 +21,7 @@ import {
     updateNotificationEventValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
@@ -31,7 +31,7 @@ const router = Router();
 
 // Create Notification Event
 // Code: ESAVI-NOTIFEVT-001
-router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationEventValidator, validateFields, createNotificationEvent);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createNotificationEventValidator, validateFields, createNotificationEvent);
 
 // Get Notification Events by Case
 // Code: ESAVI-NOTIFEVT-006
@@ -59,7 +59,7 @@ router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...no
 
 // Activate Notification Event - For Admin
 // Code: ESAVI-NOTIFEVT-005B
-// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a NOTIFIER's
 // retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
 router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationEventIdValidator, validateFields, activateNotificationEvent);
@@ -72,14 +72,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationEvent
 
 // Update Notification Event
 // Code: ESAVI-NOTIFEVT-004
-// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// NOTIFIER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
 // corrects and retires it. Retiring is a logical delete, reversible with 005B
-router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationEventIdValidator, ...updateNotificationEventValidator, validateFields, updateNotificationEvent);
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationEventIdValidator, ...updateNotificationEventValidator, validateFields, updateNotificationEvent);
 
 // Delete Notification Event - Logical delete
 // Code: ESAVI-NOTIFEVT-005A
-// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// NOTIFIER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
 // corrects and retires it. Retiring is a logical delete, reversible with 005B
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationEventIdValidator, validateFields, deleteNotificationEvent);
+router.delete('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationEventIdValidator, validateFields, deleteNotificationEvent);
 
 export default router;

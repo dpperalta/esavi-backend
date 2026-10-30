@@ -18,16 +18,16 @@ import {
     updateInvestigationVaccinationContextValidator
 } from '../validators';
 
-const { ADMIN, SUPERADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Investigation Vaccination Context
 // Code: ESAVI-INVVACTX-001
-// USER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
+// INVESTIGATOR and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09, F10,
 // F13, F14 and F28 to F35 already fixed: the detail is captured in the same operational flow as the
 // case, and splitting it across two roles would break the form in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationVaccinationContextValidator, validateFields, createInvestigationVaccinationContext);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationVaccinationContextValidator, validateFields, createInvestigationVaccinationContext);
 
 // Get Investigation Vaccination Contexts
 // Code: ESAVI-INVVACTX-002A
@@ -63,9 +63,9 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationVacc
 
 // Update Investigation Vaccination Context
 // Code: ESAVI-INVVACTX-004
-// USER for the same reason as 001: completing the vaccination context is part of the same
+// INVESTIGATOR for the same reason as 001: completing the vaccination context is part of the same
 // operational flow. It is the main operation of the entity — the row is opened with one field and
 // filled in over time
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationVaccinationContextIdValidator, ...updateInvestigationVaccinationContextValidator, validateFields, updateInvestigationVaccinationContext);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationVaccinationContextIdValidator, ...updateInvestigationVaccinationContextValidator, validateFields, updateInvestigationVaccinationContext);
 
 export default router;

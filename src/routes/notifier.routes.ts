@@ -13,15 +13,15 @@ import {
 } from '../controllers/notifier.controller';
 import { createNotifierValidator, notifierIdValidator, notifierListValidator, updateNotifierValidator } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
 // Create Notifier
 // Code: ESAVI-NOTIFIER-001
-// USER and not ADMIN, departing from the canonical matrix: the notifier is captured in the same
+// NOTIFIER and not ADMIN, departing from the canonical matrix: the notifier is captured in the same
 // operational flow as the case, and with create in ADMIN the flow would break in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createNotifierValidator, validateFields, createNotifier);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createNotifierValidator, validateFields, createNotifier);
 
 // Get Notifiers
 // Code: ESAVI-NOTIFIER-002A
@@ -46,14 +46,14 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidat
 
 // Update Notifier
 // Code: ESAVI-NOTIFIER-004
-// USER for the same reason as 001: correcting the notifier is part of reporting the ESAVI
-router.put('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidator, ...updateNotifierValidator, validateFields, updateNotifier);
+// NOTIFIER for the same reason as 001: correcting the notifier is part of reporting the ESAVI
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notifierIdValidator, ...updateNotifierValidator, validateFields, updateNotifier);
 
 // Soft delete Notifier
 // Code: ESAVI-NOTIFIER-005A
-// USER for the same reason as 001 and 004: retirar un notificador mal capturado es parte del
+// NOTIFIER for the same reason as 001 and 004: retirar un notificador mal capturado es parte del
 // mismo flujo de notificación del ESAVI. La reactivación (005B) y la purga (005C) siguen
 // reservadas, así que el error se corrige hacia abajo pero no se revierte sin SUPERADMIN
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...notifierIdValidator, validateFields, deleteNotifier);
+router.delete('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notifierIdValidator, validateFields, deleteNotifier);
 
 export default router;

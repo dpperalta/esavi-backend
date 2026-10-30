@@ -82,7 +82,7 @@ describe('investigationAutopsy contract', () => {
         (await Investigation.create({ caseId, statusItemId: statusZeroItemId, isActive }))
             .getDataValue('investigationId');
 
-    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post('/api/investigation-autopsies').set(authHeader(role)).send(payload);
 
     // The minimum create of this entity, and the difference with F13, F14 and F29: there is no
@@ -107,7 +107,7 @@ describe('investigationAutopsy contract', () => {
     const listAdmin = (query: string = '', role: TestRole = 'ADMIN') =>
         request(app).get(`/api/investigation-autopsies/admin${ query }`).set(authHeader(role));
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`/api/investigation-autopsies/${ id }`).set(authHeader(role)).send(payload);
 
     const purge = (id: string, role: TestRole = 'SUPERADMIN') =>
@@ -507,7 +507,7 @@ describe('investigationAutopsy contract', () => {
                 path: '/api/investigation-autopsies',
                 id,
                 model: InvestigationAutopsy,
-                role: 'USER'
+                role: 'INVESTIGATOR'
             });
         });
 
@@ -578,12 +578,12 @@ describe('investigationAutopsy contract', () => {
             expect(await versionOf(id)).toBe(versionBefore);
         });
 
-        it('an unknown id is 404, and an inactive investigation is 404 for USER, 200 for SUPERADMIN', async () => {
+        it('an unknown id is 404, and an inactive investigation is 404 for INVESTIGATOR, 200 for SUPERADMIN', async () => {
             expect((await update(unknownUuid, { notes: 'x' })).status).toBe(404);
 
             const id = await seedAutopsy();
             await retireInvestigation(id);
-            expect((await update(id, { notes: 'x' }, 'USER')).status).toBe(404);
+            expect((await update(id, { notes: 'x' }, 'INVESTIGATOR')).status).toBe(404);
             expect((await update(id, { notes: 'x' }, 'ADMIN')).status).toBe(404);
             expect((await update(id, { notes: 'y' }, 'SUPERADMIN')).status).toBe(200);
         });
@@ -750,7 +750,7 @@ describe('investigationAutopsy contract', () => {
 
         it('purging the autopsy does not touch the investigationSource of the same investigation', async () => {
             const id = await seedAutopsy();
-            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
             await seal(id);
 
             expect((await purge(id)).status).toBe(200);

@@ -87,7 +87,7 @@ describe('investigationClinicalEvaluation contract', () => {
     const createInvestigationFixture = async (isActive: boolean = true): Promise<string> =>
         await createInvestigationForCase(await createCaseFixture(), isActive);
 
-    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const create = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post(basePath).set(authHeader(role)).send(payload);
 
     // The empty create of this entity: { investigationId } is the whole minimum. Mints an
@@ -111,7 +111,7 @@ describe('investigationClinicalEvaluation contract', () => {
     const listAdmin = (query: string = '', role: TestRole = 'ADMIN') =>
         request(app).get(`${ basePath }/admin${ query }`).set(authHeader(role));
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`${ basePath }/${ id }`).set(authHeader(role)).send(payload);
 
     const purge = (id: string, role: TestRole = 'SUPERADMIN') =>
@@ -516,7 +516,7 @@ describe('investigationClinicalEvaluation contract', () => {
             });
 
             await expectPutOfGetResponseWritesNothing({
-                path: basePath, id, model: InvestigationClinicalEvaluation, role: 'USER'
+                path: basePath, id, model: InvestigationClinicalEvaluation, role: 'INVESTIGATOR'
             });
         });
 
@@ -584,11 +584,11 @@ describe('investigationClinicalEvaluation contract', () => {
             expect((await update(id, { notes: '' })).body.data.notes).toBeNull();
         });
 
-        it('a retired investigation answers 404 for USER and ADMIN and 200 for SUPERADMIN', async () => {
+        it('a retired investigation answers 404 for INVESTIGATOR and ADMIN and 200 for SUPERADMIN', async () => {
             const id = await seed();
             await retireInvestigation(id);
 
-            expect((await update(id, { notes: 'x' }, 'USER')).status).toBe(404);
+            expect((await update(id, { notes: 'x' }, 'INVESTIGATOR')).status).toBe(404);
             expect((await update(id, { notes: 'x' }, 'ADMIN')).status).toBe(404);
             expect((await update(id, { notes: 'x' }, 'SUPERADMIN')).status).toBe(200);
         });

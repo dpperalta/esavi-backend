@@ -75,7 +75,7 @@ describe('notificationEvent contract', () => {
         const caseId = await createCaseFixture();
         const created = await request(app)
             .post('/api/notifications')
-            .set(authHeader('USER'))
+            .set(authHeader('NOTIFIER'))
             .send({ caseId, notificationType: 'NON_SEVERE', esaviDescription: 'Fever after the dose' });
         return { notificationId: created.body.data.notificationId, caseId };
     };
@@ -337,10 +337,11 @@ describe('notificationEvent contract', () => {
             expect(response.body.data.startTime).toBe('14:30:00');
         });
 
-        it('admits a USER, who is the one who notifies', async () => {
+        it('admits a NOTIFIER, who is the one who notifies', async () => {
             const { notificationId } = await notifyNewCase();
 
-            expect(( await createEvent({ notificationId, esaviName: 'Fiebre' }, 'USER') ).status).toBe(201);
+            expect(( await createEvent({ notificationId, esaviName: 'Fiebre' }, 'USER') ).status).toBe(403);
+            expect(( await createEvent({ notificationId, esaviName: 'Fiebre' }, 'NOTIFIER') ).status).toBe(201);
         });
 
     });
@@ -596,11 +597,11 @@ describe('notificationEvent contract', () => {
             expect(response.body.data.notificationId).toBe(notificationId);
         });
 
-        it('answers 200 for a USER and 403 for an ANALYTICS', async () => {
+        it('answers 200 for a NOTIFIER and 403 for a USER', async () => {
             const { eventId } = await newEvent();
 
-            expect(( await updateEvent(eventId, { notes: 'x' }, 'ANALYTICS') ).status).toBe(403);
-            expect(( await updateEvent(eventId, { notes: 'x' }, 'USER') ).status).toBe(200);
+            expect(( await updateEvent(eventId, { notes: 'x' }, 'USER') ).status).toBe(403);
+            expect(( await updateEvent(eventId, { notes: 'x' }, 'NOTIFIER') ).status).toBe(200);
         });
 
     });

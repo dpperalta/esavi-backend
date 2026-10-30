@@ -15,16 +15,16 @@ import {
     updateSevereNotificationValidator
 } from '../validators';
 
-const { SUPERADMIN, USER } = ROLES;
+const { SUPERADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
 // Create Severe Notification
 // Code: ESAVI-SEVNOT-001
-// USER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09 and
+// NOTIFIER and not ADMIN, the same deviation from the canonical matrix that F05, F06, F07, F09 and
 // F10 already fixed: the clinical detail is captured in the same operational flow as the
 // notification, and splitting it across two roles would break the form in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createSevereNotificationValidator, validateFields, createSevereNotification);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createSevereNotificationValidator, validateFields, createSevereNotification);
 
 // Purge Severe Notification - Physical delete, for SuperAdmin
 // Code: ESAVI-SEVNOT-005C
@@ -46,7 +46,7 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...severeNotificatio
 
 // Update Severe Notification
 // Code: ESAVI-SEVNOT-004
-// USER for the same reason as 001: correcting the detail is part of the same clinical flow
-router.put('/:id', tokenValidation, validateUserRole(USER), ...severeNotificationIdValidator, ...updateSevereNotificationValidator, validateFields, updateSevereNotification);
+// NOTIFIER for the same reason as 001: correcting the detail is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...severeNotificationIdValidator, ...updateSevereNotificationValidator, validateFields, updateSevereNotification);
 
 export default router;

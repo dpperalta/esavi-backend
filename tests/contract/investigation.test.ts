@@ -84,7 +84,7 @@ describe('investigation contract', () => {
         vaccinationSiteItemId = item.getDataValue('catalogItemId');
     };
 
-    const createInvestigation = (payload: Record<string, unknown> = {}, role: TestRole = 'USER') =>
+    const createInvestigation = (payload: Record<string, unknown> = {}, role: TestRole = 'INVESTIGATOR') =>
         request(app).post('/api/investigations').set(authHeader(role)).send(payload);
 
     const getById = (id: string, role: TestRole = 'USER') =>
@@ -99,7 +99,7 @@ describe('investigation contract', () => {
     const listAdmin = (query: string = '', role: TestRole = 'ADMIN') =>
         request(app).get(`/api/investigations/admin${ query }`).set(authHeader(role));
 
-    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'USER') =>
+    const update = (id: string, payload: Record<string, unknown>, role: TestRole = 'INVESTIGATOR') =>
         request(app).put(`/api/investigations/${ id }`).set(authHeader(role)).send(payload);
 
     const deactivate = (id: string, role: TestRole = 'ADMIN') =>
@@ -661,7 +661,7 @@ describe('investigation contract', () => {
                 path: '/api/investigations',
                 id,
                 model: Investigation,
-                role: 'USER'
+                role: 'INVESTIGATOR'
             });
             // And the status it had is still the one it had, not downgraded to the default '0'
             expect((await readRow(id)).getDataValue('statusItemId')).toBe(statusTwoItemId);
@@ -923,7 +923,7 @@ describe('investigation contract', () => {
         // The source is created through its own endpoint, which is the only way it is ever born
         const createSource = (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-sources')
-                .set(authHeader('USER')).send({ investigationId, ...payload });
+                .set(authHeader('INVESTIGATOR')).send({ investigationId, ...payload });
 
         const readSource = async (id: string) =>
             await InvestigationSource.findByPk(id, { paranoid: false });
@@ -986,12 +986,12 @@ describe('investigation contract', () => {
         // Unlike the source it cannot be opened empty: isDeath and deathDate are required
         const createAutopsy = (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-autopsies')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01', ...payload });
 
         const createSourceFor = (investigationId: string) =>
             request(app).post('/api/investigation-sources')
-                .set(authHeader('USER')).send({ investigationId });
+                .set(authHeader('INVESTIGATOR')).send({ investigationId });
 
         const readAutopsy = async (id: string) =>
             await InvestigationAutopsy.findByPk(id, { paranoid: false });
@@ -1093,16 +1093,16 @@ describe('investigation contract', () => {
         // whole minimum
         const createMedicalHistory = (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-medical-histories')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, ...payload });
 
         const createSourceForHistory = (investigationId: string) =>
             request(app).post('/api/investigation-sources')
-                .set(authHeader('USER')).send({ investigationId });
+                .set(authHeader('INVESTIGATOR')).send({ investigationId });
 
         const createAutopsyForHistory = (investigationId: string) =>
             request(app).post('/api/investigation-autopsies')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, isDeath: true, deathDate: '2024-06-01' });
 
         const readMedicalHistory = async (id: string) =>
@@ -1193,7 +1193,7 @@ describe('investigation contract', () => {
         // the whole minimum
         const createClinicalEvaluation = (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-clinical-evaluations')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, ...payload });
 
         // Where esaviLog writes. Read directly because the warn dump of the purge never reaches an
@@ -1267,10 +1267,10 @@ describe('investigation contract', () => {
         it('an investigation with the FOUR satellites seals and clears the four in the same transaction', async () => {
             const created = await createInvestigation({ caseId: await createCaseFixture() });
             const id = created.body.data.investigationId;
-            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId: id, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
             await createClinicalEvaluation(id);
 
             const satellites = [InvestigationSource, InvestigationAutopsy, InvestigationMedicalHistory, InvestigationClinicalEvaluation];
@@ -1304,7 +1304,7 @@ describe('investigation contract', () => {
         // empty: { investigationId } is the whole minimum
         const createVaccinationContext = (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-vaccination-contexts')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, ...payload });
 
         const logPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
@@ -1395,11 +1395,11 @@ describe('investigation contract', () => {
         it('an investigation with the FIVE satellites without isActive seals and clears the five in the same transaction', async () => {
             const created = await createInvestigation({ caseId: await createCaseFixture() });
             const id = created.body.data.investigationId;
-            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId: id, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
             await createVaccinationContext(id);
 
             const satellites = [
@@ -1435,7 +1435,7 @@ describe('investigation contract', () => {
         // it opens empty: { investigationId } is the whole minimum
         const createColdChain = (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-cold-chains')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, ...payload });
 
         const logPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
@@ -1526,12 +1526,12 @@ describe('investigation contract', () => {
         it('an investigation with the SIX satellites without isActive seals and clears the six in the same transaction', async () => {
             const created = await createInvestigation({ caseId: await createCaseFixture() });
             const id = created.body.data.investigationId;
-            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId: id, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
             await createColdChain(id);
 
             const satellites = [
@@ -1568,7 +1568,7 @@ describe('investigation contract', () => {
         // context and the cold chain, it opens empty: { investigationId } is the whole minimum
         const createAdministrationError = (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-administration-errors')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, ...payload });
 
         const administrationErrorLogPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
@@ -1663,13 +1663,13 @@ describe('investigation contract', () => {
         it('an investigation with the SEVEN satellites without isActive seals and clears the seven in the same transaction', async () => {
             const created = await createInvestigation({ caseId: await createCaseFixture() });
             const id = created.body.data.investigationId;
-            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId: id, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-cold-chains').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-cold-chains').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
             await createAdministrationError(id);
 
             const satellites = [
@@ -1708,7 +1708,7 @@ describe('investigation contract', () => {
         // minimum
         const createCommunity = (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-communities')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, ...payload });
 
         const communityLogPath = path.join(process.cwd(), 'src', 'logs', 'esaviLog.log');
@@ -1803,14 +1803,14 @@ describe('investigation contract', () => {
         it('an investigation with the EIGHT satellites without isActive seals and clears the eight in the same transaction', async () => {
             const created = await createInvestigation({ caseId: await createCaseFixture() });
             const id = created.body.data.investigationId;
-            await request(app).post('/api/investigation-sources').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-autopsies').set(authHeader('USER'))
+            await request(app).post('/api/investigation-sources').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-autopsies').set(authHeader('INVESTIGATOR'))
                 .send({ investigationId: id, isDeath: true, deathDate: '2024-06-01' });
-            await request(app).post('/api/investigation-medical-histories').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-cold-chains').set(authHeader('USER')).send({ investigationId: id });
-            await request(app).post('/api/investigation-administration-errors').set(authHeader('USER')).send({ investigationId: id });
+            await request(app).post('/api/investigation-medical-histories').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-clinical-evaluations').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-vaccination-contexts').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-cold-chains').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
+            await request(app).post('/api/investigation-administration-errors').set(authHeader('INVESTIGATOR')).send({ investigationId: id });
             await createCommunity(id);
 
             const satellites = [
@@ -1857,7 +1857,7 @@ describe('investigation contract', () => {
 
         const createVaccineAdministered = async (investigationId: string, payload: Record<string, unknown> = {}) =>
             request(app).post('/api/investigation-vaccines-administered')
-                .set(authHeader('USER'))
+                .set(authHeader('INVESTIGATOR'))
                 .send({ investigationId, vaccineWhodrugId: await createWhodrug(), ...payload });
 
         const readVaccine = (id: string) =>

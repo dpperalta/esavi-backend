@@ -37,7 +37,8 @@ describe('classification contract', () => {
 
     // SPEC F49 — a facility with no geoLocationId belongs to no territory and no non-admin
     // ever reaches its cases. createCaseFixture's facility lives inside this geoLocation, and
-    // scopedUserToken is a USER assigned to it — see esaviCase.test.ts for the same pattern
+    // scopedUserToken is a NOTIFIER assigned to it, because it only writes the case (SPEC F64) —
+    // see esaviCase.test.ts for the same pattern
     let scopeRootGeoLocationId: string;
     let scopedUserToken: string;
 
@@ -92,7 +93,7 @@ describe('classification contract', () => {
         daysItemId = items.DAYS;
     };
 
-    const createClassification = ( payload: Record<string, unknown> = {}, role: TestRole = 'USER' ) =>
+    const createClassification = ( payload: Record<string, unknown> = {}, role: TestRole = 'NOTIFIER' ) =>
         request(app)
             .post('/api/classifications')
             .set(authHeader(role))
@@ -110,7 +111,7 @@ describe('classification contract', () => {
     const listAdminClassifications = ( query: string = '', role: TestRole = 'ADMIN' ) =>
         request(app).get(`/api/classifications/admin${ query }`).set(authHeader(role));
 
-    const updateClassification = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const updateClassification = ( id: string, payload: Record<string, unknown>, role: TestRole = 'NOTIFIER' ) =>
         request(app).put(`/api/classifications/${ id }`).set(authHeader(role)).send(payload);
 
     const deleteClassification = ( id: string, role: TestRole = 'ADMIN' ) =>
@@ -147,7 +148,7 @@ describe('classification contract', () => {
             level: baseLevel + 1
         });
         scopeRootGeoLocationId = scopeRoot.getDataValue('geoLocationId');
-        scopedUserToken = ( await createScopedTestUser('classification-default', scopeRootGeoLocationId) ).token;
+        scopedUserToken = ( await createScopedTestUser('classification-default', scopeRootGeoLocationId, 'NOTIFIER') ).token;
 
         inactiveCaseId = await createCaseFixture({ isActive: false });
 
@@ -231,7 +232,7 @@ describe('classification contract', () => {
         it('answers 400 when caseId is missing or is not a UUID', async () => {
             const missing = await request(app)
                 .post('/api/classifications')
-                .set(authHeader('USER'))
+                .set(authHeader('NOTIFIER'))
                 .send({ isSeriousEvent: false });
             const malformed = await createClassification({ caseId: 'not-a-uuid' });
 
@@ -387,7 +388,7 @@ describe('classification contract', () => {
 
             const response = await request(app)
                 .post('/api/classifications')
-                .set(authHeader('USER'))
+                .set(authHeader('NOTIFIER'))
                 .send({ caseId });
 
             expect(response.status).toBe(400);
@@ -414,7 +415,7 @@ describe('classification contract', () => {
             const asFalse = await createClassification({ caseId: await createCaseFixture(), causedDeath: true, isSeriousEvent: false });
             const absent = await request(app)
                 .post('/api/classifications')
-                .set(authHeader('USER'))
+                .set(authHeader('NOTIFIER'))
                 .send({ caseId: await createCaseFixture(), causedHospitalization: true });
 
             expect(asFalse.status).toBe(201);
@@ -752,7 +753,7 @@ describe('classification contract', () => {
             const caseId = await createCaseFixture();
             const created = await request(app)
                 .post('/api/classifications')
-                .set(authHeader('USER'))
+                .set(authHeader('NOTIFIER'))
                 .send({ caseId, isSeriousEvent: 'false' });
 
             const response = await updateClassification(created.body.data.classificationId, {

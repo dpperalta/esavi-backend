@@ -21,7 +21,7 @@ import {
     updateNotificationMedicalHistoryValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
@@ -31,7 +31,7 @@ const router = Router();
 
 // Create Notification Medical History
 // Code: ESAVI-MEDHIST-001
-router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationMedicalHistoryValidator, validateFields, createNotificationMedicalHistory);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createNotificationMedicalHistoryValidator, validateFields, createNotificationMedicalHistory);
 
 // Get Notification Medical Histories by Case
 // Code: ESAVI-MEDHIST-006
@@ -60,7 +60,7 @@ router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...no
 
 // Activate Notification Medical History - For Admin
 // Code: ESAVI-MEDHIST-005B
-// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a NOTIFIER's
 // retirement belongs to whoever supervises the case, not to the system administrator
 router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationMedicalHistoryIdValidator, validateFields, activateNotificationMedicalHistory);
 
@@ -71,17 +71,17 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationMedic
 
 // Update Notification Medical History
 // Code: ESAVI-MEDHIST-004
-// USER and not ADMIN, which is the declared deviation from the matrix of the notification family:
+// NOTIFIER and not ADMIN, which is the declared deviation from the matrix of the notification family:
 // whoever records the antecedent is whoever corrects it, and forcing an ADMIN in to fix a capture
 // typo would break the operational flow in half
-router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, ...updateNotificationMedicalHistoryValidator, validateFields, updateNotificationMedicalHistory);
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationMedicalHistoryIdValidator, ...updateNotificationMedicalHistoryValidator, validateFields, updateNotificationMedicalHistory);
 
 // Delete Notification Medical History - Logical delete, for User
 // Code: ESAVI-MEDHIST-005A
-// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// NOTIFIER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
 // corrects and retires it. Retiring is a logical delete, reversible with 005B
 // Blocked by nothing: the table is a leaf of the graph. It seals deletedAt, which frees the
 // sortOrder from the partial unique index, and it does not touch the notification's flag
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationMedicalHistoryIdValidator, validateFields, deleteNotificationMedicalHistory);
+router.delete('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationMedicalHistoryIdValidator, validateFields, deleteNotificationMedicalHistory);
 
 export default router;

@@ -19,7 +19,7 @@ import {
     updateInvestigationPregnancyConditionValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
@@ -29,10 +29,10 @@ const router = Router();
 
 // Create Investigation Pregnancy Condition
 // Code: ESAVI-INVPREG-001
-// USER and not ADMIN, following the parent F32 and the twelve specs before it: the condition is
+// INVESTIGATOR and not ADMIN, following the parent F32 and the twelve specs before it: the condition is
 // captured in the same operational flow as the case, and splitting the pregnancy form between two
 // roles would break the capture in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationPregnancyConditionValidator, validateFields, createInvestigationPregnancyCondition);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationPregnancyConditionValidator, validateFields, createInvestigationPregnancyCondition);
 
 // Get All Investigation Pregnancy Conditions By Investigation - For Admin
 // Code: ESAVI-INVPREG-002B
@@ -66,12 +66,12 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationPreg
 
 // Update Investigation Pregnancy Condition
 // Code: ESAVI-INVPREG-004
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionIdValidator, ...updateInvestigationPregnancyConditionValidator, validateFields, updateInvestigationPregnancyCondition);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationPregnancyConditionIdValidator, ...updateInvestigationPregnancyConditionValidator, validateFields, updateInvestigationPregnancyCondition);
 
 // Delete Investigation Pregnancy Condition - Soft delete
 // Code: ESAVI-INVPREG-005A
-// USER and not ADMIN, following the same reason as 001: retracting the condition is part of the
+// INVESTIGATOR and not ADMIN, following the same reason as 001: retracting the condition is part of the
 // same clinical flow that creates and updates it
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationPregnancyConditionIdValidator, validateFields, deleteInvestigationPregnancyCondition);
+router.delete('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationPregnancyConditionIdValidator, validateFields, deleteInvestigationPregnancyCondition);
 
 export default router;

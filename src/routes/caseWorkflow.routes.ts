@@ -21,7 +21,7 @@ import {
     completeCaseWorkflowStageValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, EVALUATOR, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
@@ -57,30 +57,30 @@ router.get('/case/:caseId', tokenValidation, validateUserRole(USER), ...caseWork
 // Complete Case Workflow Stage
 // Code: ESAVI-CASEFLOW-007
 // Seals the end of one stage. It does NOT move the status — that is what 012 does
-router.patch('/case/:caseId/complete-stage', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, ...completeCaseWorkflowStageValidator, validateFields, completeCaseWorkflowStage);
+router.patch('/case/:caseId/complete-stage', tokenValidation, validateUserRole(NOTIFIER), ...caseWorkflowCaseIdValidator, ...completeCaseWorkflowStageValidator, validateFields, completeCaseWorkflowStage);
 
 // Close Case Workflow
 // Code: ESAVI-CASEFLOW-008
 // Verifies the four stage preconditions, seals closedAt and moves the status to CLOSED. This is
 // how a case file is finished; 005A only retires the workflow RECORD from view
-router.patch('/case/:caseId/close', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, closeCaseWorkflow);
+router.patch('/case/:caseId/close', tokenValidation, validateUserRole(EVALUATOR), ...caseWorkflowCaseIdValidator, validateFields, closeCaseWorkflow);
 
 // Reopen Case Workflow
 // Code: ESAVI-CASEFLOW-009
-// ADMIN. Increments reopenCount and stamps lastReopenedAt; closedAt is NOT cleared. REOPENED is
+// EVALUATOR. Increments reopenCount and stamps lastReopenedAt; closedAt is NOT cleared. REOPENED is
 // transitory — the next call to 012 takes the file out of it
-router.patch('/case/:caseId/reopen', tokenValidation, validateUserRole(ADMIN), ...caseWorkflowCaseIdValidator, validateFields, reopenCaseWorkflow);
+router.patch('/case/:caseId/reopen', tokenValidation, validateUserRole(EVALUATOR), ...caseWorkflowCaseIdValidator, validateFields, reopenCaseWorkflow);
 
 // Request Case Workflow Validation
 // Code: ESAVI-CASEFLOW-010
 // Saves the current status in previousStatusItemId and moves to PENDING_VALIDATION
-router.patch('/case/:caseId/request-validation', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, requestCaseWorkflowValidation);
+router.patch('/case/:caseId/request-validation', tokenValidation, validateUserRole(NOTIFIER), ...caseWorkflowCaseIdValidator, validateFields, requestCaseWorkflowValidation);
 
 // Resolve Case Workflow Validation
 // Code: ESAVI-CASEFLOW-011
 // Restores previousStatusItemId and clears it. Entering and leaving are two facts, two codes
 // and two audit entries — never one endpoint that toggles
-router.patch('/case/:caseId/resolve-validation', tokenValidation, validateUserRole(USER), ...caseWorkflowCaseIdValidator, validateFields, resolveCaseWorkflowValidation);
+router.patch('/case/:caseId/resolve-validation', tokenValidation, validateUserRole(EVALUATOR), ...caseWorkflowCaseIdValidator, validateFields, resolveCaseWorkflowValidation);
 
 // Get Case Workflow by ID
 // Code: ESAVI-CASEFLOW-003

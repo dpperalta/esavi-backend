@@ -20,15 +20,15 @@ import {
     updateNotificationValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
 // Create Notification
 // Code: ESAVI-NOTIFCN-001
-// USER and not ADMIN, departing from the canonical matrix: notifying is captured in the same
+// NOTIFIER and not ADMIN, departing from the canonical matrix: notifying is captured in the same
 // operational flow as the case, and with create in ADMIN the flow would break in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationValidator, validateFields, createNotification);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createNotificationValidator, validateFields, createNotification);
 
 // Get Notifications
 // Code: ESAVI-NOTIFCN-002A
@@ -59,8 +59,8 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationIdVal
 
 // Update Notification
 // Code: ESAVI-NOTIFCN-004
-// USER for the same reason as 001: correcting the notification is part of the same clinical flow
-router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationIdValidator, ...updateNotificationValidator, validateFields, updateNotification);
+// NOTIFIER for the same reason as 001: correcting the notification is part of the same clinical flow
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationIdValidator, ...updateNotificationValidator, validateFields, updateNotification);
 
 // Soft delete Notification
 // Code: ESAVI-NOTIFCN-005A

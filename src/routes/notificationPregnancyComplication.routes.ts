@@ -19,7 +19,7 @@ import {
     updateNotificationPregnancyComplicationValidator
 } from '../validators';
 
-const { SUPERADMIN, ADMIN, USER } = ROLES;
+const { SUPERADMIN, ADMIN, NOTIFIER, USER } = ROLES;
 
 const router = Router();
 
@@ -29,10 +29,10 @@ const router = Router();
 
 // Create Notification Pregnancy Complication
 // Code: ESAVI-PREGCOMP-001
-// USER and not ADMIN, following the parent F25 and not F24: the complication is captured in the same
+// NOTIFIER and not ADMIN, following the parent F25 and not F24: the complication is captured in the same
 // pregnancy form as the parent row, and splitting the form between two roles would break the capture
 // in half
-router.post('/', tokenValidation, validateUserRole(USER), ...createNotificationPregnancyComplicationValidator, validateFields, createNotificationPregnancyComplication);
+router.post('/', tokenValidation, validateUserRole(NOTIFIER), ...createNotificationPregnancyComplicationValidator, validateFields, createNotificationPregnancyComplication);
 
 // Get All Notification Pregnancy Complications By Pregnancy - For Admin
 // Code: ESAVI-PREGCOMP-002B
@@ -53,7 +53,7 @@ router.delete('/purge/:id', tokenValidation, validateUserRole(SUPERADMIN), ...no
 
 // Activate Notification Pregnancy Complication - For Admin
 // Code: ESAVI-PREGCOMP-005B
-// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a USER's
+// ADMIN and not SUPERADMIN, under the clinical file exception of CONVENTIONS §9: undoing a NOTIFIER's
 // retirement belongs to whoever supervises the case, not to the system administrator
 // Declared with the literal paths, before /:id
 router.patch('/activate/:id', tokenValidation, validateUserRole(ADMIN), ...notificationPregnancyComplicationIdValidator, validateFields, activateNotificationPregnancyComplication);
@@ -66,12 +66,12 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...notificationPregn
 
 // Update Notification Pregnancy Complication
 // Code: ESAVI-PREGCOMP-004
-router.put('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationIdValidator, ...updateNotificationPregnancyComplicationValidator, validateFields, updateNotificationPregnancyComplication);
+router.put('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationPregnancyComplicationIdValidator, ...updateNotificationPregnancyComplicationValidator, validateFields, updateNotificationPregnancyComplication);
 
 // Delete Notification Pregnancy Complication - Soft delete
 // Code: ESAVI-PREGCOMP-005A
-// USER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
+// NOTIFIER and not ADMIN, under the clinical file exception of CONVENTIONS §9: whoever records the row
 // corrects and retires it. Retiring is a logical delete, reversible with 005B
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...notificationPregnancyComplicationIdValidator, validateFields, deleteNotificationPregnancyComplication);
+router.delete('/:id', tokenValidation, validateUserRole(NOTIFIER), ...notificationPregnancyComplicationIdValidator, validateFields, deleteNotificationPregnancyComplication);
 
 export default router;

@@ -1055,6 +1055,8 @@
         "notPending": "El caso no está pendiente de validación",
         "previousStatusMissing": "El caso está pendiente de validación pero no conserva el estado anterior. Contacte al administrador del sistema.",
         "stageNotStarted": "La etapa {{stage}} aún no ha iniciado, por lo que no puede cerrarse",
+
+        "stageForbidden": "Tu rol no permite completar la etapa {{stage}}",
         "stageAlreadyCompleted": "La etapa {{stage}} ya está cerrada",
         "classificationRequired": "El caso no puede cerrarse sin una clasificación registrada",
         "notificationRequired": "El caso no puede cerrarse sin una notificación registrada",

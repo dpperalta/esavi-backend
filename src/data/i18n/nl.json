@@ -1055,6 +1055,8 @@
         "notPending": "Het geval wacht niet op validatie",
         "previousStatusMissing": "Het geval wacht op validatie maar bewaart de vorige status niet. Neem contact op met de systeembeheerder.",
         "stageNotStarted": "De fase {{stage}} is nog niet gestart en kan dus niet worden afgesloten",
+
+        "stageForbidden": "Uw rol staat niet toe de fase {{stage}} af te ronden",
         "stageAlreadyCompleted": "De fase {{stage}} is al afgesloten",
         "classificationRequired": "Het geval kan niet worden gesloten zonder classificatie",
         "notificationRequired": "Het geval kan niet worden gesloten zonder melding",

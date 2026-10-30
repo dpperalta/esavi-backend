@@ -20,17 +20,17 @@ import {
     updateInvestigationDiagnosticValidator
 } from '../validators';
 
-const { ADMIN, SUPERADMIN, USER } = ROLES;
+const { ADMIN, SUPERADMIN, INVESTIGATOR, USER } = ROLES;
 
 const router = Router();
 
 // Create Investigation Diagnostic
 // Code: ESAVI-INVDIAG-001
-// USER and not ADMIN, the matrix of the investigation family: whoever captures the investigation is
-// the same USER who records its final diagnoses. It is the literal matrix of INVTEAM, INVPREG and
+// INVESTIGATOR and not ADMIN, the matrix of the investigation family: whoever captures the investigation is
+// the same INVESTIGATOR who records its final diagnoses. It is the literal matrix of INVTEAM, INVPREG and
 // INVVACAD, and the deviation from the canonical one of §9 belongs to the whole family and not to
 // this entity
-router.post('/', tokenValidation, validateUserRole(USER), ...createInvestigationDiagnosticValidator, validateFields, createInvestigationDiagnostic);
+router.post('/', tokenValidation, validateUserRole(INVESTIGATOR), ...createInvestigationDiagnosticValidator, validateFields, createInvestigationDiagnostic);
 
 // Get Investigation Diagnostics By Case ID
 // Code: ESAVI-INVDIAG-006
@@ -81,17 +81,17 @@ router.get('/:id', tokenValidation, validateUserRole(USER), ...investigationDiag
 
 // Update Investigation Diagnostic
 // Code: ESAVI-INVDIAG-004
-// USER, like the 001: whoever captures the investigation is who corrects its diagnoses. The update
+// INVESTIGATOR, like the 001: whoever captures the investigation is who corrects its diagnoses. The update
 // is differential — the write is fired by the real change of value and never by the presence of the
 // key — so resending the whole response of the GET writes nothing at all
-router.put('/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticIdValidator, ...updateInvestigationDiagnosticValidator, validateFields, updateInvestigationDiagnostic);
+router.put('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationDiagnosticIdValidator, ...updateInvestigationDiagnosticValidator, validateFields, updateInvestigationDiagnostic);
 
 // Delete Investigation Diagnostic
 // Code: ESAVI-INVDIAG-005A
-// USER and not ADMIN, departing from the canonical role for soft delete: it is part of the same
+// INVESTIGATOR and not ADMIN, departing from the canonical role for soft delete: it is part of the same
 // clinical flow that captures and updates the diagnostic. It seals deletedAt, which frees the
 // sortOrder from the partial unique index — deliberate: the gap stays available for the next
 // diagnosis, and it is the collision ESAVI-INVDIAG-005B has to resolve
-router.delete('/:id', tokenValidation, validateUserRole(USER), ...investigationDiagnosticIdValidator, validateFields, deleteInvestigationDiagnostic);
+router.delete('/:id', tokenValidation, validateUserRole(INVESTIGATOR), ...investigationDiagnosticIdValidator, validateFields, deleteInvestigationDiagnostic);
 
 export default router;

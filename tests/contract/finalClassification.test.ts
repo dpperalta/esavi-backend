@@ -102,7 +102,7 @@ describe('finalClassification contract', () => {
         inactiveImportanceId = inactive.getDataValue('catalogItemId');
     };
 
-    const create = ( payload: Record<string, unknown> = {}, role: TestRole = 'USER' ) =>
+    const create = ( payload: Record<string, unknown> = {}, role: TestRole = 'EVALUATOR' ) =>
         request(app).post('/api/final-classifications').set(authHeader(role)).send(payload);
 
     const get = ( id: string, role: TestRole = 'USER' ) =>
@@ -117,7 +117,7 @@ describe('finalClassification contract', () => {
     const listAdmin = ( query: string = '', role: TestRole = 'ADMIN' ) =>
         request(app).get(`/api/final-classifications/admin${ query }`).set(authHeader(role));
 
-    const update = ( id: string, payload: Record<string, unknown>, role: TestRole = 'USER' ) =>
+    const update = ( id: string, payload: Record<string, unknown>, role: TestRole = 'EVALUATOR' ) =>
         request(app).put(`/api/final-classifications/${ id }`).set(authHeader(role)).send(payload);
 
     const remove = ( id: string, role: TestRole = 'ADMIN' ) =>
@@ -804,7 +804,7 @@ describe('finalClassification contract', () => {
                 path: '/api/final-classifications',
                 id,
                 model: FinalClassification,
-                role: 'USER'
+                role: 'EVALUATOR'
             });
         });
 
