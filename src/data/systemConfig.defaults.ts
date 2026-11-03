@@ -386,5 +386,15 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfigDefault[] = [
         scope: 'NOTIFICATION',
         isEncrypted: false,
         isEditable: true
+    },
+    {
+        code: 'ESAVI_DASHBOARD_STALE_DAYS',
+        name: 'Días para considerar un caso estancado',
+        description: 'Días que un caso no cerrado puede pasar en su etapa abierta, o desde su última reapertura, antes de que el dashboard lo marque como estancado. Un valor menor que 1 desactiva la detección.',
+        value: 15,
+        valueType: 'number',
+        scope: 'DASHBOARD',
+        isEncrypted: false,
+        isEditable: true
     }
 ];
