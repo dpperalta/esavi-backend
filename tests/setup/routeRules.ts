@@ -776,5 +776,7 @@ export const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: '/api/dashboard/indicators',                               minRole: 'ANALYTICS',  code: 'ESAVI-DASH-007' },
     { method: 'get',    path: '/api/dashboard/epi-curve',                                minRole: 'ANALYTICS',  code: 'ESAVI-DASH-008' },
     { method: 'get',    path: '/api/dashboard/distributions',                            minRole: 'ANALYTICS',  code: 'ESAVI-DASH-009' },
-    { method: 'get',    path: '/api/dashboard/batch-alerts',                             minRole: 'ANALYTICS',  code: 'ESAVI-DASH-010' }
+    { method: 'get',    path: '/api/dashboard/batch-alerts',                             minRole: 'ANALYTICS',  code: 'ESAVI-DASH-010' },
+    { method: 'get',    path: '/api/dashboard/recent-activity',                          minRole: 'USER',       code: 'ESAVI-DASH-011' },
+    { method: 'get',    path: '/api/dashboard/system-activity',                          minRole: 'SUPERADMIN', code: 'ESAVI-DASH-012' }
 ];

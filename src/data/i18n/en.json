@@ -1145,6 +1145,10 @@
         "distributionsFailed": "Failed to fetch the dashboard case distributions. Please try again later.",
         "batchAlertsSuccess": "Dashboard batch clustering alerts fetched successfully",
         "batchAlertsFailed": "Failed to fetch the dashboard batch clustering alerts. Please try again later.",
+        "recentActivitySuccess": "Dashboard recent case activity fetched successfully",
+        "recentActivityFailed": "Failed to fetch the dashboard recent case activity. Please try again later.",
+        "systemActivitySuccess": "Dashboard system activity fetched successfully",
+        "systemActivityFailed": "Failed to fetch the dashboard system activity. Please try again later.",
         "invalidPeriod": "Invalid period: the start date cannot be later than the end date, the end date cannot be in the future and the range cannot exceed {{maxDays}} days."
     }
 }

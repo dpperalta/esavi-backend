@@ -1,6 +1,6 @@
 # SPEC F69 — Dashboard: actividad reciente
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01, SPEC 04, SPEC 05, SPEC 06 (`AppDetails` tipado), SPEC 08, **SPEC F42** (`appSession`, motivos de revocación), **SPEC F44** (`caseWorkflow`), **SPEC F49** (alcance geográfico), **SPEC F59** (autor de auditoría por email), **SPEC F63** (retención de `appSession`), **SPEC F65** (marco `DASH`, universo U)
 > **Fecha:** 2026-11-02
 > **Objetivo:** Mostrar en el home qué ha pasado últimamente en los casos del territorio del usuario y en cuáles intervino él, y dar al SUPERADMIN un resumen del uso del sistema por sesiones, sin exponer más de lo que cada rol ya puede ver.

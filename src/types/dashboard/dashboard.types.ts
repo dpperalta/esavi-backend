@@ -128,3 +128,33 @@ export interface DashboardBatchAlerts {
     total: number; batchesEvaluated: number; casesWithoutBatch: number;
     alerts: DashboardBatchAlert[];
 }
+
+export type DashboardActivityAction =
+    'CASE_CREATED' | 'CASE_UPDATED' | 'CASE_DEACTIVATED' | 'CASE_ACTIVATED' |
+    'WORKFLOW_DEACTIVATED' | 'WORKFLOW_ACTIVATED' | 'STAGE_STARTED' | 'STAGE_COMPLETED' |
+    'CASE_CLOSED' | 'CASE_REOPENED' | 'VALIDATION_REQUESTED' | 'VALIDATION_RESOLVED' | 'OTHER';
+
+export interface DashboardActivityEvent {
+    caseId: string; caseCode: string; occurredAt: string;
+    method: string; action: DashboardActivityAction; author: string | null;
+}
+
+export interface DashboardMyCase {
+    caseId: string; caseCode: string; statusCode: string;
+    lastActionAt: string; lastAction: DashboardActivityAction;
+}
+
+export interface DashboardRecentActivity {
+    windowDays: number;
+    scope: { restricted: boolean; hasAssignments: boolean };
+    territory: DashboardActivityEvent[];
+    myCases: DashboardMyCase[];
+}
+
+export interface DashboardSystemActivity {
+    generatedAt: string;
+    activeSessions: number;
+    activeUsers24h: number; activeUsers7d: number;
+    sessionsStarted24h: number; sessionsStarted7d: number;
+    revocations7d: { reason: string; count: number }[];
+}
