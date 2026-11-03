@@ -72,3 +72,5 @@ export interface DashboardIndicators {
         aSubcategories: Record<DashboardASubcategory, number>;
     };
 }
+
+export interface EpiWeek { epiYear: number; epiWeek: number; label: string; weekStart: string; }
