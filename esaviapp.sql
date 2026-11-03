@@ -1920,7 +1920,8 @@ UPDATE "catalogItem"
  WHERE "value" ~ '\s';
 
 -- 3. Lock the values that src/ resolves items by. A value is locked if and only
---    if some file under src/ names it - today five rows in three catalogs.
+--    if some file under src/ names it - today eight rows in four catalogs. The
+--    three "sex" rows are resolved by the dashboard distributions (SPEC F67).
 --    "isActive" is forced back on in the same statement: a locked row is alive
 --    by definition, even if someone had withdrawn it before this deployment.
 UPDATE "catalogItem" ci
@@ -1934,7 +1935,10 @@ UPDATE "catalogItem" ci
      ('ageUnit', 'MONTHS'),
      ('ageUnit', 'DAYS'),
      ('outcome', 'DEATH'),
-     ('investigationStatus', 'UNKNOWN')
+     ('investigationStatus', 'UNKNOWN'),
+     ('sex', 'FEMALE'),
+     ('sex', 'MALE'),
+     ('sex', 'UNKNOWN')
    )
    AND (ci."isValueLocked" IS DISTINCT FROM true
         OR ci."isActive" IS DISTINCT FROM true

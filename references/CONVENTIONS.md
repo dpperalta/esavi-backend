@@ -217,6 +217,8 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | geoLocation | `007` | generación de la plantilla `.xlsx` con catálogos incrustados — ADMIN, `GET /import/template` |
 | dashboard | `006` | trabajo pendiente — embudo, estancados, investigaciones pendientes y reabiertos, acotado por F49. `GET /pending-work`, USER |
 | dashboard | `007` | indicadores de vigilancia de un periodo, comparados con el anterior y acotados por F49. `GET /indicators`, ANALYTICS |
+| dashboard | `008` | curva por semana epidemiológica OPS de un periodo, acotada por F49. `GET /epi-curve`, ANALYTICS |
+| dashboard | `009` | vacunas, sexo y edad, geografía y fallos programáticos de un periodo, acotados por F49. `GET /distributions`, ANALYTICS |
 
 `appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4). El `008` sigue el mismo razonamiento: purgar por retención no es un `005C`, porque no lo pide un cliente sobre una fila concreta, sino que lo decide la antigüedad de la fila (SPEC F63 §3.4).
 

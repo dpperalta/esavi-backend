@@ -66,7 +66,7 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-044](#deuda-044) | 🟠 | ✅ `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla |
 | [DEUDA-045](#deuda-045) | 🟠 | ✅ `appDetails.user` expone el UUID interno del usuario en toda respuesta |
 | [DEUDA-046](#deuda-046) | 🔴 | ✅ El rate limit se cuenta por IP y sin `trust proxy` |
-| [DEUDA-047](#deuda-047) | 🟡 | `investigationAutopsy` no tiene `isActive` |
+| [DEUDA-047](#deuda-047) | 🟡 | Las satélites 1:1 de `investigation` (`investigationAutopsy`, `investigationAdministrationError`, `investigationColdChain`) no tienen `isActive` |
 
 ## Mapa de resolución
 
@@ -998,16 +998,16 @@ Verificado: `npm run check` en 0 — build, lint (0 errores), `i18n:check` con 9
 ---
 
 <a id="deuda-047"></a>
-## DEUDA-047 🟡 `investigationAutopsy` no tiene `isActive`
+## DEUDA-047 🟡 Las satélites 1:1 de `investigation` no tienen `isActive`
 
-**Archivos**: `esaviapp.sql:1075-1092`, `src/models/investigationAutopsy.model.ts`, `src/services/investigationAutopsy.service.ts`
+**Archivos**: `esaviapp.sql:1075-1092`, `esaviapp.sql:1274-1297`, `esaviapp.sql:1299-1335`, `src/models/investigationAutopsy.model.ts`, `src/models/investigationColdChain.model.ts`, `src/models/investigationAdministrationError.model.ts`, `src/services/investigationAutopsy.service.ts`, `src/services/investigationColdChain.service.ts`, `src/services/investigationAdministrationError.service.ts`
 
-Detectada el 2026-11-02 al redactar el [SPEC F66](./functional/specs/66-dashboard-indicators.md), que es el primer consumidor que agrega la tabla fuera de su propio CRUD.
+Detectada el 2026-11-02 al redactar el [SPEC F66](./functional/specs/66-dashboard-indicators.md), que es el primer consumidor que agrega `investigationAutopsy` fuera de su propio CRUD. Ampliada el mismo día por el [SPEC F67](./functional/specs/67-dashboard-series-distributions.md), que agrega `investigationAdministrationError` ([SPEC F39](./functional/specs/39-investigationadministrationerror-crud.md)) e `investigationColdChain` ([SPEC F38](./functional/specs/38-investigationcoldchain-crud.md)) para los fallos programáticos del dashboard. Las tres son tablas satélite 1:1 de la investigación y comparten la misma anomalía.
 
 El DDL declara `createdAt`, `updatedAt`, `deletedAt`, `sysDetails` y `appDetails`, pero **no** `isActive`, que es una de las columnas transversales que el canon exige a toda tabla. El [SPEC F30](./functional/specs/30-investigationautopsy-crud.md) lo aceptó de forma deliberada, siguiendo el patrón de satélite sin `isActive` que fijaron F13 y F14 y que mantuvo F29: no hay `005A` ni `005B`, y la visibilidad se hereda de `investigation.isActive`.
 
-Dentro de su CRUD la ausencia está resuelta. El problema aparece fuera de él: todo consumidor que lea la tabla directamente tiene que saber que su marca de vigencia es `deletedAt IS NULL` y no `isActive = true`. Es una excepción que no se ve en la tabla y que cada nuevo consumidor tiene que redescubrir. F66 es el primero: cuenta defunciones (`isDeath`) y autopsias realizadas (`isAutopsyPerformed`) filtrando por `deletedAt IS NULL`.
+Dentro de su CRUD la ausencia está resuelta. El problema aparece fuera de él: todo consumidor que lea la tabla directamente tiene que saber que su marca de vigencia es `deletedAt IS NULL` y no `isActive = true`. Es una excepción que no se ve en la tabla y que cada nuevo consumidor tiene que redescubrir. F66 es el primero: cuenta defunciones (`isDeath`) y autopsias realizadas (`isAutopsyPerformed`) filtrando por `deletedAt IS NULL`. F67 es el segundo: cuenta errores de administración y fallos de cadena de frío con el mismo filtro, sobre `investigationAdministrationError` e `investigationColdChain`.
 
 Hay otras tres tablas en la misma situación —`severeNotification`, `nonSevereNotification` e `investigationSource`— que heredan el mismo riesgo en cuanto alguien las agregue.
 
-**Aceptación**: decidir entre dos caminos. O se añade `isActive` a las cuatro tablas en `esaviapp.sql`, con sus modelos y un `005A`/`005B` por entidad, o se documenta en la sección de columnas transversales de [CONVENTIONS.md](./CONVENTIONS.md) que estas cuatro tablas satélite usan `deletedAt IS NULL` como marca de vigencia. En cualquiera de los dos casos, los consumidores agregados (F66 y siguientes) quedan alineados con la decisión.
+**Aceptación**: decidir entre dos caminos. O se añade `isActive` a las seis tablas en `esaviapp.sql`, con sus modelos y un `005A`/`005B` por entidad, o se documenta en la sección de columnas transversales de [CONVENTIONS.md](./CONVENTIONS.md) que estas seis tablas satélite usan `deletedAt IS NULL` como marca de vigencia. En cualquiera de los dos casos, los consumidores agregados (F66 y siguientes) quedan alineados con la decisión.

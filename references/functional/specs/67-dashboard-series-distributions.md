@@ -1,6 +1,6 @@
 # SPEC F67 — Dashboard: series y distribuciones
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01, SPEC 02, SPEC 04, SPEC 05, SPEC 08, **SPEC F09** (`classification`, edad), **SPEC F22** (`notificationVaccine`), **SPEC F38** (`investigationColdChain`), **SPEC F39** (`investigationAdministrationError`), **SPEC F49** (alcance geográfico), **SPEC F65** (marco `DASH`), **SPEC F66** (periodo, filtro geográfico y universo Uₚ)
 > **Fecha:** 2026-11-02
 > **Objetivo:** Dar al home la curva epidemiológica semanal del periodo y la distribución de sus casos por vacuna sospechosa, sexo y edad, unidad geográfica y fallo programático, con el mismo universo y el mismo alcance que los indicadores de F66.
@@ -94,7 +94,7 @@ Además de las de F66 §3.1 (`esaviCase`, `healthFacility`, `caseWorkflow`, `cla
 | `notification` | `:803` | `notificationId`, `caseId` (`UQ_notification_case`) | `isActive` | Puente caso → vacuna |
 | `vaccineWhodrug` | `:604` | `vaccineWhodrugId`, `drugName` (`NOT NULL`) | — | Nombre de la vacuna codificada |
 | `classification` | `:775-801` | `age` (`:778`, `CHECK >= 0`), `ageUnitItemId` (`:779`) | `isActive` | Edad |
-| `catalogItem` | `:214` | `code` de los tipos `ageUnit` (`YEARS`, `MONTHS`, `DAYS`, `:1775-1777`) y `sex` (`FEMALE`, `MALE`, `UNKNOWN`, `:1779-1781`) | — | Unidades y sexo |
+| `catalogItem` | `:214` | `value` con `isValueLocked = true` (SPEC F46) de los tipos `ageUnit` (`YEARS`, `MONTHS`, `DAYS`, `:1775-1777`) y `sex` (`FEMALE`, `MALE`, `UNKNOWN`, `:1779-1781`). El `code` es del país y no se usa | — | Unidades y sexo |
 | `patient` | `:699-721` | `patientId`, `sexItemId` (`:710`) | — | Sexo |
 | `geoLocation` | `:447-471` | `geoLocationId`, `parentGeoLocationId` (`IX_geoLocation_parent`), `name`, `latitude`, `longitude` | `isActive` | Filas geográficas |
 | `appUserGeoLocation` | `:510` | `userId`, `geoLocationId` | `isActive`, `deletedAt IS NULL` | Raíces de un usuario restringido |
@@ -140,14 +140,14 @@ Las comprobaciones de §5 fijan tres años con 53 semanas o con un cambio de añ
 
 **`ESAVI-DASH-009` — sexo y edad.**
 
-*Edad en años cumplidos (`ageYears`)* a partir de `classification.age` y del `code` de `ageUnitItemId`:
+*Edad en años cumplidos (`ageYears`)* a partir de `classification.age` y del `value` bloqueado del `catalogItem` de `ageUnitItemId`:
 
 | Unidad | Regla |
 |---|---|
 | `YEARS` | `age` |
 | `MONTHS` | `floor(age / 12)` |
 | `DAYS` | `floor(age / 365)` |
-| sin clasificación, `age` nula, unidad nula o código desconocido | desconocida |
+| sin clasificación, `age` nula, unidad nula o `value` desconocido o no bloqueado | desconocida |
 
 *Bandas* (`DASHBOARD_AGE_BANDS`):
 
@@ -163,7 +163,9 @@ Las comprobaciones de §5 fijan tres años con 53 semanas o con un cambio de añ
 | `Y80_PLUS` | ≥ 80 |
 | `UNKNOWN` | edad desconocida |
 
-*Sexo:* el `code` del `catalogItem` de `patient.sexItemId` (`FEMALE`, `MALE`, `UNKNOWN`). Sin `sexItemId`, o con un código fuera de esos tres → `NONE`.
+*Sexo:* el `value` bloqueado del `catalogItem` de `patient.sexItemId` (`FEMALE`, `MALE`, `UNKNOWN`). Sin `sexItemId`, o con un `value` fuera de esos tres o sin bloquear → `NONE`.
+
+*Bloqueo de los values de sexo:* por la regla de SPEC F46 —un `value` se bloquea si y solo si `src/` lo nombra—, el bloque de despliegue de `esaviapp.sql` añade `('sex', 'FEMALE')`, `('sex', 'MALE')` y `('sex', 'UNKNOWN')` a los values bloqueados. Es un cambio de datos del seed, no de esquema.
 
 *Salida:* una matriz completa de 9 × 4, en el orden de las tablas, con ceros explícitos. La suma de la matriz es igual a |Uₚ|.
 
@@ -182,7 +184,12 @@ Las comprobaciones de §5 fijan tres años con 53 semanas o con un cambio de añ
 *Dos filas especiales:*
 
 - `self`: con `geoLocationId`, los casos ubicados **en la propia unidad** de referencia y no en un hijo;
-- `unlocated`: solo para administradores sin `geoLocationId`, los casos cuyo establecimiento no tiene `geoLocationId`.
+- `unlocated`: para cualquier usuario y con o sin `geoLocationId`, los casos de Uₚ que no se pueden atribuir a ninguna fila de R ni a `self`. Son tres situaciones:
+  - el establecimiento no tiene `geoLocationId`;
+  - su unidad está inactiva o cuelga de un ancestro inactivo, de modo que el recorrido recursivo no la alcanza;
+  - su unidad cuelga de un hijo de la unidad de referencia que el filtro de alcance retiró de R, como un usuario asignado a un cantón que consulta el país.
+
+  La fila no expone el nombre ni el `geoLocationId` de ninguna de esas unidades.
 
 Ambas van con `geoLocationId: null` y una etiqueta fija. Se omiten si valen 0.
 
@@ -409,10 +416,11 @@ Depende de que F65 y F66 estén implementados: dominio `DASH`, `dashboardPeriodV
 
 **Geografía (`009`)**
 
-- [ ] Un ADMIN sin `geoLocationId` recibe como filas las unidades sin padre, incluidas las que tienen 0, y la fila `unlocated` si hay casos en establecimientos sin ubicación.
+- [ ] Un ADMIN sin `geoLocationId` recibe como filas las unidades sin padre, incluidas las que tienen 0, y la fila `unlocated` si hay casos no atribuibles (establecimientos sin ubicación o bajo unidades inactivas).
 - [ ] Con `geoLocationId = <provincia>`, las filas son sus cantones, más `self` si hay casos ubicados directamente en la provincia.
 - [ ] Un usuario restringido asignado a una provincia y a uno de sus cantones ve una sola fila: la provincia.
 - [ ] Un usuario restringido con `geoLocationId` de una unidad que contiene territorio ajeno no recibe como fila ningún hijo fuera de su alcance. Ni el nombre ni el `geoLocationId` de ese hijo aparecen en la respuesta.
+- [ ] Un usuario restringido asignado a un cantón que consulta con `geoLocationId` = el país ve sus casos en la fila `unlocated`, y ninguna provincia como fila.
 - [ ] `Σ rows.total = |Uₚ|`.
 - [ ] Ninguna fila trae `geoPolygon`.
 

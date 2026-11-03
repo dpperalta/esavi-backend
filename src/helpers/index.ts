@@ -10,6 +10,7 @@ export * from './i18n.helper';
 export * from './crypto.helper';
 export * from './dashboardPeriod.helper';
 export * from './differentialUpdate.helper';
+export * from './epiWeek.helper';
 export * from './geoImportParser.helper';
 export * from './geoTemplateBuilder.helper';
 export * from './identifier.helper';

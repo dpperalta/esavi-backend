@@ -712,8 +712,8 @@ describe('catalogItem contract', () => {
      * `value` belongs to this source code, which resolves items by it, and is frozen by
      * `isValueLocked` so a recoding cannot silently break the lookup. The lock itself is never
      * set through the API — it is written only by esaviapp.sql's deployment block — so this
-     * suite reads the five rows the deployment already locked (ageUnit YEARS/MONTHS/DAYS,
-     * outcome DEATH, investigationStatus UNKNOWN) rather than minting its own.
+     * suite reads the rows the deployment already locked (ageUnit YEARS/MONTHS/DAYS,
+     * outcome DEATH, investigationStatus UNKNOWN, sex FEMALE/MALE/UNKNOWN) rather than minting its own.
      */
     describe('value lock — SPEC F46', () => {
 

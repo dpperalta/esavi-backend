@@ -72,3 +72,40 @@ export interface DashboardIndicators {
         aSubcategories: Record<DashboardASubcategory, number>;
     };
 }
+
+export interface EpiWeek { epiYear: number; epiWeek: number; label: string; weekStart: string; }
+
+export interface DashboardEpiWeek {
+    label: string; epiYear: number; epiWeek: number; weekStart: string;
+    partial: boolean; serious: number; nonSerious: number; unclassified: number; total: number;
+}
+
+export interface DashboardEpiCurve {
+    period: DashboardPeriod;
+    scope: { restricted: boolean; hasAssignments: boolean; geoLocationId: string | null };
+    weeks: DashboardEpiWeek[];
+}
+
+export interface DashboardVaccineRow { key: string; label: string | null; coded: boolean; cases: number; serious: number; }
+
+export interface DashboardGeoRow {
+    geoLocationId: string | null; kind: 'unit' | 'self' | 'unlocated';
+    name: string | null; latitude: number | null; longitude: number | null; total: number; serious: number;
+}
+
+export interface DashboardDistributions {
+    period: DashboardPeriod;
+    scope: { restricted: boolean; hasAssignments: boolean; geoLocationId: string | null };
+    vaccines: { items: DashboardVaccineRow[]; others: { cases: number; serious: number }; casesWithoutSuspectedVaccine: number };
+    sexAge: { bands: string[]; sexes: string[]; matrix: number[][] };
+    geography: { rows: DashboardGeoRow[] };
+    programmatic: {
+        investigatedCases: number;
+        withoutAdministrationRecord: number;
+        withoutColdChainRecord: number;
+        administrationErrors: Record<'prescriptionError' | 'contaminatedVaccine' | 'abnormalVaccineConditions' | 'preparationError' | 'handlingError' | 'improperAdministration' | 'anyError', number>;
+        coldChainFailures: Record<'rangeDeviation' | 'procedureNotFollowed' | 'vaccineNotUsable' | 'diluentNotUsable' | 'partiallyReconstitutedVaccine' | 'otherObjectPresent' | 'anyFailure', number>;
+    };
+}
+
+export interface DashboardAgeBand { code: string; minYears: number | null; maxYears: number | null; }

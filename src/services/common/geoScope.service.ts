@@ -49,12 +49,7 @@ interface UserGeoRootRow {
     geoLocationId: string;
 }
 
-// The geographic scope of a user: null for an administrator (no restriction, same convention as
-// buildFacilityInclude), or the list of geoLocationId the user's active appUserGeoLocation
-// assignments expand to. An authUser without assignments gets [], which is scope, not "sees all".
-// authUser absent is treated as empty scope, not as an admin — the default of a control is closed
-const resolveUserGeoScopeIds = async (authUser?: AuthUser): Promise<string[] | null> => {
-    if( isAdmin(authUser) ) return null;
+const resolveUserGeoRootIds = async (authUser?: AuthUser): Promise<string[]> => {
     if( !authUser ) return [];
 
     const roots = await sequelize.query<UserGeoRootRow>(
@@ -71,10 +66,21 @@ const resolveUserGeoScopeIds = async (authUser?: AuthUser): Promise<string[] | n
             type: QueryTypes.SELECT
         }
     );
-    const rootIds = roots.map(( row ) => row.geoLocationId );
+    return roots.map(( row ) => row.geoLocationId );
+}
+
+// The geographic scope of a user: null for an administrator (no restriction, same convention as
+// buildFacilityInclude), or the list of geoLocationId the user's active appUserGeoLocation
+// assignments expand to. An authUser without assignments gets [], which is scope, not "sees all".
+// authUser absent is treated as empty scope, not as an admin — the default of a control is closed
+const resolveUserGeoScopeIds = async (authUser?: AuthUser): Promise<string[] | null> => {
+    if( isAdmin(authUser) ) return null;
+    if( !authUser ) return [];
+
+    const rootIds = await resolveUserGeoRootIds(authUser);
     if( rootIds.length === 0 ) return [];
 
     return resolveGeoSubtreeIds(rootIds);
 }
 
-export { MAX_GEO_SUBTREE_DEPTH, resolveGeoSubtreeIds, resolveUserGeoScopeIds };
+export { MAX_GEO_SUBTREE_DEPTH, resolveGeoSubtreeIds, resolveUserGeoRootIds, resolveUserGeoScopeIds };

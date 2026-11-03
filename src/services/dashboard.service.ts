@@ -1,13 +1,17 @@
 import { QueryTypes } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType } from '../models';
-import { AppError, esaviLog, getAppConfigNumber, getMessage, resolveDashboardPeriod } from '../helpers';
+import { AppError, esaviLog, getAppConfigNumber, getMessage, listEpiWeeks, resolveDashboardPeriod } from '../helpers';
 import {
     AuthUser,
     CaseWorkflowStage,
     DashboardASubcategory,
     DashboardCausalityCategory,
     DashboardComparable,
+    DashboardDistributions,
+    DashboardEpiCurve,
+    DashboardEpiWeek,
+    DashboardGeoRow,
     DashboardIndicators,
     DashboardPendingInvestigation,
     DashboardPendingWork,
@@ -15,18 +19,22 @@ import {
     DashboardPeriodQuery,
     DashboardSeverityCriterion,
     DashboardStalledCase,
-    DashboardStatusCount
+    DashboardStatusCount,
+    DashboardVaccineRow
 } from '../types';
 import { CASE_WORKFLOW_STAGE_FIELD, CASE_WORKFLOW_STAGES, CASE_WORKFLOW_STATUS, CASE_WORKFLOW_STATUS_CATALOG_CODE } from '../constants/caseWorkflow.constants';
 import {
+    DASHBOARD_AGE_BANDS,
     DASHBOARD_CONFIG_SCOPE,
+    DASHBOARD_SEX_CODES,
     DASHBOARD_STALE_DAYS_CODE,
     DASHBOARD_TOP_LIMIT,
+    DASHBOARD_VACCINE_TOP_LIMIT,
     NOTIFICATION_CONFIG_SCOPE,
     NOTIFICATION_DEADLINE_DAYS_CODE
 } from '../constants/dashboard.constants';
 import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE, FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE } from '../constants/finalClassification.constants';
-import { resolveGeoSubtreeIds, resolveUserGeoScopeIds } from './common/geoScope.service';
+import { MAX_GEO_SUBTREE_DEPTH, resolveGeoSubtreeIds, resolveUserGeoRootIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 
 const MISSING_CONFIG_CODE = 'APPCONFIG_VALUE_MISSING';
 
@@ -96,7 +104,7 @@ const OPEN_STAGE_VALUES = CASE_WORKFLOW_STAGES
     .join(',\n                ');
 
 const buildUniverseSql = (restricted: boolean): string => `
-    SELECT c."caseId", c."caseCode", c."reportDate", c."eventDate", s."code" AS "statusCode", w."statusItemId", w."openedAt", w."closedAt",
+    SELECT c."caseId", c."caseCode", c."patientId", c."healthFacilityId", c."reportDate", c."eventDate", s."code" AS "statusCode", w."statusItemId", w."openedAt", w."closedAt",
         w."classificationStartedAt", w."classificationEndedAt",
         w."notificationStartedAt", w."notificationEndedAt",
         w."investigationStartedAt", w."investigationEndedAt",
@@ -580,8 +588,519 @@ const getIndicatorsService = async (query: DashboardPeriodQuery, authUser: AuthU
     }
 }
 
+interface EpiCurveRow {
+    weekStart: string;
+    serious: number;
+    nonSerious: number;
+    unclassified: number;
+}
+
+type DashboardScope = DashboardEpiCurve['scope'];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const addIsoDays = (isoDate: string, days: number): string => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day) + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+const resolvePeriodScope = async (
+    query: DashboardPeriodQuery,
+    authUser: AuthUser | undefined
+): Promise<{ userScopeIds: string[] | null; scopeIds: string[] | null; scope: DashboardScope }> => {
+    const userScopeIds = await resolveUserGeoScopeIds(authUser);
+    const scopeIds = await resolveIndicatorsScopeIds(userScopeIds, query.geoLocationId);
+    return {
+        userScopeIds,
+        scopeIds,
+        scope: {
+            restricted: scopeIds !== null,
+            hasAssignments: userScopeIds === null || userScopeIds.length > 0,
+            geoLocationId: query.geoLocationId ?? null
+        }
+    };
+}
+
+const buildPeriodReplacements = (period: DashboardPeriod, scopeIds: string[] | null): Record<string, unknown> => {
+    const replacements: Record<string, unknown> = { from: period.from, to: period.to };
+    if( scopeIds !== null ) replacements.scopeIds = scopeIds;
+    return replacements;
+}
+
+const queryEpiCurve = async (universeSql: string, replacements: Record<string, unknown>): Promise<EpiCurveRow[]> =>
+    sequelize.query<EpiCurveRow>(
+        `WITH u AS (${ universeSql })
+        SELECT to_char(u."reportDate" - EXTRACT(DOW FROM u."reportDate")::int, 'YYYY-MM-DD') AS "weekStart",
+            COUNT(*) FILTER (WHERE cl."isSeriousEvent" IS TRUE)::int AS "serious",
+            COUNT(*) FILTER (WHERE cl."caseId" IS NOT NULL AND cl."isSeriousEvent" IS NOT TRUE)::int AS "nonSerious",
+            COUNT(*) FILTER (WHERE cl."caseId" IS NULL)::int AS "unclassified"
+        FROM u
+        LEFT JOIN "classification" cl ON cl."caseId" = u."caseId" AND cl."isActive" = true
+        WHERE u."reportDate" BETWEEN :from AND :to
+        GROUP BY 1`,
+        { replacements, type: QueryTypes.SELECT }
+    );
+
+const buildEpiWeeks = (period: DashboardPeriod, rows: EpiCurveRow[]): DashboardEpiWeek[] => {
+    const byWeekStart = new Map(rows.map(( row ) => [row.weekStart, row] ));
+    return listEpiWeeks(period.from, period.to).map(( week ) => {
+        const row = byWeekStart.get(week.weekStart);
+        const serious = row?.serious ?? 0;
+        const nonSerious = row?.nonSerious ?? 0;
+        const unclassified = row?.unclassified ?? 0;
+        return {
+            label: week.label,
+            epiYear: week.epiYear,
+            epiWeek: week.epiWeek,
+            weekStart: week.weekStart,
+            partial: week.weekStart < period.from || addIsoDays(week.weekStart, 6) > period.to,
+            serious,
+            nonSerious,
+            unclassified,
+            total: serious + nonSerious + unclassified
+        };
+    });
+}
+
+// Get Dashboard Epi Curve Service
+// Code: ESAVI-DASH-008
+const getEpiCurveService = async (query: DashboardPeriodQuery, authUser: AuthUser | undefined, lang: string): Promise<DashboardEpiCurve> => {
+    try {
+        const { period } = resolveDashboardPeriod({ from: query.from, to: query.to });
+        const { scopeIds, scope } = await resolvePeriodScope(query, authUser);
+
+        if( scopeIds !== null && scopeIds.length === 0 ) {
+            return { period, scope, weeks: buildEpiWeeks(period, []) };
+        }
+
+        const rows = await queryEpiCurve(buildUniverseSql(scopeIds !== null), buildPeriodReplacements(period, scopeIds));
+
+        return { period, scope, weeks: buildEpiWeeks(period, rows) };
+    } catch (error) {
+        if( error instanceof AppError ) throw error;
+        throw new AppError(getMessage('dashboard.epiCurveFailed', lang), 500, 'DASH_008_FETCH_FAILED', error);
+    }
+}
+
+const AGE_UNIT_CATALOG_CODE = 'ageUnit';
+const SEX_CATALOG_CODE = 'sex';
+
+type DashboardProgrammatic = DashboardDistributions['programmatic'];
+type DashboardSexCode = typeof DASHBOARD_SEX_CODES[number];
+
+interface VaccineQueryRow {
+    kind: 'item' | 'others' | 'without';
+    key: string | null;
+    coded: boolean | null;
+    label: string | null;
+    cases: number;
+    serious: number;
+    rank: number | null;
+}
+
+interface SexAgeRow {
+    ageYears: number | null;
+    sexValue: string | null;
+    total: number;
+}
+
+type AdministrationErrorKey = Exclude<keyof DashboardProgrammatic['administrationErrors'], 'anyError'>;
+type ColdChainFailureKey = Exclude<keyof DashboardProgrammatic['coldChainFailures'], 'anyFailure'>;
+
+const periodCasesSql = (universeSql: string, recursive = false): string => `WITH ${ recursive ? 'RECURSIVE ' : '' }u AS (${ universeSql }),
+        pc AS (
+            SELECT u."caseId", u."patientId", u."healthFacilityId", cl."isSeriousEvent" IS TRUE AS "serious"
+            FROM u
+            LEFT JOIN "classification" cl ON cl."caseId" = u."caseId" AND cl."isActive" = true
+            WHERE u."reportDate" BETWEEN :from AND :to
+        )`;
+
+const queryVaccines = async (universeSql: string, replacements: Record<string, unknown>): Promise<VaccineQueryRow[]> =>
+    sequelize.query<VaccineQueryRow>(
+        `${ periodCasesSql(universeSql) },
+        sv AS (
+            SELECT DISTINCT pc."caseId", pc."serious",
+                CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
+                    THEN 'W:' || nv."vaccineWhodrugId"::text
+                    ELSE 'T:' || upper(btrim(COALESCE(nv."vaccineName", '')))
+                END AS "key",
+                nv."vaccineWhodrugId" IS NOT NULL AS "coded",
+                CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
+                    THEN vw."drugName"
+                    ELSE NULLIF(upper(btrim(COALESCE(nv."vaccineName", ''))), '')
+                END AS "label"
+            FROM pc
+            JOIN "notification" n ON n."caseId" = pc."caseId" AND n."isActive" = true
+            JOIN "notificationVaccine" nv ON nv."notificationId" = n."notificationId" AND nv."isActive" = true AND nv."isSuspected" = true
+            LEFT JOIN "vaccineWhodrug" vw ON vw."vaccineWhodrugId" = nv."vaccineWhodrugId"
+        ),
+        g AS (
+            SELECT sv."key", sv."coded", sv."label",
+                COUNT(DISTINCT sv."caseId")::int AS "cases",
+                COUNT(DISTINCT sv."caseId") FILTER (WHERE sv."serious")::int AS "serious"
+            FROM sv
+            GROUP BY sv."key", sv."coded", sv."label"
+        ),
+        r AS (
+            SELECT g.*, ROW_NUMBER() OVER (ORDER BY g."cases" DESC, g."label" ASC NULLS LAST, g."key" ASC)::int AS "rank"
+            FROM g
+        )
+        SELECT 'item' AS "kind", r."key", r."coded", r."label", r."cases", r."serious", r."rank"
+        FROM r
+        WHERE r."rank" <= :vaccineTopLimit
+        UNION ALL
+        SELECT 'others', NULL, NULL, NULL,
+            COUNT(DISTINCT sv."caseId")::int,
+            COUNT(DISTINCT sv."caseId") FILTER (WHERE sv."serious")::int,
+            NULL
+        FROM sv
+        JOIN r ON r."key" = sv."key"
+        WHERE r."rank" > :vaccineTopLimit
+        UNION ALL
+        SELECT 'without', NULL, NULL, NULL,
+            COUNT(*)::int, 0, NULL
+        FROM pc
+        WHERE NOT EXISTS (SELECT 1 FROM sv WHERE sv."caseId" = pc."caseId")`,
+        { replacements: { ...replacements, vaccineTopLimit: DASHBOARD_VACCINE_TOP_LIMIT }, type: QueryTypes.SELECT }
+    );
+
+const querySexAge = async (universeSql: string, replacements: Record<string, unknown>): Promise<SexAgeRow[]> =>
+    sequelize.query<SexAgeRow>(
+        `${ periodCasesSql(universeSql) }
+        SELECT CASE au."value"
+                WHEN 'YEARS' THEN cl."age"
+                WHEN 'MONTHS' THEN FLOOR(cl."age"::numeric / 12)
+                WHEN 'DAYS' THEN FLOOR(cl."age"::numeric / 365)
+            END::int AS "ageYears",
+            sx."value" AS "sexValue",
+            COUNT(*)::int AS "total"
+        FROM pc
+        LEFT JOIN "classification" cl ON cl."caseId" = pc."caseId" AND cl."isActive" = true
+        LEFT JOIN "catalogItem" au ON au."catalogItemId" = cl."ageUnitItemId"
+            AND au."isValueLocked" = true
+            AND au."catalogTypeId" = (SELECT "catalogTypeId" FROM "catalogType" WHERE "code" = :ageUnitCatalogCode)
+        LEFT JOIN "patient" pt ON pt."patientId" = pc."patientId"
+        LEFT JOIN "catalogItem" sx ON sx."catalogItemId" = pt."sexItemId"
+            AND sx."isValueLocked" = true
+            AND sx."catalogTypeId" = (SELECT "catalogTypeId" FROM "catalogType" WHERE "code" = :sexCatalogCode)
+        GROUP BY 1, 2`,
+        {
+            replacements: { ...replacements, ageUnitCatalogCode: AGE_UNIT_CATALOG_CODE, sexCatalogCode: SEX_CATALOG_CODE },
+            type: QueryTypes.SELECT
+        }
+    );
+
+const ageBandIndexOf = (ageYears: number | null): number => {
+    const unknownIndex = DASHBOARD_AGE_BANDS.length - 1;
+    if( ageYears === null || ageYears === undefined ) return unknownIndex;
+    const index = DASHBOARD_AGE_BANDS.findIndex(( band ) =>
+        band.minYears !== null && ageYears >= band.minYears && ( band.maxYears === null || ageYears <= band.maxYears ));
+    return index === -1 ? unknownIndex : index;
+}
+
+const SEX_CATALOG_VALUES: readonly DashboardSexCode[] = DASHBOARD_SEX_CODES.filter(( code ) => code !== 'NONE' );
+
+const sexIndexOf = (sexValue: string | null): number =>
+    DASHBOARD_SEX_CODES.indexOf(SEX_CATALOG_VALUES.includes(sexValue as DashboardSexCode) ? sexValue as DashboardSexCode : 'NONE');
+
+const emptySexAgeMatrix = (): number[][] =>
+    DASHBOARD_AGE_BANDS.map(() => DASHBOARD_SEX_CODES.map(() => 0 ));
+
+const buildSexAge = (rows: SexAgeRow[]): DashboardDistributions['sexAge'] => {
+    const matrix = emptySexAgeMatrix();
+    rows.forEach(( row ) => {
+        matrix[ageBandIndexOf(row.ageYears)][sexIndexOf(row.sexValue)] += row.total;
+    });
+    return {
+        bands: DASHBOARD_AGE_BANDS.map(( band ) => band.code ),
+        sexes: [...DASHBOARD_SEX_CODES],
+        matrix
+    };
+}
+
+const buildVaccines = (rows: VaccineQueryRow[]): DashboardDistributions['vaccines'] => {
+    const items = rows
+        .filter(( row ) => row.kind === 'item' )
+        .sort(( a, b ) => ( a.rank ?? 0 ) - ( b.rank ?? 0 ))
+        .map(( row ): DashboardVaccineRow => ({
+            key: row.key as string,
+            label: row.label,
+            coded: row.coded === true,
+            cases: row.cases,
+            serious: row.serious
+        }));
+    const others = rows.find(( row ) => row.kind === 'others' );
+    const without = rows.find(( row ) => row.kind === 'without' );
+    return {
+        items,
+        others: { cases: others?.cases ?? 0, serious: others?.serious ?? 0 },
+        casesWithoutSuspectedVaccine: without?.cases ?? 0
+    };
+}
+
+interface GeoReferenceRow {
+    geoLocationId: string;
+    name: string;
+    latitude: number | string | null;
+    longitude: number | string | null;
+}
+
+interface GeoBucketRow {
+    bucket: string | null;
+    total: number;
+    serious: number;
+}
+
+interface GeoReference {
+    rows: GeoReferenceRow[];
+    selfId: string | null;
+}
+
+const SELF_BUCKET = 'self';
+
+const GEO_REFERENCE_COLUMNS = 'g."geoLocationId", g."name", g."latitude", g."longitude"';
+
+const minimizeGeoRootIds = async (rootIds: string[]): Promise<string[]> => {
+    if( rootIds.length <= 1 ) return rootIds;
+    const nested = await sequelize.query<{ geoLocationId: string }>(
+        `WITH RECURSIVE d AS (
+            SELECT g."geoLocationId" AS "rootId", g."geoLocationId", 1 AS depth
+            FROM "geoLocation" g
+            WHERE g."geoLocationId" IN (:rootIds)
+              AND g."isActive" = true
+            UNION
+            SELECT d."rootId", c."geoLocationId", d.depth + 1
+            FROM d
+            JOIN "geoLocation" c ON c."parentGeoLocationId" = d."geoLocationId"
+            WHERE c."isActive" = true
+              AND d.depth < :maxDepth
+        )
+        SELECT DISTINCT d."geoLocationId"
+        FROM d
+        WHERE d."geoLocationId" IN (:rootIds)
+          AND d."geoLocationId" <> d."rootId"`,
+        { replacements: { rootIds, maxDepth: MAX_GEO_SUBTREE_DEPTH }, type: QueryTypes.SELECT }
+    );
+    const nestedIds = new Set(nested.map(( row ) => row.geoLocationId ));
+    return rootIds.filter(( id ) => !nestedIds.has(id) );
+}
+
+const resolveGeoReference = async (
+    query: DashboardPeriodQuery,
+    authUser: AuthUser | undefined,
+    userScopeIds: string[] | null
+): Promise<GeoReference> => {
+    if( query.geoLocationId ) {
+        const children = await sequelize.query<GeoReferenceRow>(
+            `SELECT ${ GEO_REFERENCE_COLUMNS }
+            FROM "geoLocation" g
+            WHERE g."parentGeoLocationId" = :geoLocationId
+              AND g."isActive" = true`,
+            { replacements: { geoLocationId: query.geoLocationId }, type: QueryTypes.SELECT }
+        );
+        if( userScopeIds === null ) return { rows: children, selfId: query.geoLocationId };
+        const userScope = new Set(userScopeIds);
+        return { rows: children.filter(( row ) => userScope.has(row.geoLocationId) ), selfId: query.geoLocationId };
+    }
+
+    if( userScopeIds === null ) {
+        const roots = await sequelize.query<GeoReferenceRow>(
+            `SELECT ${ GEO_REFERENCE_COLUMNS }
+            FROM "geoLocation" g
+            WHERE g."parentGeoLocationId" IS NULL
+              AND g."isActive" = true`,
+            { type: QueryTypes.SELECT }
+        );
+        return { rows: roots, selfId: null };
+    }
+
+    const rootIds = await minimizeGeoRootIds([...new Set(await resolveUserGeoRootIds(authUser))]);
+    if( rootIds.length === 0 ) return { rows: [], selfId: null };
+    const roots = await sequelize.query<GeoReferenceRow>(
+        `SELECT ${ GEO_REFERENCE_COLUMNS }
+        FROM "geoLocation" g
+        WHERE g."geoLocationId" IN (:rootIds)
+          AND g."isActive" = true`,
+        { replacements: { rootIds }, type: QueryTypes.SELECT }
+    );
+    return { rows: roots, selfId: null };
+}
+
+const queryGeography = async (
+    universeSql: string,
+    replacements: Record<string, unknown>,
+    reference: GeoReference
+): Promise<GeoBucketRow[]> => {
+    const referenceIds = reference.rows.map(( row ) => row.geoLocationId );
+    const subtreeSql = referenceIds.length > 0
+        ? `SELECT g."geoLocationId" AS "rootId", g."geoLocationId", 1 AS depth
+            FROM "geoLocation" g
+            WHERE g."geoLocationId" IN (:referenceIds)
+            UNION
+            SELECT t."rootId", c."geoLocationId", t.depth + 1
+            FROM t
+            JOIN "geoLocation" c ON c."parentGeoLocationId" = t."geoLocationId"
+            WHERE c."isActive" = true
+              AND t.depth < :maxDepth`
+        : 'SELECT NULL::uuid AS "rootId", NULL::uuid AS "geoLocationId", 1 AS depth WHERE false';
+
+    return sequelize.query<GeoBucketRow>(
+        `${ periodCasesSql(universeSql, true) },
+        t AS (${ subtreeSql }),
+        a AS (
+            SELECT DISTINCT ON (pc."caseId") pc."caseId", pc."serious",
+                CASE WHEN h."geoLocationId" = CAST(:selfId AS uuid) THEN '${ SELF_BUCKET }' ELSE t."rootId"::text END AS "bucket"
+            FROM pc
+            JOIN "healthFacility" h ON h."healthFacilityId" = pc."healthFacilityId"
+            LEFT JOIN t ON t."geoLocationId" = h."geoLocationId"
+            ORDER BY pc."caseId", t."rootId"
+        )
+        SELECT a."bucket", COUNT(*)::int AS "total", COUNT(*) FILTER (WHERE a."serious")::int AS "serious"
+        FROM a
+        GROUP BY a."bucket"`,
+        {
+            replacements: { ...replacements, referenceIds, selfId: reference.selfId, maxDepth: MAX_GEO_SUBTREE_DEPTH },
+            type: QueryTypes.SELECT
+        }
+    );
+}
+
+const compareGeoRows = (a: DashboardGeoRow, b: DashboardGeoRow): number => {
+    if( a.total !== b.total ) return b.total - a.total;
+    if( a.name === b.name ) return 0;
+    if( a.name === null ) return 1;
+    if( b.name === null ) return -1;
+    return a.name.localeCompare(b.name);
+}
+
+const buildGeography = (reference: GeoReference, buckets: GeoBucketRow[]): DashboardDistributions['geography'] => {
+    const byBucket = new Map(buckets.map(( row ) => [row.bucket, row] ));
+    const rows: DashboardGeoRow[] = reference.rows.map(( row ) => ({
+        geoLocationId: row.geoLocationId,
+        kind: 'unit',
+        name: row.name,
+        latitude: toNullableNumber(row.latitude),
+        longitude: toNullableNumber(row.longitude),
+        total: byBucket.get(row.geoLocationId)?.total ?? 0,
+        serious: byBucket.get(row.geoLocationId)?.serious ?? 0
+    }));
+    const special = ( kind: 'self' | 'unlocated', bucket: GeoBucketRow | undefined ): void => {
+        if( !bucket || bucket.total === 0 ) return;
+        rows.push({ geoLocationId: null, kind, name: null, latitude: null, longitude: null, total: bucket.total, serious: bucket.serious });
+    };
+    special('self', byBucket.get(SELF_BUCKET));
+    special('unlocated', byBucket.get(null));
+    return { rows: rows.sort(compareGeoRows) };
+}
+
+const ADMINISTRATION_ERROR_CONDITIONS: Record<AdministrationErrorKey, string> = {
+    prescriptionError: `ae."hadPrescriptionError" = 'YES'`,
+    contaminatedVaccine: `ae."hadContaminatedVaccine" = 'YES'`,
+    abnormalVaccineConditions: `ae."hadAbnormalVaccineConditions" = 'YES'`,
+    preparationError: `ae."hadPreparationError" = 'YES'`,
+    handlingError: `ae."hadHandlingError" = 'YES'`,
+    improperAdministration: `ae."hadImproperAdministration" = 'YES'`
+};
+
+const COLD_CHAIN_FAILURE_CONDITIONS: Record<ColdChainFailureKey, string> = {
+    rangeDeviation: 'cc."storageRangeDeviation" IS TRUE',
+    procedureNotFollowed: `cc."storageProcedureFollowed" = 'NO'`,
+    vaccineNotUsable: `cc."storageVaccineNotUsable" = 'YES'`,
+    diluentNotUsable: `cc."storageDiluentNotUsable" = 'YES'`,
+    partiallyReconstitutedVaccine: `cc."storagePartiallyReconstitutedVaccine" = 'YES'`,
+    otherObjectPresent: `cc."storageOtherObjectPresent" = 'YES'`
+};
+
+const anyConditionSql = (conditions: Record<string, string>): string =>
+    Object.values(conditions).map(( condition ) => `(${ condition })`).join(' OR ');
+
+const queryProgrammatic = async (universeSql: string, replacements: Record<string, unknown>): Promise<CountRow> => {
+    const conditionColumns = (conditions: Record<string, string>, prefix: string): string[] =>
+        Object.entries(conditions).map(( [key, condition] ) => `COUNT(*) FILTER (WHERE ${ condition })::int AS "${ prefix }_${ key }"`);
+
+    const [row] = await sequelize.query<CountRow>(
+        `${ periodCasesSql(universeSql) }
+        SELECT COUNT(*)::int AS "investigatedCases",
+            COUNT(*) FILTER (WHERE ae."investigationId" IS NULL)::int AS "withoutAdministrationRecord",
+            COUNT(*) FILTER (WHERE cc."investigationId" IS NULL)::int AS "withoutColdChainRecord",
+            ${ conditionColumns(ADMINISTRATION_ERROR_CONDITIONS, 'ae').join(',\n            ') },
+            COUNT(*) FILTER (WHERE ${ anyConditionSql(ADMINISTRATION_ERROR_CONDITIONS) })::int AS "ae_anyError",
+            ${ conditionColumns(COLD_CHAIN_FAILURE_CONDITIONS, 'cc').join(',\n            ') },
+            COUNT(*) FILTER (WHERE ${ anyConditionSql(COLD_CHAIN_FAILURE_CONDITIONS) })::int AS "cc_anyFailure"
+        FROM pc
+        JOIN "investigation" inv ON inv."caseId" = pc."caseId" AND inv."isActive" = true
+        LEFT JOIN "investigationAdministrationError" ae ON ae."investigationId" = inv."investigationId" AND ae."deletedAt" IS NULL
+        LEFT JOIN "investigationColdChain" cc ON cc."investigationId" = inv."investigationId" AND cc."deletedAt" IS NULL`,
+        { replacements, type: QueryTypes.SELECT }
+    );
+    return row;
+}
+
+const buildProgrammatic = (row: CountRow): DashboardProgrammatic => ({
+    investigatedCases: row.investigatedCases ?? 0,
+    withoutAdministrationRecord: row.withoutAdministrationRecord ?? 0,
+    withoutColdChainRecord: row.withoutColdChainRecord ?? 0,
+    administrationErrors: {
+        ...mapRecord(ADMINISTRATION_ERROR_CONDITIONS, ( _condition, key ) => row[`ae_${ key }`] ?? 0 ),
+        anyError: row.ae_anyError ?? 0
+    },
+    coldChainFailures: {
+        ...mapRecord(COLD_CHAIN_FAILURE_CONDITIONS, ( _condition, key ) => row[`cc_${ key }`] ?? 0 ),
+        anyFailure: row.cc_anyFailure ?? 0
+    }
+});
+
+const emptyProgrammatic = (): DashboardProgrammatic => buildProgrammatic({});
+
+const emptyDistributions = (period: DashboardPeriod, scope: DashboardScope): DashboardDistributions => ({
+    period,
+    scope,
+    vaccines: { items: [], others: { cases: 0, serious: 0 }, casesWithoutSuspectedVaccine: 0 },
+    sexAge: buildSexAge([]),
+    geography: { rows: [] },
+    programmatic: emptyProgrammatic()
+});
+
+// Get Dashboard Distributions Service
+// Code: ESAVI-DASH-009
+const getDistributionsService = async (query: DashboardPeriodQuery, authUser: AuthUser | undefined, lang: string): Promise<DashboardDistributions> => {
+    try {
+        const { period } = resolveDashboardPeriod({ from: query.from, to: query.to });
+        const { userScopeIds, scopeIds, scope } = await resolvePeriodScope(query, authUser);
+
+        if( scopeIds !== null && scopeIds.length === 0 ) {
+            return emptyDistributions(period, scope);
+        }
+
+        const universeSql = buildUniverseSql(scopeIds !== null);
+        const replacements = buildPeriodReplacements(period, scopeIds);
+        const geoReference = await resolveGeoReference(query, authUser, userScopeIds);
+
+        const [vaccineRows, sexAgeRows, geoBuckets, programmaticRow] = await Promise.all([
+            queryVaccines(universeSql, replacements),
+            querySexAge(universeSql, replacements),
+            queryGeography(universeSql, replacements, geoReference),
+            queryProgrammatic(universeSql, replacements)
+        ]);
+
+        return {
+            period,
+            scope,
+            vaccines: buildVaccines(vaccineRows),
+            sexAge: buildSexAge(sexAgeRows),
+            geography: buildGeography(geoReference, geoBuckets),
+            programmatic: buildProgrammatic(programmaticRow)
+        };
+    } catch (error) {
+        if( error instanceof AppError ) throw error;
+        throw new AppError(getMessage('dashboard.distributionsFailed', lang), 500, 'DASH_009_FETCH_FAILED', error);
+    }
+}
+
 export {
     CAUSALITY_CATEGORY_SQL,
+    getDistributionsService,
+    getEpiCurveService,
     getIndicatorsService,
     getPendingWorkService
 }
