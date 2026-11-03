@@ -84,7 +84,7 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(360);
+            expect(ROUTE_RULES).toHaveLength(362);
         });
 
         it('has a role below every minimum other than ANALYTICS, so the 403 side is always testable', () => {

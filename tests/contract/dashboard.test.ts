@@ -3,6 +3,8 @@ import path from 'path';
 import request from 'supertest';
 import { app } from '../../src/app';
 import {
+    AppSession,
+    AppUser,
     AppUserGeoLocation,
     CaseWorkflow,
     CatalogItem,
@@ -29,7 +31,7 @@ import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { advanceCaseWorkflowStageService } from '../../src/services/caseWorkflow.service';
 import { CASE_WORKFLOW_STATUS } from '../../src/constants/caseWorkflow.constants';
 import { closeTestDatabase, seedCaseWorkflow, setCaseWorkflowStatus } from '../setup/database';
-import { TEST_ROLES, seedTestUsers, seedUserWithoutRole, authHeader, authHeaderWithoutRole, createScopedTestUser } from '../setup/auth';
+import { TEST_PASSWORD, TEST_ROLES, seedTestUsers, seedUserWithoutRole, authHeader, authHeaderWithoutRole, createScopedTestUser, getTestUser } from '../setup/auth';
 import type { TestRole } from '../setup/auth';
 
 const VARIANT_SPELLINGS = ['var1', 'VAR1', 'Var-1', 'VAR 1', 'V.A.R.1', 'va r1'];
@@ -1927,6 +1929,482 @@ describe('dashboard contract', () => {
                 expect(( await fetchAlerts(authHeader('ADMIN')) ).status).toBe(200);
                 const list = await request(app).get(`/api/esavi-cases?batchNumber=AB123&vaccineKey=${ encodeURIComponent(keyA) }&${ listPeriod }`).set(bearer(userAToken68));
                 expect(list.status).toBe(200);
+                expect(await snapshot()).toBe(before);
+            });
+        });
+    });
+
+    describe('recent activity — ESAVI-DASH-011 / system activity — ESAVI-DASH-012', () => {
+
+        const recentActivity = '/api/dashboard/recent-activity';
+        const systemActivity = '/api/dashboard/system-activity';
+        const hourMs = 60 * 60 * 1000;
+        const hoursAgo = ( hours: number ): Date => new Date(Date.now() - hours * hourMs);
+        const geo69: Record<string, string> = {};
+        const case69: Record<string, string> = {};
+        const users69: Record<string, { userId: string; email: string; token: string }> = {};
+
+        interface ActivityEvent { caseId: string; caseCode: string; occurredAt: string; method: string; action: string; author: string | null }
+        interface MyCase { caseId: string; caseCode: string; statusCode: string; lastActionAt: string; lastAction: string }
+        interface Revocation { reason: string; count: number }
+
+        const actionMap: [string, string][] = [
+            ['ESAVI-CASE-001', 'CASE_CREATED'],
+            ['ESAVI-CASE-004', 'CASE_UPDATED'],
+            ['ESAVI-CASE-005A', 'CASE_DEACTIVATED'],
+            ['ESAVI-CASE-005B', 'CASE_ACTIVATED'],
+            ['ESAVI-CASEFLOW-005A', 'WORKFLOW_DEACTIVATED'],
+            ['ESAVI-CASEFLOW-005B', 'WORKFLOW_ACTIVATED'],
+            ['ESAVI-CASEFLOW-007', 'STAGE_COMPLETED'],
+            ['ESAVI-CASEFLOW-008', 'CASE_CLOSED'],
+            ['ESAVI-CASEFLOW-009', 'CASE_REOPENED'],
+            ['ESAVI-CASEFLOW-010', 'VALIDATION_REQUESTED'],
+            ['ESAVI-CASEFLOW-011', 'VALIDATION_RESOLVED'],
+            ['ESAVI-CASEFLOW-012', 'STAGE_STARTED']
+        ];
+        const unknownMethod = 'ESAVI-CASEFLOW-999';
+        const revokeReasons = ['LOGOUT', 'LOGOUT_ALL', 'REUSE_DETECTED', 'PASSWORD_CHANGED', 'PASSWORD_RESET', 'ABSOLUTE_MAX_REACHED'];
+
+        const entry = ( method: string, user: string, at: Date ) => ({ createdAt: at.toISOString(), user, method, detail: `F69 ${ method } detail` });
+
+        const setCaseAudit = async ( caseId: string, entries: unknown[] ) =>
+            EsaviCase.update({ appDetails: entries }, { where: { caseId } });
+        const setFlowAudit = async ( caseId: string, entries: unknown[] ) =>
+            CaseWorkflow.update({ appDetails: entries }, { where: { caseId } });
+
+        const seedActivityCase = async ( label: string, geoLocationId: string ): Promise<string> => {
+            const facility = await HealthFacility.create({ localCode: `${ tag }R${ label }`, name: `${ tag } R${ label }`, geoLocationId });
+            const patient = await Patient.create({
+                names: esaviCrypt(`Activity ${ label }`),
+                lastNames: esaviCrypt(`Probe ${ suffix }`),
+                documentNumber: esaviCrypt(`DR${ label }${ suffix }`),
+                healthSystemCode: `DR${ label }${ suffix }`
+            });
+            const esaviCase = await EsaviCase.create({
+                caseCode: `${ tag }-R${ label }`,
+                patientId: patient.getDataValue('patientId'),
+                healthFacilityId: facility.getDataValue('healthFacilityId'),
+                reportDate: '2026-05-01',
+                isActive: true,
+                appDetails: []
+            });
+            const caseId = esaviCase.getDataValue('caseId');
+            await seedCaseWorkflow(caseId);
+            case69[label] = caseId;
+            return caseId;
+        };
+
+        const fetchActivity = ( headers: Record<string, string> ) => request(app).get(recentActivity).set(headers);
+        const activityOf = async ( headers: Record<string, string> ) => ( await fetchActivity(headers) ).body.data;
+        const asUser = ( key: string ) => bearer(users69[key].token);
+        const eventsOf = ( data: { territory: ActivityEvent[] }, label: string ): ActivityEvent[] =>
+            data.territory.filter(( event ) => event.caseId === case69[label] );
+        const myCaseOf = ( data: { myCases: MyCase[] }, label: string ): MyCase | undefined =>
+            data.myCases.find(( item ) => item.caseId === case69[label] );
+
+        const fetchSystem = ( headers: Record<string, string> = authHeader('SUPERADMIN') ) => request(app).get(systemActivity).set(headers);
+        const systemOf = async () => ( await fetchSystem() ).body.data;
+        const revocationOf = ( data: { revocations7d: Revocation[] }, reason: string ): number =>
+            data.revocations7d.find(( row ) => row.reason === reason )?.count ?? 0;
+
+        const createSession = async ( userId: string, values: Record<string, unknown> = {} ) =>
+            AppSession.create({ userId, startedAt: new Date(), expiresAt: new Date(Date.now() + 24 * hourMs), ...values });
+
+        const keysOf = ( value: unknown, keys: Set<string> = new Set() ): Set<string> => {
+            if( Array.isArray(value) ) value.forEach(( item ) => keysOf(item, keys) );
+            else if( value && typeof value === 'object' ) {
+                for( const [key, nested] of Object.entries(value) ) {
+                    keys.add(key);
+                    keysOf(nested, keys);
+                }
+            }
+            return keys;
+        };
+
+        beforeAll(async () => {
+            const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+            for( const label of ['A', 'B', 'C', 'D', 'M'] ) {
+                geo69[label] = await createGeoLocation(`PROV${ label }ACT`, null, baseLevel + 1);
+            }
+
+            for( const [key, geo, role] of [
+                ['a', 'A', 'USER'], ['a2', 'A', 'USER'],
+                ['notifier', 'A', 'NOTIFIER'], ['investigator', 'A', 'INVESTIGATOR'], ['evaluator', 'A', 'EVALUATOR'],
+                ['c', 'C', 'USER'], ['d', 'D', 'USER'], ['m', 'M', 'USER']
+            ] as [string, string, TestRole][] ) {
+                const scoped = await createScopedTestUser(`dashboard-f69-${ key }`, geo69[geo], role);
+                users69[key] = { userId: scoped.userId, email: scoped.email, token: scoped.token };
+            }
+            const userA = users69.a.userId;
+            const userA2 = users69.a2.userId;
+
+            const facilityNew = await HealthFacility.create({ localCode: `${ tag }RNEW`, name: `${ tag } RNEW`, geoLocationId: geo69.A });
+            const patientNew = await Patient.create({
+                names: esaviCrypt('Activity NEW'),
+                lastNames: esaviCrypt(`Probe ${ suffix }`),
+                documentNumber: esaviCrypt(`DRNEW${ suffix }`),
+                healthSystemCode: `DRNEW${ suffix }`
+            });
+            const created = await request(app).post('/api/esavi-cases').set(asUser('notifier')).send({
+                patientId: patientNew.getDataValue('patientId'),
+                healthFacilityId: facilityNew.getDataValue('healthFacilityId')
+            });
+            expect(created.status).toBe(201);
+            case69.NEW = created.body.data.caseId;
+
+            await seedActivityCase('FLOW', geo69.A);
+            await setFlowAudit(case69.FLOW, [
+                entry('ESAVI-CASEFLOW-008', userA2, hoursAgo(5)),
+                entry('ESAVI-CASEFLOW-009', userA2, hoursAgo(4))
+            ]);
+
+            await seedActivityCase('WINDOW', geo69.A);
+            await setCaseAudit(case69.WINDOW, [
+                entry('ESAVI-CASE-005A', userA2, new Date(Date.now() - 31 * dayMs)),
+                entry('ESAVI-CASE-005B', userA2, new Date(Date.now() - 29 * dayMs))
+            ]);
+
+            await seedActivityCase('INACTIVE', geo69.A);
+            await setCaseAudit(case69.INACTIVE, [entry('ESAVI-CASE-004', userA, hoursAgo(3))]);
+            await EsaviCase.update({ isActive: false }, { where: { caseId: case69.INACTIVE } });
+
+            await seedActivityCase('BROKEN', geo69.A);
+            await sequelize.query(`UPDATE "esaviCase" SET "appDetails" = '{}'::jsonb WHERE "caseId" = :caseId`, { replacements: { caseId: case69.BROKEN } });
+
+            await seedActivityCase('MINE', geo69.A);
+            await setCaseAudit(case69.MINE, [entry('ESAVI-CASE-004', userA, hoursAgo(3))]);
+            await setFlowAudit(case69.MINE, [entry('ESAVI-CASEFLOW-010', userA, hoursAgo(2))]);
+            await setCaseWorkflowStatus(case69.MINE, CASE_WORKFLOW_STATUS.IN_INVESTIGATION);
+
+            await seedActivityCase('OTHERS', geo69.A);
+            await setCaseAudit(case69.OTHERS, [entry('ESAVI-CASE-004', userA2, hoursAgo(6))]);
+
+            await seedActivityCase('OLDMINE', geo69.A);
+            await setCaseAudit(case69.OLDMINE, [entry('ESAVI-CASE-004', userA, new Date(Date.now() - 31 * dayMs))]);
+
+            await seedActivityCase('AUTH', geo69.A);
+
+            await seedActivityCase('FOREIGN', geo69.B);
+            await setCaseAudit(case69.FOREIGN, [entry('ESAVI-CASE-004', userA, hoursAgo(1))]);
+
+            await seedActivityCase('LIMIT', geo69.C);
+            await setCaseAudit(case69.LIMIT, Array.from({ length: 25 }, ( _value, index ) => entry('ESAVI-CASE-004', userA2, hoursAgo(index + 1)) ));
+
+            for( let index = 0; index < 12; index++ ) {
+                const label = `MY${ `${ index }`.padStart(2, '0') }`;
+                await seedActivityCase(label, geo69.D);
+                await setCaseAudit(case69[label], [entry('ESAVI-CASE-004', users69.d.userId, hoursAgo(index + 1))]);
+            }
+
+            await seedActivityCase('MAP', geo69.M);
+            await setFlowAudit(case69.MAP, [
+                ...actionMap.map(( [method], index ) => entry(method, userA2, hoursAgo(index + 2)) ),
+                entry(unknownMethod, userA2, hoursAgo(1))
+            ]);
+        });
+
+        describe('surface and roles', () => {
+
+            it.each(['USER', 'NOTIFIER', 'INVESTIGATOR', 'EVALUATOR', 'ADMIN', 'SUPERADMIN'] as TestRole[])('011 answers 200 to %s', async ( role ) => {
+                const response = await fetchActivity(authHeader(role));
+                expect(response.status).toBe(200);
+                expect(response.body.ok).toBe(true);
+                expect(typeof response.body.message).toBe('string');
+            });
+
+            it('011 answers 403 to ANALYTICS and 401 without a token', async () => {
+                expect(( await fetchActivity(authHeader('ANALYTICS')) ).status).toBe(403);
+                expect(( await request(app).get(recentActivity) ).status).toBe(401);
+            });
+
+            it('012 answers 200 to SUPERADMIN, 403 to ADMIN and 401 without a token', async () => {
+                const response = await fetchSystem();
+                expect(response.status).toBe(200);
+                expect(response.body.ok).toBe(true);
+                expect(( await fetchSystem(authHeader('ADMIN')) ).status).toBe(403);
+                expect(( await request(app).get(systemActivity) ).status).toBe(401);
+            });
+
+            it('011 returns exactly the keys of the contract', async () => {
+                const data = await activityOf(asUser('a'));
+                expect(Object.keys(data).sort()).toEqual(['myCases', 'scope', 'territory', 'windowDays']);
+                expect(data.windowDays).toBe(30);
+                expect(data.scope).toEqual({ restricted: true, hasAssignments: true });
+                expect(Object.keys(eventsOf(data, 'FLOW')[0]).sort()).toEqual(['action', 'author', 'caseCode', 'caseId', 'method', 'occurredAt']);
+                expect(Object.keys(myCaseOf(data, 'MINE')!).sort()).toEqual(['caseCode', 'caseId', 'lastAction', 'lastActionAt', 'statusCode']);
+            });
+
+            it('012 returns exactly the keys of the contract', async () => {
+                const data = await systemOf();
+                expect(Object.keys(data).sort()).toEqual(
+                    ['activeSessions', 'activeUsers24h', 'activeUsers7d', 'generatedAt', 'revocations7d', 'sessionsStarted24h', 'sessionsStarted7d']
+                );
+            });
+        });
+
+        describe('territory feed', () => {
+
+            it('creating a case produces one CASE_CREATED event, not two', async () => {
+                const events = eventsOf(await activityOf(asUser('a')), 'NEW');
+                expect(events).toHaveLength(1);
+                expect(events[0].action).toBe('CASE_CREATED');
+                expect(events[0].method).toBe('ESAVI-CASE-001');
+                expect(events.some(( event ) => event.method === 'ESAVI-CASEFLOW-001' )).toBe(false);
+            });
+
+            it('closing and reopening a case produces CASE_REOPENED then CASE_CLOSED', async () => {
+                const events = eventsOf(await activityOf(asUser('a')), 'FLOW');
+                expect(events.map(( event ) => event.action )).toEqual(['CASE_REOPENED', 'CASE_CLOSED']);
+                expect(Date.parse(events[0].occurredAt)).toBeGreaterThan(Date.parse(events[1].occurredAt));
+            });
+
+            it('the whole territory is ordered by occurredAt descending', async () => {
+                const times = ( await activityOf(asUser('a')) ).territory.map(( event: ActivityEvent ) => Date.parse(event.occurredAt) );
+                expect(times).toEqual([...times].sort(( left, right ) => right - left ));
+            });
+
+            it('translates every method of the map to its action and an unknown method to OTHER', async () => {
+                const events = eventsOf(await activityOf(asUser('m')), 'MAP');
+                const actionByMethod = new Map(events.map(( event ) => [event.method, event.action] ));
+                for( const [method, action] of actionMap ) {
+                    expect(actionByMethod.get(method)).toBe(action);
+                }
+                expect(actionByMethod.get(unknownMethod)).toBe('OTHER');
+                expect(events[0].method).toBe(unknownMethod);
+            });
+
+            it('an entry from 31 days ago does not appear and one from 29 days ago does', async () => {
+                const events = eventsOf(await activityOf(asUser('a')), 'WINDOW');
+                expect(events.map(( event ) => event.method )).toEqual(['ESAVI-CASE-005B']);
+                expect(events[0].action).toBe('CASE_ACTIVATED');
+            });
+
+            it('with 25 events in the window, territory carries 20, the most recent ones', async () => {
+                const territory: ActivityEvent[] = ( await activityOf(asUser('c')) ).territory;
+                expect(territory).toHaveLength(20);
+                const times = territory.map(( event ) => Date.parse(event.occurredAt) );
+                expect(times).toEqual([...times].sort(( left, right ) => right - left ));
+                expect(Date.now() - times[19]).toBeLessThan(20.5 * hourMs);
+            });
+
+            it('a user restricted to territory A receives no event from cases of B', async () => {
+                await setCaseAudit(case69.FOREIGN, [entry('ESAVI-CASE-004', users69.a.userId, new Date())]);
+                const data = await activityOf(asUser('a'));
+                expect(eventsOf(data, 'FOREIGN')).toEqual([]);
+                expect(eventsOf(await activityOf(authHeader('ADMIN')), 'FOREIGN')).toHaveLength(1);
+            });
+
+            it('a deactivated case contributes no events', async () => {
+                expect(eventsOf(await activityOf(asUser('a')), 'INACTIVE')).toEqual([]);
+                expect(myCaseOf(await activityOf(asUser('a')), 'INACTIVE')).toBeUndefined();
+            });
+
+            it('a case whose appDetails is {} does not break the response and contributes no events', async () => {
+                const [stored] = await sequelize.query<{ kind: string }>(
+                    `SELECT jsonb_typeof("appDetails") AS "kind" FROM "esaviCase" WHERE "caseId" = :caseId`,
+                    { replacements: { caseId: case69.BROKEN }, type: QueryTypes.SELECT }
+                );
+                expect(stored.kind).toBe('object');
+                for( const headers of [asUser('a'), authHeader('ADMIN')] ) {
+                    const response = await fetchActivity(headers);
+                    expect(response.status).toBe(200);
+                    expect(eventsOf(response.body.data, 'BROKEN')).toEqual([]);
+                }
+            });
+
+            it('no entry carries detail or a userId', async () => {
+                for( const headers of [asUser('a'), authHeader('ADMIN'), authHeader('SUPERADMIN')] ) {
+                    const body = ( await fetchActivity(headers) ).body;
+                    const keys = keysOf(body);
+                    for( const forbidden of ['detail', 'user', 'userId', 'appDetails', 'patientId'] ) {
+                        expect(keys.has(forbidden)).toBe(false);
+                    }
+                    const serialized = JSON.stringify(body);
+                    for( const user of Object.values(users69) ) {
+                        expect(serialized).not.toContain(user.userId);
+                    }
+                    expect(serialized).not.toContain(getTestUser('ADMIN').userId);
+                }
+            });
+        });
+
+        describe('authors — SPEC F59', () => {
+
+            const injectAuthEntries = async (): Promise<void> => {
+                const now = Date.now();
+                await setFlowAudit(case69.AUTH, [
+                    entry('ESAVI-CASEFLOW-012', getTestUser('ADMIN').userId, new Date(now - 3000)),
+                    entry('ESAVI-CASEFLOW-007', 'undefined', new Date(now - 2000)),
+                    entry('ESAVI-CASEFLOW-011', users69.a.userId, new Date(now - 1000))
+                ]);
+            };
+
+            it('ADMIN and SUPERADMIN see the decrypted email of the author, and null for user "undefined"', async () => {
+                await injectAuthEntries();
+                for( const role of ['ADMIN', 'SUPERADMIN'] as TestRole[] ) {
+                    const events = eventsOf(await activityOf(authHeader(role)), 'AUTH');
+                    const authorByMethod = new Map(events.map(( event ) => [event.method, event.author] ));
+                    expect(authorByMethod.get('ESAVI-CASEFLOW-012')).toBe(getTestUser('ADMIN').email);
+                    expect(authorByMethod.get('ESAVI-CASEFLOW-011')).toBe(users69.a.email);
+                    expect(authorByMethod.has('ESAVI-CASEFLOW-007')).toBe(true);
+                    expect(authorByMethod.get('ESAVI-CASEFLOW-007')).toBeNull();
+                }
+            });
+
+            it.each(['a', 'notifier', 'investigator', 'evaluator'])('the scoped %s sees author null on every event, its own included', async ( key ) => {
+                await injectAuthEntries();
+                const data = await activityOf(asUser(key));
+                expect(eventsOf(data, 'AUTH')).toHaveLength(3);
+                expect(data.territory.length).toBeGreaterThan(0);
+                expect(data.territory.every(( event: ActivityEvent ) => event.author === null )).toBe(true);
+            });
+
+            it('resolving authors makes at most one query to appUser per request', async () => {
+                await injectAuthEntries();
+                const findAll = jest.spyOn(AppUser, 'findAll');
+                try {
+                    const response = await fetchActivity(authHeader('ADMIN'));
+                    expect(response.status).toBe(200);
+                    const listQueries = findAll.mock.calls.filter(( [options] ) => !( options as { plain?: boolean } | undefined )?.plain );
+                    expect(listQueries.length).toBeLessThanOrEqual(1);
+                    expect(listQueries.length).toBe(1);
+                } finally {
+                    findAll.mockRestore();
+                }
+            });
+        });
+
+        describe('my cases', () => {
+
+            it('CASE-004 then CASEFLOW-010 on the same case lists it once with VALIDATION_REQUESTED', async () => {
+                const data = await activityOf(asUser('a'));
+                const mine = data.myCases.filter(( item: MyCase ) => item.caseId === case69.MINE );
+                expect(mine).toHaveLength(1);
+                expect(mine[0].lastAction).toBe('VALIDATION_REQUESTED');
+            });
+
+            it('a case where only another user acted does not appear', async () => {
+                const data = await activityOf(asUser('a'));
+                expect(myCaseOf(data, 'OTHERS')).toBeUndefined();
+                expect(myCaseOf(data, 'FLOW')).toBeUndefined();
+                expect(myCaseOf(await activityOf(asUser('a2')), 'OTHERS')).toBeDefined();
+            });
+
+            it('a case where the user acted 31 days ago, and not after, does not appear', async () => {
+                expect(myCaseOf(await activityOf(asUser('a')), 'OLDMINE')).toBeUndefined();
+            });
+
+            it('statusCode is the current workflow status, not the one of the intervention', async () => {
+                expect(myCaseOf(await activityOf(asUser('a')), 'MINE')!.statusCode).toBe(CASE_WORKFLOW_STATUS.IN_INVESTIGATION);
+            });
+
+            it('with 12 cases with interventions, myCases carries 10 ordered by lastActionAt descending', async () => {
+                const myCases: MyCase[] = ( await activityOf(asUser('d')) ).myCases;
+                expect(myCases).toHaveLength(10);
+                expect(myCases.map(( item ) => item.caseId )).toEqual(
+                    Array.from({ length: 10 }, ( _value, index ) => case69[`MY${ `${ index }`.padStart(2, '0') }`] )
+                );
+                expect(myCases.every(( item ) => item.lastAction === 'CASE_UPDATED' )).toBe(true);
+            });
+
+            it('an own case that left the user scope does not appear', async () => {
+                expect(myCaseOf(await activityOf(asUser('a')), 'FOREIGN')).toBeUndefined();
+            });
+        });
+
+        describe('empty scope', () => {
+
+            it('a user without assignments receives 200 with empty lists and hasAssignments false', async () => {
+                const response = await fetchActivity(bearer(noScopeToken));
+                expect(response.status).toBe(200);
+                expect(response.body.data).toEqual({
+                    windowDays: 30,
+                    scope: { restricted: true, hasAssignments: false },
+                    territory: [],
+                    myCases: []
+                });
+            });
+        });
+
+        describe('system activity', () => {
+
+            it('an active session counts, an expired or deleted one does not', async () => {
+                const owner = ( await createScopedTestUser('dashboard-f69-sess-active', null) ).userId;
+                const before = await systemOf();
+                await createSession(owner);
+                await createSession(owner, { startedAt: new Date(Date.now() - 2 * dayMs), expiresAt: new Date(Date.now() - dayMs) });
+                await createSession(owner, { deletedAt: new Date() });
+                const after = await systemOf();
+                expect(after.activeSessions - before.activeSessions).toBe(1);
+            });
+
+            it('two sessions of the same user started today add 2 to sessionsStarted24h and 1 to activeUsers24h', async () => {
+                const owner = ( await createScopedTestUser('dashboard-f69-sess-twice', null) ).userId;
+                const before = await systemOf();
+                await createSession(owner);
+                await createSession(owner);
+                const after = await systemOf();
+                expect(after.sessionsStarted24h - before.sessionsStarted24h).toBe(2);
+                expect(after.activeUsers24h - before.activeUsers24h).toBe(1);
+                expect(after.sessionsStarted7d - before.sessionsStarted7d).toBe(2);
+                expect(after.activeUsers7d - before.activeUsers7d).toBe(1);
+            });
+
+            it('a login and a logout add 1 to sessionsStarted24h and 1 to LOGOUT', async () => {
+                const before = await systemOf();
+                const login = await request(app).post('/api/auth/login').send({ email: getTestUser('USER').email, password: TEST_PASSWORD });
+                expect(login.status).toBe(200);
+                const logout = await request(app).post('/api/auth/logout').send({ refreshToken: login.body.data.refreshToken });
+                expect(logout.status).toBe(200);
+                const after = await systemOf();
+                expect(after.sessionsStarted24h - before.sessionsStarted24h).toBe(1);
+                expect(revocationOf(after, 'LOGOUT') - revocationOf(before, 'LOGOUT')).toBe(1);
+            });
+
+            it('revocations7d always carries the six reasons in order, then UNSPECIFIED and OTHER when they exist', async () => {
+                const baseline = await systemOf();
+                expect(baseline.revocations7d.slice(0, 6).map(( row: Revocation ) => row.reason )).toEqual(revokeReasons);
+
+                const owner = ( await createScopedTestUser('dashboard-f69-sess-revoked', null) ).userId;
+                await createSession(owner, { revokedAt: new Date(), revokedReason: null });
+                await createSession(owner, { revokedAt: new Date(), revokedReason: 'SOMETHING_ELSE' });
+                await createSession(owner, { revokedAt: new Date(Date.now() - 8 * dayMs), startedAt: new Date(Date.now() - 9 * dayMs), revokedReason: 'LOGOUT_ALL' });
+
+                const after = await systemOf();
+                const reasons = after.revocations7d.map(( row: Revocation ) => row.reason );
+                expect(reasons).toEqual([...revokeReasons, 'UNSPECIFIED', 'OTHER']);
+                expect(revocationOf(after, 'UNSPECIFIED') - revocationOf(baseline, 'UNSPECIFIED')).toBe(1);
+                expect(revocationOf(after, 'OTHER') - revocationOf(baseline, 'OTHER')).toBe(1);
+                expect(revocationOf(after, 'LOGOUT_ALL')).toBe(revocationOf(baseline, 'LOGOUT_ALL'));
+                for( const row of after.revocations7d as Revocation[] ) {
+                    expect(Number.isInteger(row.count)).toBe(true);
+                }
+            });
+
+            it('the response carries no userId, sessionId, ipAddress, userAgent or email', async () => {
+                const body = ( await fetchSystem() ).body;
+                const keys = keysOf(body);
+                for( const forbidden of ['userId', 'sessionId', 'ipAddress', 'userAgent', 'email'] ) {
+                    expect(keys.has(forbidden)).toBe(false);
+                }
+                expect(JSON.stringify(body.data)).not.toContain('@');
+            });
+        });
+
+        describe('no writes', () => {
+
+            it('calling 011 and 012 modifies no row, appSession included', async () => {
+                const caseIds = Object.values(case69);
+                const attributes = ['updatedAt', 'appDetails', 'sysDetails', 'isActive'];
+                const snapshot = async () => JSON.stringify(await Promise.all([
+                    EsaviCase.findAll({ where: { caseId: caseIds }, attributes: ['caseId', ...attributes], order: [['caseId', 'ASC']] }),
+                    CaseWorkflow.findAll({ where: { caseId: caseIds }, attributes: ['caseId', ...attributes], order: [['caseId', 'ASC']] }),
+                    AppSession.findAll({ order: [['sessionId', 'ASC']] })
+                ]));
+                const before = await snapshot();
+                expect(( await fetchActivity(asUser('a')) ).status).toBe(200);
+                expect(( await fetchActivity(authHeader('ADMIN')) ).status).toBe(200);
+                expect(( await fetchSystem() ).status).toBe(200);
                 expect(await snapshot()).toBe(before);
             });
         });
