@@ -26,7 +26,8 @@ const listFilters = (req: Request): EsaviCaseListFilters => ({
     eventDateTo: req.query.eventDateTo as string | undefined,
     reportFillingDate: req.query.reportFillingDate as string | undefined,
     reportFillingDateFrom: req.query.reportFillingDateFrom as string | undefined,
-    reportFillingDateTo: req.query.reportFillingDateTo as string | undefined
+    reportFillingDateTo: req.query.reportFillingDateTo as string | undefined,
+    statusCode: req.query.statusCode as string | undefined
 });
 
 // Create ESAVI Case Controller

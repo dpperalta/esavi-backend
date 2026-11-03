@@ -2,7 +2,7 @@ import request from 'supertest';
 import { app } from '../../src/app';
 import { AppUserGeoLocation, CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
-import { closeTestDatabase, seedCaseWorkflow } from '../setup/database';
+import { closeTestDatabase, seedCaseWorkflow, setCaseWorkflowStatus } from '../setup/database';
 import { seedTestUsers, authHeader, createScopedTestUser } from '../setup/auth';
 import { expectPutOfGetResponseWritesNothing } from '../setup/differentialUpdate';
 import type { TestRole } from '../setup/auth';
@@ -758,6 +758,127 @@ describe('esaviCase contract', () => {
             expect(JSON.stringify(after!.getDataValue('sysDetails'))).toBe(beforeState.sysDetails);
         }, 30000);
 
+    });
+
+    describe('002A and 002B — statusCode filter (SPEC F65)', () => {
+
+        let levelTypeId: string;
+        let provinceId: string;
+        let cantonOneId: string;
+        let cantonTwoId: string;
+        let otherProvinceId: string;
+        let userToken: string;
+
+        const tag = `F65ST${ suffix }`;
+
+        const scopedList = ( query: string = '' ) =>
+            request(app).get(`/api/esavi-cases${ query }`).set({ Authorization: `Bearer ${ userToken }` });
+
+        const ownCodes = ( rows: { caseCode: string }[] ): string[] =>
+            rows.filter(( row ) => row.caseCode.startsWith(tag) ).map(( row ) => row.caseCode ).sort();
+
+        const createGeoLocation = async ( label: string, parent: string | null, level: number ): Promise<string> => {
+            const geo = await GeoLocation.create({
+                geoLevelTypeId: levelTypeId,
+                parentGeoLocationId: parent,
+                code: `${ label }_${ suffix }`,
+                name: `${ label } ${ suffix }`,
+                level
+            });
+            return geo.getDataValue('geoLocationId');
+        };
+
+        const seedStatusCase = async ( label: string, geoLocationId: string, statusCode: string ): Promise<void> => {
+            const facility = await HealthFacility.create({
+                localCode: `${ tag }${ label }`, name: `${ tag } ${ label }`, geoLocationId
+            });
+            const esaviCase = await EsaviCase.create({
+                caseCode: `${ tag }-${ label }`,
+                patientId: await createPatientFixture(`65${ label }`),
+                healthFacilityId: facility.getDataValue('healthFacilityId'),
+                reportDate: '2026-05-01',
+                isActive: true
+            });
+            const caseId = esaviCase.getDataValue('caseId');
+            await seedCaseWorkflow(caseId);
+            if( statusCode !== 'OPEN' ) await setCaseWorkflowStatus(caseId, statusCode);
+        };
+
+        beforeAll(async () => {
+            const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+            const levelType = await GeoLevelType.create({
+                code: `LVL65_${ suffix }`, name: `Level65 ${ suffix }`, sortOrder: 1
+            });
+            levelTypeId = levelType.getDataValue('geoLevelTypeId');
+
+            provinceId = await createGeoLocation('PROV65', null, baseLevel + 1);
+            cantonOneId = await createGeoLocation('CAN165', provinceId, baseLevel + 2);
+            cantonTwoId = await createGeoLocation('CAN265', provinceId, baseLevel + 2);
+            otherProvinceId = await createGeoLocation('PRO265', null, baseLevel + 1);
+
+            await seedStatusCase('A', cantonOneId, 'IN_INVESTIGATION');
+            await seedStatusCase('B', cantonTwoId, 'IN_INVESTIGATION');
+            await seedStatusCase('C', cantonOneId, 'OPEN');
+            await seedStatusCase('D', cantonOneId, 'CLOSED');
+            await seedStatusCase('E', otherProvinceId, 'IN_INVESTIGATION');
+
+            userToken = ( await createScopedTestUser('esaviCase-f65-status', provinceId) ).token;
+        });
+
+        it('returns only the cases in that state, and count equals the unpaginated rows', async () => {
+            const response = await scopedList('?statusCode=IN_INVESTIGATION');
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual([`${ tag }-A`, `${ tag }-B`]);
+            expect(response.body.data.count).toBe(2);
+            expect(response.body.data.rows).toHaveLength(2);
+        });
+
+        it('the count is not inflated by the include when the page is smaller than the result', async () => {
+            const response = await scopedList('?statusCode=IN_INVESTIGATION&limit=1');
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(2);
+            expect(response.body.data.rows).toHaveLength(1);
+        });
+
+        it('a state with no cases answers 200 with count 0', async () => {
+            const response = await scopedList('?statusCode=REOPENED');
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+            expect(response.body.data.rows).toEqual([]);
+        });
+
+        it('an unknown statusCode answers 400 on both listings', async () => {
+            expect(( await scopedList('?statusCode=FOO') ).status).toBe(400);
+            expect(( await listAdminCases('?statusCode=FOO') ).status).toBe(400);
+        });
+
+        it('composes with the SPEC F48 geoLocationId filter and the SPEC F49 scope as an intersection', async () => {
+            const response = await scopedList(`?statusCode=IN_INVESTIGATION&geoLocationId=${ cantonOneId }`);
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual([`${ tag }-A`]);
+            expect(response.body.data.count).toBe(1);
+
+            const outOfScope = await scopedList(`?statusCode=IN_INVESTIGATION&geoLocationId=${ otherProvinceId }`);
+            expect(outOfScope.status).toBe(200);
+            expect(outOfScope.body.data.count).toBe(0);
+        });
+
+        it('without statusCode the listing is unchanged: every state, same count, same row shape', async () => {
+            const unfiltered = await scopedList();
+            expect(unfiltered.status).toBe(200);
+            expect(ownCodes(unfiltered.body.data.rows)).toEqual([`${ tag }-A`, `${ tag }-B`, `${ tag }-C`, `${ tag }-D`]);
+            expect(unfiltered.body.data.count).toBe(4);
+
+            const filtered = await scopedList('?statusCode=IN_INVESTIGATION');
+            expect(Object.keys(filtered.body.data.rows[0]).sort()).toEqual(Object.keys(unfiltered.body.data.rows[0]).sort());
+            expect(filtered.body.data.rows[0]).not.toHaveProperty('workflow');
+        });
+
+        it('002B filters by statusCode the same way for an ADMIN', async () => {
+            const response = await listAdminCases('?statusCode=CLOSED&limit=100');
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual([`${ tag }-D`]);
+        });
     });
 
     describe('003 — get by id', () => {
