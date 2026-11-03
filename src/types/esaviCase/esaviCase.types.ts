@@ -34,4 +34,6 @@ export interface EsaviCaseListFilters {
     reportFillingDateFrom?: string;
     reportFillingDateTo?: string;
     statusCode?: string;
+    batchNumber?: string;
+    vaccineKey?: string;
 }

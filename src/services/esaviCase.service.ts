@@ -4,6 +4,7 @@ import { CaseWorkflow, CatalogItem, Classification, EsaviCase, FinalClassificati
 import { AppError, buildDifferentialUpdate, buildTextSearchConditions, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { BATCH_NUMBER_NORMALIZED_SQL, normalizeBatchNumber, VACCINE_KEY_SQL } from '../constants/notificationVaccine.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { recalculateClassificationAgesService } from './common/ageRecalculation.service';
 import { cascadeSealSatellite } from './common/satelliteCascade.service';
@@ -307,7 +308,7 @@ const dateCondition = (exact?: string, fromValue?: string, toValue?: string): un
 // something absent is an empty search, not a missing resource. The geographic filter is not
 // resolved here: it is an include, not a where, and it lives in the two listing services
 const buildListWhere = (filters: EsaviCaseListFilters = {}): WhereOptions => {
-    const where: Record<string, unknown> = {};
+    const where: Record<string | symbol, unknown> = {};
 
     // The canonical text parameter of SPEC F52, joined with Op.and to everything else in this
     // where: it is an identity axis, not a facet like the date ranges or the foreign keys
@@ -328,8 +329,29 @@ const buildListWhere = (filters: EsaviCaseListFilters = {}): WhereOptions => {
     );
     if( reportFillingDate !== undefined ) where.reportFillingDate = reportFillingDate;
 
+    if( filters.batchNumber !== undefined ) where[Op.and] = [batchExistsCondition(filters)];
+
     return where as WhereOptions;
 }
+
+const batchExistsCondition = (filters: EsaviCaseListFilters) => sequelize.literal(`EXISTS (
+        SELECT 1 FROM "notification" n
+        JOIN "notificationVaccine" nv ON nv."notificationId" = n."notificationId"
+        WHERE n."caseId" = "EsaviCase"."caseId" AND n."isActive" AND nv."isActive"
+            AND ${ BATCH_NUMBER_NORMALIZED_SQL('nv') } = :batchNumber${ filters.vaccineKey !== undefined ? `
+            AND ${ VACCINE_KEY_SQL('nv') } = :vaccineKey` : '' }
+    )`);
+
+const listReplacements = (filters: EsaviCaseListFilters) => (
+    filters.batchNumber !== undefined
+        ? {
+            replacements: {
+                batchNumber: normalizeBatchNumber(filters.batchNumber),
+                ...( filters.vaccineKey !== undefined ? { vaccineKey: filters.vaccineKey } : {} )
+            }
+        }
+        : {}
+);
 
 // The facility include of the two listings. Without the geographic filter it stays the LEFT JOIN
 // it has always been; with it, the join becomes required so the count is computed over it. An
@@ -401,7 +423,8 @@ const getEsaviCasesService = async (
         include: [LIST_PATIENT_INCLUDE, facilityInclude, ...buildStatusInclude(filters)],
         order: LIST_ORDER,
         limit,
-        offset
+        offset,
+        ...listReplacements(filters)
     });
     return resolveAppDetailsAuthorsService({ count, rows: rows.map(toEsaviCaseListRow) }, canViewAuditAuthors(authUser));
 }
@@ -421,7 +444,8 @@ const getAllEsaviCasesService = async (
         include: [LIST_PATIENT_INCLUDE, facilityInclude, ...buildStatusInclude(filters)],
         order: LIST_ORDER,
         limit,
-        offset
+        offset,
+        ...listReplacements(filters)
     });
     return resolveAppDetailsAuthorsService({ count, rows: rows.map(toEsaviCaseListRow) }, canViewAuthors);
 }

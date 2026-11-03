@@ -1,5 +1,6 @@
 import { body, CustomValidator, param, query } from 'express-validator';
 import { CASE_WORKFLOW_STATUS } from '../constants/caseWorkflow.constants';
+import { normalizeBatchNumber, VACCINE_KEY_PATTERN } from '../constants/notificationVaccine.constants';
 
 // The three date columns are calendar dates, so they are compared as plain YYYY-MM-DD
 // strings: building a Date would drag the server time zone into the comparison and could
@@ -90,6 +91,15 @@ export const esaviCaseListValidator = [
     query('statusCode').optional().trim()
         .isIn(Object.values(CASE_WORKFLOW_STATUS))
         .withMessage(`Status Code must be one of: ${ Object.values(CASE_WORKFLOW_STATUS).join(', ') }`),
+    query('batchNumber').optional()
+        .isString().withMessage('Batch Number must be a string')
+        .isLength({ max: 100 }).withMessage('Batch Number must be at most 100 characters long')
+        .custom(( value: string ) => normalizeBatchNumber(value) !== '')
+        .withMessage('Batch Number must contain at least one letter or digit'),
+    query('vaccineKey').optional()
+        .matches(VACCINE_KEY_PATTERN).withMessage('Vaccine Key must be W:<uuid> or T:<text>')
+        .custom(( _value, { req } ) => ( req.query ?? {} ).batchNumber !== undefined)
+        .withMessage('Vaccine Key requires Batch Number'),
     query('limit').optional().isInt({ min: 1, max: 100 })
         .withMessage('Limit must be an integer between 1 and 100'),
     query('offset').optional().isInt({ min: 0 })
