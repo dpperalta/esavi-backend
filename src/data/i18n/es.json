@@ -1139,6 +1139,10 @@
         "statusCatalogMissing": "El catálogo de estados del flujo del caso no está cargado. Contacte al administrador del sistema.",
         "indicatorsSuccess": "Indicadores de vigilancia del dashboard obtenidos exitosamente",
         "indicatorsFailed": "Error al obtener los indicadores de vigilancia del dashboard. Por favor, inténtelo de nuevo más tarde.",
+        "epiCurveSuccess": "Curva epidemiológica del dashboard obtenida exitosamente",
+        "epiCurveFailed": "Error al obtener la curva epidemiológica del dashboard. Por favor, inténtelo de nuevo más tarde.",
+        "distributionsSuccess": "Distribuciones de casos del dashboard obtenidas exitosamente",
+        "distributionsFailed": "Error al obtener las distribuciones de casos del dashboard. Por favor, inténtelo de nuevo más tarde.",
         "invalidPeriod": "El periodo no es válido: la fecha inicial no puede ser posterior a la final, la final no puede estar en el futuro y el rango no puede superar {{maxDays}} días."
     }
 }

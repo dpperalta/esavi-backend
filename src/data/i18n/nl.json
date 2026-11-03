@@ -1139,6 +1139,10 @@
         "statusCatalogMissing": "De statuscatalogus van de casusworkflow is niet geladen. Neem contact op met de systeembeheerder.",
         "indicatorsSuccess": "Surveillance-indicatoren van het dashboard succesvol opgehaald",
         "indicatorsFailed": "Ophalen van de surveillance-indicatoren van het dashboard mislukt. Probeer het later opnieuw.",
+        "epiCurveSuccess": "Epidemische curve van het dashboard succesvol opgehaald",
+        "epiCurveFailed": "Ophalen van de epidemische curve van het dashboard mislukt. Probeer het later opnieuw.",
+        "distributionsSuccess": "Verdelingen van casussen van het dashboard succesvol opgehaald",
+        "distributionsFailed": "Ophalen van de verdelingen van casussen van het dashboard mislukt. Probeer het later opnieuw.",
         "invalidPeriod": "Ongeldige periode: de begindatum mag niet later zijn dan de einddatum, de einddatum mag niet in de toekomst liggen en het bereik mag niet meer dan {{maxDays}} dagen bedragen."
     }
 }
