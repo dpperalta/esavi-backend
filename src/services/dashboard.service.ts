@@ -5,9 +5,33 @@ import { AppError, esaviLog, getAppConfigNumber, getMessage } from '../helpers';
 import { AuthUser, CaseWorkflowStage, DashboardPendingInvestigation, DashboardPendingWork, DashboardStalledCase, DashboardStatusCount } from '../types';
 import { CASE_WORKFLOW_STAGE_FIELD, CASE_WORKFLOW_STAGES, CASE_WORKFLOW_STATUS, CASE_WORKFLOW_STATUS_CATALOG_CODE } from '../constants/caseWorkflow.constants';
 import { DASHBOARD_CONFIG_SCOPE, DASHBOARD_STALE_DAYS_CODE, DASHBOARD_TOP_LIMIT } from '../constants/dashboard.constants';
+import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE } from '../constants/finalClassification.constants';
 import { resolveUserGeoScopeIds } from './common/geoScope.service';
 
 const MISSING_CONFIG_CODE = 'APPCONFIG_VALUE_MISSING';
+
+const isTopImportanceSql = (column: string): string => `EXISTS (
+            SELECT 1 FROM "catalogItem" imp
+            JOIN "catalogType" impType ON impType."catalogTypeId" = imp."catalogTypeId"
+            WHERE imp."catalogItemId" = fc."${ column }"
+                AND impType."code" = '${ FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE }'
+                AND imp."value" = '1'
+        )`;
+
+const CAUSALITY_CATEGORY_SQL = `CASE
+        WHEN fc."dIsUnclassifiable" IS TRUE THEN 'D'
+        WHEN ${ isTopImportanceSql('importanceAItemId') } THEN 'A'
+        WHEN ${ isTopImportanceSql('importanceBItemId') } THEN 'B'
+        WHEN ${ isTopImportanceSql('importanceCItemId') } THEN 'C'
+        WHEN fc."aIsRelatedToVaccineProduct" IS TRUE
+            OR fc."aIsRelatedToQualityDeviation" IS TRUE
+            OR fc."aIsRelatedToProgrammaticError" IS TRUE
+            OR fc."aIsRelatedToStress" IS TRUE THEN 'A'
+        WHEN fc."bIsConsistentTemporalRelation" IS TRUE
+            OR fc."bHasDeterminantFactor" IS TRUE THEN 'B'
+        WHEN fc."cHasCoincidentCause" IS TRUE THEN 'C'
+        ELSE 'UNCLASSIFIED'
+    END`;
 
 interface StatusItem {
     catalogItemId: string;
@@ -247,5 +271,6 @@ const getPendingWorkService = async (authUser: AuthUser | undefined, lang: strin
 }
 
 export {
+    CAUSALITY_CATEGORY_SQL,
     getPendingWorkService
 }
