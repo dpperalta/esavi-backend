@@ -1136,6 +1136,9 @@
     "dashboard": {
         "pendingWorkSuccess": "Dashboard pending work fetched successfully",
         "pendingWorkFailed": "Failed to fetch the dashboard pending work. Please try again later.",
-        "statusCatalogMissing": "The case workflow status catalog is not loaded. Please contact the system administrator."
+        "statusCatalogMissing": "The case workflow status catalog is not loaded. Please contact the system administrator.",
+        "indicatorsSuccess": "Dashboard surveillance indicators fetched successfully",
+        "indicatorsFailed": "Failed to fetch the dashboard surveillance indicators. Please try again later.",
+        "invalidPeriod": "Invalid period: the start date cannot be later than the end date, the end date cannot be in the future and the range cannot exceed {{maxDays}} days."
     }
 }
