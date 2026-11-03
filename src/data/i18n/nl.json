@@ -1143,6 +1143,8 @@
         "epiCurveFailed": "Ophalen van de epidemische curve van het dashboard mislukt. Probeer het later opnieuw.",
         "distributionsSuccess": "Verdelingen van casussen van het dashboard succesvol opgehaald",
         "distributionsFailed": "Ophalen van de verdelingen van casussen van het dashboard mislukt. Probeer het later opnieuw.",
+        "batchAlertsSuccess": "Clusteringsmeldingen per partij van het dashboard succesvol opgehaald",
+        "batchAlertsFailed": "Ophalen van de clusteringsmeldingen per partij van het dashboard mislukt. Probeer het later opnieuw.",
         "invalidPeriod": "Ongeldige periode: de begindatum mag niet later zijn dan de einddatum, de einddatum mag niet in de toekomst liggen en het bereik mag niet meer dan {{maxDays}} dagen bedragen."
     }
 }
