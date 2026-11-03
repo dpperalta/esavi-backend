@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { getBatchAlertsService, getDistributionsService, getEpiCurveService, getIndicatorsService, getPendingWorkService } from '../services/dashboard.service';
+import { getBatchAlertsService, getDistributionsService, getEpiCurveService, getIndicatorsService, getPendingWorkService, getRecentActivityService } from '../services/dashboard.service';
 import { DashboardPeriodQuery } from '../types';
 
 // Get Dashboard Pending Work Controller
@@ -107,10 +107,31 @@ const getBatchAlerts = async (req: Request, res: Response, next: NextFunction): 
     }
 }
 
+// Get Dashboard Recent Activity Controller
+// Code: ESAVI-DASH-011
+const getRecentActivity = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await getRecentActivityService(req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('dashboard.recentActivitySuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DASH-011: Error fetching dashboard recent activity: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('dashboard.recentActivityFailed', req.lang), 500, 'DASH_011_FETCH_FAILED', error));
+    }
+}
+
 export {
     getBatchAlerts,
     getDistributions,
     getEpiCurve,
     getIndicators,
-    getPendingWork
+    getPendingWork,
+    getRecentActivity
 }

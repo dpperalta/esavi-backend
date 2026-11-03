@@ -1,10 +1,14 @@
 import { QueryTypes } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType } from '../models';
-import { AppError, esaviLog, getAppConfigNumber, getMessage, listEpiWeeks, resolveDashboardPeriod } from '../helpers';
+import { AppError, canViewAuditAuthors, esaviLog, getAppConfigNumber, getMessage, listEpiWeeks, resolveDashboardPeriod } from '../helpers';
 import {
     AuthUser,
     CaseWorkflowStage,
+    DashboardActivityAction,
+    DashboardActivityEvent,
+    DashboardMyCase,
+    DashboardRecentActivity,
     DashboardBatchAlert,
     DashboardBatchAlertReason,
     DashboardBatchAlerts,
@@ -27,7 +31,12 @@ import {
 } from '../types';
 import { CASE_WORKFLOW_STAGE_FIELD, CASE_WORKFLOW_STAGES, CASE_WORKFLOW_STATUS, CASE_WORKFLOW_STATUS_CATALOG_CODE } from '../constants/caseWorkflow.constants';
 import {
+    DASHBOARD_ACTIVITY_ACTION_MAP,
+    DASHBOARD_ACTIVITY_EXCLUDED_METHODS,
+    DASHBOARD_ACTIVITY_LIMIT,
+    DASHBOARD_ACTIVITY_WINDOW_DAYS,
     DASHBOARD_AGE_BANDS,
+    DASHBOARD_MY_CASES_LIMIT,
     DASHBOARD_BATCH_ALERT_LIMIT,
     DASHBOARD_BATCH_MIN_CASES_CODE,
     DASHBOARD_BATCH_MIN_CASES_DEFAULT,
@@ -44,6 +53,7 @@ import {
 import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE, FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE } from '../constants/finalClassification.constants';
 import { BATCH_NUMBER_NORMALIZED_SQL, VACCINE_KEY_SQL } from '../constants/notificationVaccine.constants';
 import { MAX_GEO_SUBTREE_DEPTH, resolveGeoSubtreeIds, resolveUserGeoRootIds, resolveUserGeoScopeIds } from './common/geoScope.service';
+import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
 const MISSING_CONFIG_CODE = 'APPCONFIG_VALUE_MISSING';
 
@@ -1304,11 +1314,145 @@ const getBatchAlertsService = async (query: DashboardPeriodQuery, authUser: Auth
     }
 }
 
+interface ActivityEventRow {
+    caseId: string;
+    caseCode: string;
+    occurredAt: Date;
+    method: string;
+    user: string | null;
+}
+
+interface MyCaseRow {
+    caseId: string;
+    caseCode: string;
+    statusCode: string;
+    occurredAt: Date;
+    method: string;
+}
+
+interface AuthorHolder {
+    appDetails: { user: string | null }[];
+}
+
+const auditEntriesSql = (column: string): string =>
+    `jsonb_array_elements(CASE WHEN jsonb_typeof(${ column }) = 'array' THEN ${ column } ELSE '[]'::jsonb END)`;
+
+const activityEventsSql = (universeSql: string): string => `WITH u AS (${ universeSql }),
+        entries AS (
+            SELECT u."caseId", u."caseCode", u."statusCode", e."entry"
+            FROM u
+            JOIN "esaviCase" c ON c."caseId" = u."caseId"
+            CROSS JOIN LATERAL ${ auditEntriesSql('c."appDetails"') } AS e("entry")
+            UNION ALL
+            SELECT u."caseId", u."caseCode", u."statusCode", e."entry"
+            FROM u
+            JOIN "caseWorkflow" w ON w."caseId" = u."caseId" AND w."isActive" = true
+            CROSS JOIN LATERAL ${ auditEntriesSql('w."appDetails"') } AS e("entry")
+        ),
+        typed AS (
+            SELECT en."caseId", en."caseCode", en."statusCode",
+                CASE WHEN jsonb_typeof(en."entry" -> 'createdAt') = 'string' AND jsonb_typeof(en."entry" -> 'method') = 'string'
+                    THEN (en."entry" ->> 'createdAt')::timestamptz END AS "occurredAt",
+                en."entry" ->> 'method' AS "method",
+                en."entry" ->> 'user' AS "user"
+            FROM entries en
+        ),
+        events AS (
+            SELECT t."caseId", t."caseCode", t."statusCode", t."occurredAt", t."method", t."user"
+            FROM typed t
+            WHERE t."occurredAt" IS NOT NULL
+              AND t."occurredAt" >= now() - make_interval(days => :windowDays)
+              AND t."method" NOT IN (:excludedMethods)
+        )`;
+
+const queryTerritoryActivity = async (universeSql: string, replacements: Record<string, unknown>): Promise<ActivityEventRow[]> =>
+    sequelize.query<ActivityEventRow>(
+        `${ activityEventsSql(universeSql) }
+        SELECT ev."caseId", ev."caseCode", ev."occurredAt", ev."method", ev."user"
+        FROM events ev
+        ORDER BY ev."occurredAt" DESC, ev."caseCode" ASC
+        LIMIT :activityLimit`,
+        { replacements: { ...replacements, activityLimit: DASHBOARD_ACTIVITY_LIMIT }, type: QueryTypes.SELECT }
+    );
+
+const queryMyCases = async (universeSql: string, replacements: Record<string, unknown>, userId: string): Promise<MyCaseRow[]> =>
+    sequelize.query<MyCaseRow>(
+        `${ activityEventsSql(universeSql) },
+        mine AS (
+            SELECT DISTINCT ON (ev."caseId") ev."caseId", ev."caseCode", ev."statusCode", ev."occurredAt", ev."method"
+            FROM events ev
+            WHERE ev."user" = :userId
+            ORDER BY ev."caseId", ev."occurredAt" DESC
+        )
+        SELECT m."caseId", m."caseCode", m."statusCode", m."occurredAt", m."method"
+        FROM mine m
+        ORDER BY m."occurredAt" DESC, m."caseCode" ASC
+        LIMIT :myCasesLimit`,
+        { replacements: { ...replacements, userId, myCasesLimit: DASHBOARD_MY_CASES_LIMIT }, type: QueryTypes.SELECT }
+    );
+
+const toActivityAction = (method: string): DashboardActivityAction => DASHBOARD_ACTIVITY_ACTION_MAP[method] ?? 'OTHER';
+
+const resolveActivityAuthors = async (rows: ActivityEventRow[], canViewAuthors: boolean): Promise<(string | null)[]> => {
+    const holders: AuthorHolder[] = rows.map(( row ) => ({ appDetails: [{ user: row.user }] }));
+    const resolved = await resolveAppDetailsAuthorsService<AuthorHolder[]>(holders, canViewAuthors);
+    return resolved.map(( holder ) => holder.appDetails[0]?.user ?? null );
+}
+
+// Get Dashboard Recent Activity Service
+// Code: ESAVI-DASH-011
+const getRecentActivityService = async (authUser: AuthUser | undefined, lang: string): Promise<DashboardRecentActivity> => {
+    try {
+        const scopeIds = await resolveUserGeoScopeIds(authUser);
+        const scope = { restricted: scopeIds !== null, hasAssignments: scopeIds === null || scopeIds.length > 0 };
+
+        if( scopeIds !== null && scopeIds.length === 0 ) {
+            return { windowDays: DASHBOARD_ACTIVITY_WINDOW_DAYS, scope, territory: [], myCases: [] };
+        }
+
+        const universeSql = buildUniverseSql(scopeIds !== null);
+        const replacements: Record<string, unknown> = {
+            windowDays: DASHBOARD_ACTIVITY_WINDOW_DAYS,
+            excludedMethods: DASHBOARD_ACTIVITY_EXCLUDED_METHODS
+        };
+        if( scopeIds !== null ) replacements.scopeIds = scopeIds;
+
+        const [territoryRows, myCaseRows] = await Promise.all([
+            queryTerritoryActivity(universeSql, replacements),
+            authUser ? queryMyCases(universeSql, replacements, authUser.userId) : Promise.resolve([] as MyCaseRow[])
+        ]);
+
+        const authors = await resolveActivityAuthors(territoryRows, canViewAuditAuthors(authUser));
+
+        const territory: DashboardActivityEvent[] = territoryRows.map(( row, index ) => ({
+            caseId: row.caseId,
+            caseCode: row.caseCode,
+            occurredAt: new Date(row.occurredAt).toISOString(),
+            method: row.method,
+            action: toActivityAction(row.method),
+            author: authors[index] ?? null
+        }));
+        const myCases: DashboardMyCase[] = myCaseRows.map(( row ) => ({
+            caseId: row.caseId,
+            caseCode: row.caseCode,
+            statusCode: row.statusCode,
+            lastActionAt: new Date(row.occurredAt).toISOString(),
+            lastAction: toActivityAction(row.method)
+        }));
+
+        return { windowDays: DASHBOARD_ACTIVITY_WINDOW_DAYS, scope, territory, myCases };
+    } catch (error) {
+        if( error instanceof AppError ) throw error;
+        throw new AppError(getMessage('dashboard.recentActivityFailed', lang), 500, 'DASH_011_FETCH_FAILED', error);
+    }
+}
+
 export {
     CAUSALITY_CATEGORY_SQL,
     getBatchAlertsService,
     getDistributionsService,
     getEpiCurveService,
     getIndicatorsService,
-    getPendingWorkService
+    getPendingWorkService,
+    getRecentActivityService
 }
