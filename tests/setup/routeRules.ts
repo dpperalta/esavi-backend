@@ -770,5 +770,7 @@ export const ROUTE_RULES: RouteRule[] = [
     // 002B is the inspection listing, ADMIN; 007 is SUPERADMIN, same as every bulk import
     { method: 'get',    path: '/api/whodrug-products/search',                            minRole: 'USER',       code: 'ESAVI-WHODPROD-006' },
     { method: 'get',    path: '/api/whodrug-products/admin',                             minRole: 'ADMIN',      code: 'ESAVI-WHODPROD-002B' },
-    { method: 'post',   path: '/api/whodrug-products/sync',                              minRole: 'SUPERADMIN', code: 'ESAVI-WHODPROD-007' }
+    { method: 'post',   path: '/api/whodrug-products/sync',                              minRole: 'SUPERADMIN', code: 'ESAVI-WHODPROD-007' },
+
+    { method: 'get',    path: '/api/dashboard/pending-work',                             minRole: 'USER',       code: 'ESAVI-DASH-006' }
 ];
