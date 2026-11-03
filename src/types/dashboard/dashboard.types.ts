@@ -33,3 +33,7 @@ export interface DashboardPendingWork {
     pendingInvestigations: { total: number; items: DashboardPendingInvestigation[] };
     reopened: { total: number };
 }
+
+export interface DashboardPeriod { from: string; to: string; days: number; }
+
+export interface DashboardPeriodQuery { from?: string; to?: string; geoLocationId?: string; }

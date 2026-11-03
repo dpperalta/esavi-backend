@@ -41,6 +41,7 @@ export * from './investigationCommunity.validator';
 export * from './investigationDiagnostic.validator';
 export * from './finalClassification.validator';
 export * from './caseWorkflow.validator';
+export * from './dashboard.validator';
 export * from './evaluationInstitution.validator';
 export * from './systemConfig.validator';
 export * from './meddra.validator';
