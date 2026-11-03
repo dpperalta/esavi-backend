@@ -25,7 +25,7 @@ import {
     NOTIFICATION_CONFIG_SCOPE,
     NOTIFICATION_DEADLINE_DAYS_CODE
 } from '../constants/dashboard.constants';
-import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE } from '../constants/finalClassification.constants';
+import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE, FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE } from '../constants/finalClassification.constants';
 import { resolveGeoSubtreeIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 
 const MISSING_CONFIG_CODE = 'APPCONFIG_VALUE_MISSING';
@@ -35,7 +35,7 @@ const isTopImportanceSql = (column: string): string => `EXISTS (
             JOIN "catalogType" impType ON impType."catalogTypeId" = imp."catalogTypeId"
             WHERE imp."catalogItemId" = fc."${ column }"
                 AND impType."code" = '${ FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE }'
-                AND imp."value" = '1'
+                AND imp."value" = '${ FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE }'
         )`;
 
 const CAUSALITY_CATEGORY_SQL = `CASE

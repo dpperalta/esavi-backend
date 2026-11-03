@@ -772,5 +772,6 @@ export const ROUTE_RULES: RouteRule[] = [
     { method: 'get',    path: '/api/whodrug-products/admin',                             minRole: 'ADMIN',      code: 'ESAVI-WHODPROD-002B' },
     { method: 'post',   path: '/api/whodrug-products/sync',                              minRole: 'SUPERADMIN', code: 'ESAVI-WHODPROD-007' },
 
-    { method: 'get',    path: '/api/dashboard/pending-work',                             minRole: 'USER',       code: 'ESAVI-DASH-006' }
+    { method: 'get',    path: '/api/dashboard/pending-work',                             minRole: 'USER',       code: 'ESAVI-DASH-006' },
+    { method: 'get',    path: '/api/dashboard/indicators',                               minRole: 'ANALYTICS',  code: 'ESAVI-DASH-007' }
 ];

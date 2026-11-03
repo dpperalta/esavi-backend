@@ -1,6 +1,6 @@
 # SPEC F67 — Dashboard: series y distribuciones
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01, SPEC 02, SPEC 04, SPEC 05, SPEC 08, **SPEC F09** (`classification`, edad), **SPEC F22** (`notificationVaccine`), **SPEC F38** (`investigationColdChain`), **SPEC F39** (`investigationAdministrationError`), **SPEC F49** (alcance geográfico), **SPEC F65** (marco `DASH`), **SPEC F66** (periodo, filtro geográfico y universo Uₚ)
 > **Fecha:** 2026-11-02
 > **Objetivo:** Dar al home la curva epidemiológica semanal del periodo y la distribución de sus casos por vacuna sospechosa, sexo y edad, unidad geográfica y fallo programático, con el mismo universo y el mismo alcance que los indicadores de F66.

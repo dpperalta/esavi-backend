@@ -1,6 +1,6 @@
 # SPEC F66 — Dashboard: indicadores de vigilancia
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01, SPEC 02, SPEC 04, SPEC 05, SPEC 08, **SPEC F26** (`systemConfig`), **SPEC F41** (`finalClassification`), **SPEC F44** (`caseWorkflow`), **SPEC F48** (filtro `geoLocationId`), **SPEC F49** (alcance geográfico), **SPEC F65** (marco del dominio `DASH`)
 > **Fecha:** 2026-11-02
 > **Objetivo:** Dar al home los indicadores de vigilancia ESAVI de un periodo —volumen, gravedad, defunciones, oportunidad de notificación, tiempos de cierre y causalidad—, comparados con el periodo anterior y acotados al territorio del usuario.
@@ -141,8 +141,10 @@ Solo periodo actual.
 **Causalidad OMS: regla de la categoría principal.** Para cada `finalClassification` activa de un caso de Uₚ, en este orden:
 
 1. `dIsUnclassifiable = true` → **`D`**.
-2. Si no, el bloque cuyo `importance*ItemId` apunta al `catalogItem` de `value = '1'` → **`A`**, **`B`** o **`C`**.
+2. Si no, el bloque cuyo `importance*ItemId` apunta al `catalogItem` de `value = 'MAX'` del tipo `finalClassificationImportance` → **`A`**, **`B`** o **`C`**.
 3. Si no hay prelación `1`, el primer bloque con algún booleano en `true`, en orden A → B → C.
+
+**Corrección en implementación (2026-11-03).** La redacción original comparaba con `value = '1'`, igual que F41 §A, pero la siembra real (`esaviapp.sql:1826-1828`) guarda la prelación como `code` `1`/`2`/`3` y `value` `MAX`/`MED`/`MIN`. Se compara por `value`, que es la clave estable según F46, con la constante `FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE`. Queda pendiente, fuera de este spec, añadir `('finalClassificationImportance', 'MAX')` a los valores bloqueados con `isValueLocked`: la regla de F46 dice que todo valor que nombre `src/` va bloqueado.
 4. Si no hay nada → **`UNCLASSIFIED`**.
 
 Salida del bloque:

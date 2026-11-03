@@ -162,6 +162,36 @@ const createScopedTestUser = async ( key: string, geoLocationId: string | null, 
     return scopedUser;
 }
 
+let userWithoutRole: { userId: string; token: string } | undefined;
+
+const seedUserWithoutRole = async (): Promise<void> => {
+    if( userWithoutRole ) return;
+    await openTestConnection();
+
+    const email = 'norole@test.local';
+    const [user] = await AppUser.findOrCreate({
+        where: { email: esaviCrypt(email) },
+        defaults: {
+            username: esaviCrypt(email),
+            email: esaviCrypt(email),
+            passwordHash: await bcrypt.hash(TEST_PASSWORD, 10),
+            displayName: esaviCrypt('Test NO ROLE'),
+            requiresPasswordChange: false,
+            isActive: true
+        }
+    });
+
+    const userId = user.getDataValue('userId');
+    userWithoutRole = { userId, token: await jwtGenerate({ userId }) as string };
+}
+
+const authHeaderWithoutRole = (): Record<string, string> => {
+    if( !userWithoutRole ) {
+        throw new Error('No test user without role. Call seedUserWithoutRole() in a beforeAll hook.');
+    }
+    return { Authorization: `Bearer ${ userWithoutRole.token }` };
+}
+
 const getToken = ( role: TestRole ): string => getTestUser(role).token;
 
 /**
@@ -179,6 +209,8 @@ export {
     getTestUser,
     getToken,
     authHeader,
+    authHeaderWithoutRole,
+    seedUserWithoutRole,
     createScopedTestUser
 }
 
