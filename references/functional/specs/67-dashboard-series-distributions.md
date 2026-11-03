@@ -184,7 +184,12 @@ Las comprobaciones de §5 fijan tres años con 53 semanas o con un cambio de añ
 *Dos filas especiales:*
 
 - `self`: con `geoLocationId`, los casos ubicados **en la propia unidad** de referencia y no en un hijo;
-- `unlocated`: solo para administradores sin `geoLocationId`, los casos cuyo establecimiento no tiene `geoLocationId`.
+- `unlocated`: para cualquier usuario y con o sin `geoLocationId`, los casos de Uₚ que no se pueden atribuir a ninguna fila de R ni a `self`. Son tres situaciones:
+  - el establecimiento no tiene `geoLocationId`;
+  - su unidad está inactiva o cuelga de un ancestro inactivo, de modo que el recorrido recursivo no la alcanza;
+  - su unidad cuelga de un hijo de la unidad de referencia que el filtro de alcance retiró de R, como un usuario asignado a un cantón que consulta el país.
+
+  La fila no expone el nombre ni el `geoLocationId` de ninguna de esas unidades.
 
 Ambas van con `geoLocationId: null` y una etiqueta fija. Se omiten si valen 0.
 
@@ -411,10 +416,11 @@ Depende de que F65 y F66 estén implementados: dominio `DASH`, `dashboardPeriodV
 
 **Geografía (`009`)**
 
-- [ ] Un ADMIN sin `geoLocationId` recibe como filas las unidades sin padre, incluidas las que tienen 0, y la fila `unlocated` si hay casos en establecimientos sin ubicación.
+- [ ] Un ADMIN sin `geoLocationId` recibe como filas las unidades sin padre, incluidas las que tienen 0, y la fila `unlocated` si hay casos no atribuibles (establecimientos sin ubicación o bajo unidades inactivas).
 - [ ] Con `geoLocationId = <provincia>`, las filas son sus cantones, más `self` si hay casos ubicados directamente en la provincia.
 - [ ] Un usuario restringido asignado a una provincia y a uno de sus cantones ve una sola fila: la provincia.
 - [ ] Un usuario restringido con `geoLocationId` de una unidad que contiene territorio ajeno no recibe como fila ningún hijo fuera de su alcance. Ni el nombre ni el `geoLocationId` de ese hijo aparecen en la respuesta.
+- [ ] Un usuario restringido asignado a un cantón que consulta con `geoLocationId` = el país ve sus casos en la fila `unlocated`, y ninguna provincia como fila.
 - [ ] `Σ rows.total = |Uₚ|`.
 - [ ] Ninguna fila trae `geoPolygon`.
 

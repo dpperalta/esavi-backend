@@ -11,6 +11,7 @@ import {
     DashboardDistributions,
     DashboardEpiCurve,
     DashboardEpiWeek,
+    DashboardGeoRow,
     DashboardIndicators,
     DashboardPendingInvestigation,
     DashboardPendingWork,
@@ -33,7 +34,7 @@ import {
     NOTIFICATION_DEADLINE_DAYS_CODE
 } from '../constants/dashboard.constants';
 import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE, FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE } from '../constants/finalClassification.constants';
-import { resolveGeoSubtreeIds, resolveUserGeoScopeIds } from './common/geoScope.service';
+import { MAX_GEO_SUBTREE_DEPTH, resolveGeoSubtreeIds, resolveUserGeoRootIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 
 const MISSING_CONFIG_CODE = 'APPCONFIG_VALUE_MISSING';
 
@@ -711,7 +712,7 @@ const COLD_CHAIN_FAILURE_KEYS = [
     'rangeDeviation', 'procedureNotFollowed', 'vaccineNotUsable', 'diluentNotUsable', 'partiallyReconstitutedVaccine', 'otherObjectPresent'
 ] as const;
 
-const periodCasesSql = (universeSql: string): string => `WITH u AS (${ universeSql }),
+const periodCasesSql = (universeSql: string, recursive = false): string => `WITH ${ recursive ? 'RECURSIVE ' : '' }u AS (${ universeSql }),
         pc AS (
             SELECT u."caseId", u."patientId", u."healthFacilityId", cl."isSeriousEvent" IS TRUE AS "serious"
             FROM u
@@ -842,6 +843,161 @@ const buildVaccines = (rows: VaccineQueryRow[]): DashboardDistributions['vaccine
     };
 }
 
+interface GeoReferenceRow {
+    geoLocationId: string;
+    name: string;
+    latitude: number | string | null;
+    longitude: number | string | null;
+}
+
+interface GeoBucketRow {
+    bucket: string | null;
+    total: number;
+    serious: number;
+}
+
+interface GeoReference {
+    rows: GeoReferenceRow[];
+    selfId: string | null;
+}
+
+const SELF_BUCKET = 'self';
+
+const GEO_REFERENCE_COLUMNS = 'g."geoLocationId", g."name", g."latitude", g."longitude"';
+
+const minimizeGeoRootIds = async (rootIds: string[]): Promise<string[]> => {
+    if( rootIds.length <= 1 ) return rootIds;
+    const nested = await sequelize.query<{ geoLocationId: string }>(
+        `WITH RECURSIVE d AS (
+            SELECT g."geoLocationId" AS "rootId", g."geoLocationId", 1 AS depth
+            FROM "geoLocation" g
+            WHERE g."geoLocationId" IN (:rootIds)
+              AND g."isActive" = true
+            UNION
+            SELECT d."rootId", c."geoLocationId", d.depth + 1
+            FROM d
+            JOIN "geoLocation" c ON c."parentGeoLocationId" = d."geoLocationId"
+            WHERE c."isActive" = true
+              AND d.depth < :maxDepth
+        )
+        SELECT DISTINCT d."geoLocationId"
+        FROM d
+        WHERE d."geoLocationId" IN (:rootIds)
+          AND d."geoLocationId" <> d."rootId"`,
+        { replacements: { rootIds, maxDepth: MAX_GEO_SUBTREE_DEPTH }, type: QueryTypes.SELECT }
+    );
+    const nestedIds = new Set(nested.map(( row ) => row.geoLocationId ));
+    return rootIds.filter(( id ) => !nestedIds.has(id) );
+}
+
+const resolveGeoReference = async (
+    query: DashboardPeriodQuery,
+    authUser: AuthUser | undefined,
+    userScopeIds: string[] | null
+): Promise<GeoReference> => {
+    if( query.geoLocationId ) {
+        const children = await sequelize.query<GeoReferenceRow>(
+            `SELECT ${ GEO_REFERENCE_COLUMNS }
+            FROM "geoLocation" g
+            WHERE g."parentGeoLocationId" = :geoLocationId
+              AND g."isActive" = true`,
+            { replacements: { geoLocationId: query.geoLocationId }, type: QueryTypes.SELECT }
+        );
+        if( userScopeIds === null ) return { rows: children, selfId: query.geoLocationId };
+        const userScope = new Set(userScopeIds);
+        return { rows: children.filter(( row ) => userScope.has(row.geoLocationId) ), selfId: query.geoLocationId };
+    }
+
+    if( userScopeIds === null ) {
+        const roots = await sequelize.query<GeoReferenceRow>(
+            `SELECT ${ GEO_REFERENCE_COLUMNS }
+            FROM "geoLocation" g
+            WHERE g."parentGeoLocationId" IS NULL
+              AND g."isActive" = true`,
+            { type: QueryTypes.SELECT }
+        );
+        return { rows: roots, selfId: null };
+    }
+
+    const rootIds = await minimizeGeoRootIds([...new Set(await resolveUserGeoRootIds(authUser))]);
+    if( rootIds.length === 0 ) return { rows: [], selfId: null };
+    const roots = await sequelize.query<GeoReferenceRow>(
+        `SELECT ${ GEO_REFERENCE_COLUMNS }
+        FROM "geoLocation" g
+        WHERE g."geoLocationId" IN (:rootIds)
+          AND g."isActive" = true`,
+        { replacements: { rootIds }, type: QueryTypes.SELECT }
+    );
+    return { rows: roots, selfId: null };
+}
+
+const queryGeography = async (
+    universeSql: string,
+    replacements: Record<string, unknown>,
+    reference: GeoReference
+): Promise<GeoBucketRow[]> => {
+    const referenceIds = reference.rows.map(( row ) => row.geoLocationId );
+    const subtreeSql = referenceIds.length > 0
+        ? `SELECT g."geoLocationId" AS "rootId", g."geoLocationId", 1 AS depth
+            FROM "geoLocation" g
+            WHERE g."geoLocationId" IN (:referenceIds)
+            UNION
+            SELECT t."rootId", c."geoLocationId", t.depth + 1
+            FROM t
+            JOIN "geoLocation" c ON c."parentGeoLocationId" = t."geoLocationId"
+            WHERE c."isActive" = true
+              AND t.depth < :maxDepth`
+        : 'SELECT NULL::uuid AS "rootId", NULL::uuid AS "geoLocationId", 1 AS depth WHERE false';
+
+    return sequelize.query<GeoBucketRow>(
+        `${ periodCasesSql(universeSql, true) },
+        t AS (${ subtreeSql }),
+        a AS (
+            SELECT DISTINCT ON (pc."caseId") pc."caseId", pc."serious",
+                CASE WHEN h."geoLocationId" = CAST(:selfId AS uuid) THEN '${ SELF_BUCKET }' ELSE t."rootId"::text END AS "bucket"
+            FROM pc
+            JOIN "healthFacility" h ON h."healthFacilityId" = pc."healthFacilityId"
+            LEFT JOIN t ON t."geoLocationId" = h."geoLocationId"
+            ORDER BY pc."caseId", t."rootId"
+        )
+        SELECT a."bucket", COUNT(*)::int AS "total", COUNT(*) FILTER (WHERE a."serious")::int AS "serious"
+        FROM a
+        GROUP BY a."bucket"`,
+        {
+            replacements: { ...replacements, referenceIds, selfId: reference.selfId, maxDepth: MAX_GEO_SUBTREE_DEPTH },
+            type: QueryTypes.SELECT
+        }
+    );
+}
+
+const compareGeoRows = (a: DashboardGeoRow, b: DashboardGeoRow): number => {
+    if( a.total !== b.total ) return b.total - a.total;
+    if( a.name === b.name ) return 0;
+    if( a.name === null ) return 1;
+    if( b.name === null ) return -1;
+    return a.name.localeCompare(b.name);
+}
+
+const buildGeography = (reference: GeoReference, buckets: GeoBucketRow[]): DashboardDistributions['geography'] => {
+    const byBucket = new Map(buckets.map(( row ) => [row.bucket, row] ));
+    const rows: DashboardGeoRow[] = reference.rows.map(( row ) => ({
+        geoLocationId: row.geoLocationId,
+        kind: 'unit',
+        name: row.name,
+        latitude: toNullableNumber(row.latitude),
+        longitude: toNullableNumber(row.longitude),
+        total: byBucket.get(row.geoLocationId)?.total ?? 0,
+        serious: byBucket.get(row.geoLocationId)?.serious ?? 0
+    }));
+    const special = ( kind: 'self' | 'unlocated', bucket: GeoBucketRow | undefined ): void => {
+        if( !bucket || bucket.total === 0 ) return;
+        rows.push({ geoLocationId: null, kind, name: null, latitude: null, longitude: null, total: bucket.total, serious: bucket.serious });
+    };
+    special('self', byBucket.get(SELF_BUCKET));
+    special('unlocated', byBucket.get(null));
+    return { rows: rows.sort(compareGeoRows) };
+}
+
 const emptyProgrammatic = (): DashboardProgrammatic => ({
     investigatedCases: 0,
     withoutAdministrationRecord: 0,
@@ -870,7 +1026,7 @@ const emptyDistributions = (period: DashboardPeriod, scope: DashboardScope): Das
 const getDistributionsService = async (query: DashboardPeriodQuery, authUser: AuthUser | undefined, lang: string): Promise<DashboardDistributions> => {
     try {
         const { period } = resolveDashboardPeriod({ from: query.from, to: query.to });
-        const { scopeIds, scope } = await resolvePeriodScope(query, authUser);
+        const { userScopeIds, scopeIds, scope } = await resolvePeriodScope(query, authUser);
 
         if( scopeIds !== null && scopeIds.length === 0 ) {
             return emptyDistributions(period, scope);
@@ -878,10 +1034,12 @@ const getDistributionsService = async (query: DashboardPeriodQuery, authUser: Au
 
         const universeSql = buildUniverseSql(scopeIds !== null);
         const replacements = buildPeriodReplacements(period, scopeIds);
+        const geoReference = await resolveGeoReference(query, authUser, userScopeIds);
 
-        const [vaccineRows, sexAgeRows] = await Promise.all([
+        const [vaccineRows, sexAgeRows, geoBuckets] = await Promise.all([
             queryVaccines(universeSql, replacements),
-            querySexAge(universeSql, replacements)
+            querySexAge(universeSql, replacements),
+            queryGeography(universeSql, replacements, geoReference)
         ]);
 
         return {
@@ -889,7 +1047,7 @@ const getDistributionsService = async (query: DashboardPeriodQuery, authUser: Au
             scope,
             vaccines: buildVaccines(vaccineRows),
             sexAge: buildSexAge(sexAgeRows),
-            geography: { rows: [] },
+            geography: buildGeography(geoReference, geoBuckets),
             programmatic: emptyProgrammatic()
         };
     } catch (error) {
