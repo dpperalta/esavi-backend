@@ -2,7 +2,7 @@ import request from 'supertest';
 import { app } from '../../src/app';
 import { ROLE_LEVELS, ROLES } from '../../src/constants/roles.constants';
 import { closeTestDatabase } from '../setup/database';
-import { seedTestUsers, authHeader } from '../setup/auth';
+import { seedTestUsers, seedUserWithoutRole, authHeader, authHeaderWithoutRole } from '../setup/auth';
 import type { TestRole } from '../setup/auth';
 import { ROUTE_RULES, UUID } from '../setup/routeRules';
 
@@ -29,6 +29,7 @@ describe('role matrix', () => {
     beforeAll(async () => {
         consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
         await seedTestUsers();
+        await seedUserWithoutRole();
     });
 
     afterAll(async () => {
@@ -40,10 +41,12 @@ describe('role matrix', () => {
 
         const below = roleBelow(minRole);
 
-        it(`rejects ${ below } with 403`, async () => {
-            const response = await request(app)[method](path).set(authHeader(below as TestRole));
+        it(`rejects ${ below ?? 'a user without roles' } with 403`, async () => {
+            const headers = below ? authHeader(below) : authHeaderWithoutRole();
+            const response = await request(app)[method](path).set(headers);
 
             expect(response.status).toBe(403);
+            expect(response.body.code).toBe('AUTH_ROLE_FORBIDDEN');
         });
 
         it(`does not reject ${ minRole } with 403`, async () => {
@@ -81,11 +84,11 @@ describe('role matrix', () => {
         it('covers every route that declares validateUserRole', () => {
             // Bumped deliberately when a route is added, so a new endpoint cannot
             // slip in without a rule in ROUTE_RULES.
-            expect(ROUTE_RULES).toHaveLength(356);
+            expect(ROUTE_RULES).toHaveLength(357);
         });
 
-        it('has a role below every minimum it uses, so the 403 side is always testable', () => {
-            for( const rule of ROUTE_RULES ) {
+        it('has a role below every minimum other than ANALYTICS, so the 403 side is always testable', () => {
+            for( const rule of ROUTE_RULES.filter(( candidate ) => candidate.minRole !== 'ANALYTICS' ) ) {
                 expect(roleBelow(rule.minRole)).toBeDefined();
             }
         });

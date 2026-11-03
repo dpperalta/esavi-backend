@@ -2,12 +2,27 @@ import fs from 'fs';
 import path from 'path';
 import request from 'supertest';
 import { app } from '../../src/app';
-import { CaseWorkflow, EsaviCase, GeoLevelType, GeoLocation, HealthFacility, Notification, Patient, SystemConfig } from '../../src/models';
+import {
+    CaseWorkflow,
+    CatalogItem,
+    CatalogType,
+    Classification,
+    EsaviCase,
+    FinalClassification,
+    GeoLevelType,
+    GeoLocation,
+    HealthFacility,
+    Investigation,
+    InvestigationAutopsy,
+    Notification,
+    Patient,
+    SystemConfig
+} from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { advanceCaseWorkflowStageService } from '../../src/services/caseWorkflow.service';
 import { CASE_WORKFLOW_STATUS } from '../../src/constants/caseWorkflow.constants';
 import { closeTestDatabase, seedCaseWorkflow, setCaseWorkflowStatus } from '../setup/database';
-import { seedTestUsers, authHeader, createScopedTestUser } from '../setup/auth';
+import { TEST_ROLES, seedTestUsers, seedUserWithoutRole, authHeader, authHeaderWithoutRole, createScopedTestUser } from '../setup/auth';
 import type { TestRole } from '../setup/auth';
 
 interface FunnelEntry { statusCode: string; statusName: string; sortOrder: number; count: number }
@@ -444,6 +459,490 @@ describe('dashboard contract', () => {
             expect(( await fetchAs(bearer(userAToken)) ).status).toBe(200);
             expect(( await fetchAs(authHeader('ADMIN')) ).status).toBe(200);
             expect(await snapshot()).toBe(before);
+        });
+    });
+
+    describe('indicators — ESAVI-DASH-007', () => {
+
+        const indicators = '/api/dashboard/indicators';
+        const period = 'from=2026-03-01&to=2026-03-31';
+        const indicatorIds: Record<string, string> = {};
+
+        let provinceIndId: string;
+        let cantonIndId: string;
+        let provinceOtherId: string;
+        let medianThreeId: string;
+        let medianTwoId: string;
+        let analystToken: string;
+        let analystEmptyToken: string;
+        let userIndToken: string;
+        let topImportanceItemId: string;
+
+        interface IndicatorCaseOptions {
+            geoLocationId: string;
+            reportDate: string;
+            eventDate?: string;
+            notification?: { notificationType: 'SEVERE' | 'NON_SEVERE'; deathDate?: string; autopsyRequested?: boolean };
+            classification?: Record<string, boolean>;
+            autopsy?: { isDeath: boolean; isAutopsyPerformed: boolean; deleted?: boolean };
+            finalClassification?: Record<string, unknown>;
+            statusCode?: string;
+            stamps?: Record<string, unknown>;
+        }
+
+        const seedIndicatorCase = async ( label: string, options: IndicatorCaseOptions ): Promise<string> => {
+            const facility = await HealthFacility.create({
+                localCode: `${ tag }I${ label }`, name: `${ tag } I${ label }`, geoLocationId: options.geoLocationId
+            });
+            const patient = await Patient.create({
+                names: esaviCrypt(`Ind ${ label }`),
+                lastNames: esaviCrypt(`Probe ${ suffix }`),
+                documentNumber: esaviCrypt(`DI${ label }${ suffix }`),
+                healthSystemCode: `DI${ label }${ suffix }`
+            });
+            const esaviCase = await EsaviCase.create({
+                caseCode: `${ tag }-I${ label }`,
+                patientId: patient.getDataValue('patientId'),
+                healthFacilityId: facility.getDataValue('healthFacilityId'),
+                reportDate: options.reportDate,
+                eventDate: options.eventDate ?? null,
+                isActive: true
+            });
+            const caseId = esaviCase.getDataValue('caseId');
+            await seedCaseWorkflow(caseId);
+            if( options.statusCode ) await setCaseWorkflowStatus(caseId, options.statusCode);
+            if( options.stamps ) await CaseWorkflow.update(options.stamps, { where: { caseId } });
+            if( options.notification ) {
+                await Notification.create({
+                    caseId,
+                    notificationType: options.notification.notificationType,
+                    esaviDescription: `Ind ${ label }`,
+                    deathDate: options.notification.deathDate ?? null,
+                    autopsyRequested: options.notification.autopsyRequested ?? null
+                });
+            }
+            if( options.classification ) {
+                await Classification.create({ caseId, ...options.classification });
+            }
+            if( options.autopsy ) {
+                const investigation = await Investigation.create({ caseId });
+                await InvestigationAutopsy.create({
+                    investigationId: investigation.getDataValue('investigationId'),
+                    isDeath: options.autopsy.isDeath,
+                    isAutopsyPerformed: options.autopsy.isAutopsyPerformed,
+                    deletedAt: options.autopsy.deleted ? new Date() : null
+                });
+            }
+            if( options.finalClassification ) {
+                await FinalClassification.create({ caseId, ...options.finalClassification });
+            }
+            indicatorIds[label] = caseId;
+            return caseId;
+        };
+
+        const getIndicators = ( headers: Record<string, string>, query = '' ) =>
+            request(app).get(`${ indicators }${ query ? `?${ query }` : '' }`).set(headers);
+        const analystData = async ( query = period ) => ( await getIndicators(bearer(analystToken), query) ).body.data;
+
+        const localToday = (): string => {
+            const now = new Date();
+            return `${ now.getFullYear() }-${ `${ now.getMonth() + 1 }`.padStart(2, '0') }-${ `${ now.getDate() }`.padStart(2, '0') }`;
+        };
+        const shiftDays = ( isoDate: string, days: number ): string => {
+            const [year, month, day] = isoDate.split('-').map(Number);
+            return new Date(Date.UTC(year, month - 1, day) + days * dayMs).toISOString().slice(0, 10);
+        };
+
+        const collectKeys = ( value: unknown, keys: Set<string> = new Set() ): Set<string> => {
+            if( Array.isArray(value) ) value.forEach(( item ) => collectKeys(item, keys) );
+            else if( value && typeof value === 'object' ) {
+                for( const [key, nested] of Object.entries(value) ) {
+                    keys.add(key);
+                    collectKeys(nested, keys);
+                }
+            }
+            return keys;
+        };
+
+        beforeAll(async () => {
+            await seedUserWithoutRole();
+
+            const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+            provinceIndId = await createGeoLocation('PROVIND', null, baseLevel + 1);
+            cantonIndId = await createGeoLocation('CANTIND', provinceIndId, baseLevel + 2);
+            provinceOtherId = await createGeoLocation('PROVOTHIND', null, baseLevel + 1);
+            medianThreeId = await createGeoLocation('PROVMED3', null, baseLevel + 1);
+            medianTwoId = await createGeoLocation('PROVMED2', null, baseLevel + 1);
+
+            const importanceItem = await CatalogItem.findOne({
+                where: { value: 'MAX', isActive: true },
+                include: [{ model: CatalogType, as: 'catalogType', where: { code: 'finalClassificationImportance' }, attributes: [] }]
+            });
+            topImportanceItemId = importanceItem!.getDataValue('catalogItemId');
+
+            await seedIndicatorCase('E1', {
+                geoLocationId: cantonIndId, reportDate: '2026-03-01', eventDate: '2026-02-27',
+                notification: { notificationType: 'SEVERE', deathDate: '2026-02-28', autopsyRequested: false },
+                classification: { isSeriousEvent: true, causedDeath: true, causedHospitalization: true },
+                autopsy: { isDeath: true, isAutopsyPerformed: true },
+                finalClassification: { dIsUnclassifiable: true, aIsRelatedToStress: true }
+            });
+            await seedIndicatorCase('E2', {
+                geoLocationId: cantonIndId, reportDate: '2026-03-31', eventDate: '2026-03-27',
+                notification: { notificationType: 'NON_SEVERE' },
+                classification: { isSeriousEvent: false },
+                finalClassification: { importanceBItemId: topImportanceItemId, aIsRelatedToStress: true }
+            });
+            await seedIndicatorCase('E3', {
+                geoLocationId: cantonIndId, reportDate: '2026-03-15', eventDate: '2026-03-05',
+                classification: { isSeriousEvent: true, causedDeath: true },
+                finalClassification: { bHasDeterminantFactor: true, cHasCoincidentCause: true }
+            });
+            await seedIndicatorCase('E4', {
+                geoLocationId: cantonIndId, reportDate: '2026-03-15', eventDate: '2026-02-13',
+                notification: { notificationType: 'SEVERE', deathDate: '2026-02-20' },
+                finalClassification: {}
+            });
+            await seedIndicatorCase('E5', {
+                geoLocationId: cantonIndId, reportDate: '2026-03-15', eventDate: '2026-02-12',
+                notification: { notificationType: 'SEVERE', autopsyRequested: true },
+                autopsy: { isDeath: true, isAutopsyPerformed: false },
+                finalClassification: { aIsRelatedToVaccineProduct: true, aIsRelatedToStress: true }
+            });
+            await seedIndicatorCase('E6', {
+                geoLocationId: provinceIndId, reportDate: '2026-03-15',
+                autopsy: { isDeath: true, isAutopsyPerformed: true, deleted: true }
+            });
+            await seedIndicatorCase('P1', {
+                geoLocationId: cantonIndId, reportDate: '2026-02-28', eventDate: '2026-02-20',
+                notification: { notificationType: 'SEVERE' },
+                classification: { isSeriousEvent: true, causedDeath: true }
+            });
+            await seedIndicatorCase('OUT', { geoLocationId: cantonIndId, reportDate: '2026-01-28' });
+
+            await seedIndicatorCase('CLOSE10', {
+                geoLocationId: cantonIndId, reportDate: '2025-12-01', statusCode: CASE_WORKFLOW_STATUS.CLOSED,
+                stamps: {
+                    openedAt: new Date('2026-03-01T12:00:00Z'), closedAt: new Date('2026-03-11T12:00:00Z'),
+                    classificationStartedAt: new Date('2026-03-01T12:00:00Z'), classificationEndedAt: new Date('2026-03-03T12:00:00Z')
+                }
+            });
+            await seedIndicatorCase('CLOSE20', {
+                geoLocationId: cantonIndId, reportDate: '2025-12-01', statusCode: CASE_WORKFLOW_STATUS.CLOSED,
+                stamps: {
+                    openedAt: new Date('2026-03-01T12:00:00Z'), closedAt: new Date('2026-03-21T12:00:00Z'),
+                    classificationStartedAt: new Date('2026-03-01T12:00:00Z'), classificationEndedAt: new Date('2026-03-05T12:00:00Z'),
+                    notificationStartedAt: new Date('2026-03-05T12:00:00Z')
+                }
+            });
+            await seedIndicatorCase('REOPENIND', {
+                geoLocationId: cantonIndId, reportDate: '2025-12-01', statusCode: CASE_WORKFLOW_STATUS.REOPENED,
+                stamps: { openedAt: new Date('2026-03-01T12:00:00Z'), closedAt: new Date('2026-03-15T12:00:00Z') }
+            });
+
+            await seedIndicatorCase('OTHER', {
+                geoLocationId: provinceOtherId, reportDate: '2026-03-15', eventDate: '2026-03-14',
+                notification: { notificationType: 'SEVERE', deathDate: '2026-03-14' },
+                classification: { isSeriousEvent: true, causedDeath: true },
+                finalClassification: { dIsUnclassifiable: true }
+            });
+
+            await seedIndicatorCase('M3A', { geoLocationId: medianThreeId, reportDate: '2026-03-10', eventDate: '2026-03-08' });
+            await seedIndicatorCase('M3B', { geoLocationId: medianThreeId, reportDate: '2026-03-10', eventDate: '2026-03-06' });
+            await seedIndicatorCase('M3C', { geoLocationId: medianThreeId, reportDate: '2026-03-10', eventDate: '2026-02-28' });
+            await seedIndicatorCase('M2A', { geoLocationId: medianTwoId, reportDate: '2026-03-10', eventDate: '2026-03-08' });
+            await seedIndicatorCase('M2B', { geoLocationId: medianTwoId, reportDate: '2026-03-10', eventDate: '2026-03-05' });
+
+            analystToken = ( await createScopedTestUser('dashboard-ind-analyst', provinceIndId, 'ANALYTICS') ).token;
+            analystEmptyToken = ( await createScopedTestUser('dashboard-ind-analyst-empty', null, 'ANALYTICS') ).token;
+            userIndToken = ( await createScopedTestUser('dashboard-ind-user', provinceIndId) ).token;
+        });
+
+        describe('surface and roles', () => {
+
+            it.each(TEST_ROLES)('answers 200 to %s', async ( role ) => {
+                const response = await getIndicators(authHeader(role));
+                expect(response.status).toBe(200);
+                expect(response.body.ok).toBe(true);
+                expect(typeof response.body.message).toBe('string');
+            });
+
+            it('answers 403 AUTH_ROLE_FORBIDDEN to an authenticated user without roles and 401 without a token', async () => {
+                const forbidden = await getIndicators(authHeaderWithoutRole());
+                expect(forbidden.status).toBe(403);
+                expect(forbidden.body.code).toBe('AUTH_ROLE_FORBIDDEN');
+                expect(( await request(app).get(indicators) ).status).toBe(401);
+            });
+
+            it('returns every block of the contract', async () => {
+                const data = await analystData();
+                expect(Object.keys(data).sort()).toEqual(
+                    ['causality', 'closure', 'deaths', 'period', 'previousPeriod', 'scope', 'severity', 'timeliness', 'volume'].sort()
+                );
+            });
+        });
+
+        describe('period', () => {
+
+            it('defaults to the 30 days ending today and the 30 before them', async () => {
+                const data = ( await getIndicators(authHeader('ADMIN')) ).body.data;
+                const today = localToday();
+                expect(data.period).toEqual({ from: shiftDays(today, -29), to: today, days: 30 });
+                expect(data.previousPeriod).toEqual({ from: shiftDays(today, -59), to: shiftDays(today, -30), days: 30 });
+            });
+
+            it('derives from as to minus 29 when only to travels', async () => {
+                const data = ( await getIndicators(authHeader('ADMIN'), 'to=2026-03-31') ).body.data;
+                expect(data.period.from).toBe('2026-03-02');
+            });
+
+            it('resolves the previous period of January as the whole of December', async () => {
+                const data = ( await getIndicators(authHeader('ADMIN'), 'from=2026-01-01&to=2026-01-31') ).body.data;
+                expect(data.period.days).toBe(31);
+                expect(data.previousPeriod).toEqual({ from: '2025-12-01', to: '2025-12-31', days: 31 });
+            });
+
+            it.each([
+                ['from later than to', 'from=2026-05-01&to=2026-04-01'],
+                ['a future to', `to=${ shiftDays(localToday(), 1) }`],
+                ['a range of 367 days', 'from=2025-01-01&to=2026-01-02'],
+                ['a malformed date', 'from=2026-13-01'],
+                ['a timestamp instead of a date', 'from=2026-03-01T00:00:00Z'],
+                ['a malformed geoLocationId', 'geoLocationId=not-a-uuid']
+            ])('answers 400 to %s', async ( _label, query ) => {
+                const response = await getIndicators(authHeader('ADMIN'), query);
+                expect(response.status).toBe(400);
+                expect(response.body.ok).toBe(false);
+            });
+
+            it('the invalid period 400 carries dashboard.invalidPeriod', async () => {
+                const response = await getIndicators(authHeader('ADMIN'), 'from=2026-05-01&to=2026-04-01&lang=en');
+                expect(response.body.errors).toContain('the range cannot exceed 366 days');
+            });
+
+            it('counts both ends of the period and puts from minus 1 in previous', async () => {
+                const data = await analystData();
+                expect(data.volume.total).toEqual({ current: 6, previous: 1 });
+                const onlyFrom = await analystData('from=2026-03-01&to=2026-03-01');
+                const onlyTo = await analystData('from=2026-03-31&to=2026-03-31');
+                expect(onlyFrom.volume.total).toEqual({ current: 1, previous: 1 });
+                expect(onlyTo.volume.total.current).toBe(1);
+            });
+        });
+
+        describe('scope', () => {
+
+            it('an analyst of territory A counts nothing of territory B in any block', async () => {
+                const data = await analystData();
+                expect(data.scope).toEqual({ restricted: true, hasAssignments: true, geoLocationId: null });
+                expect(data.volume.total.current).toBe(6);
+                expect(data.deaths.total.current).toBe(4);
+                expect(data.causality.categories.D).toBe(1);
+                expect(data.timeliness.withEventDate).toBe(5);
+            });
+
+            it('the same analyst gets 200 with zeros for territory B, identical to an unknown UUID', async () => {
+                const foreign = await getIndicators(bearer(analystToken), `${ period }&geoLocationId=${ provinceOtherId }`);
+                const unknown = await getIndicators(bearer(analystToken), `${ period }&geoLocationId=00000000-0000-4000-8000-000000000001`);
+                expect(foreign.status).toBe(200);
+                expect(unknown.status).toBe(200);
+                expect(foreign.body.data.volume.total).toEqual({ current: 0, previous: 0 });
+                expect(foreign.body.data.closure.closedCases).toBe(0);
+                expect(foreign.body.data.timeliness.medianDays).toBeNull();
+                const strip = ( data: { scope: Record<string, unknown> } ) => ({ ...data, scope: { ...data.scope, geoLocationId: null } });
+                expect(strip(foreign.body.data)).toEqual(strip(unknown.body.data));
+                expect(foreign.body.data.scope.geoLocationId).toBe(provinceOtherId);
+            });
+
+            it('an ADMIN filtering by territory A counts A and its descendants only', async () => {
+                const data = ( await getIndicators(authHeader('ADMIN'), `${ period }&geoLocationId=${ provinceIndId }`) ).body.data;
+                expect(data.scope).toEqual({ restricted: true, hasAssignments: true, geoLocationId: provinceIndId });
+                expect(data.volume.total).toEqual({ current: 6, previous: 1 });
+                expect(data.closure.closedCases).toBe(2);
+            });
+
+            it('an analyst without assignments gets 200 with zeros, null medians and hasAssignments false', async () => {
+                const response = await getIndicators(bearer(analystEmptyToken), period);
+                expect(response.status).toBe(200);
+                const data = response.body.data;
+                expect(data.scope).toEqual({ restricted: true, hasAssignments: false, geoLocationId: null });
+                expect(data.volume.total).toEqual({ current: 0, previous: 0 });
+                expect(data.timeliness.medianDays).toBeNull();
+                expect(data.closure.medianDaysToClose).toBeNull();
+                expect(Object.values(data.closure.stageMedianDays).every(( value ) => value === null )).toBe(true);
+            });
+        });
+
+        describe('volume and severity', () => {
+
+            it('volume.total.current matches the case listing of the same non-admin user', async () => {
+                const listing = await request(app)
+                    .get('/api/esavi-cases?reportDateFrom=2026-03-01&reportDateTo=2026-03-31')
+                    .set(bearer(userIndToken));
+                expect(listing.status).toBe(200);
+                const data = ( await getIndicators(bearer(userIndToken), period) ).body.data;
+                expect(data.volume.total.current).toBe(listing.body.data.count);
+            });
+
+            it('splits volume by notification type and the three parts add up to the total in both periods', async () => {
+                const data = await analystData();
+                expect(data.volume.byNotificationType).toEqual({
+                    SEVERE: { current: 3, previous: 1 },
+                    NON_SEVERE: { current: 1, previous: 0 },
+                    none: { current: 2, previous: 0 }
+                });
+                for( const side of ['current', 'previous'] as const ) {
+                    const { SEVERE, NON_SEVERE, none } = data.volume.byNotificationType;
+                    expect(SEVERE[side] + NON_SEVERE[side] + none[side]).toBe(data.volume.total[side]);
+                }
+            });
+
+            it('classified plus unclassified is the total and serious never exceeds classified', async () => {
+                const data = await analystData();
+                expect(data.severity.classified).toEqual({ current: 3, previous: 1 });
+                expect(data.severity.serious).toEqual({ current: 2, previous: 1 });
+                expect(data.severity.unclassified).toEqual({ current: 3, previous: 0 });
+                for( const side of ['current', 'previous'] as const ) {
+                    expect(data.severity.classified[side] + data.severity.unclassified[side]).toBe(data.volume.total[side]);
+                    expect(data.severity.serious[side]).toBeLessThanOrEqual(data.severity.classified[side]);
+                }
+            });
+
+            it('a case with causedDeath and causedHospitalization adds 1 to each criterion', async () => {
+                const data = await analystData();
+                expect(data.severity.criteria).toEqual({
+                    death: 2, disability: 0, congenitalAnomaly: 0, fetalDeath: 0,
+                    lifeThreatening: 0, hospitalization: 1, abortion: 0, otherCondition: 0
+                });
+            });
+        });
+
+        describe('deaths', () => {
+
+            it('a case with death in the three sources counts once', async () => {
+                const data = ( await getIndicators(authHeader('ADMIN'), `from=2026-03-01&to=2026-03-01&geoLocationId=${ provinceIndId }`) ).body.data;
+                expect(data.deaths.total.current).toBe(1);
+            });
+
+            it('three cases with death in one source each add up to 3, on top of the one with all three', async () => {
+                const data = await analystData();
+                expect(data.deaths.total).toEqual({ current: 4, previous: 1 });
+            });
+
+            it('a deleted investigationAutopsy counts neither as death nor as performed autopsy', async () => {
+                const data = await analystData();
+                expect(data.deaths.autopsyPerformed).toBe(1);
+                expect(data.deaths.autopsyRequested).toBe(1);
+            });
+        });
+
+        describe('timeliness', () => {
+
+            it('with a 30-day deadline, 30 days is on time and 31 is not; a case without eventDate is counted apart', async () => {
+                const data = await analystData();
+                expect(data.timeliness).toEqual({ withEventDate: 5, withoutEventDate: 1, medianDays: 10, onTime: 4, deadlineDays: 30 });
+            });
+
+            it('the median of 2, 4 and 10 days is 4', async () => {
+                const data = ( await getIndicators(authHeader('ADMIN'), `${ period }&geoLocationId=${ medianThreeId }`) ).body.data;
+                expect(data.timeliness.medianDays).toBe(4);
+            });
+
+            it('the median of 2 and 5 days is 3.5', async () => {
+                const data = ( await getIndicators(authHeader('ADMIN'), `${ period }&geoLocationId=${ medianTwoId }`) ).body.data;
+                expect(data.timeliness.medianDays).toBe(3.5);
+            });
+
+            it('without the deadline configuration nor environment variable: 200, onTime and deadlineDays null, warning logged', async () => {
+                const row = await SystemConfig.findOne({ where: { code: 'ESAVI_NOTIFICATION_DEADLINE_DAYS', scope: 'NOTIFICATION' } });
+                const envValue = process.env.ESAVI_NOTIFICATION_DEADLINE_DAYS;
+                delete process.env.ESAVI_NOTIFICATION_DEADLINE_DAYS;
+                const logBefore = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf-8').length : 0;
+                await row!.update({ isActive: false });
+                try {
+                    const response = await getIndicators(bearer(analystToken), period);
+                    expect(response.status).toBe(200);
+                    expect(response.body.data.timeliness).toEqual({ withEventDate: 5, withoutEventDate: 1, medianDays: 10, onTime: null, deadlineDays: null });
+                    const added = fs.readFileSync(logPath, 'utf-8').slice(logBefore);
+                    expect(added).toContain('ESAVI-DASH-007 - ESAVI_NOTIFICATION_DEADLINE_DAYS missing or invalid, onTime disabled');
+                } finally {
+                    await row!.update({ isActive: true });
+                    if( envValue !== undefined ) process.env.ESAVI_NOTIFICATION_DEADLINE_DAYS = envValue;
+                }
+            });
+        });
+
+        describe('closure', () => {
+
+            it('counts cases closed in the period whatever their reportDate, and leaves a reopened one out', async () => {
+                const data = await analystData();
+                expect(data.closure.closedCases).toBe(2);
+                expect(data.closure.medianDaysToClose).toBe(15);
+            });
+
+            it('a stage without EndedAt stays out of its median, and a stage nobody ended is null', async () => {
+                const data = await analystData();
+                expect(data.closure.stageMedianDays).toEqual({
+                    CLASSIFICATION: 3, NOTIFICATION: null, INVESTIGATION: null, FINAL_CLASSIFICATION: null
+                });
+            });
+        });
+
+        describe('causality', () => {
+
+            it('applies the main category rule: D first, then precedence 1, then the first block marked, else UNCLASSIFIED', async () => {
+                const data = await analystData();
+                expect(data.causality.categories).toEqual({ A: 1, B: 2, C: 0, D: 1, UNCLASSIFIED: 1 });
+            });
+
+            it('the totals add up', async () => {
+                const data = await analystData();
+                expect(data.causality.withFinalClassification).toBe(5);
+                expect(data.causality.withoutFinalClassification).toBe(1);
+                expect(data.causality.withFinalClassification + data.causality.withoutFinalClassification).toBe(data.volume.total.current);
+                const categoriesSum = Object.values(data.causality.categories as Record<string, number>).reduce(( sum, value ) => sum + value, 0 );
+                expect(categoriesSum).toBe(data.causality.withFinalClassification);
+            });
+
+            it('an A case with vaccineProduct and stress adds 1 to each subcategory; stress of a D case does not count', async () => {
+                const data = await analystData();
+                expect(data.causality.aSubcategories).toEqual({ vaccineProduct: 1, qualityDeviation: 0, programmaticError: 0, stress: 1 });
+            });
+        });
+
+        describe('exposed data', () => {
+
+            it('the response carries no case or patient identifier at any level', async () => {
+                const keys = collectKeys(( await getIndicators(authHeader('SUPERADMIN'), period) ).body);
+                for( const forbidden of ['caseId', 'caseCode', 'patientId', 'names', 'lastNames', 'documentNumber', 'healthSystemCode'] ) {
+                    expect(keys.has(forbidden)).toBe(false);
+                }
+            });
+
+            it('scope.geoLocationId echoes the received value', async () => {
+                const unknownId = '00000000-0000-4000-8000-000000000002';
+                const data = ( await getIndicators(authHeader('ADMIN'), `geoLocationId=${ unknownId }`) ).body.data;
+                expect(data.scope.geoLocationId).toBe(unknownId);
+            });
+        });
+
+        describe('no writes', () => {
+
+            it('calling ESAVI-DASH-007 leaves updatedAt, appDetails and sysDetails of the fixture untouched', async () => {
+                const caseIds = Object.values(indicatorIds);
+                const attributes = ['caseId', 'updatedAt', 'appDetails', 'sysDetails'];
+                const snapshot = async () => JSON.stringify(await Promise.all([
+                    EsaviCase.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] }),
+                    CaseWorkflow.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] }),
+                    Classification.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] }),
+                    Notification.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] }),
+                    FinalClassification.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] })
+                ]));
+                const before = await snapshot();
+                expect(( await getIndicators(bearer(analystToken), period) ).status).toBe(200);
+                expect(( await getIndicators(authHeader('ADMIN'), period) ).status).toBe(200);
+                expect(await snapshot()).toBe(before);
+            });
         });
     });
 });

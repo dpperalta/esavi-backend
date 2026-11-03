@@ -1,6 +1,6 @@
 # SPEC F65 — Dashboard: marco común y trabajo pendiente
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (autorización y exposición), SPEC 02 (validación de entrada), SPEC 04 (consistencia del contrato), SPEC 05 (códigos de operación), SPEC 08 (`lang` en servicios), **SPEC F26** (`systemConfig`), **SPEC F44** (`caseWorkflow`), **SPEC F48** (filtros del listado de casos), **SPEC F49** (alcance geográfico), **SPEC F64** (roles por etapa)
 > **Fecha:** 2026-11-02
 > **Objetivo:** Dar al home un endpoint que diga, dentro del territorio del usuario, cuántos casos hay en cada estado, cuáles llevan demasiado tiempo detenidos y qué investigaciones solicitadas siguen sin iniciar.

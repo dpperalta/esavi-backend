@@ -66,6 +66,7 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-044](#deuda-044) | 🟠 | ✅ `notificationOrganization` se guarda en mayúsculas y su caso de contrato falla |
 | [DEUDA-045](#deuda-045) | 🟠 | ✅ `appDetails.user` expone el UUID interno del usuario en toda respuesta |
 | [DEUDA-046](#deuda-046) | 🔴 | ✅ El rate limit se cuenta por IP y sin `trust proxy` |
+| [DEUDA-047](#deuda-047) | 🟡 | `investigationAutopsy` no tiene `isActive` |
 
 ## Mapa de resolución
 
@@ -98,7 +99,7 @@ producción, en vez de exigir SUPERADMIN), **013** (unicidad **sin** filtrar por
 | [09 — CRUD de healthFacility](./specs/09-healthfacility-crud.md) | 039 |
 | [F12 — Update diferencial uniforme](./functional/specs/12-differential.md) | 041 |
 | [F59 — Autor de auditoría por email](./functional/specs/59-appdetails-author-email.md) | 045 |
-| sin spec | 031, 032, 033, 034, 035, 036, 040, 042, 043, 046 |
+| sin spec | 031, 032, 033, 034, 035, 036, 040, 042, 043, 046, 047 |
 
 Orden de ejecución: 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08. El 05 renumera
 líneas que tocan el 01, el 02 y el 04; el 06 renombra archivos que editan los
@@ -993,3 +994,20 @@ Dos desvíos respecto de lo que el diagnóstico preveía:
 Fuera de alcance, como el diagnóstico ya anotaba: el store sigue siendo en memoria, así que los contadores se reinician con el proceso y no se comparten entre instancias.
 
 Verificado: `npm run check` en 0 — build, lint (0 errores), `i18n:check` con 974 claves idénticas en `es`, `en` y `nl`, y 3347 tests en 54 suites. Los limiters siguen siendo un `passThrough` bajo `NODE_ENV=test`, por la razón que `app.ts` ya documentaba.
+
+---
+
+<a id="deuda-047"></a>
+## DEUDA-047 🟡 `investigationAutopsy` no tiene `isActive`
+
+**Archivos**: `esaviapp.sql:1075-1092`, `src/models/investigationAutopsy.model.ts`, `src/services/investigationAutopsy.service.ts`
+
+Detectada el 2026-11-02 al redactar el [SPEC F66](./functional/specs/66-dashboard-indicators.md), que es el primer consumidor que agrega la tabla fuera de su propio CRUD.
+
+El DDL declara `createdAt`, `updatedAt`, `deletedAt`, `sysDetails` y `appDetails`, pero **no** `isActive`, que es una de las columnas transversales que el canon exige a toda tabla. El [SPEC F30](./functional/specs/30-investigationautopsy-crud.md) lo aceptó de forma deliberada, siguiendo el patrón de satélite sin `isActive` que fijaron F13 y F14 y que mantuvo F29: no hay `005A` ni `005B`, y la visibilidad se hereda de `investigation.isActive`.
+
+Dentro de su CRUD la ausencia está resuelta. El problema aparece fuera de él: todo consumidor que lea la tabla directamente tiene que saber que su marca de vigencia es `deletedAt IS NULL` y no `isActive = true`. Es una excepción que no se ve en la tabla y que cada nuevo consumidor tiene que redescubrir. F66 es el primero: cuenta defunciones (`isDeath`) y autopsias realizadas (`isAutopsyPerformed`) filtrando por `deletedAt IS NULL`.
+
+Hay otras tres tablas en la misma situación —`severeNotification`, `nonSevereNotification` e `investigationSource`— que heredan el mismo riesgo en cuanto alguien las agregue.
+
+**Aceptación**: decidir entre dos caminos. O se añade `isActive` a las cuatro tablas en `esaviapp.sql`, con sus modelos y un `005A`/`005B` por entidad, o se documenta en la sección de columnas transversales de [CONVENTIONS.md](./CONVENTIONS.md) que estas cuatro tablas satélite usan `deletedAt IS NULL` como marca de vigencia. En cualquiera de los dos casos, los consumidores agregados (F66 y siguientes) quedan alineados con la decisión.
