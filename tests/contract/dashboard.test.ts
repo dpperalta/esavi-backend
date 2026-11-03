@@ -3,6 +3,7 @@ import path from 'path';
 import request from 'supertest';
 import { app } from '../../src/app';
 import {
+    AppUserGeoLocation,
     CaseWorkflow,
     CatalogItem,
     CatalogType,
@@ -13,10 +14,14 @@ import {
     GeoLocation,
     HealthFacility,
     Investigation,
+    InvestigationAdministrationError,
     InvestigationAutopsy,
+    InvestigationColdChain,
     Notification,
+    NotificationVaccine,
     Patient,
-    SystemConfig
+    SystemConfig,
+    VaccineWhodrug
 } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { advanceCaseWorkflowStageService } from '../../src/services/caseWorkflow.service';
@@ -941,6 +946,516 @@ describe('dashboard contract', () => {
                 const before = await snapshot();
                 expect(( await getIndicators(bearer(analystToken), period) ).status).toBe(200);
                 expect(( await getIndicators(authHeader('ADMIN'), period) ).status).toBe(200);
+                expect(await snapshot()).toBe(before);
+            });
+        });
+    });
+
+    describe('series and distributions — ESAVI-DASH-008 / ESAVI-DASH-009', () => {
+
+        const epiCurve = '/api/dashboard/epi-curve';
+        const distributions = '/api/dashboard/distributions';
+        const indicatorsPath = '/api/dashboard/indicators';
+        const curvePeriod = 'from=2026-01-01&to=2026-01-28';
+        const distPeriod = 'from=2026-02-01&to=2026-02-28';
+        const seriesIds: Record<string, string> = {};
+        const geo: Record<string, string> = {};
+
+        let analystPToken: string;
+        let analystOverlapToken: string;
+        let analystCantonToken: string;
+        let coded: { id: string; name: string };
+
+        interface GeoRow { geoLocationId: string | null; kind: string; name: string | null; latitude: number | null; longitude: number | null; total: number; serious: number }
+        interface VaccineRow { key: string; label: string | null; coded: boolean; cases: number; serious: number }
+        interface EpiWeekRow { label: string; partial: boolean; serious: number; nonSerious: number; unclassified: number; total: number }
+
+        interface SeriesCaseOptions {
+            geoLocationId: string | null;
+            reportDate: string;
+            classification?: { age?: number | null; unit?: string | null; isSeriousEvent?: boolean };
+            sex?: string;
+            vaccines?: { name?: string | null; whodrugId?: string; suspected: boolean; active?: boolean }[];
+            investigation?: {
+                administration?: Record<string, unknown>;
+                coldChain?: Record<string, unknown>;
+            };
+        }
+
+        const lockedItemId = async ( typeCode: string, value: string ): Promise<string> => {
+            const item = await CatalogItem.findOne({
+                where: { value, isValueLocked: true },
+                include: [{ model: CatalogType, as: 'catalogType', where: { code: typeCode }, attributes: [] }]
+            });
+            return item!.getDataValue('catalogItemId');
+        };
+
+        const seedSeriesCase = async ( label: string, options: SeriesCaseOptions ): Promise<string> => {
+            const facility = await HealthFacility.create({
+                localCode: `${ tag }S${ label }`, name: `${ tag } S${ label }`, geoLocationId: options.geoLocationId
+            });
+            const patient = await Patient.create({
+                names: esaviCrypt(`Series ${ label }`),
+                lastNames: esaviCrypt(`Probe ${ suffix }`),
+                documentNumber: esaviCrypt(`DSS${ label }${ suffix }`),
+                healthSystemCode: `DSS${ label }${ suffix }`,
+                sexItemId: options.sex ? await lockedItemId('sex', options.sex) : null
+            });
+            const esaviCase = await EsaviCase.create({
+                caseCode: `${ tag }-S${ label }`,
+                patientId: patient.getDataValue('patientId'),
+                healthFacilityId: facility.getDataValue('healthFacilityId'),
+                reportDate: options.reportDate,
+                isActive: true
+            });
+            const caseId = esaviCase.getDataValue('caseId');
+            await seedCaseWorkflow(caseId);
+            if( options.classification ) {
+                const { age, unit, isSeriousEvent } = options.classification;
+                await Classification.create({
+                    caseId,
+                    age: age ?? null,
+                    ageUnitItemId: unit ? await lockedItemId('ageUnit', unit) : null,
+                    isSeriousEvent: isSeriousEvent ?? false
+                });
+            }
+            if( options.vaccines ) {
+                const notification = await Notification.create({ caseId, notificationType: 'SEVERE', esaviDescription: `Series ${ label }` });
+                for( const vaccine of options.vaccines ) {
+                    await NotificationVaccine.create({
+                        notificationId: notification.getDataValue('notificationId'),
+                        vaccineName: vaccine.name ?? null,
+                        vaccineWhodrugId: vaccine.whodrugId ?? null,
+                        isSuspected: vaccine.suspected,
+                        isActive: vaccine.active ?? true,
+                        sortOrder: 0
+                    });
+                }
+            }
+            if( options.investigation ) {
+                const investigation = await Investigation.create({ caseId });
+                const investigationId = investigation.getDataValue('investigationId');
+                if( options.investigation.administration ) {
+                    await InvestigationAdministrationError.create({ investigationId, ...options.investigation.administration });
+                }
+                if( options.investigation.coldChain ) {
+                    await InvestigationColdChain.create({ investigationId, ...options.investigation.coldChain });
+                }
+            }
+            seriesIds[label] = caseId;
+            return caseId;
+        };
+
+        const fetchPath = ( path: string, headers: Record<string, string>, query: string ) =>
+            request(app).get(`${ path }${ query ? `?${ query }` : '' }`).set(headers);
+        const curveOf = async ( headers: Record<string, string>, query: string ) => ( await fetchPath(epiCurve, headers, query) ).body.data;
+        const distOf = async ( headers: Record<string, string>, query: string ) => ( await fetchPath(distributions, headers, query) ).body.data;
+        const totalOf = async ( headers: Record<string, string>, query: string ): Promise<number> =>
+            ( await fetchPath(indicatorsPath, headers, query) ).body.data.volume.total.current;
+        const provinceQuery = ( query: string ) => `${ query }&geoLocationId=${ geo.P }`;
+
+        const vaccineByKey = ( data: { vaccines: { items: VaccineRow[] } }, key: string ) =>
+            data.vaccines.items.find(( item ) => item.key === key );
+        const cell = ( data: { sexAge: { bands: string[]; sexes: string[]; matrix: number[][] } }, band: string, sex: string ): number =>
+            data.sexAge.matrix[data.sexAge.bands.indexOf(band)][data.sexAge.sexes.indexOf(sex)];
+        const matrixSum = ( matrix: number[][] ): number => matrix.flat().reduce(( sum, value ) => sum + value, 0 );
+        const rowsSum = ( rows: GeoRow[] ): number => rows.reduce(( sum, row ) => sum + row.total, 0 );
+        const rowNamed = ( rows: GeoRow[], id: string ) => rows.find(( row ) => row.geoLocationId === id );
+
+        const keysOf = ( value: unknown, keys: Set<string> = new Set() ): Set<string> => {
+            if( Array.isArray(value) ) value.forEach(( item ) => keysOf(item, keys) );
+            else if( value && typeof value === 'object' ) {
+                for( const [key, nested] of Object.entries(value) ) {
+                    keys.add(key);
+                    keysOf(nested, keys);
+                }
+            }
+            return keys;
+        };
+
+        beforeAll(async () => {
+            await seedUserWithoutRole();
+
+            const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+            geo.X = await createGeoLocation('CTRYSER', null, baseLevel + 1);
+            geo.P = await createGeoLocation('PROVSER', geo.X, baseLevel + 2);
+            geo.CA = await createGeoLocation('CANTASER', geo.P, baseLevel + 3);
+            geo.CB = await createGeoLocation('CANTBSER', geo.P, baseLevel + 3);
+            geo.I = await createGeoLocation('CANTISER', geo.P, baseLevel + 3);
+            await GeoLocation.update({ isActive: false }, { where: { geoLocationId: geo.I } });
+            geo.B = await createGeoLocation('PROVBSER', null, baseLevel + 1);
+            geo.EMPTY = await createGeoLocation('PROVESER', null, baseLevel + 1);
+            geo.TOP = await createGeoLocation('PROVTSER', null, baseLevel + 1);
+            await GeoLocation.update({ latitude: -1.25, longitude: -78.5 }, { where: { geoLocationId: geo.CA } });
+
+            const whodrug = await VaccineWhodrug.create({ drugCode: `DSER${ suffix }`, drugName: `Coded Vaccine ${ suffix }` });
+            coded = { id: whodrug.getDataValue('vaccineWhodrugId'), name: `Coded Vaccine ${ suffix }` };
+
+            await seedSeriesCase('K1', { geoLocationId: geo.CA, reportDate: '2026-01-02', classification: { isSeriousEvent: true } });
+            await seedSeriesCase('K2', { geoLocationId: geo.CA, reportDate: '2025-12-30', classification: { isSeriousEvent: true } });
+            await seedSeriesCase('K3', { geoLocationId: geo.CA, reportDate: '2026-01-06', classification: { isSeriousEvent: false } });
+            await seedSeriesCase('K4', { geoLocationId: geo.CB, reportDate: '2026-01-27' });
+
+            const day = '2026-02-10';
+            await seedSeriesCase('V1', {
+                geoLocationId: geo.CA, reportDate: day, sex: 'FEMALE',
+                classification: { age: 11, unit: 'MONTHS', isSeriousEvent: true },
+                vaccines: [
+                    { name: ' Pfizer ', suspected: true },
+                    { name: 'PFIZER', suspected: true },
+                    { name: 'Moderna', suspected: true },
+                    { name: 'Astra', suspected: false }
+                ],
+                investigation: { administration: { hadHandlingError: 'YES' }, coldChain: { storageRangeDeviation: true } }
+            });
+            await seedSeriesCase('V2', {
+                geoLocationId: geo.CA, reportDate: day, sex: 'MALE',
+                classification: { age: 12, unit: 'MONTHS' },
+                vaccines: [{ name: 'pfizer', suspected: true }, { whodrugId: coded.id, suspected: true }, { name: 'Inactive', suspected: true, active: false }],
+                investigation: {
+                    administration: { hadPrescriptionError: 'YES', hadPreparationError: 'YES', hadImproperAdministration: 'YES' },
+                    coldChain: { storageProcedureFollowed: 'NO' }
+                }
+            });
+            await seedSeriesCase('V3', {
+                geoLocationId: geo.CB, reportDate: day,
+                classification: { age: 364, unit: 'DAYS' },
+                investigation: {}
+            });
+            await seedSeriesCase('V4', {
+                geoLocationId: geo.CB, reportDate: day, sex: 'UNKNOWN',
+                classification: { age: 365, unit: 'DAYS' },
+                investigation: {
+                    administration: { hadHandlingError: 'NO', hadContaminatedVaccine: 'UNKNOWN' },
+                    coldChain: { storageProcedureFollowed: 'YES' }
+                }
+            });
+            await seedSeriesCase('V5', {
+                geoLocationId: geo.P, reportDate: day,
+                classification: { age: 17, unit: 'YEARS' },
+                investigation: {
+                    administration: { hadContaminatedVaccine: 'YES', deletedAt: new Date() },
+                    coldChain: { storageDiluentNotUsable: 'YES', deletedAt: new Date() }
+                }
+            });
+            await seedSeriesCase('V6', { geoLocationId: geo.P, reportDate: day });
+            const ages: [string, number][] = [['A18', 18], ['A49', 49], ['A50', 50], ['A79', 79], ['A80', 80]];
+            for( const [label, age] of ages ) {
+                await seedSeriesCase(label, { geoLocationId: geo.CA, reportDate: day, sex: 'FEMALE', classification: { age, unit: 'YEARS' } });
+            }
+            await seedSeriesCase('ANULL', { geoLocationId: geo.CA, reportDate: day, classification: { age: null, unit: 'YEARS' } });
+            await seedSeriesCase('UNULL', { geoLocationId: geo.CA, reportDate: day, classification: { age: 30, unit: null } });
+            await seedSeriesCase('INACT', { geoLocationId: geo.I, reportDate: day });
+            await seedSeriesCase('NOGEO', { geoLocationId: null, reportDate: day });
+            await seedSeriesCase('BSIDE', {
+                geoLocationId: geo.B, reportDate: day, sex: 'FEMALE',
+                classification: { age: 30, unit: 'YEARS', isSeriousEvent: true },
+                vaccines: [{ name: 'Pfizer', suspected: true }],
+                investigation: { administration: { hadHandlingError: 'YES' } }
+            });
+            await seedSeriesCase('TOP', {
+                geoLocationId: geo.TOP, reportDate: day,
+                vaccines: Array.from({ length: 12 }, ( _, index ) => ({ name: `VAX${ `${ index }`.padStart(2, '0') }`, suspected: true }))
+            });
+
+            analystPToken = ( await createScopedTestUser('dashboard-ser-p', geo.P, 'ANALYTICS') ).token;
+            const overlap = await createScopedTestUser('dashboard-ser-overlap', geo.P, 'ANALYTICS');
+            await AppUserGeoLocation.create({ userId: overlap.userId, geoLocationId: geo.CA, validFrom: new Date(), isActive: true });
+            analystOverlapToken = overlap.token;
+            analystCantonToken = ( await createScopedTestUser('dashboard-ser-canton', geo.CA, 'ANALYTICS') ).token;
+        });
+
+        describe('surface and roles', () => {
+
+            it.each(TEST_ROLES)('both endpoints answer 200 to %s', async ( role ) => {
+                for( const path of [epiCurve, distributions] ) {
+                    const response = await fetchPath(path, authHeader(role), curvePeriod);
+                    expect(response.status).toBe(200);
+                    expect(response.body.ok).toBe(true);
+                    expect(typeof response.body.message).toBe('string');
+                }
+            });
+
+            it('both answer 403 AUTH_ROLE_FORBIDDEN without roles and 401 without a token', async () => {
+                for( const path of [epiCurve, distributions] ) {
+                    const forbidden = await fetchPath(path, authHeaderWithoutRole(), '');
+                    expect(forbidden.status).toBe(403);
+                    expect(forbidden.body.code).toBe('AUTH_ROLE_FORBIDDEN');
+                    expect(( await request(app).get(path) ).status).toBe(401);
+                }
+            });
+
+            it('both reject an invalid period with 400', async () => {
+                for( const path of [epiCurve, distributions] ) {
+                    expect(( await fetchPath(path, authHeader('ADMIN'), 'from=2026-05-01&to=2026-04-01') ).status).toBe(400);
+                }
+            });
+        });
+
+        describe('epi curve — ESAVI-DASH-008', () => {
+
+            it('returns the five continuous weeks of the period, partial at both ends', async () => {
+                const data = await curveOf(authHeader('ADMIN'), provinceQuery(curvePeriod));
+                expect(data.weeks.map(( week: EpiWeekRow ) => [week.label, week.partial] )).toEqual([
+                    ['2025-SE53', true], ['2026-SE01', false], ['2026-SE02', false], ['2026-SE03', false], ['2026-SE04', true]
+                ]);
+            });
+
+            it('a week without cases carries the four counters at 0', async () => {
+                const data = await curveOf(authHeader('ADMIN'), provinceQuery(curvePeriod));
+                const empty = data.weeks.find(( week: EpiWeekRow ) => week.label === '2026-SE02' );
+                expect(empty).toMatchObject({ serious: 0, nonSerious: 0, unclassified: 0, total: 0 });
+            });
+
+            it('a case of 2026-01-02 counts in 2025-SE53 and one of 2025-12-30 is out of the period', async () => {
+                const data = await curveOf(authHeader('ADMIN'), provinceQuery(curvePeriod));
+                const first = data.weeks[0];
+                expect(first).toMatchObject({ label: '2025-SE53', serious: 1, total: 1 });
+            });
+
+            it('splits every week into serious, nonSerious and unclassified, which add up to total', async () => {
+                const data = await curveOf(authHeader('ADMIN'), provinceQuery(curvePeriod));
+                expect(data.weeks.map(( week: EpiWeekRow ) => [week.serious, week.nonSerious, week.unclassified] )).toEqual([
+                    [1, 0, 0], [0, 1, 0], [0, 0, 0], [0, 0, 0], [0, 0, 1]
+                ]);
+                for( const week of data.weeks as EpiWeekRow[] ) {
+                    expect(week.serious + week.nonSerious + week.unclassified).toBe(week.total);
+                }
+            });
+
+            it.each([
+                ['an ADMIN filtered by the province', () => authHeader('ADMIN'), true],
+                ['an ADMIN without filter', () => authHeader('ADMIN'), false],
+                ['a restricted analyst', () => bearer(analystPToken), false]
+            ])('the sum of total equals volume.total.current of ESAVI-DASH-007 for %s', async ( _label, headers, filtered ) => {
+                const query = filtered ? provinceQuery(curvePeriod) : curvePeriod;
+                const data = await curveOf(headers(), query);
+                const sum = data.weeks.reduce(( acc: number, week: EpiWeekRow ) => acc + week.total, 0 );
+                expect(sum).toBe(await totalOf(headers(), query));
+            });
+        });
+
+        describe('vaccines — ESAVI-DASH-009', () => {
+
+            it('normalizes free text: " Pfizer ", "PFIZER" and "pfizer" are one group T:PFIZER, and a case with it twice counts once', async () => {
+                const data = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(vaccineByKey(data, 'T:PFIZER')).toEqual({ key: 'T:PFIZER', label: 'PFIZER', coded: false, cases: 2, serious: 1 });
+            });
+
+            it('a case with two different suspected vaccines adds 1 to each', async () => {
+                const data = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(vaccineByKey(data, 'T:MODERNA')).toMatchObject({ cases: 1, serious: 1 });
+                expect(vaccineByKey(data, 'T:PFIZER')!.cases).toBe(2);
+            });
+
+            it('a coded vaccine is grouped by vaccineWhodrugId with its drugName', async () => {
+                const data = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(vaccineByKey(data, `W:${ coded.id }`)).toEqual({ key: `W:${ coded.id }`, label: coded.name, coded: true, cases: 1, serious: 0 });
+            });
+
+            it('rows with isSuspected false or inactive do not count', async () => {
+                const data = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(vaccineByKey(data, 'T:ASTRA')).toBeUndefined();
+                expect(vaccineByKey(data, 'T:INACTIVE')).toBeUndefined();
+            });
+
+            it('casesWithoutSuspectedVaccine counts the cases of the universe without any suspected row', async () => {
+                const data = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                const total = await totalOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(data.vaccines.casesWithoutSuspectedVaccine).toBe(total - 2);
+            });
+
+            it('with 12 vaccines the top 10 go to items and others counts distinct cases of the remaining 2', async () => {
+                const data = await distOf(authHeader('ADMIN'), `${ distPeriod }&geoLocationId=${ geo.TOP }`);
+                expect(data.vaccines.items.map(( item: VaccineRow ) => item.key )).toEqual(
+                    Array.from({ length: 10 }, ( _, index ) => `T:VAX${ `${ index }`.padStart(2, '0') }` )
+                );
+                expect(data.vaccines.others).toEqual({ cases: 1, serious: 0 });
+            });
+        });
+
+        describe('sex and age — ESAVI-DASH-009', () => {
+
+            it('the matrix is always 9 x 4 in the order of bands and sexes, and adds up to the universe', async () => {
+                const query = provinceQuery(distPeriod);
+                const data = await distOf(authHeader('ADMIN'), query);
+                expect(data.sexAge.bands).toEqual(['LT_1Y', 'Y1_17', 'Y18_24', 'Y25_49', 'Y50_59', 'Y60_69', 'Y70_79', 'Y80_PLUS', 'UNKNOWN']);
+                expect(data.sexAge.sexes).toEqual(['FEMALE', 'MALE', 'UNKNOWN', 'NONE']);
+                expect(data.sexAge.matrix).toHaveLength(9);
+                for( const row of data.sexAge.matrix ) expect(row).toHaveLength(4);
+                expect(matrixSum(data.sexAge.matrix)).toBe(await totalOf(authHeader('ADMIN'), query));
+            });
+
+            it('converts months and days to completed years at the one-year border', async () => {
+                const data = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(cell(data, 'LT_1Y', 'FEMALE')).toBe(1);
+                expect(cell(data, 'LT_1Y', 'NONE')).toBe(1);
+                expect(cell(data, 'Y1_17', 'MALE')).toBe(1);
+                expect(cell(data, 'Y1_17', 'UNKNOWN')).toBe(1);
+            });
+
+            it('places 17, 18, 49, 50, 79 and 80 years in their bands', async () => {
+                const data = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(cell(data, 'Y1_17', 'NONE')).toBe(1);
+                expect(cell(data, 'Y18_24', 'FEMALE')).toBe(1);
+                expect(cell(data, 'Y25_49', 'FEMALE')).toBe(1);
+                expect(cell(data, 'Y50_59', 'FEMALE')).toBe(1);
+                expect(cell(data, 'Y70_79', 'FEMALE')).toBe(1);
+                expect(cell(data, 'Y80_PLUS', 'FEMALE')).toBe(1);
+            });
+
+            it('a case without classification, with null age or with null unit goes to UNKNOWN, and a patient without sex to NONE', async () => {
+                const data = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(cell(data, 'UNKNOWN', 'NONE')).toBe(3);
+            });
+        });
+
+        describe('geography — ESAVI-DASH-009', () => {
+
+            it('an ADMIN without geoLocationId gets the units without parent, also at 0, and unlocated; the rows add up to the universe', async () => {
+                const data = await distOf(authHeader('ADMIN'), distPeriod);
+                const rows: GeoRow[] = data.geography.rows;
+                expect(rowNamed(rows, geo.EMPTY)).toMatchObject({ kind: 'unit', total: 0, serious: 0 });
+                expect(rowNamed(rows, geo.P)).toBeUndefined();
+                expect(rowNamed(rows, geo.X)!.total).toBe(13);
+                const unlocated = rows.find(( row ) => row.kind === 'unlocated' );
+                expect(unlocated!.total).toBeGreaterThanOrEqual(2);
+                expect(unlocated).toMatchObject({ geoLocationId: null, name: null, latitude: null, longitude: null });
+                expect(rowsSum(rows)).toBe(await totalOf(authHeader('ADMIN'), distPeriod));
+            });
+
+            it('with geoLocationId of the province the rows are its active cantons, plus self, ordered by total', async () => {
+                const query = provinceQuery(distPeriod);
+                const data = await distOf(authHeader('ADMIN'), query);
+                const rows: GeoRow[] = data.geography.rows;
+                expect(rows.map(( row ) => [row.kind, row.geoLocationId, row.total] )).toEqual([
+                    ['unit', geo.CA, 9],
+                    ['unit', geo.CB, 2],
+                    ['self', null, 2]
+                ]);
+                expect(rowNamed(rows, geo.CA)).toMatchObject({ name: `CANTASER ${ suffix }`, latitude: -1.25, longitude: -78.5, serious: 1 });
+                expect(rowsSum(rows)).toBe(await totalOf(authHeader('ADMIN'), query));
+            });
+
+            it('a restricted user assigned to a province and to one of its cantons sees a single row: the province', async () => {
+                const data = await distOf(bearer(analystOverlapToken), distPeriod);
+                expect(data.geography.rows.map(( row: GeoRow ) => [row.geoLocationId, row.total] )).toEqual([[geo.P, 13]]);
+            });
+
+            it('a restricted user never receives a child outside the scope, neither its name nor its geoLocationId', async () => {
+                const response = await fetchPath(distributions, bearer(analystCantonToken), provinceQuery(distPeriod));
+                const rows: GeoRow[] = response.body.data.geography.rows;
+                expect(rows.map(( row ) => row.geoLocationId )).toEqual([geo.CA]);
+                const body = JSON.stringify(response.body);
+                expect(body).not.toContain(geo.CB);
+                expect(body).not.toContain(`CANTBSER ${ suffix }`);
+            });
+
+            it('a restricted user of a canton querying the country sees its cases in unlocated and no province', async () => {
+                const query = `${ distPeriod }&geoLocationId=${ geo.X }`;
+                const response = await fetchPath(distributions, bearer(analystCantonToken), query);
+                const rows: GeoRow[] = response.body.data.geography.rows;
+                expect(rows.map(( row ) => [row.kind, row.total] )).toEqual([['unlocated', 9]]);
+                expect(JSON.stringify(response.body)).not.toContain(`PROVSER ${ suffix }`);
+                expect(rowsSum(rows)).toBe(await totalOf(bearer(analystCantonToken), query));
+            });
+
+            it('no row carries geoPolygon', async () => {
+                const keys = keysOf(( await distOf(authHeader('ADMIN'), distPeriod) ).geography);
+                expect(keys.has('geoPolygon')).toBe(false);
+            });
+        });
+
+        describe('programmatic failures — ESAVI-DASH-009', () => {
+
+            it('counts the investigated cases and the investigations without each record', async () => {
+                const { programmatic } = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(programmatic.investigatedCases).toBe(5);
+                expect(programmatic.withoutAdministrationRecord).toBe(2);
+                expect(programmatic.withoutColdChainRecord).toBe(2);
+            });
+
+            it('only YES is an administration error, and a case with three errors adds 1 to anyError', async () => {
+                const { programmatic } = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(programmatic.administrationErrors).toEqual({
+                    prescriptionError: 1, contaminatedVaccine: 0, abnormalVaccineConditions: 0,
+                    preparationError: 1, handlingError: 1, improperAdministration: 1, anyError: 2
+                });
+            });
+
+            it('storageRangeDeviation true and storageProcedureFollowed NO are failures; YES is not; deleted rows do not count', async () => {
+                const { programmatic } = await distOf(authHeader('ADMIN'), provinceQuery(distPeriod));
+                expect(programmatic.coldChainFailures).toEqual({
+                    rangeDeviation: 1, procedureNotFollowed: 1, vaccineNotUsable: 0, diluentNotUsable: 0,
+                    partiallyReconstitutedVaccine: 0, otherObjectPresent: 0, anyFailure: 2
+                });
+            });
+        });
+
+        describe('scope and exposed data', () => {
+
+            it('an analyst of territory A receives no count of territory B in either endpoint', async () => {
+                const curve = await curveOf(bearer(analystPToken), distPeriod);
+                const data = await distOf(bearer(analystPToken), distPeriod);
+                expect(curve.weeks.reduce(( acc: number, week: EpiWeekRow ) => acc + week.total, 0 )).toBe(13);
+                expect(matrixSum(data.sexAge.matrix)).toBe(13);
+                expect(vaccineByKey(data, 'T:PFIZER')!.cases).toBe(2);
+                expect(data.programmatic.administrationErrors.handlingError).toBe(1);
+                expect(cell(data, 'Y25_49', 'FEMALE')).toBe(1);
+            });
+
+            it.each([
+                ['a foreign territory', () => geo.B],
+                ['an unknown UUID', () => '00000000-0000-4000-8000-000000000067']
+            ])('with geoLocationId of %s both endpoints answer 200 with zeros and no geography rows', async ( _label, target ) => {
+                const query = `${ distPeriod }&geoLocationId=${ target() }`;
+                const curve = await fetchPath(epiCurve, bearer(analystPToken), query);
+                const dist = await fetchPath(distributions, bearer(analystPToken), query);
+                expect(curve.status).toBe(200);
+                expect(dist.status).toBe(200);
+                expect(curve.body.data.weeks.every(( week: EpiWeekRow ) => week.total === 0 )).toBe(true);
+                expect(dist.body.data.geography.rows).toEqual([]);
+                expect(matrixSum(dist.body.data.sexAge.matrix)).toBe(0);
+                expect(dist.body.data.vaccines).toEqual({ items: [], others: { cases: 0, serious: 0 }, casesWithoutSuspectedVaccine: 0 });
+                expect(dist.body.data.programmatic.investigatedCases).toBe(0);
+            });
+
+            it('a foreign territory and an unknown UUID produce identical responses', async () => {
+                const strip = ( data: { scope: Record<string, unknown> } ) => ({ ...data, scope: { ...data.scope, geoLocationId: null } });
+                for( const path of [epiCurve, distributions] ) {
+                    const foreign = ( await fetchPath(path, bearer(analystPToken), `${ distPeriod }&geoLocationId=${ geo.B }`) ).body.data;
+                    const unknown = ( await fetchPath(path, bearer(analystPToken), `${ distPeriod }&geoLocationId=00000000-0000-4000-8000-000000000067`) ).body.data;
+                    expect(strip(foreign)).toEqual(strip(unknown));
+                }
+            });
+
+            it('neither response carries a case or patient identifier at any level', async () => {
+                for( const path of [epiCurve, distributions] ) {
+                    const keys = keysOf(( await fetchPath(path, authHeader('SUPERADMIN'), distPeriod) ).body);
+                    for( const forbidden of ['caseId', 'caseCode', 'patientId', 'names', 'lastNames', 'documentNumber', 'healthSystemCode'] ) {
+                        expect(keys.has(forbidden)).toBe(false);
+                    }
+                }
+            });
+        });
+
+        describe('no writes', () => {
+
+            it('calling ESAVI-DASH-008 and ESAVI-DASH-009 leaves updatedAt, appDetails and sysDetails of the fixture untouched', async () => {
+                const caseIds = Object.values(seriesIds);
+                const attributes = ['caseId', 'updatedAt', 'appDetails', 'sysDetails'];
+                const snapshot = async () => JSON.stringify(await Promise.all([
+                    EsaviCase.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] }),
+                    CaseWorkflow.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] }),
+                    Classification.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] }),
+                    Notification.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] }),
+                    Investigation.findAll({ where: { caseId: caseIds }, attributes, order: [['caseId', 'ASC']] })
+                ]));
+                const before = await snapshot();
+                for( const path of [epiCurve, distributions] ) {
+                    expect(( await fetchPath(path, bearer(analystPToken), distPeriod) ).status).toBe(200);
+                    expect(( await fetchPath(path, authHeader('ADMIN'), provinceQuery(distPeriod)) ).status).toBe(200);
+                }
                 expect(await snapshot()).toBe(before);
             });
         });
