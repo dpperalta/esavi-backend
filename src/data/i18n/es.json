@@ -1145,6 +1145,10 @@
         "distributionsFailed": "Error al obtener las distribuciones de casos del dashboard. Por favor, inténtelo de nuevo más tarde.",
         "batchAlertsSuccess": "Alertas de agrupamiento por lote del dashboard obtenidas exitosamente",
         "batchAlertsFailed": "Error al obtener las alertas de agrupamiento por lote del dashboard. Por favor, inténtelo de nuevo más tarde.",
+        "recentActivitySuccess": "Actividad reciente de casos del dashboard obtenida exitosamente",
+        "recentActivityFailed": "Error al obtener la actividad reciente de casos del dashboard. Por favor, inténtelo de nuevo más tarde.",
+        "systemActivitySuccess": "Actividad del sistema del dashboard obtenida exitosamente",
+        "systemActivityFailed": "Error al obtener la actividad del sistema del dashboard. Por favor, inténtelo de nuevo más tarde.",
         "invalidPeriod": "El periodo no es válido: la fecha inicial no puede ser posterior a la final, la final no puede estar en el futuro y el rango no puede superar {{maxDays}} días."
     }
 }

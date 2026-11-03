@@ -67,6 +67,7 @@ Un ✅ delante del título marca la entrada como **saldada**: el spec que la cie
 | [DEUDA-045](#deuda-045) | 🟠 | ✅ `appDetails.user` expone el UUID interno del usuario en toda respuesta |
 | [DEUDA-046](#deuda-046) | 🔴 | ✅ El rate limit se cuenta por IP y sin `trust proxy` |
 | [DEUDA-047](#deuda-047) | 🟡 | Las satélites 1:1 de `investigation` (`investigationAutopsy`, `investigationAdministrationError`, `investigationColdChain`) no tienen `isActive` |
+| [DEUDA-048](#deuda-048) | 🟠 | `appDetails` declara `DEFAULT '{}'::jsonb` (objeto) en las 49 tablas; la convención es un arreglo |
 
 ## Mapa de resolución
 
@@ -1011,3 +1012,26 @@ Dentro de su CRUD la ausencia está resuelta. El problema aparece fuera de él: 
 Hay otras tres tablas en la misma situación —`severeNotification`, `nonSevereNotification` e `investigationSource`— que heredan el mismo riesgo en cuanto alguien las agregue.
 
 **Aceptación**: decidir entre dos caminos. O se añade `isActive` a las seis tablas en `esaviapp.sql`, con sus modelos y un `005A`/`005B` por entidad, o se documenta en la sección de columnas transversales de [CONVENTIONS.md](./CONVENTIONS.md) que estas seis tablas satélite usan `deletedAt IS NULL` como marca de vigencia. En cualquiera de los dos casos, los consumidores agregados (F66 y siguientes) quedan alineados con la decisión.
+
+---
+
+<a id="deuda-048"></a>
+## DEUDA-048 🟠 `appDetails` declara `DEFAULT '{}'::jsonb` (objeto) en las 49 tablas; la convención es un arreglo
+
+**Archivos**: `esaviapp.sql` (las 49 declaraciones `"appDetails" jsonb NOT NULL DEFAULT '{}'::jsonb`, desde `:210`), `esaviapp.sql:1553` (función `createEsaviCase()`), `src/types/common/audit.types.ts`
+
+La detectó el 2026-11-02 el [SPEC F69](./functional/specs/69-dashboard-recent-activity.md) al redactar la actividad reciente del dashboard. Es el primer consumidor que expande `appDetails` de forma transversal con `jsonb_array_elements`, en lugar de leerlo fila a fila.
+
+La convención («Audit trail» en `CLAUDE.md`, y el tipo `AppDetails` de SPEC 06) dice que `appDetails` es un **arreglo** de entradas `{ createdAt, user, method, detail }`. Todos los servicios escriben un arreglo (`[...currentAppDetails, newEntry]`). Sin embargo, el DDL declara en las 49 tablas que lo llevan un `DEFAULT '{}'::jsonb`, que es un **objeto** vacío.
+
+Mientras toda inserción pase por un servicio, el `DEFAULT` nunca se aplica y no hay síntoma. Pero una fila insertada por otra vía queda con `{}`:
+
+- la función SQL `createEsaviCase()` hace `INSERT INTO "esaviCase"` sin la columna `appDetails`;
+- una carga manual;
+- una semilla.
+
+Sobre esa fila, `jsonb_array_elements("appDetails")` lanza `cannot extract elements from an object` y tumba la consulta entera. En la capa de servicios, la anomalía ya se intuía: varios servicios (`appRole.service.ts:164`, `appSession.service.ts:119`, `appUserGeoLocation.service.ts:107`, entre otros) leen el valor con `Array.isArray(x.appDetails) ? x.appDetails : []` antes de extenderlo.
+
+F69 se protege filtrando antes por `jsonb_typeof("appDetails") = 'array'` y tiene una prueba de contrato con `{}`. Cada nuevo consumidor transversal tendría que redescubrir la misma guarda.
+
+**Aceptación**: cambiar el `DEFAULT` a `'[]'::jsonb` en las 49 tablas de `esaviapp.sql`, con una migración que convierta a `'[]'` las filas existentes cuyo `jsonb_typeof("appDetails")` no sea `'array'`. Opcionalmente, añadir un `CHECK (jsonb_typeof("appDetails") = 'array')`. Con eso, la guarda de F69 se vuelve redundante pero inocua.
