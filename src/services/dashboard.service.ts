@@ -34,6 +34,7 @@ import {
     NOTIFICATION_DEADLINE_DAYS_CODE
 } from '../constants/dashboard.constants';
 import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE, FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE } from '../constants/finalClassification.constants';
+import { VACCINE_KEY_SQL } from '../constants/notificationVaccine.constants';
 import { MAX_GEO_SUBTREE_DEPTH, resolveGeoSubtreeIds, resolveUserGeoRootIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 
 const MISSING_CONFIG_CODE = 'APPCONFIG_VALUE_MISSING';
@@ -720,10 +721,7 @@ const queryVaccines = async (universeSql: string, replacements: Record<string, u
         `${ periodCasesSql(universeSql) },
         sv AS (
             SELECT DISTINCT pc."caseId", pc."serious",
-                CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
-                    THEN 'W:' || nv."vaccineWhodrugId"::text
-                    ELSE 'T:' || upper(btrim(COALESCE(nv."vaccineName", '')))
-                END AS "key",
+                ${ VACCINE_KEY_SQL('nv') } AS "key",
                 nv."vaccineWhodrugId" IS NOT NULL AS "coded",
                 CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
                     THEN vw."drugName"
