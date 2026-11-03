@@ -5,6 +5,9 @@ import { AppError, esaviLog, getAppConfigNumber, getMessage, listEpiWeeks, resol
 import {
     AuthUser,
     CaseWorkflowStage,
+    DashboardBatchAlert,
+    DashboardBatchAlertReason,
+    DashboardBatchAlerts,
     DashboardASubcategory,
     DashboardCausalityCategory,
     DashboardComparable,
@@ -25,6 +28,11 @@ import {
 import { CASE_WORKFLOW_STAGE_FIELD, CASE_WORKFLOW_STAGES, CASE_WORKFLOW_STATUS, CASE_WORKFLOW_STATUS_CATALOG_CODE } from '../constants/caseWorkflow.constants';
 import {
     DASHBOARD_AGE_BANDS,
+    DASHBOARD_BATCH_ALERT_LIMIT,
+    DASHBOARD_BATCH_MIN_CASES_CODE,
+    DASHBOARD_BATCH_MIN_CASES_DEFAULT,
+    DASHBOARD_BATCH_MIN_SERIOUS_CODE,
+    DASHBOARD_BATCH_MIN_SERIOUS_DEFAULT,
     DASHBOARD_CONFIG_SCOPE,
     DASHBOARD_SEX_CODES,
     DASHBOARD_STALE_DAYS_CODE,
@@ -34,6 +42,7 @@ import {
     NOTIFICATION_DEADLINE_DAYS_CODE
 } from '../constants/dashboard.constants';
 import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE, FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE } from '../constants/finalClassification.constants';
+import { BATCH_NUMBER_NORMALIZED_SQL, VACCINE_KEY_SQL } from '../constants/notificationVaccine.constants';
 import { MAX_GEO_SUBTREE_DEPTH, resolveGeoSubtreeIds, resolveUserGeoRootIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 
 const MISSING_CONFIG_CODE = 'APPCONFIG_VALUE_MISSING';
@@ -720,10 +729,7 @@ const queryVaccines = async (universeSql: string, replacements: Record<string, u
         `${ periodCasesSql(universeSql) },
         sv AS (
             SELECT DISTINCT pc."caseId", pc."serious",
-                CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
-                    THEN 'W:' || nv."vaccineWhodrugId"::text
-                    ELSE 'T:' || upper(btrim(COALESCE(nv."vaccineName", '')))
-                END AS "key",
+                ${ VACCINE_KEY_SQL('nv') } AS "key",
                 nv."vaccineWhodrugId" IS NOT NULL AS "coded",
                 CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
                     THEN vw."drugName"
@@ -1097,8 +1103,210 @@ const getDistributionsService = async (query: DashboardPeriodQuery, authUser: Au
     }
 }
 
+interface BatchAlertRow {
+    vaccineKey: string;
+    label: string | null;
+    coded: boolean;
+    batchNumber: string;
+    variants: string[];
+    cases: number;
+    suspectedCases: number;
+    serious: number;
+    deaths: number;
+    expiredAtVaccination: number;
+    firstReportDate: string;
+    lastReportDate: string;
+    facilities: number;
+    geoUnits: number;
+    expirationDates: string[] | null;
+    total: number;
+}
+
+interface BatchCountersRow {
+    batchesEvaluated: number;
+    casesWithoutBatch: number;
+}
+
+type BatchThresholds = DashboardBatchAlerts['thresholds'];
+
+const readBatchThreshold = async (code: string, fallback: number, lang: string): Promise<number | null> => {
+    let value: number;
+    try {
+        value = await getAppConfigNumber(code, DASHBOARD_CONFIG_SCOPE, lang);
+    } catch (error) {
+        if( !( error instanceof AppError && error.code === MISSING_CONFIG_CODE ) ) throw error;
+        esaviLog(`ESAVI-DASH-010 - ${ code } missing or invalid, default ${ fallback } applied`, 'warn');
+        value = fallback;
+    }
+    return value < 1 ? null : Math.ceil(value);
+}
+
+const readBatchThresholds = async (lang: string): Promise<BatchThresholds> => {
+    const [minCases, minSerious] = await Promise.all([
+        readBatchThreshold(DASHBOARD_BATCH_MIN_CASES_CODE, DASHBOARD_BATCH_MIN_CASES_DEFAULT, lang),
+        readBatchThreshold(DASHBOARD_BATCH_MIN_SERIOUS_CODE, DASHBOARD_BATCH_MIN_SERIOUS_DEFAULT, lang)
+    ]);
+    return { minCases, minSerious };
+}
+
+const batchVaccinesSql = (universeSql: string): string => `WITH u AS (${ universeSql }),
+        pc AS (
+            SELECT u."caseId", u."healthFacilityId", u."reportDate",
+                cl."isSeriousEvent" IS TRUE AS "serious",
+                (cl."causedDeath" IS TRUE OR n."deathDate" IS NOT NULL OR EXISTS (
+                    SELECT 1 FROM "investigation" inv
+                    JOIN "investigationAutopsy" ia ON ia."investigationId" = inv."investigationId" AND ia."deletedAt" IS NULL
+                    WHERE inv."caseId" = u."caseId" AND inv."isActive" = true AND ia."isDeath" IS TRUE
+                )) AS "death"
+            FROM u
+            LEFT JOIN "classification" cl ON cl."caseId" = u."caseId" AND cl."isActive" = true
+            LEFT JOIN "notification" n ON n."caseId" = u."caseId" AND n."isActive" = true
+            WHERE u."reportDate" BETWEEN :from AND :to
+        ),
+        bv AS (
+            SELECT pc."caseId", pc."healthFacilityId", pc."reportDate", pc."serious", pc."death",
+                ${ VACCINE_KEY_SQL('nv') } AS "vaccineKey",
+                nv."vaccineWhodrugId" IS NOT NULL AS "coded",
+                CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
+                    THEN vw."drugName"
+                    ELSE NULLIF(upper(btrim(COALESCE(nv."vaccineName", ''))), '')
+                END AS "label",
+                ${ BATCH_NUMBER_NORMALIZED_SQL('nv') } AS "batchNumber",
+                btrim(nv."batchNumber") AS "variant",
+                nv."isSuspected", nv."vaccinationDate", nv."expirationDate",
+                h."geoLocationId"
+            FROM pc
+            JOIN "notification" n ON n."caseId" = pc."caseId" AND n."isActive" = true
+            JOIN "notificationVaccine" nv ON nv."notificationId" = n."notificationId" AND nv."isActive" = true
+            LEFT JOIN "vaccineWhodrug" vw ON vw."vaccineWhodrugId" = nv."vaccineWhodrugId"
+            LEFT JOIN "healthFacility" h ON h."healthFacilityId" = pc."healthFacilityId"
+            WHERE ${ BATCH_NUMBER_NORMALIZED_SQL('nv') } <> ''
+        )`;
+
+const queryBatchAlerts = async (universeSql: string, replacements: Record<string, unknown>, thresholds: BatchThresholds): Promise<BatchAlertRow[]> =>
+    sequelize.query<BatchAlertRow>(
+        `${ batchVaccinesSql(universeSql) },
+        g AS (
+            SELECT bv."vaccineKey", bv."coded", bv."label", bv."batchNumber",
+                (array_agg(DISTINCT bv."variant" ORDER BY bv."variant"))[1:5] AS "variants",
+                COUNT(DISTINCT bv."caseId")::int AS "cases",
+                COUNT(DISTINCT bv."caseId") FILTER (WHERE bv."isSuspected")::int AS "suspectedCases",
+                COUNT(DISTINCT bv."caseId") FILTER (WHERE bv."serious")::int AS "serious",
+                COUNT(DISTINCT bv."caseId") FILTER (WHERE bv."death")::int AS "deaths",
+                COUNT(DISTINCT bv."caseId") FILTER (WHERE bv."vaccinationDate" > bv."expirationDate")::int AS "expiredAtVaccination",
+                to_char(MIN(bv."reportDate"), 'YYYY-MM-DD') AS "firstReportDate",
+                to_char(MAX(bv."reportDate"), 'YYYY-MM-DD') AS "lastReportDate",
+                COUNT(DISTINCT bv."healthFacilityId")::int AS "facilities",
+                COUNT(DISTINCT bv."geoLocationId")::int AS "geoUnits",
+                array_agg(DISTINCT to_char(bv."expirationDate", 'YYYY-MM-DD') ORDER BY to_char(bv."expirationDate", 'YYYY-MM-DD'))
+                    FILTER (WHERE bv."expirationDate" IS NOT NULL) AS "expirationDates"
+            FROM bv
+            GROUP BY bv."vaccineKey", bv."coded", bv."label", bv."batchNumber"
+        )
+        SELECT g.*, COUNT(*) OVER ()::int AS "total"
+        FROM g
+        WHERE (CAST(:minCases AS int) IS NOT NULL AND g."cases" >= CAST(:minCases AS int))
+            OR (CAST(:minSerious AS int) IS NOT NULL AND g."serious" >= CAST(:minSerious AS int))
+            OR g."deaths" >= 1
+        ORDER BY g."deaths" DESC, g."serious" DESC, g."cases" DESC, g."lastReportDate" DESC, g."batchNumber" ASC, g."vaccineKey" ASC
+        LIMIT :batchAlertLimit`,
+        {
+            replacements: {
+                ...replacements,
+                minCases: thresholds.minCases,
+                minSerious: thresholds.minSerious,
+                batchAlertLimit: DASHBOARD_BATCH_ALERT_LIMIT
+            },
+            type: QueryTypes.SELECT
+        }
+    );
+
+const queryBatchCounters = async (universeSql: string, replacements: Record<string, unknown>): Promise<BatchCountersRow> => {
+    const [row] = await sequelize.query<BatchCountersRow>(
+        `${ batchVaccinesSql(universeSql) }
+        SELECT
+            (SELECT COUNT(*) FROM (SELECT DISTINCT bv."vaccineKey", bv."batchNumber" FROM bv) k)::int AS "batchesEvaluated",
+            (SELECT COUNT(*) FROM pc WHERE NOT EXISTS (SELECT 1 FROM bv WHERE bv."caseId" = pc."caseId"))::int AS "casesWithoutBatch"`,
+        { replacements, type: QueryTypes.SELECT }
+    );
+    return row;
+}
+
+const batchAlertReasons = (row: BatchAlertRow, thresholds: BatchThresholds): DashboardBatchAlertReason[] => {
+    const reasons: DashboardBatchAlertReason[] = [];
+    if( thresholds.minCases !== null && row.cases >= thresholds.minCases ) reasons.push('MIN_CASES');
+    if( thresholds.minSerious !== null && row.serious >= thresholds.minSerious ) reasons.push('MIN_SERIOUS');
+    if( row.deaths >= 1 ) reasons.push('DEATH');
+    return reasons;
+}
+
+const toBatchAlert = (row: BatchAlertRow, thresholds: BatchThresholds): DashboardBatchAlert => ({
+    vaccineKey: row.vaccineKey,
+    label: row.label,
+    coded: row.coded,
+    batchNumber: row.batchNumber,
+    variants: row.variants ?? [],
+    cases: row.cases,
+    suspectedCases: row.suspectedCases,
+    serious: row.serious,
+    deaths: row.deaths,
+    expiredAtVaccination: row.expiredAtVaccination,
+    firstReportDate: row.firstReportDate,
+    lastReportDate: row.lastReportDate,
+    facilities: row.facilities,
+    geoUnits: row.geoUnits,
+    expirationDates: row.expirationDates ?? [],
+    reasons: batchAlertReasons(row, thresholds)
+});
+
+const emptyBatchAlerts = (period: DashboardPeriod, scope: DashboardScope, thresholds: BatchThresholds): DashboardBatchAlerts => ({
+    period,
+    scope,
+    thresholds,
+    total: 0,
+    batchesEvaluated: 0,
+    casesWithoutBatch: 0,
+    alerts: []
+});
+
+// Get Dashboard Batch Alerts Service
+// Code: ESAVI-DASH-010
+const getBatchAlertsService = async (query: DashboardPeriodQuery, authUser: AuthUser | undefined, lang: string): Promise<DashboardBatchAlerts> => {
+    try {
+        const { period } = resolveDashboardPeriod({ from: query.from, to: query.to });
+        const { scopeIds, scope } = await resolvePeriodScope(query, authUser);
+        const thresholds = await readBatchThresholds(lang);
+
+        if( scopeIds !== null && scopeIds.length === 0 ) {
+            return emptyBatchAlerts(period, scope, thresholds);
+        }
+
+        const universeSql = buildUniverseSql(scopeIds !== null);
+        const replacements = buildPeriodReplacements(period, scopeIds);
+
+        const [alertRows, counters] = await Promise.all([
+            queryBatchAlerts(universeSql, replacements, thresholds),
+            queryBatchCounters(universeSql, replacements)
+        ]);
+
+        return {
+            period,
+            scope,
+            thresholds,
+            total: alertRows[0]?.total ?? 0,
+            batchesEvaluated: counters.batchesEvaluated,
+            casesWithoutBatch: counters.casesWithoutBatch,
+            alerts: alertRows.map(( row ) => toBatchAlert(row, thresholds) )
+        };
+    } catch (error) {
+        if( error instanceof AppError ) throw error;
+        throw new AppError(getMessage('dashboard.batchAlertsFailed', lang), 500, 'DASH_010_FETCH_FAILED', error);
+    }
+}
+
 export {
     CAUSALITY_CATEGORY_SQL,
+    getBatchAlertsService,
     getDistributionsService,
     getEpiCurveService,
     getIndicatorsService,

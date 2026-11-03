@@ -1143,6 +1143,8 @@
         "epiCurveFailed": "Error al obtener la curva epidemiológica del dashboard. Por favor, inténtelo de nuevo más tarde.",
         "distributionsSuccess": "Distribuciones de casos del dashboard obtenidas exitosamente",
         "distributionsFailed": "Error al obtener las distribuciones de casos del dashboard. Por favor, inténtelo de nuevo más tarde.",
+        "batchAlertsSuccess": "Alertas de agrupamiento por lote del dashboard obtenidas exitosamente",
+        "batchAlertsFailed": "Error al obtener las alertas de agrupamiento por lote del dashboard. Por favor, inténtelo de nuevo más tarde.",
         "invalidPeriod": "El periodo no es válido: la fecha inicial no puede ser posterior a la final, la final no puede estar en el futuro y el rango no puede superar {{maxDays}} días."
     }
 }

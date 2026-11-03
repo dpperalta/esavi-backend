@@ -1143,6 +1143,8 @@
         "epiCurveFailed": "Failed to fetch the dashboard epidemic curve. Please try again later.",
         "distributionsSuccess": "Dashboard case distributions fetched successfully",
         "distributionsFailed": "Failed to fetch the dashboard case distributions. Please try again later.",
+        "batchAlertsSuccess": "Dashboard batch clustering alerts fetched successfully",
+        "batchAlertsFailed": "Failed to fetch the dashboard batch clustering alerts. Please try again later.",
         "invalidPeriod": "Invalid period: the start date cannot be later than the end date, the end date cannot be in the future and the range cannot exceed {{maxDays}} days."
     }
 }

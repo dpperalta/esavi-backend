@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import { dashboardPeriodValidator } from '../validators';
-import { getDistributions, getEpiCurve, getIndicators, getPendingWork } from '../controllers/dashboard.controller';
+import { getBatchAlerts, getDistributions, getEpiCurve, getIndicators, getPendingWork } from '../controllers/dashboard.controller';
 
 const { USER, ANALYTICS } = ROLES;
 
@@ -23,5 +23,9 @@ router.get('/epi-curve', tokenValidation, validateUserRole(ANALYTICS), ...dashbo
 // Get Dashboard Distributions
 // Code: ESAVI-DASH-009
 router.get('/distributions', tokenValidation, validateUserRole(ANALYTICS), ...dashboardPeriodValidator, validateFields, getDistributions);
+
+// Get Dashboard Batch Alerts
+// Code: ESAVI-DASH-010
+router.get('/batch-alerts', tokenValidation, validateUserRole(ANALYTICS), ...dashboardPeriodValidator, validateFields, getBatchAlerts);
 
 export default router;

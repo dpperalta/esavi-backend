@@ -109,3 +109,22 @@ export interface DashboardDistributions {
 }
 
 export interface DashboardAgeBand { code: string; minYears: number | null; maxYears: number | null; }
+
+export type DashboardBatchAlertReason = 'MIN_CASES' | 'MIN_SERIOUS' | 'DEATH';
+
+export interface DashboardBatchAlert {
+    vaccineKey: string; label: string | null; coded: boolean;
+    batchNumber: string; variants: string[];
+    cases: number; suspectedCases: number; serious: number; deaths: number; expiredAtVaccination: number;
+    firstReportDate: string; lastReportDate: string;
+    facilities: number; geoUnits: number; expirationDates: string[];
+    reasons: DashboardBatchAlertReason[];
+}
+
+export interface DashboardBatchAlerts {
+    period: DashboardPeriod;
+    scope: { restricted: boolean; hasAssignments: boolean; geoLocationId: string | null };
+    thresholds: { minCases: number | null; minSerious: number | null };
+    total: number; batchesEvaluated: number; casesWithoutBatch: number;
+    alerts: DashboardBatchAlert[];
+}

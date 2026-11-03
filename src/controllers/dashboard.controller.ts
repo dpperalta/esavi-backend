@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { getDistributionsService, getEpiCurveService, getIndicatorsService, getPendingWorkService } from '../services/dashboard.service';
+import { getBatchAlertsService, getDistributionsService, getEpiCurveService, getIndicatorsService, getPendingWorkService } from '../services/dashboard.service';
 import { DashboardPeriodQuery } from '../types';
 
 // Get Dashboard Pending Work Controller
@@ -86,7 +86,29 @@ const getDistributions = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
+// Get Dashboard Batch Alerts Controller
+// Code: ESAVI-DASH-010
+const getBatchAlerts = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const { from, to, geoLocationId } = req.query as DashboardPeriodQuery;
+        const data = await getBatchAlertsService({ from, to, geoLocationId }, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('dashboard.batchAlertsSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DASH-010: Error fetching dashboard batch alerts: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('dashboard.batchAlertsFailed', req.lang), 500, 'DASH_010_FETCH_FAILED', error));
+    }
+}
+
 export {
+    getBatchAlerts,
     getDistributions,
     getEpiCurve,
     getIndicators,

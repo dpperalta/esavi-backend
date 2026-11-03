@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import { AppUserGeoLocation, CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../../src/models';
+import { AppUserGeoLocation, CatalogItem, CatalogType, Classification, EsaviCase, FinalClassification, GeoLevelType, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, NotificationVaccine, Notifier, Patient, SevereNotification } from '../../src/models';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { closeTestDatabase, seedCaseWorkflow, setCaseWorkflowStatus } from '../setup/database';
 import { seedTestUsers, authHeader, createScopedTestUser } from '../setup/auth';
@@ -878,6 +878,187 @@ describe('esaviCase contract', () => {
             const response = await listAdminCases('?statusCode=CLOSED&limit=100');
             expect(response.status).toBe(200);
             expect(ownCodes(response.body.data.rows)).toEqual([`${ tag }-D`]);
+        });
+    });
+
+    describe('002A and 002B — batchNumber and vaccineKey filter (SPEC F68)', () => {
+
+        let levelTypeId: string;
+        let provinceId: string;
+        let cantonOneId: string;
+        let cantonTwoId: string;
+        let otherProvinceId: string;
+        let userToken: string;
+
+        const tag = `F68BT${ suffix }`;
+        const vaccineName = `PFIZER${ suffix }`;
+        const otherVaccineName = `MODERNA${ suffix }`;
+        const vaccineKey = `T:${ vaccineName }`;
+
+        const scopedList = ( query: string = '' ) =>
+            request(app).get(`/api/esavi-cases${ query }`).set({ Authorization: `Bearer ${ userToken }` });
+
+        const ownCodes = ( rows: { caseCode: string }[] ): string[] =>
+            rows.filter(( row ) => row.caseCode.startsWith(tag) ).map(( row ) => row.caseCode ).sort();
+
+        const codes = ( ...labels: string[] ): string[] => labels.map(( label ) => `${ tag }-${ label }` ).sort();
+
+        const batchQuery = ( batch: string, extra: string = '' ) => `?batchNumber=${ encodeURIComponent(batch) }${ extra }&limit=100`;
+
+        const createGeoLocation = async ( label: string, parent: string | null, level: number ): Promise<string> => {
+            const geo = await GeoLocation.create({
+                geoLevelTypeId: levelTypeId,
+                parentGeoLocationId: parent,
+                code: `${ label }_${ suffix }`,
+                name: `${ label } ${ suffix }`,
+                level
+            });
+            return geo.getDataValue('geoLocationId');
+        };
+
+        const seedBatchCase = async (
+            label: string,
+            geoLocationId: string,
+            vaccines: { name: string; batch: string | null; active?: boolean; suspected?: boolean }[],
+            statusCode: string = 'OPEN'
+        ): Promise<void> => {
+            const facility = await HealthFacility.create({
+                localCode: `${ tag }${ label }`, name: `${ tag } ${ label }`, geoLocationId
+            });
+            const esaviCase = await EsaviCase.create({
+                caseCode: `${ tag }-${ label }`,
+                patientId: await createPatientFixture(`68${ label }`),
+                healthFacilityId: facility.getDataValue('healthFacilityId'),
+                reportDate: '2026-05-01',
+                isActive: true
+            });
+            const caseId = esaviCase.getDataValue('caseId');
+            await seedCaseWorkflow(caseId);
+            if( statusCode !== 'OPEN' ) await setCaseWorkflowStatus(caseId, statusCode);
+            const notification = await Notification.create({ caseId, notificationType: 'SEVERE', esaviDescription: `Batch ${ label }` });
+            for( const vaccine of vaccines ) {
+                await NotificationVaccine.create({
+                    notificationId: notification.getDataValue('notificationId'),
+                    vaccineName: vaccine.name,
+                    batchNumber: vaccine.batch,
+                    isSuspected: vaccine.suspected ?? true,
+                    isActive: vaccine.active ?? true,
+                    sortOrder: 0
+                });
+            }
+        };
+
+        beforeAll(async () => {
+            const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+            const levelType = await GeoLevelType.create({
+                code: `LVL68_${ suffix }`, name: `Level68 ${ suffix }`, sortOrder: 1
+            });
+            levelTypeId = levelType.getDataValue('geoLevelTypeId');
+
+            provinceId = await createGeoLocation('PROV68', null, baseLevel + 1);
+            cantonOneId = await createGeoLocation('CAN168', provinceId, baseLevel + 2);
+            cantonTwoId = await createGeoLocation('CAN268', provinceId, baseLevel + 2);
+            otherProvinceId = await createGeoLocation('PRO268', null, baseLevel + 1);
+
+            await seedBatchCase('A', cantonOneId, [{ name: vaccineName, batch: 'AB 123' }], 'IN_INVESTIGATION');
+            await seedBatchCase('B', cantonOneId, [{ name: vaccineName, batch: 'AB123', suspected: false }]);
+            await seedBatchCase('C', cantonTwoId, [{ name: otherVaccineName, batch: 'ab-123' }]);
+            await seedBatchCase('D', cantonOneId, [{ name: vaccineName, batch: 'XY999' }]);
+            await seedBatchCase('E', cantonTwoId, [{ name: vaccineName, batch: 'AB-123' }, { name: vaccineName, batch: 'ab.123' }]);
+            await seedBatchCase('F', cantonOneId, [{ name: vaccineName, batch: 'AB123', active: false }]);
+            await seedBatchCase('G', otherProvinceId, [{ name: vaccineName, batch: 'AB123' }]);
+            await seedBatchCase('H', cantonOneId, [{ name: vaccineName, batch: null }]);
+
+            userToken = ( await createScopedTestUser('esaviCase-f68-batch', provinceId) ).token;
+        });
+
+        it('matches every spelling of the batch, across vaccines, and only active vaccine rows', async () => {
+            const response = await scopedList(batchQuery('ab-123'));
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual(codes('A', 'B', 'C', 'E'));
+            expect(response.body.data.count).toBe(4);
+        });
+
+        it('normalizes the parameter the same way: "ab 123" finds the case written AB-123', async () => {
+            const response = await scopedList(batchQuery('ab 123'));
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual(codes('A', 'B', 'C', 'E'));
+        });
+
+        it('vaccineKey narrows to the batch of that vaccine, suspected or not', async () => {
+            const response = await scopedList(batchQuery('AB123', `&vaccineKey=${ encodeURIComponent(vaccineKey) }`));
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual(codes('A', 'B', 'E'));
+            expect(response.body.data.count).toBe(3);
+        });
+
+        it('a case with two rows of the same batch appears once and does not inflate the count', async () => {
+            const response = await scopedList(batchQuery('AB123', `&vaccineKey=${ encodeURIComponent(vaccineKey) }`));
+            expect(response.body.data.rows).toHaveLength(3);
+
+            const paged = await scopedList(`?batchNumber=AB123&vaccineKey=${ encodeURIComponent(vaccineKey) }&limit=1`);
+            expect(paged.status).toBe(200);
+            expect(paged.body.data.count).toBe(3);
+            expect(paged.body.data.rows).toHaveLength(1);
+        });
+
+        it('a batch with no cases answers 200 with count 0', async () => {
+            const response = await scopedList(batchQuery('ZZ000'));
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+            expect(response.body.data.rows).toEqual([]);
+        });
+
+        it('answers 400 on both listings for an invalid batch or vaccine key', async () => {
+            const uuidKey = encodeURIComponent(`W:${ unknownUuid }`);
+            for( const list of [scopedList, listAdminCases] ) {
+                expect(( await list(`?vaccineKey=${ uuidKey }`) ).status).toBe(400);
+                expect(( await list('?batchNumber=AB123&vaccineKey=X:foo') ).status).toBe(400);
+                expect(( await list('?batchNumber=---') ).status).toBe(400);
+                expect(( await list('?batchNumber=--') ).status).toBe(400);
+                expect(( await list('?batchNumber=') ).status).toBe(400);
+                expect(( await list(`?batchNumber=${ 'A'.repeat(101) }`) ).status).toBe(400);
+            }
+        });
+
+        it('accepts a well-formed W: key alongside a batch', async () => {
+            const response = await scopedList(`?batchNumber=AB123&vaccineKey=${ encodeURIComponent(`W:${ unknownUuid }`) }`);
+            expect(response.status).toBe(200);
+            expect(response.body.data.count).toBe(0);
+        });
+
+        it('composes with statusCode (SPEC F65) as an intersection', async () => {
+            const response = await scopedList(batchQuery('AB123', '&statusCode=IN_INVESTIGATION'));
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual(codes('A'));
+            expect(response.body.data.count).toBe(1);
+        });
+
+        it('composes with geoLocationId (SPEC F48) and the SPEC F49 scope as an intersection', async () => {
+            const response = await scopedList(batchQuery('AB123', `&geoLocationId=${ cantonTwoId }`));
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual(codes('C', 'E'));
+
+            const outOfScope = await scopedList(batchQuery('AB123', `&geoLocationId=${ otherProvinceId }`));
+            expect(outOfScope.status).toBe(200);
+            expect(outOfScope.body.data.count).toBe(0);
+        });
+
+        it('without batchNumber the listing is unchanged: every case, same row shape', async () => {
+            const unfiltered = await scopedList('?limit=100');
+            expect(unfiltered.status).toBe(200);
+            expect(ownCodes(unfiltered.body.data.rows)).toEqual(codes('A', 'B', 'C', 'D', 'E', 'F', 'H'));
+
+            const filtered = await scopedList(batchQuery('AB123'));
+            const ownRow = ( rows: { caseCode: string }[] ) => rows.find(( row ) => row.caseCode === `${ tag }-A` );
+            expect(Object.keys(ownRow(filtered.body.data.rows)!).sort()).toEqual(Object.keys(ownRow(unfiltered.body.data.rows)!).sort());
+            expect(ownRow(filtered.body.data.rows)).not.toHaveProperty('notification');
+        });
+
+        it('002B filters by batch the same way for an ADMIN, without the territorial scope', async () => {
+            const response = await listAdminCases(batchQuery('AB123', `&vaccineKey=${ encodeURIComponent(vaccineKey) }`));
+            expect(response.status).toBe(200);
+            expect(ownCodes(response.body.data.rows)).toEqual(codes('A', 'B', 'E', 'G'));
         });
     });
 
