@@ -47,6 +47,7 @@ import caseWorkflowRoutes from './caseWorkflow.routes';
 import systemConfigRoutes from './systemConfig.routes';
 import meddraRoutes from './meddra.routes';
 import whodrugProductRoutes from './whodrugProduct.routes';
+import dashboardRoutes from './dashboard.routes';
 
 const router = Router();
 
@@ -164,5 +165,7 @@ router.use('/meddra', meddraRoutes);
 // The raw mirror of the WHODrug standard, downloaded from the UMC regional-drugs API (SPEC F56).
 // Distinct from /whodrug-vaccines: that one is the curated vaccine catalogue of SPEC F18
 router.use('/whodrug-products', whodrugProductRoutes);
+
+router.use('/dashboard', dashboardRoutes);
 
 export default router;

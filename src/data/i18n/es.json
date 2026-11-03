@@ -1132,5 +1132,10 @@
         "syncFailed": "Error al sincronizar el estándar WHODrug. Por favor, inténtelo de nuevo más tarde.",
         "searchFailed": "Error al buscar medicación concomitante. Por favor, inténtelo de nuevo más tarde.",
         "fetchFailed": "Error al listar el espejo WHODrug. Por favor, inténtelo de nuevo más tarde."
+    },
+    "dashboard": {
+        "pendingWorkSuccess": "Trabajo pendiente del dashboard obtenido exitosamente",
+        "pendingWorkFailed": "Error al obtener el trabajo pendiente del dashboard. Por favor, inténtelo de nuevo más tarde.",
+        "statusCatalogMissing": "El catálogo de estados del flujo del caso no está cargado. Contacte al administrador del sistema."
     }
 }

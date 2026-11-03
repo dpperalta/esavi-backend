@@ -215,6 +215,7 @@ El rango `001`–`005B` cubre las operaciones canónicas de un CRUD y **no se es
 | whodrugProduct | `007` | sincronización del estándar desde el API de la UMC `regional-drugs` — SUPERADMIN, `POST /api/whodrug-products/sync` |
 | geoLocation | `006` | importación masiva de geografía y establecimientos desde `.xlsx` — SUPERADMIN, `POST /import` |
 | geoLocation | `007` | generación de la plantilla `.xlsx` con catálogos incrustados — ADMIN, `GET /import/template` |
+| dashboard | `006` | trabajo pendiente — embudo, estancados, investigaciones pendientes y reabiertos, acotado por F49. `GET /pending-work`, USER |
 
 `appSession` toma `006` y `007` por una razón distinta a las demás: revocar **no es** ninguna de las siete operaciones canónicas, y la tabla no tiene `isActive` con el que expresar `005A`/`005B`. Una sesión no se reactiva — se abre una nueva. Su `001` sí es canónico, aunque tampoco tenga ruta HTTP (SPEC F42 §3.4). El `008` sigue el mismo razonamiento: purgar por retención no es un `005C`, porque no lo pide un cliente sobre una fila concreta, sino que lo decide la antigüedad de la fila (SPEC F63 §3.4).
 
@@ -330,6 +331,7 @@ La fila debe estar ya en `isActive: false`. Purgar una fila activa devuelve **40
 | catalogItem | `CATITEM` |
 | catalogType | `CATTYPE` |
 | classification | `CLASSIF` |
+| dashboard | `DASH` |
 | diagnosticTerm | `DIAGTERM` |
 | diluentCatalog | `DILUENT` |
 | esaviCase | `CASE` |

@@ -1,4 +1,5 @@
 import { body, CustomValidator, param, query } from 'express-validator';
+import { CASE_WORKFLOW_STATUS } from '../constants/caseWorkflow.constants';
 
 // The three date columns are calendar dates, so they are compared as plain YYYY-MM-DD
 // strings: building a Date would drag the server time zone into the comparison and could
@@ -86,6 +87,9 @@ export const esaviCaseListValidator = [
     query('reportFillingDateTo').optional().isISO8601()
         .withMessage('Report Filling Date To must be a valid ISO 8601 date'),
     ...dateFilterValidators,
+    query('statusCode').optional().trim()
+        .isIn(Object.values(CASE_WORKFLOW_STATUS))
+        .withMessage(`Status Code must be one of: ${ Object.values(CASE_WORKFLOW_STATUS).join(', ') }`),
     query('limit').optional().isInt({ min: 1, max: 100 })
         .withMessage('Limit must be an integer between 1 and 100'),
     query('offset').optional().isInt({ min: 0 })

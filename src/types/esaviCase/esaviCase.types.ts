@@ -33,4 +33,5 @@ export interface EsaviCaseListFilters {
     reportFillingDate?: string;
     reportFillingDateFrom?: string;
     reportFillingDateTo?: string;
+    statusCode?: string;
 }

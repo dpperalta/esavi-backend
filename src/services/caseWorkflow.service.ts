@@ -5,6 +5,12 @@ import { AppError, esaviLog, getMessage, canViewAuditAuthors, getUserRoleLevel }
 import { AppDetails, AuthUser, CaseWorkflowListFilters, CaseWorkflowStage, CreateCaseWorkflowInput } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
 import { ROLES, ROLE_LEVELS } from '../constants/roles.constants';
+import {
+    CASE_WORKFLOW_STAGE_FIELD,
+    CASE_WORKFLOW_STAGES,
+    CASE_WORKFLOW_STATUS,
+    CASE_WORKFLOW_STATUS_CATALOG_CODE
+} from '../constants/caseWorkflow.constants';
 import { sequelize } from '../database/connection';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
@@ -24,46 +30,12 @@ import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.serv
  * no 004 because no column of this table is written by a human.
  */
 
-// Code of the catalogType that groups the eight workflow states. Seeded by esaviapp.sql with
-// upsertCatalogItem; if it is missing the deployment is broken, not the request
-const WORKFLOW_STATUS_CATALOG_CODE = 'caseWorkflowStatus';
-
-// The eight states of the file, by their catalogItem code
-const STATUS = {
-    OPEN: 'OPEN',
-    IN_CLASSIFICATION: 'IN_CLASSIFICATION',
-    IN_NOTIFICATION: 'IN_NOTIFICATION',
-    IN_INVESTIGATION: 'IN_INVESTIGATION',
-    IN_FINAL_CLASSIFICATION: 'IN_FINAL_CLASSIFICATION',
-    PENDING_VALIDATION: 'PENDING_VALIDATION',
-    CLOSED: 'CLOSED',
-    REOPENED: 'REOPENED'
-} as const;
-
-// The four stages in process order. The index is what "the previous stage" means when 012 seals
-// the end of the one before the stage that is starting
-const STAGES: CaseWorkflowStage[] = [
-    'CLASSIFICATION',
-    'NOTIFICATION',
-    'INVESTIGATION',
-    'FINAL_CLASSIFICATION'
-];
-
-// The column prefix of each stage. The eight stamps are `<prefix>StartedAt` and `<prefix>EndedAt`,
-// so one map replaces eight branches — and adding a stage means adding one entry, not eight
-const STAGE_FIELD: Record<CaseWorkflowStage, string> = {
-    CLASSIFICATION: 'classification',
-    NOTIFICATION: 'notification',
-    INVESTIGATION: 'investigation',
-    FINAL_CLASSIFICATION: 'finalClassification'
-};
-
 // The status the file moves to when a stage starts
 const STAGE_STATUS: Record<CaseWorkflowStage, string> = {
-    CLASSIFICATION: STATUS.IN_CLASSIFICATION,
-    NOTIFICATION: STATUS.IN_NOTIFICATION,
-    INVESTIGATION: STATUS.IN_INVESTIGATION,
-    FINAL_CLASSIFICATION: STATUS.IN_FINAL_CLASSIFICATION
+    CLASSIFICATION: CASE_WORKFLOW_STATUS.IN_CLASSIFICATION,
+    NOTIFICATION: CASE_WORKFLOW_STATUS.IN_NOTIFICATION,
+    INVESTIGATION: CASE_WORKFLOW_STATUS.IN_INVESTIGATION,
+    FINAL_CLASSIFICATION: CASE_WORKFLOW_STATUS.IN_FINAL_CLASSIFICATION
 };
 
 const STAGE_MIN_ROLE: Record<CaseWorkflowStage, string> = {
@@ -73,8 +45,8 @@ const STAGE_MIN_ROLE: Record<CaseWorkflowStage, string> = {
     FINAL_CLASSIFICATION: ROLES.EVALUATOR
 };
 
-const startedAtField = (stage: CaseWorkflowStage): string => `${ STAGE_FIELD[stage] }StartedAt`;
-const endedAtField = (stage: CaseWorkflowStage): string => `${ STAGE_FIELD[stage] }EndedAt`;
+const startedAtField = (stage: CaseWorkflowStage): string => `${ CASE_WORKFLOW_STAGE_FIELD[stage] }StartedAt`;
+const endedAtField = (stage: CaseWorkflowStage): string => `${ CASE_WORKFLOW_STAGE_FIELD[stage] }EndedAt`;
 
 // The status of the row, resolved to its code. Every transition needs it and none of them may
 // return it: the `catalogItem` travels in the response of the HTTP operations, never sysDetails
@@ -108,7 +80,7 @@ const resolveStatusItem = async (
         include: [{
             model: CatalogType,
             as: 'catalogType',
-            where: { code: WORKFLOW_STATUS_CATALOG_CODE },
+            where: { code: CASE_WORKFLOW_STATUS_CATALOG_CODE },
             attributes: []
         }],
         transaction
@@ -162,7 +134,7 @@ const createCaseWorkflowService = async (
             );
         }
 
-        const openStatus = await resolveStatusItem(STATUS.OPEN, '001', lang, transaction);
+        const openStatus = await resolveStatusItem(CASE_WORKFLOW_STATUS.OPEN, '001', lang, transaction);
 
         const newEntry: AppDetails = {
             createdAt: new Date(),
@@ -278,7 +250,7 @@ const buildStages = (workflow: CaseWorkflow) => {
     const esaviCase = workflow.case as ( EsaviCase & Record<string, unknown> ) | undefined;
     const stages: Record<string, unknown> = {};
 
-    for( const stage of STAGES ) {
+    for( const stage of CASE_WORKFLOW_STAGES ) {
         const { alias, primaryKey } = STAGE_SATELLITE[stage];
         const satellite = esaviCase?.[alias] as Record<string, unknown> | null | undefined;
         const id = ( satellite?.[primaryKey] as string | undefined ) ?? null;
@@ -378,7 +350,7 @@ const resolveStatusFilter = async (statusCode: string | undefined, lang: string)
         include: [{
             model: CatalogType,
             as: 'catalogType',
-            where: { code: WORKFLOW_STATUS_CATALOG_CODE },
+            where: { code: CASE_WORKFLOW_STATUS_CATALOG_CODE },
             attributes: []
         }]
     });
@@ -586,7 +558,7 @@ const completeCaseWorkflowStageService = async (
 
         const workflow = await findWorkflowForTransition(caseId, '007', lang);
 
-        if( workflow.status?.code === STATUS.CLOSED ) {
+        if( workflow.status?.code === CASE_WORKFLOW_STATUS.CLOSED ) {
             throw new AppError(getMessage('caseWorkflow.caseClosed', lang), 409, 'CASEFLOW_007_CASE_CLOSED');
         }
 
@@ -663,13 +635,13 @@ const closeCaseWorkflowService = async (
     try {
         const workflow = await findWorkflowForTransition(caseId, '008', lang);
 
-        if( workflow.status?.code === STATUS.CLOSED ) {
+        if( workflow.status?.code === CASE_WORKFLOW_STATUS.CLOSED ) {
             throw new AppError(getMessage('caseWorkflow.alreadyClosed', lang), 409, 'CASEFLOW_008_ALREADY_CLOSED');
         }
 
         // Closing a case somebody sent for review without resolving it empties the state of any
         // meaning: the reviewer would find the file already shut
-        if( workflow.status?.code === STATUS.PENDING_VALIDATION ) {
+        if( workflow.status?.code === CASE_WORKFLOW_STATUS.PENDING_VALIDATION ) {
             throw new AppError(getMessage('caseWorkflow.pendingValidation', lang), 409, 'CASEFLOW_008_PENDING_VALIDATION');
         }
 
@@ -721,7 +693,7 @@ const closeCaseWorkflowService = async (
             );
         }
 
-        const closedStatus = await resolveStatusItem(STATUS.CLOSED, '008', lang);
+        const closedStatus = await resolveStatusItem(CASE_WORKFLOW_STATUS.CLOSED, '008', lang);
         const now = new Date();
         const changes: Record<string, unknown> = {
             closedAt: now,
@@ -732,8 +704,8 @@ const closeCaseWorkflowService = async (
         // The last stage still open is sealed with the same instant, for the same reason as in
         // 012: no stamp is left orphaned and every duration stays computable. Only the last one —
         // sealing them all would invent an end for phases the file may never have entered
-        for( let index = STAGES.length - 1; index >= 0; index-- ) {
-            const stage = STAGES[index];
+        for( let index = CASE_WORKFLOW_STAGES.length - 1; index >= 0; index-- ) {
+            const stage = CASE_WORKFLOW_STAGES[index];
             const startedAt = stampOf(workflow, startedAtField(stage));
             const endedAt = stampOf(workflow, endedAtField(stage));
             if( startedAt && !endedAt ) {
@@ -778,11 +750,11 @@ const reopenCaseWorkflowService = async (
     try {
         const workflow = await findWorkflowForTransition(caseId, '009', lang);
 
-        if( workflow.status?.code !== STATUS.CLOSED ) {
+        if( workflow.status?.code !== CASE_WORKFLOW_STATUS.CLOSED ) {
             throw new AppError(getMessage('caseWorkflow.notClosed', lang), 409, 'CASEFLOW_009_NOT_CLOSED');
         }
 
-        const reopenedStatus = await resolveStatusItem(STATUS.REOPENED, '009', lang);
+        const reopenedStatus = await resolveStatusItem(CASE_WORKFLOW_STATUS.REOPENED, '009', lang);
 
         await workflow.update({
             statusItemId: reopenedStatus.catalogItemId,
@@ -823,15 +795,15 @@ const requestCaseWorkflowValidationService = async (
     try {
         const workflow = await findWorkflowForTransition(caseId, '010', lang);
 
-        if( workflow.status?.code === STATUS.PENDING_VALIDATION ) {
+        if( workflow.status?.code === CASE_WORKFLOW_STATUS.PENDING_VALIDATION ) {
             throw new AppError(getMessage('caseWorkflow.alreadyPending', lang), 409, 'CASEFLOW_010_ALREADY_PENDING');
         }
 
-        if( workflow.status?.code === STATUS.CLOSED ) {
+        if( workflow.status?.code === CASE_WORKFLOW_STATUS.CLOSED ) {
             throw new AppError(getMessage('caseWorkflow.caseClosed', lang), 409, 'CASEFLOW_010_CASE_CLOSED');
         }
 
-        const pendingStatus = await resolveStatusItem(STATUS.PENDING_VALIDATION, '010', lang);
+        const pendingStatus = await resolveStatusItem(CASE_WORKFLOW_STATUS.PENDING_VALIDATION, '010', lang);
 
         await workflow.update({
             previousStatusItemId: workflow.statusItemId,
@@ -874,7 +846,7 @@ const resolveCaseWorkflowValidationService = async (
     try {
         const workflow = await findWorkflowForTransition(caseId, '011', lang);
 
-        if( workflow.status?.code !== STATUS.PENDING_VALIDATION ) {
+        if( workflow.status?.code !== CASE_WORKFLOW_STATUS.PENDING_VALIDATION ) {
             throw new AppError(getMessage('caseWorkflow.notPending', lang), 409, 'CASEFLOW_011_NOT_PENDING');
         }
 
@@ -993,7 +965,7 @@ const assertCaseIsOpen = async (
         transaction
     });
 
-    if( workflow?.status?.code === STATUS.CLOSED ) {
+    if( workflow?.status?.code === CASE_WORKFLOW_STATUS.CLOSED ) {
         throw new AppError(
             getMessage('caseWorkflow.caseClosed', lang),
             409,
@@ -1056,7 +1028,7 @@ const advanceCaseWorkflowStageService = async (
         // the same rule guards every write of the file through `assertCaseIsOpen`, which is not
         // reused here: this operation needs the whole row for what it does next, and a missing
         // workflow is a 404 for it
-        if( workflow.status?.code === STATUS.CLOSED ) {
+        if( workflow.status?.code === CASE_WORKFLOW_STATUS.CLOSED ) {
             throw new AppError(
                 getMessage('caseWorkflow.caseClosed', lang),
                 409,
@@ -1076,7 +1048,7 @@ const advanceCaseWorkflowStageService = async (
 
         // The immediately previous stage, and only that one. Sealing every stage left open would
         // invent an end for a phase the file may never have entered
-        const previousStage = STAGES[STAGES.indexOf(stage) - 1];
+        const previousStage = CASE_WORKFLOW_STAGES[CASE_WORKFLOW_STAGES.indexOf(stage) - 1];
         if( previousStage ) {
             const previousStarted = stampOf(workflow, startedAtField(previousStage));
             const previousEnded = stampOf(workflow, endedAtField(previousStage));
@@ -1087,7 +1059,7 @@ const advanceCaseWorkflowStageService = async (
 
         const stageStatus = await resolveStatusItem(STAGE_STATUS[stage], '012', lang, transaction);
 
-        if( workflow.status?.code === STATUS.PENDING_VALIDATION ) {
+        if( workflow.status?.code === CASE_WORKFLOW_STATUS.PENDING_VALIDATION ) {
             // The file keeps waiting for its review, but the point 011 will return it to is now
             // the stage it just entered, not the one it was in when the validation was requested
             changes.previousStatusItemId = stageStatus.catalogItemId;
@@ -1142,10 +1114,6 @@ export {
     resolveStatusItem,
     startedAtField,
     endedAtField,
-    STAGES,
-    STAGE_FIELD,
     STAGE_STATUS,
-    STATUS,
-    STATUS_INCLUDE,
-    WORKFLOW_STATUS_CATALOG_CODE
+    STATUS_INCLUDE
 }

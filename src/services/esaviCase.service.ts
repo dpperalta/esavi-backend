@@ -1,6 +1,6 @@
 import { Op, Transaction, UniqueConstraintError, WhereOptions } from 'sequelize';
 import { sequelize } from '../database/connection';
-import { Classification, EsaviCase, FinalClassification, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
+import { CaseWorkflow, CatalogItem, Classification, EsaviCase, FinalClassification, GeoLocation, HealthFacility, Investigation, InvestigationAutopsy, InvestigationClinicalEvaluation, InvestigationMedicalHistory, InvestigationSource, InvestigationVaccinationContext, InvestigationColdChain, InvestigationAdministrationError, InvestigationCommunity, Notification, NonSevereNotification, Notifier, Patient, SevereNotification } from '../models';
 import { AppError, buildDifferentialUpdate, buildTextSearchConditions, caseCodePrefix, esaviDecrypt, formatCaseCode, getMessage, toTitleCase, canViewAuditAuthors } from '../helpers';
 import { AppDetails, AuthUser, CreateEsaviCaseInput, EsaviCaseListFilters } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
@@ -367,6 +367,25 @@ const resolveScopedFacilityInclude = async (filters: EsaviCaseListFilters, authU
     return buildFacilityInclude(intersectSubtreeIds(userScope, explicitSubtree));
 }
 
+const buildStatusInclude = (filters: EsaviCaseListFilters) => (
+    filters.statusCode
+        ? [{
+            model: CaseWorkflow,
+            as: 'workflow',
+            attributes: [],
+            required: true,
+            where: { isActive: true },
+            include: [{
+                model: CatalogItem,
+                as: 'status',
+                attributes: [],
+                required: true,
+                where: { code: filters.statusCode }
+            }]
+        }]
+        : []
+);
+
 // Get Active ESAVI Cases Service
 // Code: ESAVI-CASE-002A
 const getEsaviCasesService = async (
@@ -379,7 +398,7 @@ const getEsaviCasesService = async (
     const { count, rows } = await EsaviCase.findAndCountAll({
         where: { ...buildListWhere(filters), isActive: true },
         attributes: LIST_ATTRIBUTES,
-        include: [LIST_PATIENT_INCLUDE, facilityInclude],
+        include: [LIST_PATIENT_INCLUDE, facilityInclude, ...buildStatusInclude(filters)],
         order: LIST_ORDER,
         limit,
         offset
@@ -399,7 +418,7 @@ const getAllEsaviCasesService = async (
     const { count, rows } = await EsaviCase.findAndCountAll({
         where: buildListWhere(filters),
         attributes: LIST_ATTRIBUTES,
-        include: [LIST_PATIENT_INCLUDE, facilityInclude],
+        include: [LIST_PATIENT_INCLUDE, facilityInclude, ...buildStatusInclude(filters)],
         order: LIST_ORDER,
         limit,
         offset
