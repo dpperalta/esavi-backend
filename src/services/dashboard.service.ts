@@ -704,13 +704,8 @@ interface SexAgeRow {
     total: number;
 }
 
-const ADMINISTRATION_ERROR_KEYS = [
-    'prescriptionError', 'contaminatedVaccine', 'abnormalVaccineConditions', 'preparationError', 'handlingError', 'improperAdministration'
-] as const;
-
-const COLD_CHAIN_FAILURE_KEYS = [
-    'rangeDeviation', 'procedureNotFollowed', 'vaccineNotUsable', 'diluentNotUsable', 'partiallyReconstitutedVaccine', 'otherObjectPresent'
-] as const;
+type AdministrationErrorKey = Exclude<keyof DashboardProgrammatic['administrationErrors'], 'anyError'>;
+type ColdChainFailureKey = Exclude<keyof DashboardProgrammatic['coldChainFailures'], 'anyFailure'>;
 
 const periodCasesSql = (universeSql: string, recursive = false): string => `WITH ${ recursive ? 'RECURSIVE ' : '' }u AS (${ universeSql }),
         pc AS (
@@ -998,19 +993,64 @@ const buildGeography = (reference: GeoReference, buckets: GeoBucketRow[]): Dashb
     return { rows: rows.sort(compareGeoRows) };
 }
 
-const emptyProgrammatic = (): DashboardProgrammatic => ({
-    investigatedCases: 0,
-    withoutAdministrationRecord: 0,
-    withoutColdChainRecord: 0,
+const ADMINISTRATION_ERROR_CONDITIONS: Record<AdministrationErrorKey, string> = {
+    prescriptionError: `ae."hadPrescriptionError" = 'YES'`,
+    contaminatedVaccine: `ae."hadContaminatedVaccine" = 'YES'`,
+    abnormalVaccineConditions: `ae."hadAbnormalVaccineConditions" = 'YES'`,
+    preparationError: `ae."hadPreparationError" = 'YES'`,
+    handlingError: `ae."hadHandlingError" = 'YES'`,
+    improperAdministration: `ae."hadImproperAdministration" = 'YES'`
+};
+
+const COLD_CHAIN_FAILURE_CONDITIONS: Record<ColdChainFailureKey, string> = {
+    rangeDeviation: 'cc."storageRangeDeviation" IS TRUE',
+    procedureNotFollowed: `cc."storageProcedureFollowed" = 'NO'`,
+    vaccineNotUsable: `cc."storageVaccineNotUsable" = 'YES'`,
+    diluentNotUsable: `cc."storageDiluentNotUsable" = 'YES'`,
+    partiallyReconstitutedVaccine: `cc."storagePartiallyReconstitutedVaccine" = 'YES'`,
+    otherObjectPresent: `cc."storageOtherObjectPresent" = 'YES'`
+};
+
+const anyConditionSql = (conditions: Record<string, string>): string =>
+    Object.values(conditions).map(( condition ) => `(${ condition })`).join(' OR ');
+
+const queryProgrammatic = async (universeSql: string, replacements: Record<string, unknown>): Promise<CountRow> => {
+    const conditionColumns = (conditions: Record<string, string>, prefix: string): string[] =>
+        Object.entries(conditions).map(( [key, condition] ) => `COUNT(*) FILTER (WHERE ${ condition })::int AS "${ prefix }_${ key }"`);
+
+    const [row] = await sequelize.query<CountRow>(
+        `${ periodCasesSql(universeSql) }
+        SELECT COUNT(*)::int AS "investigatedCases",
+            COUNT(*) FILTER (WHERE ae."investigationId" IS NULL)::int AS "withoutAdministrationRecord",
+            COUNT(*) FILTER (WHERE cc."investigationId" IS NULL)::int AS "withoutColdChainRecord",
+            ${ conditionColumns(ADMINISTRATION_ERROR_CONDITIONS, 'ae').join(',\n            ') },
+            COUNT(*) FILTER (WHERE ${ anyConditionSql(ADMINISTRATION_ERROR_CONDITIONS) })::int AS "ae_anyError",
+            ${ conditionColumns(COLD_CHAIN_FAILURE_CONDITIONS, 'cc').join(',\n            ') },
+            COUNT(*) FILTER (WHERE ${ anyConditionSql(COLD_CHAIN_FAILURE_CONDITIONS) })::int AS "cc_anyFailure"
+        FROM pc
+        JOIN "investigation" inv ON inv."caseId" = pc."caseId" AND inv."isActive" = true
+        LEFT JOIN "investigationAdministrationError" ae ON ae."investigationId" = inv."investigationId" AND ae."deletedAt" IS NULL
+        LEFT JOIN "investigationColdChain" cc ON cc."investigationId" = inv."investigationId" AND cc."deletedAt" IS NULL`,
+        { replacements, type: QueryTypes.SELECT }
+    );
+    return row;
+}
+
+const buildProgrammatic = (row: CountRow): DashboardProgrammatic => ({
+    investigatedCases: row.investigatedCases ?? 0,
+    withoutAdministrationRecord: row.withoutAdministrationRecord ?? 0,
+    withoutColdChainRecord: row.withoutColdChainRecord ?? 0,
     administrationErrors: {
-        ...Object.fromEntries(ADMINISTRATION_ERROR_KEYS.map(( key ) => [key, 0] )),
-        anyError: 0
-    } as DashboardProgrammatic['administrationErrors'],
+        ...mapRecord(ADMINISTRATION_ERROR_CONDITIONS, ( _condition, key ) => row[`ae_${ key }`] ?? 0 ),
+        anyError: row.ae_anyError ?? 0
+    },
     coldChainFailures: {
-        ...Object.fromEntries(COLD_CHAIN_FAILURE_KEYS.map(( key ) => [key, 0] )),
-        anyFailure: 0
-    } as DashboardProgrammatic['coldChainFailures']
+        ...mapRecord(COLD_CHAIN_FAILURE_CONDITIONS, ( _condition, key ) => row[`cc_${ key }`] ?? 0 ),
+        anyFailure: row.cc_anyFailure ?? 0
+    }
 });
+
+const emptyProgrammatic = (): DashboardProgrammatic => buildProgrammatic({});
 
 const emptyDistributions = (period: DashboardPeriod, scope: DashboardScope): DashboardDistributions => ({
     period,
@@ -1036,10 +1076,11 @@ const getDistributionsService = async (query: DashboardPeriodQuery, authUser: Au
         const replacements = buildPeriodReplacements(period, scopeIds);
         const geoReference = await resolveGeoReference(query, authUser, userScopeIds);
 
-        const [vaccineRows, sexAgeRows, geoBuckets] = await Promise.all([
+        const [vaccineRows, sexAgeRows, geoBuckets, programmaticRow] = await Promise.all([
             queryVaccines(universeSql, replacements),
             querySexAge(universeSql, replacements),
-            queryGeography(universeSql, replacements, geoReference)
+            queryGeography(universeSql, replacements, geoReference),
+            queryProgrammatic(universeSql, replacements)
         ]);
 
         return {
@@ -1048,7 +1089,7 @@ const getDistributionsService = async (query: DashboardPeriodQuery, authUser: Au
             vaccines: buildVaccines(vaccineRows),
             sexAge: buildSexAge(sexAgeRows),
             geography: buildGeography(geoReference, geoBuckets),
-            programmatic: emptyProgrammatic()
+            programmatic: buildProgrammatic(programmaticRow)
         };
     } catch (error) {
         if( error instanceof AppError ) throw error;
