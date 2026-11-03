@@ -2,9 +2,9 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import { dashboardPeriodValidator } from '../validators';
-import { getBatchAlerts, getDistributions, getEpiCurve, getIndicators, getPendingWork, getRecentActivity } from '../controllers/dashboard.controller';
+import { getBatchAlerts, getDistributions, getEpiCurve, getIndicators, getPendingWork, getRecentActivity, getSystemActivity } from '../controllers/dashboard.controller';
 
-const { USER, ANALYTICS } = ROLES;
+const { USER, ANALYTICS, SUPERADMIN } = ROLES;
 
 const router = Router();
 
@@ -31,5 +31,9 @@ router.get('/batch-alerts', tokenValidation, validateUserRole(ANALYTICS), ...das
 // Get Dashboard Recent Activity
 // Code: ESAVI-DASH-011
 router.get('/recent-activity', tokenValidation, validateUserRole(USER), getRecentActivity);
+
+// Get Dashboard System Activity
+// Code: ESAVI-DASH-012
+router.get('/system-activity', tokenValidation, validateUserRole(SUPERADMIN), getSystemActivity);
 
 export default router;

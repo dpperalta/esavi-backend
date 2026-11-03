@@ -27,6 +27,7 @@ import {
     DashboardSeverityCriterion,
     DashboardStalledCase,
     DashboardStatusCount,
+    DashboardSystemActivity,
     DashboardVaccineRow
 } from '../types';
 import { CASE_WORKFLOW_STAGE_FIELD, CASE_WORKFLOW_STAGES, CASE_WORKFLOW_STATUS, CASE_WORKFLOW_STATUS_CATALOG_CODE } from '../constants/caseWorkflow.constants';
@@ -52,6 +53,7 @@ import {
 } from '../constants/dashboard.constants';
 import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE, FINAL_CLASSIFICATION_TOP_IMPORTANCE_VALUE } from '../constants/finalClassification.constants';
 import { BATCH_NUMBER_NORMALIZED_SQL, VACCINE_KEY_SQL } from '../constants/notificationVaccine.constants';
+import { SESSION_REVOKE_REASONS } from '../constants/session.constants';
 import { MAX_GEO_SUBTREE_DEPTH, resolveGeoSubtreeIds, resolveUserGeoRootIds, resolveUserGeoScopeIds } from './common/geoScope.service';
 import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
 
@@ -1447,6 +1449,89 @@ const getRecentActivityService = async (authUser: AuthUser | undefined, lang: st
     }
 }
 
+interface SessionCountersRow {
+    activeSessions: number;
+    activeUsers24h: number;
+    activeUsers7d: number;
+    sessionsStarted24h: number;
+    sessionsStarted7d: number;
+}
+
+interface RevocationRow {
+    reason: string;
+    count: number;
+}
+
+const UNSPECIFIED_REVOKE_REASON = 'UNSPECIFIED';
+const OTHER_REVOKE_REASON = 'OTHER';
+
+const querySessionCounters = async (): Promise<SessionCountersRow[]> =>
+    sequelize.query<SessionCountersRow>(
+        `SELECT
+            COUNT(*) FILTER (WHERE s."revokedAt" IS NULL AND (s."expiresAt" IS NULL OR s."expiresAt" > now()))::int AS "activeSessions",
+            COUNT(DISTINCT s."userId") FILTER (WHERE s."startedAt" >= now() - interval '24 hours')::int AS "activeUsers24h",
+            COUNT(DISTINCT s."userId") FILTER (WHERE s."startedAt" >= now() - interval '7 days')::int AS "activeUsers7d",
+            COUNT(*) FILTER (WHERE s."startedAt" >= now() - interval '24 hours')::int AS "sessionsStarted24h",
+            COUNT(*) FILTER (WHERE s."startedAt" >= now() - interval '7 days')::int AS "sessionsStarted7d"
+        FROM "appSession" s
+        WHERE s."deletedAt" IS NULL`,
+        { type: QueryTypes.SELECT }
+    );
+
+const queryRevocations = async (): Promise<RevocationRow[]> =>
+    sequelize.query<RevocationRow>(
+        `SELECT COALESCE(s."revokedReason", :unspecified) AS "reason", COUNT(*)::int AS "count"
+        FROM "appSession" s
+        WHERE s."deletedAt" IS NULL
+          AND s."revokedAt" >= now() - interval '7 days'
+        GROUP BY COALESCE(s."revokedReason", :unspecified)`,
+        { replacements: { unspecified: UNSPECIFIED_REVOKE_REASON }, type: QueryTypes.SELECT }
+    );
+
+const buildRevocations = (rows: RevocationRow[]): DashboardSystemActivity['revocations7d'] => {
+    const known = new Set<string>(SESSION_REVOKE_REASONS);
+    const counts = new Map<string, number>(SESSION_REVOKE_REASONS.map(( reason ) => [reason, 0] ));
+    let unspecified: number | null = null;
+    let other: number | null = null;
+    for( const row of rows ) {
+        if( known.has(row.reason) ) {
+            counts.set(row.reason, ( counts.get(row.reason) ?? 0 ) + row.count);
+        } else if( row.reason === UNSPECIFIED_REVOKE_REASON ) {
+            unspecified = ( unspecified ?? 0 ) + row.count;
+        } else {
+            other = ( other ?? 0 ) + row.count;
+        }
+    }
+    const revocations = SESSION_REVOKE_REASONS.map(( reason ) => ({ reason: reason as string, count: counts.get(reason) ?? 0 }));
+    if( unspecified !== null ) revocations.push({ reason: UNSPECIFIED_REVOKE_REASON, count: unspecified });
+    if( other !== null ) revocations.push({ reason: OTHER_REVOKE_REASON, count: other });
+    return revocations;
+}
+
+// Get Dashboard System Activity Service
+// Code: ESAVI-DASH-012
+const getSystemActivityService = async (lang: string): Promise<DashboardSystemActivity> => {
+    try {
+        const [counterRows, revocationRows] = await Promise.all([
+            querySessionCounters(),
+            queryRevocations()
+        ]);
+        const counters = counterRows[0];
+        return {
+            generatedAt: new Date().toISOString(),
+            activeSessions: counters?.activeSessions ?? 0,
+            activeUsers24h: counters?.activeUsers24h ?? 0,
+            activeUsers7d: counters?.activeUsers7d ?? 0,
+            sessionsStarted24h: counters?.sessionsStarted24h ?? 0,
+            sessionsStarted7d: counters?.sessionsStarted7d ?? 0,
+            revocations7d: buildRevocations(revocationRows)
+        };
+    } catch (error) {
+        if( error instanceof AppError ) throw error;
+        throw new AppError(getMessage('dashboard.systemActivityFailed', lang), 500, 'DASH_012_FETCH_FAILED', error);
+    }
+}
+
 export {
     CAUSALITY_CATEGORY_SQL,
     getBatchAlertsService,
@@ -1454,5 +1539,6 @@ export {
     getEpiCurveService,
     getIndicatorsService,
     getPendingWorkService,
-    getRecentActivityService
+    getRecentActivityService,
+    getSystemActivityService
 }

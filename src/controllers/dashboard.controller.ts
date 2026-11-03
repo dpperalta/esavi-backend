@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { getBatchAlertsService, getDistributionsService, getEpiCurveService, getIndicatorsService, getPendingWorkService, getRecentActivityService } from '../services/dashboard.service';
+import { getBatchAlertsService, getDistributionsService, getEpiCurveService, getIndicatorsService, getPendingWorkService, getRecentActivityService, getSystemActivityService } from '../services/dashboard.service';
 import { DashboardPeriodQuery } from '../types';
 
 // Get Dashboard Pending Work Controller
@@ -127,11 +127,32 @@ const getRecentActivity = async (req: Request, res: Response, next: NextFunction
     }
 }
 
+// Get Dashboard System Activity Controller
+// Code: ESAVI-DASH-012
+const getSystemActivity = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const data = await getSystemActivityService(req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('dashboard.systemActivitySuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DASH-012: Error fetching dashboard system activity: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('dashboard.systemActivityFailed', req.lang), 500, 'DASH_012_FETCH_FAILED', error));
+    }
+}
+
 export {
     getBatchAlerts,
     getDistributions,
     getEpiCurve,
     getIndicators,
     getPendingWork,
-    getRecentActivity
+    getRecentActivity,
+    getSystemActivity
 }
