@@ -1132,5 +1132,10 @@
         "syncFailed": "Fout bij het synchroniseren van de WHODrug-standaard. Probeer het later opnieuw.",
         "searchFailed": "Fout bij het zoeken naar gelijktijdige medicatie. Probeer het later opnieuw.",
         "fetchFailed": "Fout bij het weergeven van de WHODrug-spiegel. Probeer het later opnieuw."
+    },
+    "dashboard": {
+        "pendingWorkSuccess": "Openstaand werk van het dashboard succesvol opgehaald",
+        "pendingWorkFailed": "Ophalen van het openstaande werk van het dashboard mislukt. Probeer het later opnieuw.",
+        "statusCatalogMissing": "De statuscatalogus van de casusworkflow is niet geladen. Neem contact op met de systeembeheerder."
     }
 }
