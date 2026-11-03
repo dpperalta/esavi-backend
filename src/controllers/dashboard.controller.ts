@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { getEpiCurveService, getIndicatorsService, getPendingWorkService } from '../services/dashboard.service';
+import { getDistributionsService, getEpiCurveService, getIndicatorsService, getPendingWorkService } from '../services/dashboard.service';
 import { DashboardPeriodQuery } from '../types';
 
 // Get Dashboard Pending Work Controller
@@ -65,7 +65,29 @@ const getEpiCurve = async (req: Request, res: Response, next: NextFunction): Pro
     }
 }
 
+// Get Dashboard Distributions Controller
+// Code: ESAVI-DASH-009
+const getDistributions = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const { from, to, geoLocationId } = req.query as DashboardPeriodQuery;
+        const data = await getDistributionsService({ from, to, geoLocationId }, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('dashboard.distributionsSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DASH-009: Error fetching dashboard distributions: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('dashboard.distributionsFailed', req.lang), 500, 'DASH_009_FETCH_FAILED', error));
+    }
+}
+
 export {
+    getDistributions,
     getEpiCurve,
     getIndicators,
     getPendingWork

@@ -8,6 +8,7 @@ import {
     DashboardASubcategory,
     DashboardCausalityCategory,
     DashboardComparable,
+    DashboardDistributions,
     DashboardEpiCurve,
     DashboardEpiWeek,
     DashboardIndicators,
@@ -17,13 +18,17 @@ import {
     DashboardPeriodQuery,
     DashboardSeverityCriterion,
     DashboardStalledCase,
-    DashboardStatusCount
+    DashboardStatusCount,
+    DashboardVaccineRow
 } from '../types';
 import { CASE_WORKFLOW_STAGE_FIELD, CASE_WORKFLOW_STAGES, CASE_WORKFLOW_STATUS, CASE_WORKFLOW_STATUS_CATALOG_CODE } from '../constants/caseWorkflow.constants';
 import {
+    DASHBOARD_AGE_BANDS,
     DASHBOARD_CONFIG_SCOPE,
+    DASHBOARD_SEX_CODES,
     DASHBOARD_STALE_DAYS_CODE,
     DASHBOARD_TOP_LIMIT,
+    DASHBOARD_VACCINE_TOP_LIMIT,
     NOTIFICATION_CONFIG_SCOPE,
     NOTIFICATION_DEADLINE_DAYS_CODE
 } from '../constants/dashboard.constants';
@@ -98,7 +103,7 @@ const OPEN_STAGE_VALUES = CASE_WORKFLOW_STAGES
     .join(',\n                ');
 
 const buildUniverseSql = (restricted: boolean): string => `
-    SELECT c."caseId", c."caseCode", c."reportDate", c."eventDate", s."code" AS "statusCode", w."statusItemId", w."openedAt", w."closedAt",
+    SELECT c."caseId", c."caseCode", c."patientId", c."healthFacilityId", c."reportDate", c."eventDate", s."code" AS "statusCode", w."statusItemId", w."openedAt", w."closedAt",
         w."classificationStartedAt", w."classificationEndedAt",
         w."notificationStartedAt", w."notificationEndedAt",
         w."investigationStartedAt", w."investigationEndedAt",
@@ -676,8 +681,226 @@ const getEpiCurveService = async (query: DashboardPeriodQuery, authUser: AuthUse
     }
 }
 
+const AGE_UNIT_CATALOG_CODE = 'ageUnit';
+const SEX_CATALOG_CODE = 'sex';
+
+type DashboardProgrammatic = DashboardDistributions['programmatic'];
+type DashboardSexCode = typeof DASHBOARD_SEX_CODES[number];
+
+interface VaccineQueryRow {
+    kind: 'item' | 'others' | 'without';
+    key: string | null;
+    coded: boolean | null;
+    label: string | null;
+    cases: number;
+    serious: number;
+    rank: number | null;
+}
+
+interface SexAgeRow {
+    ageYears: number | null;
+    sexValue: string | null;
+    total: number;
+}
+
+const ADMINISTRATION_ERROR_KEYS = [
+    'prescriptionError', 'contaminatedVaccine', 'abnormalVaccineConditions', 'preparationError', 'handlingError', 'improperAdministration'
+] as const;
+
+const COLD_CHAIN_FAILURE_KEYS = [
+    'rangeDeviation', 'procedureNotFollowed', 'vaccineNotUsable', 'diluentNotUsable', 'partiallyReconstitutedVaccine', 'otherObjectPresent'
+] as const;
+
+const periodCasesSql = (universeSql: string): string => `WITH u AS (${ universeSql }),
+        pc AS (
+            SELECT u."caseId", u."patientId", u."healthFacilityId", cl."isSeriousEvent" IS TRUE AS "serious"
+            FROM u
+            LEFT JOIN "classification" cl ON cl."caseId" = u."caseId" AND cl."isActive" = true
+            WHERE u."reportDate" BETWEEN :from AND :to
+        )`;
+
+const queryVaccines = async (universeSql: string, replacements: Record<string, unknown>): Promise<VaccineQueryRow[]> =>
+    sequelize.query<VaccineQueryRow>(
+        `${ periodCasesSql(universeSql) },
+        sv AS (
+            SELECT DISTINCT pc."caseId", pc."serious",
+                CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
+                    THEN 'W:' || nv."vaccineWhodrugId"::text
+                    ELSE 'T:' || upper(btrim(COALESCE(nv."vaccineName", '')))
+                END AS "key",
+                nv."vaccineWhodrugId" IS NOT NULL AS "coded",
+                CASE WHEN nv."vaccineWhodrugId" IS NOT NULL
+                    THEN vw."drugName"
+                    ELSE NULLIF(upper(btrim(COALESCE(nv."vaccineName", ''))), '')
+                END AS "label"
+            FROM pc
+            JOIN "notification" n ON n."caseId" = pc."caseId" AND n."isActive" = true
+            JOIN "notificationVaccine" nv ON nv."notificationId" = n."notificationId" AND nv."isActive" = true AND nv."isSuspected" = true
+            LEFT JOIN "vaccineWhodrug" vw ON vw."vaccineWhodrugId" = nv."vaccineWhodrugId"
+        ),
+        g AS (
+            SELECT sv."key", sv."coded", sv."label",
+                COUNT(DISTINCT sv."caseId")::int AS "cases",
+                COUNT(DISTINCT sv."caseId") FILTER (WHERE sv."serious")::int AS "serious"
+            FROM sv
+            GROUP BY sv."key", sv."coded", sv."label"
+        ),
+        r AS (
+            SELECT g.*, ROW_NUMBER() OVER (ORDER BY g."cases" DESC, g."label" ASC NULLS LAST, g."key" ASC)::int AS "rank"
+            FROM g
+        )
+        SELECT 'item' AS "kind", r."key", r."coded", r."label", r."cases", r."serious", r."rank"
+        FROM r
+        WHERE r."rank" <= :vaccineTopLimit
+        UNION ALL
+        SELECT 'others', NULL, NULL, NULL,
+            COUNT(DISTINCT sv."caseId")::int,
+            COUNT(DISTINCT sv."caseId") FILTER (WHERE sv."serious")::int,
+            NULL
+        FROM sv
+        JOIN r ON r."key" = sv."key"
+        WHERE r."rank" > :vaccineTopLimit
+        UNION ALL
+        SELECT 'without', NULL, NULL, NULL,
+            COUNT(*)::int, 0, NULL
+        FROM pc
+        WHERE NOT EXISTS (SELECT 1 FROM sv WHERE sv."caseId" = pc."caseId")`,
+        { replacements: { ...replacements, vaccineTopLimit: DASHBOARD_VACCINE_TOP_LIMIT }, type: QueryTypes.SELECT }
+    );
+
+const querySexAge = async (universeSql: string, replacements: Record<string, unknown>): Promise<SexAgeRow[]> =>
+    sequelize.query<SexAgeRow>(
+        `${ periodCasesSql(universeSql) }
+        SELECT CASE au."value"
+                WHEN 'YEARS' THEN cl."age"
+                WHEN 'MONTHS' THEN FLOOR(cl."age"::numeric / 12)
+                WHEN 'DAYS' THEN FLOOR(cl."age"::numeric / 365)
+            END::int AS "ageYears",
+            sx."value" AS "sexValue",
+            COUNT(*)::int AS "total"
+        FROM pc
+        LEFT JOIN "classification" cl ON cl."caseId" = pc."caseId" AND cl."isActive" = true
+        LEFT JOIN "catalogItem" au ON au."catalogItemId" = cl."ageUnitItemId"
+            AND au."isValueLocked" = true
+            AND au."catalogTypeId" = (SELECT "catalogTypeId" FROM "catalogType" WHERE "code" = :ageUnitCatalogCode)
+        LEFT JOIN "patient" pt ON pt."patientId" = pc."patientId"
+        LEFT JOIN "catalogItem" sx ON sx."catalogItemId" = pt."sexItemId"
+            AND sx."isValueLocked" = true
+            AND sx."catalogTypeId" = (SELECT "catalogTypeId" FROM "catalogType" WHERE "code" = :sexCatalogCode)
+        GROUP BY 1, 2`,
+        {
+            replacements: { ...replacements, ageUnitCatalogCode: AGE_UNIT_CATALOG_CODE, sexCatalogCode: SEX_CATALOG_CODE },
+            type: QueryTypes.SELECT
+        }
+    );
+
+const ageBandIndexOf = (ageYears: number | null): number => {
+    const unknownIndex = DASHBOARD_AGE_BANDS.length - 1;
+    if( ageYears === null || ageYears === undefined ) return unknownIndex;
+    const index = DASHBOARD_AGE_BANDS.findIndex(( band ) =>
+        band.minYears !== null && ageYears >= band.minYears && ( band.maxYears === null || ageYears <= band.maxYears ));
+    return index === -1 ? unknownIndex : index;
+}
+
+const SEX_CATALOG_VALUES: readonly DashboardSexCode[] = DASHBOARD_SEX_CODES.filter(( code ) => code !== 'NONE' );
+
+const sexIndexOf = (sexValue: string | null): number =>
+    DASHBOARD_SEX_CODES.indexOf(SEX_CATALOG_VALUES.includes(sexValue as DashboardSexCode) ? sexValue as DashboardSexCode : 'NONE');
+
+const emptySexAgeMatrix = (): number[][] =>
+    DASHBOARD_AGE_BANDS.map(() => DASHBOARD_SEX_CODES.map(() => 0 ));
+
+const buildSexAge = (rows: SexAgeRow[]): DashboardDistributions['sexAge'] => {
+    const matrix = emptySexAgeMatrix();
+    rows.forEach(( row ) => {
+        matrix[ageBandIndexOf(row.ageYears)][sexIndexOf(row.sexValue)] += row.total;
+    });
+    return {
+        bands: DASHBOARD_AGE_BANDS.map(( band ) => band.code ),
+        sexes: [...DASHBOARD_SEX_CODES],
+        matrix
+    };
+}
+
+const buildVaccines = (rows: VaccineQueryRow[]): DashboardDistributions['vaccines'] => {
+    const items = rows
+        .filter(( row ) => row.kind === 'item' )
+        .sort(( a, b ) => ( a.rank ?? 0 ) - ( b.rank ?? 0 ))
+        .map(( row ): DashboardVaccineRow => ({
+            key: row.key as string,
+            label: row.label,
+            coded: row.coded === true,
+            cases: row.cases,
+            serious: row.serious
+        }));
+    const others = rows.find(( row ) => row.kind === 'others' );
+    const without = rows.find(( row ) => row.kind === 'without' );
+    return {
+        items,
+        others: { cases: others?.cases ?? 0, serious: others?.serious ?? 0 },
+        casesWithoutSuspectedVaccine: without?.cases ?? 0
+    };
+}
+
+const emptyProgrammatic = (): DashboardProgrammatic => ({
+    investigatedCases: 0,
+    withoutAdministrationRecord: 0,
+    withoutColdChainRecord: 0,
+    administrationErrors: {
+        ...Object.fromEntries(ADMINISTRATION_ERROR_KEYS.map(( key ) => [key, 0] )),
+        anyError: 0
+    } as DashboardProgrammatic['administrationErrors'],
+    coldChainFailures: {
+        ...Object.fromEntries(COLD_CHAIN_FAILURE_KEYS.map(( key ) => [key, 0] )),
+        anyFailure: 0
+    } as DashboardProgrammatic['coldChainFailures']
+});
+
+const emptyDistributions = (period: DashboardPeriod, scope: DashboardScope): DashboardDistributions => ({
+    period,
+    scope,
+    vaccines: { items: [], others: { cases: 0, serious: 0 }, casesWithoutSuspectedVaccine: 0 },
+    sexAge: buildSexAge([]),
+    geography: { rows: [] },
+    programmatic: emptyProgrammatic()
+});
+
+// Get Dashboard Distributions Service
+// Code: ESAVI-DASH-009
+const getDistributionsService = async (query: DashboardPeriodQuery, authUser: AuthUser | undefined, lang: string): Promise<DashboardDistributions> => {
+    try {
+        const { period } = resolveDashboardPeriod({ from: query.from, to: query.to });
+        const { scopeIds, scope } = await resolvePeriodScope(query, authUser);
+
+        if( scopeIds !== null && scopeIds.length === 0 ) {
+            return emptyDistributions(period, scope);
+        }
+
+        const universeSql = buildUniverseSql(scopeIds !== null);
+        const replacements = buildPeriodReplacements(period, scopeIds);
+
+        const [vaccineRows, sexAgeRows] = await Promise.all([
+            queryVaccines(universeSql, replacements),
+            querySexAge(universeSql, replacements)
+        ]);
+
+        return {
+            period,
+            scope,
+            vaccines: buildVaccines(vaccineRows),
+            sexAge: buildSexAge(sexAgeRows),
+            geography: { rows: [] },
+            programmatic: emptyProgrammatic()
+        };
+    } catch (error) {
+        if( error instanceof AppError ) throw error;
+        throw new AppError(getMessage('dashboard.distributionsFailed', lang), 500, 'DASH_009_FETCH_FAILED', error);
+    }
+}
+
 export {
     CAUSALITY_CATEGORY_SQL,
+    getDistributionsService,
     getEpiCurveService,
     getIndicatorsService,
     getPendingWorkService
