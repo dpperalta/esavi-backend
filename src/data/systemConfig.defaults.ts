@@ -396,5 +396,25 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfigDefault[] = [
         scope: 'DASHBOARD',
         isEncrypted: false,
         isEditable: true
+    },
+    {
+        code: 'ESAVI_DASHBOARD_BATCH_MIN_CASES',
+        name: 'Casos mínimos para alertar un lote',
+        description: 'Número de casos del mismo lote de vacuna, dentro del periodo y del territorio del usuario, a partir del cual el dashboard muestra una alerta de agrupamiento. Un valor menor que 1 desactiva el criterio.',
+        value: 3,
+        valueType: 'number',
+        scope: 'DASHBOARD',
+        isEncrypted: false,
+        isEditable: true
+    },
+    {
+        code: 'ESAVI_DASHBOARD_BATCH_MIN_SERIOUS',
+        name: 'Casos graves mínimos para alertar un lote',
+        description: 'Número de casos graves del mismo lote de vacuna, dentro del periodo y del territorio del usuario, a partir del cual el dashboard muestra una alerta de agrupamiento. Un valor menor que 1 desactiva el criterio.',
+        value: 2,
+        valueType: 'number',
+        scope: 'DASHBOARD',
+        isEncrypted: false,
+        isEditable: true
     }
 ];
