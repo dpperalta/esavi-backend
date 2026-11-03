@@ -9,15 +9,11 @@ import {
     FinalClassificationListFilters
 } from '../types';
 import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../constants/pagination.constants';
+import { FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE } from '../constants/finalClassification.constants';
 import { setEntityActiveStatusService } from './common/entityActivation.service';
 import { advanceCaseWorkflowStageService, assertCaseIsOpen } from './caseWorkflow.service';
 import { purgeEntityService } from './common/entityPurge.service';
 import { resolveAppDetailsAuthorsService } from './common/appDetailsAuthors.service';
-
-// Code of the catalogType that groups the three precedence values, seeded with three items of
-// code and value 1, 2 and 3. Without this check any active catalogItem of the system would enter
-// as a precedence and the stored verdict would mean nothing
-const IMPORTANCE_CATALOG_CODE = 'finalClassificationImportance';
 
 // The three slots of the precedence order. They are not three independent fields: the classifier
 // does not mark three separate things, it ranks blocks A, B and C by strength of evidence
@@ -227,7 +223,7 @@ const assertImportanceIsValid = async (itemId: string, block: string, op: string
         include: [{
             model: CatalogType,
             as: 'catalogType',
-            where: { code: IMPORTANCE_CATALOG_CODE },
+            where: { code: FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE },
             attributes: []
         }]
     });

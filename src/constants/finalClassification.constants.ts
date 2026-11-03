@@ -1,0 +1,1 @@
+export const FINAL_CLASSIFICATION_IMPORTANCE_CATALOG_CODE = 'finalClassificationImportance';

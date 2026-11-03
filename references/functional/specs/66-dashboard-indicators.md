@@ -1,6 +1,6 @@
 # SPEC F66 — Dashboard: indicadores de vigilancia
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 01, SPEC 02, SPEC 04, SPEC 05, SPEC 08, **SPEC F26** (`systemConfig`), **SPEC F41** (`finalClassification`), **SPEC F44** (`caseWorkflow`), **SPEC F48** (filtro `geoLocationId`), **SPEC F49** (alcance geográfico), **SPEC F65** (marco del dominio `DASH`)
 > **Fecha:** 2026-11-02
 > **Objetivo:** Dar al home los indicadores de vigilancia ESAVI de un periodo —volumen, gravedad, defunciones, oportunidad de notificación, tiempos de cierre y causalidad—, comparados con el periodo anterior y acotados al territorio del usuario.
