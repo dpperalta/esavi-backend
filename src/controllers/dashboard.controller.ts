@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, esaviLog, getMessage } from '../helpers';
-import { getIndicatorsService, getPendingWorkService } from '../services/dashboard.service';
+import { getEpiCurveService, getIndicatorsService, getPendingWorkService } from '../services/dashboard.service';
 import { DashboardPeriodQuery } from '../types';
 
 // Get Dashboard Pending Work Controller
@@ -44,7 +44,29 @@ const getIndicators = async (req: Request, res: Response, next: NextFunction): P
     }
 }
 
+// Get Dashboard Epi Curve Controller
+// Code: ESAVI-DASH-008
+const getEpiCurve = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        const { from, to, geoLocationId } = req.query as DashboardPeriodQuery;
+        const data = await getEpiCurveService({ from, to, geoLocationId }, req.user, req.lang);
+        return res.status(200).json({
+            ok: true,
+            message: getMessage('dashboard.epiCurveSuccess', req.lang),
+            data
+        });
+    } catch (error) {
+        esaviLog('ESAVI-DASH-008: Error fetching dashboard epi curve: ' + error, 'error');
+        if( error instanceof AppError ) {
+            next(error);
+            return;
+        }
+        next(new AppError(getMessage('dashboard.epiCurveFailed', req.lang), 500, 'DASH_008_FETCH_FAILED', error));
+    }
+}
+
 export {
+    getEpiCurve,
     getIndicators,
     getPendingWork
 }

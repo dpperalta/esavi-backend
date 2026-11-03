@@ -1,13 +1,15 @@
 import { QueryTypes } from 'sequelize';
 import { sequelize } from '../database/connection';
 import { CatalogItem, CatalogType } from '../models';
-import { AppError, esaviLog, getAppConfigNumber, getMessage, resolveDashboardPeriod } from '../helpers';
+import { AppError, esaviLog, getAppConfigNumber, getMessage, listEpiWeeks, resolveDashboardPeriod } from '../helpers';
 import {
     AuthUser,
     CaseWorkflowStage,
     DashboardASubcategory,
     DashboardCausalityCategory,
     DashboardComparable,
+    DashboardEpiCurve,
+    DashboardEpiWeek,
     DashboardIndicators,
     DashboardPendingInvestigation,
     DashboardPendingWork,
@@ -580,8 +582,103 @@ const getIndicatorsService = async (query: DashboardPeriodQuery, authUser: AuthU
     }
 }
 
+interface EpiCurveRow {
+    weekStart: string;
+    serious: number;
+    nonSerious: number;
+    unclassified: number;
+}
+
+type DashboardScope = DashboardEpiCurve['scope'];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const addIsoDays = (isoDate: string, days: number): string => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day) + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+const resolvePeriodScope = async (
+    query: DashboardPeriodQuery,
+    authUser: AuthUser | undefined
+): Promise<{ userScopeIds: string[] | null; scopeIds: string[] | null; scope: DashboardScope }> => {
+    const userScopeIds = await resolveUserGeoScopeIds(authUser);
+    const scopeIds = await resolveIndicatorsScopeIds(userScopeIds, query.geoLocationId);
+    return {
+        userScopeIds,
+        scopeIds,
+        scope: {
+            restricted: scopeIds !== null,
+            hasAssignments: userScopeIds === null || userScopeIds.length > 0,
+            geoLocationId: query.geoLocationId ?? null
+        }
+    };
+}
+
+const buildPeriodReplacements = (period: DashboardPeriod, scopeIds: string[] | null): Record<string, unknown> => {
+    const replacements: Record<string, unknown> = { from: period.from, to: period.to };
+    if( scopeIds !== null ) replacements.scopeIds = scopeIds;
+    return replacements;
+}
+
+const queryEpiCurve = async (universeSql: string, replacements: Record<string, unknown>): Promise<EpiCurveRow[]> =>
+    sequelize.query<EpiCurveRow>(
+        `WITH u AS (${ universeSql })
+        SELECT to_char(u."reportDate" - EXTRACT(DOW FROM u."reportDate")::int, 'YYYY-MM-DD') AS "weekStart",
+            COUNT(*) FILTER (WHERE cl."isSeriousEvent" IS TRUE)::int AS "serious",
+            COUNT(*) FILTER (WHERE cl."caseId" IS NOT NULL AND cl."isSeriousEvent" IS NOT TRUE)::int AS "nonSerious",
+            COUNT(*) FILTER (WHERE cl."caseId" IS NULL)::int AS "unclassified"
+        FROM u
+        LEFT JOIN "classification" cl ON cl."caseId" = u."caseId" AND cl."isActive" = true
+        WHERE u."reportDate" BETWEEN :from AND :to
+        GROUP BY 1`,
+        { replacements, type: QueryTypes.SELECT }
+    );
+
+const buildEpiWeeks = (period: DashboardPeriod, rows: EpiCurveRow[]): DashboardEpiWeek[] => {
+    const byWeekStart = new Map(rows.map(( row ) => [row.weekStart, row] ));
+    return listEpiWeeks(period.from, period.to).map(( week ) => {
+        const row = byWeekStart.get(week.weekStart);
+        const serious = row?.serious ?? 0;
+        const nonSerious = row?.nonSerious ?? 0;
+        const unclassified = row?.unclassified ?? 0;
+        return {
+            label: week.label,
+            epiYear: week.epiYear,
+            epiWeek: week.epiWeek,
+            weekStart: week.weekStart,
+            partial: week.weekStart < period.from || addIsoDays(week.weekStart, 6) > period.to,
+            serious,
+            nonSerious,
+            unclassified,
+            total: serious + nonSerious + unclassified
+        };
+    });
+}
+
+// Get Dashboard Epi Curve Service
+// Code: ESAVI-DASH-008
+const getEpiCurveService = async (query: DashboardPeriodQuery, authUser: AuthUser | undefined, lang: string): Promise<DashboardEpiCurve> => {
+    try {
+        const { period } = resolveDashboardPeriod({ from: query.from, to: query.to });
+        const { scopeIds, scope } = await resolvePeriodScope(query, authUser);
+
+        if( scopeIds !== null && scopeIds.length === 0 ) {
+            return { period, scope, weeks: buildEpiWeeks(period, []) };
+        }
+
+        const rows = await queryEpiCurve(buildUniverseSql(scopeIds !== null), buildPeriodReplacements(period, scopeIds));
+
+        return { period, scope, weeks: buildEpiWeeks(period, rows) };
+    } catch (error) {
+        if( error instanceof AppError ) throw error;
+        throw new AppError(getMessage('dashboard.epiCurveFailed', lang), 500, 'DASH_008_FETCH_FAILED', error);
+    }
+}
+
 export {
     CAUSALITY_CATEGORY_SQL,
+    getEpiCurveService,
     getIndicatorsService,
     getPendingWorkService
 }

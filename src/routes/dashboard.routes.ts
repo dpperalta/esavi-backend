@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { tokenValidation, validateFields, validateUserRole } from '../middlewares';
 import { ROLES } from '../constants/roles.constants';
 import { dashboardPeriodValidator } from '../validators';
-import { getIndicators, getPendingWork } from '../controllers/dashboard.controller';
+import { getEpiCurve, getIndicators, getPendingWork } from '../controllers/dashboard.controller';
 
 const { USER, ANALYTICS } = ROLES;
 
@@ -15,5 +15,9 @@ router.get('/pending-work', tokenValidation, validateUserRole(USER), getPendingW
 // Get Dashboard Indicators
 // Code: ESAVI-DASH-007
 router.get('/indicators', tokenValidation, validateUserRole(ANALYTICS), ...dashboardPeriodValidator, validateFields, getIndicators);
+
+// Get Dashboard Epi Curve
+// Code: ESAVI-DASH-008
+router.get('/epi-curve', tokenValidation, validateUserRole(ANALYTICS), ...dashboardPeriodValidator, validateFields, getEpiCurve);
 
 export default router;
