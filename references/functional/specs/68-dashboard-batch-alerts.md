@@ -1,6 +1,6 @@
 # SPEC F68 — Dashboard: alerta de agrupamiento por lote
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01, SPEC 02, SPEC 04, SPEC 05, SPEC 08, **SPEC F22** (`notificationVaccine`), **SPEC F26** (`systemConfig`), **SPEC F48** (filtros del listado de casos), **SPEC F49** (alcance geográfico), **SPEC F65** (marco `DASH`, filtro `statusCode`), **SPEC F66** (periodo, universo Uₚ, regla de defunción), **SPEC F67** (clave de vacuna)
 > **Fecha:** 2026-11-02
 > **Objetivo:** Señalar en el home los lotes de vacuna que, dentro del periodo y del territorio del usuario, acumulan suficientes casos, casos graves o alguna defunción como para investigarlos, y permitir llegar a esos casos desde el listado.
