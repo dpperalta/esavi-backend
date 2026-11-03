@@ -1138,7 +1138,7 @@ const readBatchThreshold = async (code: string, fallback: number, lang: string):
         esaviLog(`ESAVI-DASH-010 - ${ code } missing or invalid, default ${ fallback } applied`, 'warn');
         value = fallback;
     }
-    return value < 1 ? null : value;
+    return value < 1 ? null : Math.ceil(value);
 }
 
 const readBatchThresholds = async (lang: string): Promise<BatchThresholds> => {

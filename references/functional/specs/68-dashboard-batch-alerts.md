@@ -138,7 +138,8 @@ Si F67 ya está implementado, su expresión de clave se mueve aquí.
 
 - se lee con `getAppConfigNumber`;
 - si falta o es inválido: su valor por defecto (3 o 2) y la advertencia `esaviLog('ESAVI-DASH-010 - <code> missing or invalid, default <n> applied', 'warn')`;
-- si es menor que 1: el criterio queda desactivado y su umbral efectivo es `null`.
+- si es menor que 1: el criterio queda desactivado y su umbral efectivo es `null`;
+- si no es entero, se redondea hacia arriba (`Math.ceil`) antes de usarlo, para que el `HAVING` (`CAST(... AS int)`) y `reasons` apliquen el mismo umbral. `2.4` actúa como 3 y aparece así en `thresholds`.
 
 **Regla de alerta.** Un lote es alerta si se cumple al menos una de estas condiciones, y cada una que se cumpla añade su motivo a `reasons`:
 
@@ -148,7 +149,7 @@ Si F67 ya está implementado, su expresión de clave se mueve aquí.
 | `minSerious` no es `null` y `serious >= minSerious` | `MIN_SERIOUS` |
 | `deaths >= 1` | `DEATH` |
 
-**Orden y límite.** `deaths DESC, serious DESC, cases DESC, lastReportDate DESC, batchNumber ASC`. Se devuelven como máximo `DASHBOARD_BATCH_ALERT_LIMIT` (50). `total` es el número real de alertas, antes de aplicar el límite.
+**Orden y límite.** `deaths DESC, serious DESC, cases DESC, lastReportDate DESC, batchNumber ASC, vaccineKey ASC`. El último criterio solo desempata el mismo lote en dos vacunas. `variants` sigue el orden alfabético de la intercalación de la base de datos. Se devuelven como máximo `DASHBOARD_BATCH_ALERT_LIMIT` (50). `total` es el número real de alertas, antes de aplicar el límite.
 
 **Contadores globales.**
 

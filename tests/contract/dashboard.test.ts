@@ -23,12 +23,16 @@ import {
     SystemConfig,
     VaccineWhodrug
 } from '../../src/models';
+import { QueryTypes } from 'sequelize';
+import { sequelize } from '../../src/database/connection';
 import { esaviCrypt } from '../../src/helpers/crypto.helper';
 import { advanceCaseWorkflowStageService } from '../../src/services/caseWorkflow.service';
 import { CASE_WORKFLOW_STATUS } from '../../src/constants/caseWorkflow.constants';
 import { closeTestDatabase, seedCaseWorkflow, setCaseWorkflowStatus } from '../setup/database';
 import { TEST_ROLES, seedTestUsers, seedUserWithoutRole, authHeader, authHeaderWithoutRole, createScopedTestUser } from '../setup/auth';
 import type { TestRole } from '../setup/auth';
+
+const VARIANT_SPELLINGS = ['var1', 'VAR1', 'Var-1', 'VAR 1', 'V.A.R.1', 'va r1'];
 
 interface FunnelEntry { statusCode: string; statusName: string; sortOrder: number; count: number }
 interface StalledItem { caseId: string; caseCode: string; statusCode: string; openStage: string | null; referenceAt: string; daysStalled: number }
@@ -1456,6 +1460,473 @@ describe('dashboard contract', () => {
                     expect(( await fetchPath(path, bearer(analystPToken), distPeriod) ).status).toBe(200);
                     expect(( await fetchPath(path, authHeader('ADMIN'), provinceQuery(distPeriod)) ).status).toBe(200);
                 }
+                expect(await snapshot()).toBe(before);
+            });
+        });
+    });
+
+    describe('batch alerts — ESAVI-DASH-010', () => {
+
+        const batchAlerts = '/api/dashboard/batch-alerts';
+        const batchPeriod = 'from=2025-06-01&to=2025-06-30';
+        const listPeriod = 'reportDateFrom=2025-06-01&reportDateTo=2025-06-30';
+        const vaccineA = `VACA${ suffix }`;
+        const vaccineB = `VACB${ suffix }`;
+        const keyA = `T:${ vaccineA }`;
+        const keyB = `T:${ vaccineB }`;
+        const batchIds: Record<string, string> = {};
+        const geo68: Record<string, string> = {};
+        const facility68: Record<string, string> = {};
+
+        let userAToken68: string;
+
+        interface BatchAlertRow {
+            vaccineKey: string; label: string | null; coded: boolean; batchNumber: string; variants: string[];
+            cases: number; suspectedCases: number; serious: number; deaths: number; expiredAtVaccination: number;
+            firstReportDate: string; lastReportDate: string; facilities: number; geoUnits: number;
+            expirationDates: string[]; reasons: string[];
+        }
+
+        interface BatchVaccine { name: string; batch: string | null; suspected?: boolean; vaccinationDate?: string; expirationDate?: string | null }
+
+        interface BatchCaseOptions {
+            facility: string;
+            reportDate?: string;
+            vaccines?: BatchVaccine[];
+            serious?: boolean;
+            causedDeath?: boolean;
+            deathDate?: string;
+            autopsyDeath?: boolean;
+        }
+
+        const seedBatchCase = async ( label: string, options: BatchCaseOptions ): Promise<string> => {
+            const patient = await Patient.create({
+                names: esaviCrypt(`Batch ${ label }`),
+                lastNames: esaviCrypt(`Probe ${ suffix }`),
+                documentNumber: esaviCrypt(`DB${ label }${ suffix }`),
+                healthSystemCode: `DB${ label }${ suffix }`
+            });
+            const esaviCase = await EsaviCase.create({
+                caseCode: `${ tag }-B${ label }`,
+                patientId: patient.getDataValue('patientId'),
+                healthFacilityId: options.facility,
+                reportDate: options.reportDate ?? '2025-06-15',
+                isActive: true
+            });
+            const caseId = esaviCase.getDataValue('caseId');
+            await seedCaseWorkflow(caseId);
+            if( options.serious !== undefined || options.causedDeath !== undefined ) {
+                await Classification.create({ caseId, isSeriousEvent: options.serious ?? false, causedDeath: options.causedDeath ?? false });
+            }
+            if( options.vaccines || options.deathDate ) {
+                const notification = await Notification.create({
+                    caseId, notificationType: 'SEVERE', esaviDescription: `Batch ${ label }`, deathDate: options.deathDate ?? null
+                });
+                for( const vaccine of options.vaccines ?? [] ) {
+                    await NotificationVaccine.create({
+                        notificationId: notification.getDataValue('notificationId'),
+                        vaccineName: vaccine.name,
+                        batchNumber: vaccine.batch,
+                        isSuspected: vaccine.suspected ?? true,
+                        vaccinationDate: vaccine.vaccinationDate ?? null,
+                        expirationDate: vaccine.expirationDate ?? null,
+                        sortOrder: 0
+                    });
+                }
+            }
+            if( options.autopsyDeath ) {
+                const investigation = await Investigation.create({ caseId });
+                await InvestigationAutopsy.create({
+                    investigationId: investigation.getDataValue('investigationId'), isDeath: true, isAutopsyPerformed: true
+                });
+            }
+            batchIds[label] = caseId;
+            return caseId;
+        };
+
+        const createFacility68 = async ( label: string, geoLocationId: string | null ): Promise<string> => {
+            const facility = await HealthFacility.create({ localCode: `${ tag }B${ label }`, name: `${ tag } B${ label }`, geoLocationId });
+            return facility.getDataValue('healthFacilityId');
+        };
+
+        const fetchAlerts = ( headers: Record<string, string>, query: string = batchPeriod ) =>
+            request(app).get(`${ batchAlerts }${ query ? `?${ query }` : '' }`).set(headers);
+        const alertsOf = async ( headers: Record<string, string>, query: string = batchPeriod ) =>
+            ( await fetchAlerts(headers, query) ).body.data;
+        const userAData = async () => alertsOf(bearer(userAToken68));
+        const countryData = async () => alertsOf(authHeader('ADMIN'), `${ batchPeriod }&geoLocationId=${ geo68.X }`);
+        const alertOf = ( data: { alerts: BatchAlertRow[] }, vaccineKey: string, batchNumber: string ): BatchAlertRow | undefined =>
+            data.alerts.find(( alert ) => alert.vaccineKey === vaccineKey && alert.batchNumber === batchNumber );
+        const ownAlerts = ( data: { alerts: BatchAlertRow[] } ): BatchAlertRow[] =>
+            data.alerts.filter(( alert ) => alert.vaccineKey === keyA || alert.vaccineKey === keyB );
+
+        const configRow = async ( code: string ) => SystemConfig.findOne({ where: { code, scope: 'DASHBOARD' } });
+
+        const withBatchConfig = async <T>( changes: Record<string, Record<string, unknown>>, run: () => Promise<T> ): Promise<T> => {
+            const originals: [InstanceType<typeof SystemConfig>, Record<string, unknown>][] = [];
+            for( const [code, change] of Object.entries(changes) ) {
+                const row = await configRow(code);
+                const original: Record<string, unknown> = {};
+                for( const key of Object.keys(change) ) original[key] = row!.getDataValue(key as never);
+                originals.push([row!, original]);
+                await row!.update(change);
+            }
+            try {
+                return await run();
+            } finally {
+                for( const [row, original] of originals ) await row.update(original);
+            }
+        };
+
+        const keysOf = ( value: unknown, keys: Set<string> = new Set() ): Set<string> => {
+            if( Array.isArray(value) ) value.forEach(( item ) => keysOf(item, keys) );
+            else if( value && typeof value === 'object' ) {
+                for( const [key, nested] of Object.entries(value) ) {
+                    keys.add(key);
+                    keysOf(nested, keys);
+                }
+            }
+            return keys;
+        };
+
+        beforeAll(async () => {
+            await seedUserWithoutRole();
+
+            const baseLevel = ( await GeoLocation.max('level', { where: { isActive: true } }) as number ) || 0;
+            geo68.X = await createGeoLocation('CTRYBAT', null, baseLevel + 1);
+            geo68.A = await createGeoLocation('PROVABAT', geo68.X, baseLevel + 2);
+            geo68.CA = await createGeoLocation('CANTABAT', geo68.A, baseLevel + 3);
+            geo68.B = await createGeoLocation('PROVBBAT', geo68.X, baseLevel + 2);
+            geo68.LIM = await createGeoLocation('PROVLBAT', null, baseLevel + 1);
+
+            facility68.A1 = await createFacility68('A1', geo68.CA);
+            facility68.A2 = await createFacility68('A2', geo68.CA);
+            facility68.A3 = await createFacility68('A3', geo68.A);
+            facility68.B1 = await createFacility68('B1', geo68.B);
+            facility68.NOGEO = await createFacility68('NOGEO', null);
+            facility68.LIM = await createFacility68('LIM', geo68.LIM);
+
+            await seedBatchCase('L1A', { facility: facility68.A1, reportDate: '2025-06-02', vaccines: [
+                { name: vaccineA, batch: 'ab-123', suspected: false, vaccinationDate: '2025-06-10', expirationDate: '2025-06-01' }
+            ] });
+            await seedBatchCase('L1B', { facility: facility68.A2, reportDate: '2025-06-10', vaccines: [
+                { name: vaccineA, batch: 'AB 123', vaccinationDate: '2025-06-08', expirationDate: null }
+            ] });
+            await seedBatchCase('L1C', { facility: facility68.A1, reportDate: '2025-06-20', vaccines: [
+                { name: vaccineA, batch: 'AB.123', vaccinationDate: '2025-06-05', expirationDate: '2025-12-31' },
+                { name: vaccineA, batch: 'AB.123', vaccinationDate: '2025-06-05', expirationDate: '2025-12-31' }
+            ] });
+            await seedBatchCase('L1V2', { facility: facility68.A1, vaccines: [{ name: vaccineB, batch: 'AB123' }] });
+
+            await seedBatchCase('SER1', { facility: facility68.A1, serious: true, vaccines: [{ name: vaccineA, batch: 'SER2' }] });
+            await seedBatchCase('SER2', { facility: facility68.A1, serious: true, vaccines: [{ name: vaccineA, batch: 'SER2' }] });
+
+            await seedBatchCase('ONE1', { facility: facility68.A1, serious: true, vaccines: [{ name: vaccineA, batch: 'ONE1' }] });
+            await seedBatchCase('ONE2', { facility: facility68.A1, serious: false, vaccines: [{ name: vaccineA, batch: 'ONE1' }] });
+
+            await seedBatchCase('DTH1', { facility: facility68.A1, reportDate: '2025-06-03', deathDate: '2025-06-03', vaccines: [{ name: vaccineA, batch: 'DTH1' }] });
+            await seedBatchCase('DTH2', { facility: facility68.A1, reportDate: '2025-06-04', causedDeath: true, vaccines: [{ name: vaccineA, batch: 'DTH2' }] });
+            await seedBatchCase('DTH3', { facility: facility68.A1, reportDate: '2025-06-05', autopsyDeath: true, vaccines: [{ name: vaccineA, batch: 'DTH3' }] });
+
+            await seedBatchCase('ALL1', { facility: facility68.A1, serious: true, causedDeath: true, vaccines: [{ name: vaccineA, batch: 'ALL3' }] });
+            await seedBatchCase('ALL2', { facility: facility68.A1, serious: true, vaccines: [{ name: vaccineA, batch: 'ALL3' }] });
+            await seedBatchCase('ALL3', { facility: facility68.A1, serious: true, vaccines: [{ name: vaccineA, batch: 'ALL3' }] });
+
+            await seedBatchCase('VAR', { facility: facility68.A1, vaccines: VARIANT_SPELLINGS.map(( batch ) => ({ name: vaccineB, batch }) ) });
+
+            await seedBatchCase('NOB1', { facility: facility68.A1, vaccines: [{ name: vaccineA, batch: '--' }] });
+            await seedBatchCase('NOB2', { facility: facility68.A1 });
+            await seedBatchCase('NOB3', { facility: facility68.A1, vaccines: [{ name: vaccineA, batch: null }] });
+
+            await seedBatchCase('NG1', { facility: facility68.A1, serious: true, vaccines: [{ name: vaccineB, batch: 'NOGEO' }] });
+            await seedBatchCase('NG2', { facility: facility68.NOGEO, serious: true, vaccines: [{ name: vaccineB, batch: 'NOGEO' }] });
+
+            await seedBatchCase('SPA1', { facility: facility68.A3, vaccines: [{ name: vaccineA, batch: 'SPLIT' }] });
+            await seedBatchCase('SPA2', { facility: facility68.A3, vaccines: [{ name: vaccineA, batch: 'SPLIT' }] });
+            await seedBatchCase('SPB1', { facility: facility68.B1, vaccines: [{ name: vaccineA, batch: 'SPLIT' }] });
+            await seedBatchCase('SPB2', { facility: facility68.B1, vaccines: [{ name: vaccineA, batch: 'SPLIT' }] });
+
+            await seedBatchCase('LIM', {
+                facility: facility68.LIM,
+                reportDate: '2025-07-15',
+                deathDate: '2025-07-15',
+                vaccines: Array.from({ length: 55 }, ( _value, index ) => ({ name: vaccineA, batch: `LIM${ `${ index + 1 }`.padStart(2, '0') }` }))
+            });
+
+            userAToken68 = ( await createScopedTestUser('dashboard-f68-a', geo68.A) ).token;
+        });
+
+        describe('surface and roles', () => {
+
+            it.each(TEST_ROLES)('answers 200 to %s', async ( role ) => {
+                const response = await fetchAlerts(authHeader(role));
+                expect(response.status).toBe(200);
+                expect(response.body.ok).toBe(true);
+                expect(typeof response.body.message).toBe('string');
+            });
+
+            it('answers 403 AUTH_ROLE_FORBIDDEN without roles and 401 without a token', async () => {
+                const forbidden = await fetchAlerts(authHeaderWithoutRole());
+                expect(forbidden.status).toBe(403);
+                expect(forbidden.body.code).toBe('AUTH_ROLE_FORBIDDEN');
+                expect(( await request(app).get(batchAlerts) ).status).toBe(401);
+            });
+
+            it('rejects an invalid period with 400', async () => {
+                expect(( await fetchAlerts(authHeader('ADMIN'), 'from=2026-05-01&to=2026-04-01') ).status).toBe(400);
+            });
+
+            it('carries the period, the scope, the default thresholds and the counters', async () => {
+                const data = await userAData();
+                expect(data.period).toEqual({ from: '2025-06-01', to: '2025-06-30', days: 30 });
+                expect(data.scope).toEqual({ restricted: true, hasAssignments: true, geoLocationId: null });
+                expect(data.thresholds).toEqual({ minCases: 3, minSerious: 2 });
+                expect(data.total).toBe(6);
+                expect(data.batchesEvaluated).toBe(11);
+                expect(data.casesWithoutBatch).toBe(3);
+            });
+        });
+
+        describe('normalization and key', () => {
+
+            it('three spellings of the same batch of the same vaccine form one alert with three variants', async () => {
+                const alert = alertOf(await userAData(), keyA, 'AB123');
+                expect(alert).toBeDefined();
+                expect(alert!.cases).toBe(3);
+                expect([...alert!.variants].sort()).toEqual(['AB 123', 'AB.123', 'ab-123'].sort());
+                expect(alert!.label).toBe(vaccineA);
+                expect(alert!.coded).toBe(false);
+            });
+
+            it('the same batch in another vaccine is another batch', async () => {
+                const data = await userAData();
+                expect(alertOf(data, keyB, 'AB123')).toBeUndefined();
+                expect(alertOf(data, keyA, 'AB123')!.cases).toBe(3);
+            });
+
+            it('a batch "--" or null forms no batch and its case adds to casesWithoutBatch', async () => {
+                const data = await userAData();
+                expect(data.alerts.some(( alert: BatchAlertRow ) => alert.batchNumber === '' )).toBe(false);
+                expect(data.casesWithoutBatch).toBe(3);
+            });
+
+            it('a vaccine with isSuspected false counts in cases and not in suspectedCases', async () => {
+                const alert = alertOf(await userAData(), keyA, 'AB123')!;
+                expect(alert.cases).toBe(3);
+                expect(alert.suspectedCases).toBe(2);
+            });
+
+            it('a case with the same batch in two rows counts once', async () => {
+                const alert = alertOf(await userAData(), keyA, 'AB123')!;
+                expect(alert.cases).toBe(3);
+                expect(alert.facilities).toBe(2);
+            });
+        });
+
+        describe('rule and thresholds', () => {
+
+            it('with the defaults each criterion fires on its own', async () => {
+                const data = await userAData();
+                expect(alertOf(data, keyA, 'AB123')!.reasons).toEqual(['MIN_CASES']);
+                expect(alertOf(data, keyA, 'SER2')!.reasons).toEqual(['MIN_SERIOUS']);
+                expect(alertOf(data, keyA, 'DTH1')!.reasons).toEqual(['DEATH']);
+            });
+
+            it('a batch with 2 cases, one serious and no death, is no alert but counts in batchesEvaluated', async () => {
+                const data = await userAData();
+                expect(alertOf(data, keyA, 'ONE1')).toBeUndefined();
+                expect(data.batchesEvaluated).toBe(11);
+            });
+
+            it('a batch meeting the three criteria carries the three reasons', async () => {
+                expect(alertOf(await userAData(), keyA, 'ALL3')!.reasons).toEqual(['MIN_CASES', 'MIN_SERIOUS', 'DEATH']);
+            });
+
+            it('ESAVI_DASHBOARD_BATCH_MIN_CASES = 0 disables MIN_CASES and keeps the other criteria', async () => {
+                const data = await withBatchConfig({ ESAVI_DASHBOARD_BATCH_MIN_CASES: { value: 0 } }, userAData);
+                expect(data.thresholds).toEqual({ minCases: null, minSerious: 2 });
+                expect(data.alerts.some(( alert: BatchAlertRow ) => alert.reasons.includes('MIN_CASES') )).toBe(false);
+                expect(alertOf(data, keyA, 'AB123')).toBeUndefined();
+                expect(alertOf(data, keyA, 'SER2')!.reasons).toEqual(['MIN_SERIOUS']);
+                expect(alertOf(data, keyA, 'ALL3')!.reasons).toEqual(['MIN_SERIOUS', 'DEATH']);
+            });
+
+            it('a non-integer threshold is rounded up, in the response and in the rule', async () => {
+                const data = await withBatchConfig({ ESAVI_DASHBOARD_BATCH_MIN_CASES: { value: 2.4 } }, userAData);
+                expect(data.thresholds.minCases).toBe(3);
+                expect(alertOf(data, keyA, 'ONE1')).toBeUndefined();
+                expect(data.alerts.every(( alert: BatchAlertRow ) => alert.reasons.length > 0 )).toBe(true);
+            });
+
+            it('both configurations deactivated without environment variables: 200, defaults applied and two warnings logged', async () => {
+                const envCases = process.env.ESAVI_DASHBOARD_BATCH_MIN_CASES;
+                const envSerious = process.env.ESAVI_DASHBOARD_BATCH_MIN_SERIOUS;
+                delete process.env.ESAVI_DASHBOARD_BATCH_MIN_CASES;
+                delete process.env.ESAVI_DASHBOARD_BATCH_MIN_SERIOUS;
+                const logBefore = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf-8').length : 0;
+                try {
+                    const response = await withBatchConfig({
+                        ESAVI_DASHBOARD_BATCH_MIN_CASES: { isActive: false },
+                        ESAVI_DASHBOARD_BATCH_MIN_SERIOUS: { isActive: false }
+                    }, () => fetchAlerts(bearer(userAToken68)));
+                    expect(response.status).toBe(200);
+                    expect(response.body.data.thresholds).toEqual({ minCases: 3, minSerious: 2 });
+                    expect(response.body.data.total).toBe(6);
+                    await new Promise(( resolve ) => setTimeout(resolve, 200));
+                    const added = fs.readFileSync(logPath, 'utf-8').slice(logBefore);
+                    expect(added).toContain('ESAVI-DASH-010 - ESAVI_DASHBOARD_BATCH_MIN_CASES missing or invalid, default 3 applied');
+                    expect(added).toContain('ESAVI-DASH-010 - ESAVI_DASHBOARD_BATCH_MIN_SERIOUS missing or invalid, default 2 applied');
+                } finally {
+                    if( envCases !== undefined ) process.env.ESAVI_DASHBOARD_BATCH_MIN_CASES = envCases;
+                    if( envSerious !== undefined ) process.env.ESAVI_DASHBOARD_BATCH_MIN_SERIOUS = envSerious;
+                }
+            });
+
+            it('a death from any of the three sources fires DEATH with both thresholds disabled', async () => {
+                const data = await withBatchConfig({
+                    ESAVI_DASHBOARD_BATCH_MIN_CASES: { value: 0 },
+                    ESAVI_DASHBOARD_BATCH_MIN_SERIOUS: { value: 0 }
+                }, userAData);
+                expect(data.thresholds).toEqual({ minCases: null, minSerious: null });
+                for( const batch of ['DTH1', 'DTH2', 'DTH3'] ) {
+                    expect(alertOf(data, keyA, batch)!.reasons).toEqual(['DEATH']);
+                }
+                expect(alertOf(data, keyA, 'ALL3')!.reasons).toEqual(['DEATH']);
+                expect(data.total).toBe(4);
+            });
+        });
+
+        describe('metrics', () => {
+
+            it('expiredAtVaccination counts vaccination after expiration, and not a null expiration', async () => {
+                const alert = alertOf(await userAData(), keyA, 'AB123')!;
+                expect(alert.expiredAtVaccination).toBe(1);
+                expect(alert.expirationDates).toEqual(['2025-06-01', '2025-12-31']);
+            });
+
+            it('facilities and geoUnits count distinct values, and a facility without geoLocationId adds only to facilities', async () => {
+                const alert = alertOf(await alertsOf(authHeader('ADMIN')), keyB, 'NOGEO')!;
+                expect(alert.cases).toBe(2);
+                expect(alert.facilities).toBe(2);
+                expect(alert.geoUnits).toBe(1);
+            });
+
+            it('firstReportDate and lastReportDate are the minimum and maximum reportDate of the batch', async () => {
+                const alert = alertOf(await userAData(), keyA, 'AB123')!;
+                expect(alert.firstReportDate).toBe('2025-06-02');
+                expect(alert.lastReportDate).toBe('2025-06-20');
+            });
+
+            it('variants holds at most 5 values, in alphabetical order', async () => {
+                const data = await withBatchConfig({ ESAVI_DASHBOARD_BATCH_MIN_CASES: { value: 1 } }, userAData);
+                const alert = alertOf(data, keyB, 'VAR1')!;
+                const rows = await sequelize.query<{ v: string }>(
+                    'SELECT v FROM unnest(ARRAY[:spellings]::text[]) v ORDER BY v LIMIT 5',
+                    { replacements: { spellings: VARIANT_SPELLINGS }, type: QueryTypes.SELECT }
+                );
+                expect(alert.variants).toHaveLength(5);
+                expect(alert.variants).toEqual(rows.map(( row ) => row.v ));
+            });
+        });
+
+        describe('order and limit', () => {
+
+            it('an alert with a death and 1 case goes before one with 0 deaths and more cases', async () => {
+                const own = ownAlerts(await userAData()).map(( alert ) => alert.batchNumber );
+                expect(own[0]).toBe('ALL3');
+                expect(own.slice(1, 4)).toEqual(['DTH3', 'DTH2', 'DTH1']);
+                expect(own.indexOf('DTH1')).toBeLessThan(own.indexOf('SER2'));
+                expect(own.indexOf('SER2')).toBeLessThan(own.indexOf('AB123'));
+            });
+
+            it('with 55 batches on alert, alerts carries 50 and total is 55', async () => {
+                const data = await alertsOf(authHeader('ADMIN'), `from=2025-07-01&to=2025-07-31&geoLocationId=${ geo68.LIM }`);
+                expect(data.total).toBe(55);
+                expect(data.alerts).toHaveLength(50);
+                expect(data.batchesEvaluated).toBe(55);
+            });
+        });
+
+        describe('case listing filter', () => {
+
+            it('for the same restricted user and period, the filtered listing count equals each alert cases', async () => {
+                for( const alert of ownAlerts(await userAData()) ) {
+                    const query = `?batchNumber=${ encodeURIComponent(alert.batchNumber) }&vaccineKey=${ encodeURIComponent(alert.vaccineKey) }&${ listPeriod }`;
+                    const list = await request(app).get(`/api/esavi-cases${ query }`).set(bearer(userAToken68));
+                    expect(list.status).toBe(200);
+                    expect(list.body.data.count).toBe(alert.cases);
+                }
+            });
+
+            it('an ADMIN gets the same agreement through 002B over the whole country', async () => {
+                const alert = alertOf(await countryData(), keyA, 'SPLIT')!;
+                const query = `?batchNumber=SPLIT&vaccineKey=${ encodeURIComponent(keyA) }&${ listPeriod }&geoLocationId=${ geo68.X }`;
+                const list = await request(app).get(`/api/esavi-cases/admin${ query }`).set(authHeader('ADMIN'));
+                expect(list.status).toBe(200);
+                expect(list.body.data.count).toBe(alert.cases);
+            });
+        });
+
+        describe('scope and exposed data', () => {
+
+            it('a batch with 2 cases in A and 2 in B is no alert for a user of A and is one for an ADMIN', async () => {
+                const forA = await userAData();
+                expect(alertOf(forA, keyA, 'SPLIT')).toBeUndefined();
+                expect(alertOf(forA, keyB, 'NOGEO')).toBeUndefined();
+
+                const split = alertOf(await countryData(), keyA, 'SPLIT')!;
+                expect(split.cases).toBe(4);
+                expect(split.reasons).toEqual(['MIN_CASES']);
+                expect(split.facilities).toBe(2);
+                expect(split.geoUnits).toBe(2);
+            });
+
+            it.each([
+                ['a foreign territory', () => geo68.B],
+                ['an unknown UUID', () => '00000000-0000-4000-8000-000000000068']
+            ])('with geoLocationId of %s: 200, no alerts and zero counters', async ( _label, target ) => {
+                const response = await fetchAlerts(bearer(userAToken68), `${ batchPeriod }&geoLocationId=${ target() }`);
+                expect(response.status).toBe(200);
+                expect(response.body.data.alerts).toEqual([]);
+                expect(response.body.data.total).toBe(0);
+                expect(response.body.data.batchesEvaluated).toBe(0);
+                expect(response.body.data.casesWithoutBatch).toBe(0);
+                expect(response.body.data.thresholds).toEqual({ minCases: 3, minSerious: 2 });
+            });
+
+            it('a foreign territory and an unknown UUID produce identical responses', async () => {
+                const strip = ( data: { scope: Record<string, unknown> } ) => ({ ...data, scope: { ...data.scope, geoLocationId: null } });
+                const foreign = ( await fetchAlerts(bearer(userAToken68), `${ batchPeriod }&geoLocationId=${ geo68.B }`) ).body.data;
+                const unknown = ( await fetchAlerts(bearer(userAToken68), `${ batchPeriod }&geoLocationId=00000000-0000-4000-8000-000000000068`) ).body.data;
+                expect(strip(foreign)).toEqual(strip(unknown));
+            });
+
+            it('the response carries no case or patient identifier at any level', async () => {
+                const keys = keysOf(( await fetchAlerts(authHeader('SUPERADMIN')) ).body);
+                for( const forbidden of ['caseId', 'caseCode', 'patientId', 'names', 'lastNames', 'documentNumber', 'healthSystemCode'] ) {
+                    expect(keys.has(forbidden)).toBe(false);
+                }
+            });
+        });
+
+        describe('no writes', () => {
+
+            it('calling ESAVI-DASH-010 and the filtered listing leaves updatedAt, appDetails and sysDetails untouched', async () => {
+                const caseIds = Object.values(batchIds);
+                const notificationIds = ( await Notification.findAll({ where: { caseId: caseIds }, attributes: ['notificationId'] }) )
+                    .map(( row ) => row.getDataValue('notificationId') );
+                const attributes = ['updatedAt', 'appDetails', 'sysDetails'];
+                const snapshot = async () => JSON.stringify(await Promise.all([
+                    EsaviCase.findAll({ where: { caseId: caseIds }, attributes: ['caseId', ...attributes], order: [['caseId', 'ASC']] }),
+                    CaseWorkflow.findAll({ where: { caseId: caseIds }, attributes: ['caseId', ...attributes], order: [['caseId', 'ASC']] }),
+                    Notification.findAll({ where: { caseId: caseIds }, attributes: ['notificationId', ...attributes], order: [['notificationId', 'ASC']] }),
+                    NotificationVaccine.findAll({ where: { notificationId: notificationIds }, attributes: ['vaccineId', ...attributes], order: [['vaccineId', 'ASC']] })
+                ]));
+                const before = await snapshot();
+                expect(( await fetchAlerts(bearer(userAToken68)) ).status).toBe(200);
+                expect(( await fetchAlerts(authHeader('ADMIN')) ).status).toBe(200);
+                const list = await request(app).get(`/api/esavi-cases?batchNumber=AB123&vaccineKey=${ encodeURIComponent(keyA) }&${ listPeriod }`).set(bearer(userAToken68));
+                expect(list.status).toBe(200);
                 expect(await snapshot()).toBe(before);
             });
         });
